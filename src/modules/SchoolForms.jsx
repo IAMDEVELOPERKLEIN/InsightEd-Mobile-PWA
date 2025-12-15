@@ -79,12 +79,12 @@ const SchoolForms = () => {
             if (user) {
                 try {
                     // Check School Profile & Enrolment
-                    const profileRes = await fetch(`http://localhost:3000/api/school-by-user/${user.uid}`);
+                    const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
                     const profileJson = await profileRes.json();
                     if (profileJson.exists) setSchoolProfile(profileJson.data);
 
                     // Check School Head Info
-                    const headRes = await fetch(`http://localhost:3000/api/school-head/${user.uid}`);
+                    const headRes = await fetch(`/api/school-head/${user.uid}`);
                     const headJson = await headRes.json();
                     if (headJson.exists) setHeadProfile(headJson.data);
 
