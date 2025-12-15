@@ -15,7 +15,7 @@ const app = express();
 app.use(cors({
     origin: [
         'http://localhost:5173',           // Vite Local
-        'https://insight-ed-pwa.vercel.app', // Your Vercel Frontend
+        'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
         'https://insight-ed-frontend.vercel.app' 
     ],
     credentials: true,
