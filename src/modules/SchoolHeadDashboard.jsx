@@ -32,7 +32,7 @@ const SchoolHeadDashboard = () => {
                     if (userDoc.exists()) setUserName(userDoc.data().firstName);
 
                     // B. Get School Profile & Enrolment (Neon)
-                    const profileRes = await fetch(`http://localhost:3000/api/school-by-user/${user.uid}`);
+                    const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
                     const profileJson = await profileRes.json();
                     
                     if (profileJson.exists) {
@@ -40,7 +40,7 @@ const SchoolHeadDashboard = () => {
                     }
 
                     // C. Get School Head Info (Neon)
-                    const headRes = await fetch(`http://localhost:3000/api/school-head/${user.uid}`);
+                    const headRes = await fetch(`/api/school-head/${user.uid}`);
                     const headJson = await headRes.json();
 
                     if (headJson.exists) {

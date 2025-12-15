@@ -126,7 +126,7 @@ const SchoolProfile = () => {
                 
                 if (user) {
                     try {
-                        const response = await fetch(`http://localhost:3000/api/school-by-user/${user.uid}`);
+                        const response = await fetch('/schools.csv');
                         const result = await response.json();
                         
                         if (result.exists) {
@@ -202,7 +202,7 @@ const SchoolProfile = () => {
         setLoading(true);
 
         try {
-            const response = await fetch(`http://localhost:3000/api/check-school/${targetId}`);
+            const response = await fetch(`/api/check-school/${targetId}`);
             if (response.ok) {
                 const result = await response.json();
                 if (result.exists) {
@@ -303,7 +303,7 @@ const SchoolProfile = () => {
         const payload = { ...formData, submittedBy: auth.currentUser.uid };
         
         try {
-            const response = await fetch('http://localhost:3000/api/save-school', {
+            const response = await fetch('/api/save-school', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
             });
             if (response.ok) {

@@ -73,7 +73,7 @@ const SchoolInformation = () => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 try {
-                    const response = await fetch(`http://localhost:3000/api/school-head/${user.uid}`);
+                    const response = await fetch(`/api/school-head/${user.uid}`);
                     if (response.ok) {
                         const result = await response.json();
                         if (result.exists) {
@@ -130,7 +130,7 @@ const SchoolInformation = () => {
 
         try {
             const payload = { uid: user.uid, ...formData };
-            const response = await fetch('http://localhost:3000/api/save-school-head', {
+            const response = await fetch('/api/save-school-head', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
 
