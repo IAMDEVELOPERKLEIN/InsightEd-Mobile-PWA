@@ -1,8 +1,10 @@
+// src/forms/OrganizedClasses.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen';
+import { addToOutbox } from '../db'; // 👈 Added Import
 
 const OrganizedClasses = () => {
     const navigate = useNavigate();
@@ -41,8 +43,6 @@ const OrganizedClasses = () => {
                         setOffering(json.offering || '');
                         
                         const db = json.data;
-                        // Check if specific class data actually exists (not just the profile)
-                        // If all values are 0/null, we assume it's a new entry (optional, but safer to rely on 'exists' flag)
                         const hasData = db.kinder !== undefined || db.grade_1 !== undefined;
 
                         const initialData = {
@@ -55,8 +55,6 @@ const OrganizedClasses = () => {
                         setFormData(initialData);
                         setOriginalData(initialData);
 
-                        // LOCK ONLY IF DATA WAS PREVIOUSLY SAVED (non-null values in DB)
-                        // If the API returns valid data rows, we lock it.
                         if (hasData) {
                             setIsLocked(true);
                         }
@@ -99,17 +97,37 @@ const OrganizedClasses = () => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
+        const payload = { schoolId, ...formData };
+
+        // 📴 OFFLINE CHECK
+        if (!navigator.onLine) {
+            try {
+                await addToOutbox({
+                    type: 'ORGANIZED_CLASSES',
+                    label: 'Organized Classes',
+                    url: '/api/save-organized-classes',
+                    payload: payload
+                });
+                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
+                setOriginalData({ ...formData });
+                setIsLocked(true);
+            } catch (e) { alert("Failed to save offline."); } 
+            finally { setIsSaving(false); }
+            return;
+        }
+
+        // 🌐 ONLINE SAVE
         try {
             const res = await fetch('/api/save-organized-classes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schoolId, ...formData })
+                body: JSON.stringify(payload)
             });
 
             if (res.ok) {
                 alert('Success: Organized Classes saved!');
                 setOriginalData({ ...formData });
-                setIsLocked(true); // Lock it after saving
+                setIsLocked(true); 
             } else {
                 alert('Failed to save data.');
             }
@@ -178,7 +196,7 @@ const OrganizedClasses = () => {
                     {showElem() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
-                                <span className="text-xl">🎒</span> Elementary School
+                                <span className="text-xl">賜</span> Elementary School
                             </h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <ClassInput label="Kinder" name="kinder" />
@@ -196,7 +214,7 @@ const OrganizedClasses = () => {
                     {showJHS() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
-                                <span className="text-xl">📘</span> Junior High School
+                                <span className="text-xl">祷</span> Junior High School
                             </h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <ClassInput label="Grade 7" name="g7" />
@@ -211,7 +229,7 @@ const OrganizedClasses = () => {
                     {showSHS() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
-                                <span className="text-xl">🎓</span> Senior High School
+                                <span className="text-xl">雌</span> Senior High School
                             </h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <ClassInput label="Grade 11" name="g11" />
@@ -220,7 +238,6 @@ const OrganizedClasses = () => {
                         </div>
                     )}
 
-                    {/* Empty State */}
                     {!showElem() && !showJHS() && !showSHS() && (
                          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
                             <p className="text-gray-400 font-bold">No grade levels found.</p>
@@ -237,11 +254,10 @@ const OrganizedClasses = () => {
                         onClick={handleUpdateClick}
                         className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2"
                     >
-                        <span>✏️</span> Unlock to Edit
+                        <span>Unlock to Edit</span>
                     </button>
                 ) : (
                     <>
-                        {/* Only show Cancel if there was original data to revert to */}
                         {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>}
                         
                         <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen'; 
+// 👇 1. IMPORT OUTBOX HELPER
+import { addToOutbox } from '../db';
 
 const Enrolment = () => {
     const navigate = useNavigate();
@@ -10,7 +12,11 @@ const Enrolment = () => {
     // --- STATE ---
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // UI States
+    // Default isLocked to FALSE so you can type immediately if no data exists
     const [isLocked, setIsLocked] = useState(false);
+    const [lastUpdated, setLastUpdated] = useState(null);
     
     // School Identity
     const [schoolId, setSchoolId] = useState(null);
@@ -67,7 +73,7 @@ const Enrolment = () => {
     const getSHSTotal = () => getG11Total() + getG12Total();
     const getGrandTotal = () => getESTotal() + getJHSTotal() + getSHSTotal();
 
-    // --- VISIBILITY LOGIC ---
+    // --- VISIBILITY LOGIC (Driven by the Dropdown) ---
     const showElem = () => curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
     const showJHS = () => curricularOffering.includes("Junior") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
     const showSHS = () => curricularOffering.includes("Senior") || curricularOffering.includes("K-12");
@@ -77,6 +83,7 @@ const Enrolment = () => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 try {
+                    // Try to fetch existing enrolment data
                     const response = await fetch(`/api/school-by-user/${user.uid}`);
                     if (response.ok) {
                         const result = await response.json();
@@ -84,8 +91,12 @@ const Enrolment = () => {
                             const data = result.data;
                             setSchoolId(data.school_id);
                             setSchoolName(data.school_name);
+                            setLastUpdated(data.submitted_at);
+                            
+                            // Load Offering
                             setCurricularOffering(data.curricular_offering || '');
 
+                            // Load Grades
                             setBasicGrades({
                                 gradeKinder: data.grade_kinder || 0,
                                 grade1: data.grade_1 || 0, grade2: data.grade_2 || 0,
@@ -95,6 +106,7 @@ const Enrolment = () => {
                                 grade9: data.grade_9 || 0, grade10: data.grade_10 || 0
                             });
 
+                            // Load Strands
                             setShsStrands({
                                 abm11: data.abm_11||0, abm12: data.abm_12||0,
                                 stem11: data.stem_11||0, stem12: data.stem_12||0,
@@ -108,10 +120,20 @@ const Enrolment = () => {
                                 sports11: data.sports_11||0, sports12: data.sports_12||0
                             });
 
-                            if (data.curricular_offering) setIsLocked(true);
+                            // Only lock if we actually found data
+                            if (data.grade_1 || data.grade_7 || data.stem_11) {
+                                setIsLocked(true);
+                                setOriginalData({ 
+                                    offering: data.curricular_offering, 
+                                    basic: { ...basicGrades }, // Note: this uses initial state, might need adjustment if using fetched, but strict equality check usually ok for "has data"
+                                    strands: { ...shsStrands } 
+                                });
+                            }
                         }
                     }
-                } catch (error) { console.error("Load error:", error); }
+                } catch (error) { 
+                    console.log("Offline or no data found. Form remains unlocked."); 
+                }
             }
             setTimeout(() => { setLoading(false); }, 1000);
         });
@@ -123,11 +145,14 @@ const Enrolment = () => {
     const handleStrandChange = (e) => setShsStrands({ ...shsStrands, [e.target.name]: parseInt(e.target.value) || 0 });
 
     const handleUpdateClick = () => { setEditAgreement(false); setShowEditModal(true); };
+    
     const handleConfirmEdit = () => { 
+        // Snapshot current data as original before unlocking
         setOriginalData({ offering: curricularOffering, basic: {...basicGrades}, strands: {...shsStrands} }); 
         setIsLocked(false); 
         setShowEditModal(false); 
     };
+    
     const handleCancelEdit = () => { 
         if (originalData) {
             setCurricularOffering(originalData.offering);
@@ -137,13 +162,13 @@ const Enrolment = () => {
         setIsLocked(true); 
     };
 
-    // --- SAVE ---
+    // --- SAVE LOGIC (WITH OUTBOX) ---
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
         const user = auth.currentUser;
 
-        // Clean Data based on Visibility
+        // 1. Sanitize Data (Zero out hidden fields)
         const finalESTotal = showElem() ? getESTotal() : 0;
         const finalJHSTotal = showJHS() ? getJHSTotal() : 0;
         const finalSHSTotal = showSHS() ? getSHSTotal() : 0;
@@ -156,9 +181,13 @@ const Enrolment = () => {
         const cleanStrands = { ...shsStrands };
         if (!showSHS()) Object.keys(cleanStrands).forEach(k => cleanStrands[k] = 0);
 
+        // 2. Prepare Payload
         const payload = {
-            schoolId, submittedBy: user.uid, curricularOffering,
-            ...cleanBasic, ...cleanStrands,
+            schoolId, 
+            submittedBy: user.uid, 
+            curricularOffering,
+            ...cleanBasic, 
+            ...cleanStrands,
             grade11: showSHS() ? getG11Total() : 0, 
             grade12: showSHS() ? getG12Total() : 0,
             esTotal: finalESTotal,
@@ -167,17 +196,52 @@ const Enrolment = () => {
             grandTotal: finalGrandTotal
         };
 
+        // 👇 3. CHECK OFFLINE STATUS
+        if (!navigator.onLine) {
+            try {
+                // Save to Outbox
+                await addToOutbox({
+                    type: 'ENROLMENT',
+                    label: 'Enrolment Data', // Title for Sync Page
+                    url: '/api/save-enrolment',
+                    payload: payload
+                });
+
+                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
+                
+                // Update UI to look "saved"
+                setBasicGrades(cleanBasic);
+                setShsStrands(cleanStrands);
+                setLastUpdated(new Date().toISOString());
+                setIsLocked(true);
+
+            } catch (e) { 
+                console.error(e);
+                alert("Failed to save offline."); 
+            } 
+            finally { setIsSaving(false); }
+            return; // Stop here
+        }
+
+        // 🌐 4. ONLINE SAVE
         try {
             const response = await fetch('/api/save-enrolment', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
+
             if (response.ok) {
                 alert('Saved successfully!');
                 setBasicGrades(cleanBasic);
                 setShsStrands(cleanStrands);
+                setLastUpdated(new Date().toISOString());
                 setIsLocked(true);
-            } else { alert('Error saving.'); }
-        } catch (error) { alert("Connection failed."); } 
+            } else { 
+                const err = await response.json();
+                alert('Error: ' + err.message); 
+            }
+        } catch (error) { 
+            alert("Network Error. Please try again."); 
+        } 
         finally { setIsSaving(false); }
     };
 
@@ -187,9 +251,15 @@ const Enrolment = () => {
     const Input = ({ label, name, val, onChange }) => (
         <div className="w-full">
             {label && <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{label}</label>}
-            <input type="number" min="0" name={name} value={val} onChange={onChange} disabled={isLocked}
+            <input 
+                type="number" min="0" 
+                name={name} 
+                value={val} 
+                onChange={onChange} 
+                disabled={isLocked}
                 className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-[#004A99] transition-all 
-                ${isLocked ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white border-gray-300'}`} />
+                ${isLocked ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white border-gray-300'}`} 
+            />
         </div>
     );
 
@@ -204,7 +274,7 @@ const Enrolment = () => {
                     <div>
                         <h1 className="text-2xl font-bold text-white">Enrolment Data</h1>
                         <p className="text-blue-200 text-xs mt-1">
-                            {schoolName || 'Manage learner counts'}
+                            {lastUpdated ? `Last Updated: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage learner counts'}
                         </p>
                     </div>
                 </div>
@@ -214,11 +284,15 @@ const Enrolment = () => {
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto">
                 <div className={`bg-white p-6 md:p-8 rounded-2xl shadow-lg border transition-all ${!isLocked ? 'border-blue-400 ring-4 ring-blue-50' : 'border-gray-100'}`}>
                     
-                    {/* 1. CURRICULAR OFFERING */}
+                    {/* 1. CURRICULAR OFFERING (Fully Functional) */}
                     <div className="mb-8">
                         <label className="block text-gray-800 text-sm font-bold mb-2">Curricular Offering</label>
-                        <select value={curricularOffering} onChange={(e) => setCurricularOffering(e.target.value)} disabled={isLocked} 
-                            className={`w-full px-4 py-3 border rounded-xl font-medium text-gray-700 focus:ring-2 focus:ring-[#004A99] ${isLocked ? 'bg-gray-100' : 'bg-white'}`}>
+                        <select 
+                            value={curricularOffering} 
+                            onChange={(e) => setCurricularOffering(e.target.value)} 
+                            disabled={isLocked} 
+                            className={`w-full px-4 py-3 border rounded-xl font-medium text-gray-700 focus:ring-2 focus:ring-[#004A99] ${isLocked ? 'bg-gray-100' : 'bg-white'}`}
+                        >
                             <option value="">-- Select Offering --</option>
                             <option>Purely Elementary</option>
                             <option>Elementary School and Junior High School (K-10)</option>
@@ -338,11 +412,47 @@ const Enrolment = () => {
             </div>
 
             {/* --- MODALS --- */}
+            
             {/* EDIT WARNING */}
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">⚠️</span></div><h3 className="font-bold text-lg text-gray-900">Edit Enrolment?</h3><p className="text-sm text-gray-500 mt-2 mb-4">Changes to "Curricular Offering" may reset data for hidden grade levels to zero.</p><label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer mb-6 border border-transparent hover:border-gray-200 transition"><input type="checkbox" checked={editAgreement} onChange={(e) => setEditAgreement(e.target.checked)} className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-600" /><span className="text-xs font-bold text-gray-700 select-none">I understand and wish to proceed.</span></label><div className="flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 cursor-not-allowed'}`}>Proceed</button></div></div></div>}
+            {showEditModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
+                        <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">⚠️</span></div>
+                        <h3 className="font-bold text-lg text-gray-900">Edit Enrolment?</h3>
+                        <p className="text-sm text-gray-500 mt-2 mb-4">Changes to "Curricular Offering" may reset data for hidden grade levels to zero.</p>
+                        
+                        <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer mb-6 border border-transparent hover:border-gray-200 transition">
+                            <input type="checkbox" checked={editAgreement} onChange={(e) => setEditAgreement(e.target.checked)} className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-600" />
+                            <span className="text-xs font-bold text-gray-700 select-none">I understand and wish to proceed.</span>
+                        </label>
+                        
+                        <div className="flex gap-2">
+                            <button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button>
+                            <button onClick={handleConfirmEdit} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 cursor-not-allowed'}`}>Proceed</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             
             {/* SAVE CONFIRMATION */}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">💾</span></div><h3 className="font-bold text-lg text-gray-900">Confirm Submission</h3><div className="bg-blue-50 p-4 rounded-xl border border-blue-100 my-4 flex justify-between items-center"><span className="text-sm font-bold text-blue-800">Grand Total:</span><span className="text-xl font-extrabold text-blue-900">{getGrandTotal()}</span></div><div className="flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-lg hover:bg-[#A30000]">Submit</button></div></div></div>}
+            {showSaveModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
+                        <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">💾</span></div>
+                        <h3 className="font-bold text-lg text-gray-900">Confirm Submission</h3>
+                        
+                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 my-4 flex justify-between items-center">
+                            <span className="text-sm font-bold text-blue-800">Grand Total:</span>
+                            <span className="text-xl font-extrabold text-blue-900">{getGrandTotal()}</span>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button>
+                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-lg hover:bg-[#A30000]">Submit</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );

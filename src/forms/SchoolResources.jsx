@@ -1,8 +1,10 @@
+// src/forms/SchoolResources.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen';
+import { addToOutbox } from '../db'; // 👈 Added Import
 
 const SchoolResources = () => {
     const navigate = useNavigate();
@@ -49,7 +51,6 @@ const SchoolResources = () => {
                         setFormData(loaded);
                         setOriginalData(loaded);
                         
-                        // Lock if meaningful data exists (e.g., at least 1 armchair or room)
                         if (db.res_armchairs_good > 0 || db.res_toilets_male > 0) setIsLocked(true);
                     }
                 } catch (e) { console.error(e); }
@@ -67,11 +68,31 @@ const SchoolResources = () => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
+        const payload = { schoolId, ...formData };
+
+        // 📴 OFFLINE CHECK
+        if (!navigator.onLine) {
+            try {
+                await addToOutbox({
+                    type: 'SCHOOL_RESOURCES',
+                    label: 'School Resources',
+                    url: '/api/save-school-resources',
+                    payload: payload
+                });
+                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
+                setOriginalData({...formData});
+                setIsLocked(true);
+            } catch (e) { alert("Failed to save offline."); } 
+            finally { setIsSaving(false); }
+            return;
+        }
+
+        // 🌐 ONLINE SAVE
         try {
             const res = await fetch('/api/save-school-resources', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schoolId, ...formData })
+                body: JSON.stringify(payload)
             });
             if (res.ok) {
                 alert('Saved successfully!');
@@ -160,7 +181,6 @@ const SchoolResources = () => {
                 </form>
             </div>
 
-            {/* Floating Action Bar */}
             <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4 pb-8 z-50 flex gap-3 shadow-lg">
                 {isLocked ? (
                     <button onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
@@ -172,7 +192,6 @@ const SchoolResources = () => {
                 )}
             </div>
 
-            {/* Modals */}
             {showEditModal && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Unlock Form?</h3><div className="mt-4 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
             {showSaveModal && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><div className="mt-4 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
         </div>

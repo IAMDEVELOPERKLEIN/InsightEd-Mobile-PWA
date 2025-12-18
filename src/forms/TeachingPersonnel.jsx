@@ -1,8 +1,10 @@
+// src/forms/TeachingPersonnel.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen';
+import { addToOutbox } from '../db'; // 👈 Added Import
 
 const TeachingPersonnel = () => {
     const navigate = useNavigate();
@@ -11,7 +13,7 @@ const TeachingPersonnel = () => {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     
-    // UI States: Default to FALSE so new entries are editable
+    // UI States
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
@@ -49,23 +51,6 @@ const TeachingPersonnel = () => {
                         setFormData(initialData);
                         setOriginalData(initialData);
 
-                        // LOCK ONLY IF DATA WAS PREVIOUSLY SAVED (non-null values in DB)
-                        // Checking if ANY teacher count is greater than 0, or if specific DB fields were not null
-                        // Simple check: If 'exists' is true, and the user has previously saved this specific form data.
-                        // However, 'exists' here just means 'School Profile Exists'.
-                        // We check if the values are non-zero to determine if it's a "filled" form.
-                        // Or better yet, assume if profile exists but these columns are null/0, it's "New". 
-                        
-                        // NOTE: If you default to 0 in SQL, checking for > 0 is a decent heuristic for "filled". 
-                        // Or if you want strict locking, you can check a "last_updated" timestamp if you added one.
-                        // For now, let's keep it simple: If profile exists, we lock it. 
-                        // BUT user requested it to be UNLOCKED for 1st time.
-                        
-                        // FIX: Check if at least one value is > 0 OR if we assume data exists. 
-                        // Actually, if it's 0, 0, 0 it might just be a small school or new entry.
-                        // Let's rely on the user intention: default UNLOCKED. Only lock if we explicitly "Set" it.
-                        // Since we don't have a separate flag, let's lock it ONLY if we find > 0 values or if user clicks save.
-                        
                         const hasData = (db.es > 0 || db.jhs > 0 || db.shs > 0);
                         if (hasData) setIsLocked(true);
                     }
@@ -113,23 +98,42 @@ const TeachingPersonnel = () => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
+        const payload = { 
+            schoolId, 
+            es: showElem() ? formData.es : 0,
+            jhs: showJHS() ? formData.jhs : 0,
+            shs: showSHS() ? formData.shs : 0
+        };
+
+        // 📴 OFFLINE CHECK
+        if (!navigator.onLine) {
+            try {
+                await addToOutbox({
+                    type: 'TEACHING_PERSONNEL',
+                    label: 'Teaching Personnel',
+                    url: '/api/save-teaching-personnel',
+                    payload: payload
+                });
+                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
+                setOriginalData({ ...formData });
+                setIsLocked(true);
+            } catch (e) { alert("Failed to save offline."); } 
+            finally { setIsSaving(false); }
+            return;
+        }
+
+        // 🌐 ONLINE SAVE
         try {
             const res = await fetch('/api/save-teaching-personnel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    schoolId, 
-                    // Send 0 for hidden fields
-                    es: showElem() ? formData.es : 0,
-                    jhs: showJHS() ? formData.jhs : 0,
-                    shs: showSHS() ? formData.shs : 0
-                })
+                body: JSON.stringify(payload)
             });
 
             if (res.ok) {
                 alert('Success: Teaching Personnel saved!');
                 setOriginalData({ ...formData });
-                setIsLocked(true); // Lock after save
+                setIsLocked(true); 
             } else {
                 alert('Failed to save data.');
             }
@@ -198,7 +202,6 @@ const TeachingPersonnel = () => {
                         {showJHS() && <TeacherInput label="Junior High School (JHS) Teachers" name="jhs" />}
                         {showSHS() && <TeacherInput label="Senior High School (SHS) Teachers" name="shs" />}
 
-                        {/* Empty State */}
                         {!showElem() && !showJHS() && !showSHS() && (
                             <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                                 <p className="font-bold text-gray-500">No levels available.</p>
@@ -220,7 +223,6 @@ const TeachingPersonnel = () => {
                     </button>
                 ) : (
                     <>
-                        {/* Only show Cancel if we have data to revert to */}
                         {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>}
                         
                         <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">

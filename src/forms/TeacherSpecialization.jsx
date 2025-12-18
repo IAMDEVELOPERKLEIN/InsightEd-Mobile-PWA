@@ -1,8 +1,10 @@
+// src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen';
+import { addToOutbox } from '../db'; // 👈 Added Import
 
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
@@ -57,11 +59,31 @@ const TeacherSpecialization = () => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
+        const payload = { schoolId, ...formData };
+
+        // 📴 OFFLINE CHECK
+        if (!navigator.onLine) {
+            try {
+                await addToOutbox({
+                    type: 'TEACHER_SPECIALIZATION',
+                    label: 'Teacher Specialization',
+                    url: '/api/save-teacher-specialization',
+                    payload: payload
+                });
+                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
+                setOriginalData({...formData});
+                setIsLocked(true);
+            } catch (e) { alert("Failed to save offline."); } 
+            finally { setIsSaving(false); }
+            return;
+        }
+
+        // 🌐 ONLINE SAVE
         try {
             const res = await fetch('/api/save-teacher-specialization', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schoolId, ...formData })
+                body: JSON.stringify(payload)
             });
             if (res.ok) {
                 alert('Saved successfully!');
@@ -75,7 +97,7 @@ const TeacherSpecialization = () => {
     const SubjectRow = ({ label, id }) => {
         const major = formData[`spec_${id}_major`];
         const teaching = formData[`spec_${id}_teaching`];
-        const mismatch = teaching > major; // Simple visual cue
+        const mismatch = teaching > major; 
 
         return (
             <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 py-3 last:border-0">

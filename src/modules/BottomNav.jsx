@@ -1,10 +1,8 @@
 // src/modules/BottomNav.jsx
-
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-// 1. ICONS
-// We use TbCloudUpload because 'react-icons/tb' is confirmed to be working
+// ICONS
 import { TbHomeEdit, TbCloudUpload } from "react-icons/tb"; 
 import { LuUser } from "react-icons/lu"; 
 
@@ -27,7 +25,7 @@ const BottomNav = ({ homeRoute }) => {
 
             <div style={styles.navItems}>
                 
-                {/* 1. SYNC / OUTBOX BUTTON (Replaces Activity) */}
+                {/* 1. SYNC BUTTON (Replaces Activity) */}
                 <button 
                     style={styles.sideButton} 
                     onClick={() => navigate('/outbox')}
@@ -53,19 +51,19 @@ const BottomNav = ({ homeRoute }) => {
                     </button>
                 </div>
 
-                {/* 3. PROFILE BUTTON */}
+                {/* 3. PROFILE BUTTON (Restored to /profile) */}
                 <button 
                     style={styles.sideButton} 
-                    onClick={() => navigate('/user-profile')}
+                    onClick={() => navigate('/profile')}
                 >
                     <LuUser 
                         size={24} 
-                        color={location.pathname === '/user-profile' ? '#094684' : '#B0B0B0'}
+                        color={location.pathname === '/profile' ? '#094684' : '#B0B0B0'}
                         style={styles.icon}
                     />
                     <span style={{
                         ...styles.label,
-                        color: location.pathname === '/user-profile' ? '#094684' : '#B0B0B0'
+                        color: location.pathname === '/profile' ? '#094684' : '#B0B0B0'
                     }}>Profile</span>
                 </button>
             </div>
