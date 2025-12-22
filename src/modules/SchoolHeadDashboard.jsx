@@ -1,3 +1,4 @@
+// src/modules/SchoolHeadDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase'; 
@@ -239,8 +240,8 @@ const SchoolHeadDashboard = () => {
                 )}
             </div>
 
-            {/* Bottom Navigation */}
-            <BottomNav homeRoute="/schoolhead-dashboard" />
+            {/* Bottom Navigation: Explicitly passing userRole */}
+            <BottomNav userRole="School Head" />
         </div>
     );
 };

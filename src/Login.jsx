@@ -1,7 +1,7 @@
 // src/Login.jsx
 import React, { useState, useEffect } from 'react';
 import logo from './assets/InsightEd1.png';
-import { auth, googleProvider, db } from './firebase'; // Ensure this points to your firebase.js
+import { auth, googleProvider, db } from './firebase'; 
 import { 
     signInWithEmailAndPassword, 
     signInWithPopup, 
@@ -17,7 +17,7 @@ import './Login.css';
 const getDashboardPath = (role) => {
     const roleMap = {
         'Engineer': '/engineer-dashboard',
-        'School Head': '/schoolhead-dashboard',
+        'School Head': '/school-head-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
     };
@@ -84,11 +84,21 @@ const Login = () => {
                 const userData = docSnap.data();
                 const role = userData.role || 'School Head'; // Default to School Head if missing
 
+                // --- KEY FIX: SAVE ROLE TO LOCAL STORAGE ---
+                // This allows BottomNav to remember your role on refresh/navigation
+                console.log("Saving role to storage:", role);
+                localStorage.setItem('userRole', role);
+
                 // --- B. THE GATEKEEPER (School Heads Only) ---
                 if (role === 'School Head') {
                     try {
                         // Check if this user has a School Profile linked
-                        const response = await fetch(`/api/school-by-user/${uid}`);
+                        // NOTE: Ensure this API endpoint exists or replace with Firestore query if needed
+                        const response = await fetch(`/api/school-by-user/${uid}`); 
+                        
+                        // Handle non-200 responses if using fetch directly on client
+                        if (!response.ok) throw new Error("API not reachable");
+
                         const result = await response.json();
 
                         if (result.exists) {
@@ -100,14 +110,12 @@ const Login = () => {
                             navigate('/schoolhead-dashboard');
                         } else {
                             // ⛔ BLOCKED: No Profile Found
-                            // Force redirect to School Profile creation
                             console.log("No profile found. Redirecting to setup...");
                             navigate('/school-profile', { state: { isFirstTime: true } });
                         }
                     } catch (fetchError) {
-                        console.error("Error checking school profile (likely offline):", fetchError);
+                        console.error("Error checking school profile (likely offline/no-api):", fetchError);
                         // Fallback: If we can't check (offline), let them in 
-                        // (They might have the ID saved from a previous session)
                         navigate('/schoolhead-dashboard');
                     }
                 } else {

@@ -1,3 +1,4 @@
+// src/modules/EngineerDashboard.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -198,13 +199,6 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading }) => {
                         VIEW
                     </button>
                     
-                    {/*<button 
-                        onClick={() => navigate(`/project-gallery/${project.id}`)} 
-                        className="w-full px-1 py-1 bg-amber-50 border border-amber-200 text-amber-600 text-[9px] font-bold rounded hover:bg-amber-100 transition"
-                    >
-                        GALLERY
-                    </button> */}
-
                     <button 
                         onClick={() => onEdit(project)} 
                         disabled={isLocked}
@@ -645,6 +639,7 @@ const EngineerDashboard = () => {
                     isLoading={aiLoading}
                 />
 
+                {/* ✅ PASSED THE ROLE HERE */}
                 <BottomNav userRole="Engineer" />
             </div>
         </PageTransition>
