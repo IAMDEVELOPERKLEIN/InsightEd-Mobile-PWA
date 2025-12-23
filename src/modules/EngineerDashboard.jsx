@@ -22,6 +22,22 @@ const ProjectStatus = {
   Completed: 'Completed',
 };
 
+// --- HELPERS ---
+/**
+ * Formats a number into a currency string with 1 decimal place.
+ * e.g., 2,000,000 -> ₱2.0M
+ * e.g., 50,000 -> ₱50.0k
+ */
+const formatAllocation = (value) => {
+    const num = Number(value) || 0;
+    if (num >= 1000000) {
+      return `₱${(num / 1000000).toFixed(1)}M`;
+    } else if (num >= 1000) {
+      return `₱${(num / 1000).toFixed(1)}k`;
+    }
+    return `₱${num.toLocaleString()}`;
+};
+
 // --- SUB-COMPONENTS ---
 
 const DashboardStats = ({ projects }) => {
@@ -52,7 +68,7 @@ const DashboardStats = ({ projects }) => {
         <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Allocation</p>
             <p className="text-sm font-bold text-[#004A99] mt-1">
-                ₱{(stats.totalAllocation / 1000000).toFixed(1)}M
+                {formatAllocation(stats.totalAllocation)}
             </p>
         </div>
         <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
@@ -190,7 +206,9 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading }) => {
                     </div>
                     <div>
                         <span className="text-slate-400 block text-[9px] uppercase">Budget</span> 
-                        <span className="font-mono text-[#004A99]">₱{((project.projectAllocation || 0)/1000000).toFixed(1)}M</span>
+                        <span className="font-mono text-[#004A99]">
+                            {formatAllocation(project.projectAllocation)}
+                        </span>
                     </div>
                   </td>
 
@@ -418,23 +436,21 @@ const EngineerDashboard = () => {
         setAiModalOpen(true);
         setAiLoading(true);
         setTimeout(() => {
-            setAiAnalysis(`RISK ASSESSMENT: HIGH\n\n1. **Delay Risk**: The project is ${100 - (project.accomplishmentPercentage || 0)}% remaining vs timeline.\n2. **Budget**: Allocation of ₱${((project.projectAllocation||0)/1000000).toFixed(1)}M is under review.`);
+            setAiAnalysis(`RISK ASSESSMENT: HIGH\n\n1. **Delay Risk**: The project is ${100 - (project.accomplishmentPercentage || 0)}% remaining vs timeline.\n2. **Budget**: Allocation of ${formatAllocation(project.projectAllocation)} is under review.`);
             setAiLoading(false);
         }, 2000);
     };
 
-    // --- UPDATED handleFileUpload to match your Backend Route ---
+    // --- handleFileUpload logic ---
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Validation (5MB limit)
         if (file.size > 5 * 1024 * 1024) {
             alert("File is too large. Please upload an image under 5MB.");
             return;
         }
 
-        // Determine which project to attach the image to
         const targetProject = selectedProject || projects[0];
         if (!targetProject) {
             alert("No projects found to attach image to.");
@@ -451,14 +467,13 @@ const EngineerDashboard = () => {
                 const base64Image = reader.result; 
                 const user = auth.currentUser;
 
-                // Sending data with keys your backend expects: projectId, imageData, uploadedBy
                 const response = await fetch(`${API_BASE}/api/upload-image`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        projectId: targetProject.id,   // Matches backend 'projectId'
-                        imageData: base64Image,        // Matches backend 'imageData'
-                        uploadedBy: user?.uid          // Matches backend 'uploadedBy'
+                        projectId: targetProject.id,
+                        imageData: base64Image,
+                        uploadedBy: user?.uid
                     }),
                 });
 
@@ -467,7 +482,6 @@ const EngineerDashboard = () => {
                     setShowUploadOptions(false);
                 } else {
                     const errorData = await response.json();
-                    console.error("Server error:", errorData);
                     throw new Error(errorData.error || "Upload failed");
                 }
             } catch (err) {
@@ -480,7 +494,6 @@ const EngineerDashboard = () => {
         };
         
         reader.onerror = () => {
-            console.error("FileReader Error");
             setIsUploading(false);
             alert("Could not read the file.");
         };
@@ -573,80 +586,29 @@ const EngineerDashboard = () => {
 
                 {/* --- FLOATING IMAGE UPLOAD SECTION --- */}
                 <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end">
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        onChange={handleFileUpload} 
-                        accept="image/*" 
-                        className="hidden" 
-                    />
-                    <input 
-                        type="file" 
-                        ref={cameraInputRef} 
-                        onChange={handleFileUpload} 
-                        accept="image/*" 
-                        capture="environment" 
-                        className="hidden" 
-                    />
+                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
+                    <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
 
                     {showUploadOptions && (
                         <div className="mb-4 flex flex-col gap-3 animate-slide-up">
-                            <button 
-                                onClick={() => { cameraInputRef.current.click(); setShowUploadOptions(false); }}
-                                className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95"
-                            >
+                            <button onClick={() => { cameraInputRef.current.click(); setShowUploadOptions(false); }} className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95">
                                 <span className="text-lg">📷</span>
                                 <span className="text-xs font-bold uppercase">Take Photo</span>
                             </button>
-
-                            <button 
-                                onClick={() => { fileInputRef.current.click(); setShowUploadOptions(false); }}
-                                className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95"
-                            >
+                            <button onClick={() => { fileInputRef.current.click(); setShowUploadOptions(false); }} className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95">
                                 <span className="text-lg">🖼️</span>
                                 <span className="text-xs font-bold uppercase">From Gallery</span>
                             </button>
                         </div>
                     )}
 
-                    <button 
-                        onClick={() => setShowUploadOptions(!showUploadOptions)}
-                        disabled={isUploading || projects.length === 0}
-                        className={`${
-                            isUploading ? 'bg-slate-400' : 'bg-[#FDB913] hover:bg-yellow-500'
-                        } w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-white transition-all transform ${showUploadOptions ? 'rotate-45' : ''} border-4 border-white`}
-                    >
-                        {isUploading ? (
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                            <span className="text-2xl">{showUploadOptions ? '✕' : '📸'}</span>
-                        )}
+                    <button onClick={() => setShowUploadOptions(!showUploadOptions)} disabled={isUploading || projects.length === 0} className={`${isUploading ? 'bg-slate-400' : 'bg-[#FDB913] hover:bg-yellow-500'} w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-white transition-all transform ${showUploadOptions ? 'rotate-45' : ''} border-4 border-white`}>
+                        {isUploading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span className="text-2xl">{showUploadOptions ? '✕' : '📸'}</span>}
                     </button>
-
-                    {showUploadOptions && (
-                        <div 
-                            className="fixed inset-0 z-[-1] bg-black/5 backdrop-blur-[1px]" 
-                            onClick={() => setShowUploadOptions(false)}
-                        />
-                    )}
                 </div>
 
-                <EditProjectModal 
-                    project={selectedProject} 
-                    isOpen={editModalOpen} 
-                    onClose={() => setEditModalOpen(false)} 
-                    onSave={handleSaveProject} 
-                />
-
-                <AIInsightModal 
-                    isOpen={aiModalOpen}
-                    onClose={() => setAiModalOpen(false)}
-                    projectName={selectedProject?.schoolName}
-                    analysis={aiAnalysis}
-                    isLoading={aiLoading}
-                />
-
-                {/* ✅ PASSED THE ROLE HERE */}
+                <EditProjectModal project={selectedProject} isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} onSave={handleSaveProject} />
+                <AIInsightModal isOpen={aiModalOpen} onClose={() => setAiModalOpen(false)} projectName={selectedProject?.schoolName} analysis={aiAnalysis} isLoading={aiLoading} />
                 <BottomNav userRole="Engineer" />
             </div>
         </PageTransition>

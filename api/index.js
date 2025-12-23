@@ -364,6 +364,7 @@ app.post('/api/save-project', async (req, res) => {
     return res.status(400).json({ message: "Missing required fields" });
   }
   
+  // We added data.uid (the Firestore ID) as the 16th value ($16)
   const values = [
     data.projectName, data.schoolName, data.schoolId, 
     valueOrNull(data.region), valueOrNull(data.division),
@@ -371,7 +372,8 @@ app.post('/api/save-project', async (req, res) => {
     valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),        
     valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),             
     valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),      
-    valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks)
+    valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+    data.uid // <--- This captures the Firestore UID from the frontend
   ];
 
   const query = `
@@ -379,8 +381,9 @@ app.post('/api/save-project', async (req, res) => {
       project_name, school_name, school_id, region, division,
       status, accomplishment_percentage, status_as_of,
       target_completion_date, actual_completion_date, notice_to_proceed,
-      contractor_name, project_allocation, batch_of_funds, other_remarks
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      contractor_name, project_allocation, batch_of_funds, other_remarks,
+      engineer_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING project_id, project_name;
   `;
 
@@ -388,6 +391,7 @@ app.post('/api/save-project', async (req, res) => {
     const result = await pool.query(query, values);
     const newProject = result.rows[0];
 
+    // Your existing logging logic
     await logActivity(
         data.uid, 
         data.modifiedBy, 
@@ -442,10 +446,15 @@ app.put('/api/update-project/:id', async (req, res) => {
   }
 });
 
-// --- 10. GET: Get All Projects ---
+// --- 10. GET: Get Projects (Filtered by Engineer) ---
 app.get('/api/projects', async (req, res) => {
   try {
-    const query = `
+    // We catch the engineer_id sent from EngineerDashboard.jsx
+    const { status, region, division, search, engineer_id } = req.query; 
+    let queryParams = [];
+    let whereClauses = [];
+
+    let sql = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
         school_id AS "schoolId", division, region, status,
@@ -457,15 +466,45 @@ app.get('/api/projects', async (req, res) => {
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
       FROM "engineer_form"
-      ORDER BY project_id DESC; 
     `;
-    const result = await pool.query(query);
+
+    // 1. ADD FILTER: Only show projects belonging to this engineer
+    if (engineer_id) {
+        queryParams.push(engineer_id);
+        whereClauses.push(`engineer_id = $${queryParams.length}`);
+    }
+
+    // 2. Add your existing filters
+    if (status) {
+      queryParams.push(status);
+      whereClauses.push(`status = $${queryParams.length}`);
+    }
+    if (region) {
+      queryParams.push(region);
+      whereClauses.push(`region = $${queryParams.length}`);
+    }
+    if (division) {
+      queryParams.push(division);
+      whereClauses.push(`division = $${queryParams.length}`);
+    }
+    if (search) {
+      queryParams.push(`%${search}%`);
+      whereClauses.push(`(school_name ILIKE $${queryParams.length} OR project_name ILIKE $${queryParams.length})`);
+    }
+
+    if (whereClauses.length > 0) {
+      sql += ` WHERE ` + whereClauses.join(' AND ');
+    }
+
+    sql += ` ORDER BY project_id DESC`;
+
+    const result = await pool.query(sql, queryParams);
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ message: "Server error fetching projects" });
+    console.error("❌ Error fetching projects:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 });
-
 // --- 11. GET: Get Single Project ---
 app.get('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
