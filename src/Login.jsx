@@ -17,7 +17,7 @@ import './Login.css';
 const getDashboardPath = (role) => {
     const roleMap = {
         'Engineer': '/engineer-dashboard',
-        'School Head': '/school-head-dashboard',
+        'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
     };
@@ -195,6 +195,29 @@ const Login = () => {
                 
                 <div className="login-footer">
                     Don't have an account? <Link to="/register" className="link-text">Register here</Link>
+                </div>
+
+                <div style={{ marginTop: '2rem', textAlign: 'center', paddingBottom: '1rem' }}>
+                    <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.5rem' }}>
+                        Using an Android phone?
+                    </p>
+                    <a 
+                        href="/insighted.apk" 
+                        download="InsightEd.apk"
+                        style={{
+                            display: 'inline-block',
+                            backgroundColor: '#03e812ff',
+                            color: 'white',
+                            padding: '10px 20px',
+                            borderRadius: '12px',
+                            textDecoration: 'none',
+                            fontWeight: 'bold',
+                            fontSize: '0.9rem',
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                        }}
+                    >
+                        📥 Download App (APK)
+                    </a>
                 </div>
             </div>
 

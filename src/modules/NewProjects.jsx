@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse'; 
@@ -18,11 +18,6 @@ const NewProjects = () => {
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // --- NEW STATE FOR FAB AND IMAGES ---
-    const fileInputRef = useRef(null);
-    const [showUploadOptions, setShowUploadOptions] = useState(false);
-    const [selectedFiles, setSelectedFiles] = useState([]);
-    
     // State to hold the CSV data
     const [schoolData, setSchoolData] = useState([]); 
 
@@ -30,7 +25,7 @@ const NewProjects = () => {
     useEffect(() => {
         Papa.parse('/schools.csv', {
             download: true,
-            header: true, 
+            header: true, // Uses the first row as keys (school_id, school_name, etc.)
             skipEmptyLines: true,
             complete: (results) => {
                 console.log("Loaded schools:", results.data.length);
@@ -69,32 +64,14 @@ const NewProjects = () => {
         otherRemarks: ''
     });
 
-    // --- NEW: FILE HANDLING FUNCTIONS ---
-    const handleFileChange = (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length > 0) {
-            setSelectedFiles(prev => [...prev, ...files]);
-            setShowUploadOptions(false);
-        }
-    };
-
-    const triggerFilePicker = (mode) => {
-        if (fileInputRef.current) {
-            if (mode === 'camera') {
-                fileInputRef.current.setAttribute('capture', 'environment');
-            } else {
-                fileInputRef.current.removeAttribute('capture');
-            }
-            fileInputRef.current.click();
-        }
-    };
-
     // --- 2. AUTOFILL LOGIC ---
     const handleAutoFill = (name, value, currentData) => {
         let updates = {};
 
+        // Case A: User types SCHOOL ID
         if (name === 'schoolId') {
             const foundSchool = schoolData.find(s => s.school_id === value);
+            
             if (foundSchool) {
                 updates.schoolName = foundSchool.school_name || currentData.schoolName;
                 updates.region = foundSchool.region || currentData.region;
@@ -102,33 +79,41 @@ const NewProjects = () => {
             }
         }
 
+        // Case B: User types/selects SCHOOL NAME
         if (name === 'schoolName') {
             const foundSchool = schoolData.find(s => 
                 s.school_name && s.school_name.toLowerCase() === value.toLowerCase()
             );
+
             if (foundSchool) {
                 updates.schoolId = foundSchool.school_id || currentData.schoolId;
                 updates.region = foundSchool.region || currentData.region;
                 updates.division = foundSchool.division || currentData.division;
             }
         }
+
         return updates;
     };
 
     // --- 3. HANDLE CHANGE WITH STRICT VALIDATION ---
     const handleChange = (e) => {
         let { name, value } = e.target;
+
         if (name === 'schoolId') {
             value = value.replace(/\D/g, ''); 
-            if (value.length > 6) value = value.slice(0, 6);
+            if (value.length > 6) {
+                value = value.slice(0, 6);
+            }
         }
 
         setFormData(prev => {
             let newData = { ...prev, [name]: value };
             const autoFillUpdates = handleAutoFill(name, value, prev);
+            
             if (Object.keys(autoFillUpdates).length > 0) {
                 newData = { ...newData, ...autoFillUpdates };
             }
+
             return newData;
         });
     };
@@ -227,7 +212,7 @@ const NewProjects = () => {
                 <form onSubmit={handleSubmit} className="px-6 -mt-10">
                     <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
 
-                        <SectionHeader title="Project Identification" icon="🏢" />
+                        <SectionHeader title="Project Identification" icon="🏗️" />
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
@@ -328,7 +313,7 @@ const NewProjects = () => {
                         </div>
 
                         <SectionHeader title="Other Remarks" icon="📝" />
-                        <div className="mb-4">
+                        <div>
                             <textarea 
                                 name="otherRemarks" 
                                 rows="3" 

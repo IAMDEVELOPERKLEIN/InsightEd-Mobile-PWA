@@ -1,3 +1,4 @@
+// src/modules/BottomNav.jsx
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -6,7 +7,7 @@ import { TbHomeEdit, TbCloudUpload } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings } from "react-icons/fi"; // Changed to Gear icon
 
-const BottomNav = ({ userRole = 'Engineer' }) => { 
+const BottomNav = ({ homeRoute }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
