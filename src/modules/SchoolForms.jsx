@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
-import BottomNav from './BottomNav';
+import SchoolHeadBottomNav from './SchoolHeadBottomNav'; // ✅ UPDATED IMPORT
 import LoadingScreen from '../components/LoadingScreen';
 
 const SchoolForms = () => {
@@ -96,21 +96,15 @@ const SchoolForms = () => {
         return () => unsubscribe();
     }, []);
 
-    // --- 3. STATUS LOGIC (UNLOCKED) ---
+    // --- 3. STATUS LOGIC ---
     const getStatus = (id) => {
-        // 👇 I REMOVED THE LOCK CHECK HERE. 
-        // Now it just checks if data exists to show "Completed", otherwise "Pending".
-        
         switch (id) {
             case 'profile':
                 return schoolProfile ? 'completed' : 'pending';
-            
             case 'head':
                 return headProfile ? 'completed' : 'pending';
-            
             case 'enrolment':
                 return (schoolProfile?.total_enrollment > 0) ? 'completed' : 'pending';
-            
             case 'classes':
                 if (!schoolProfile) return 'pending';
                 const totalClasses = (schoolProfile.classes_kinder || 0) + 
@@ -119,20 +113,17 @@ const SchoolForms = () => {
                                      (schoolProfile.classes_grade_10 || 0) + 
                                      (schoolProfile.classes_grade_12 || 0);
                 return totalClasses > 0 ? 'completed' : 'pending';
-
             case 'teachers':
                 if (!schoolProfile) return 'pending';
                 const totalTeachers = (schoolProfile.teachers_es || 0) + 
                                       (schoolProfile.teachers_jhs || 0) + 
                                       (schoolProfile.teachers_shs || 0);
                 return totalTeachers > 0 ? 'completed' : 'pending';
-
             case 'infra':
                 if (!schoolProfile) return 'pending';
                 const hasShift = schoolProfile.shift_kinder || schoolProfile.shift_g1 || schoolProfile.shift_g7 || schoolProfile.shift_g11;
                 const hasAdm = schoolProfile.adm_mdl || schoolProfile.adm_odl || schoolProfile.adm_others;
                 return (hasShift || hasAdm) ? 'completed' : 'pending';
-
             default:
                 return 'pending'; 
         }
@@ -140,23 +131,17 @@ const SchoolForms = () => {
 
     const StatusBadge = ({ status }) => {
         if (status === 'completed') return <span className="bg-green-100 text-green-700 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider border border-green-200">Completed</span>;
-        // Default is now Pending (Orange)
         return <span className="bg-orange-50 text-orange-600 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider border border-orange-100 flex items-center gap-1"><span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span> Pending</span>;
     };
 
     const FormCard = ({ item }) => {
         const status = getStatus(item.id);
-        
         return (
             <div 
-                onClick={() => navigate(item.route)} // Always Navigate
+                onClick={() => navigate(item.route)}
                 className={`p-5 rounded-2xl border flex items-center justify-between transition-all duration-200 relative overflow-hidden group bg-white border-gray-100 shadow-sm hover:shadow-md cursor-pointer active:scale-[0.98]`}
             >
-                {/* Status Color Bar */}
-                <div className={`absolute left-0 top-0 bottom-0 w-1.5 
-                    ${status === 'completed' ? 'bg-[#004A99]' : 'bg-orange-400'}`} 
-                />
-
+                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${status === 'completed' ? 'bg-[#004A99]' : 'bg-orange-400'}`} />
                 <div className="flex items-center gap-4 ml-3">
                     <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl transition-transform duration-300 group-hover:scale-110 bg-blue-50 text-blue-600">
                         {item.emoji}
@@ -166,7 +151,6 @@ const SchoolForms = () => {
                         <p className="text-[10px] text-gray-400 leading-tight max-w-[180px] mt-0.5">{item.description}</p>
                     </div>
                 </div>
-
                 <div className="flex flex-col items-end gap-2">
                     <StatusBadge status={status} />
                     <span className="text-gray-300 group-hover:text-[#004A99] transition text-xl">&rarr;</span>
@@ -199,7 +183,8 @@ const SchoolForms = () => {
                 ))}
             </div>
 
-            <BottomNav active="forms" />
+            {/* ✅ UPDATED NAVIGATION CALL */}
+            <SchoolHeadBottomNav /> 
         </div>
     );
 };

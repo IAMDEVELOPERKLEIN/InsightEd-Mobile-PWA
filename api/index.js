@@ -244,30 +244,55 @@ app.post('/api/save-school', async (req, res) => {
   }
 });
 
-// --- 5. POST: Save School Head Info ---
+// --- 5. POST: Save School Head Info (Updated to match Enrolment logic) ---
 app.post('/api/save-school-head', async (req, res) => {
-  const { uid, lastName, firstName, middleName, itemNumber, positionTitle, dateHired } = req.body;
+  const data = req.body;
+  
+  // Create a log entry similar to your enrolment logic
+  const newLogEntry = {
+    timestamp: new Date().toISOString(),
+    user: data.uid,
+    action: "School Head Info Update"
+  };
+
   try {
     const query = `
-      INSERT INTO school_heads (
-        user_uid, last_name, first_name, middle_name, 
-        item_number, position_title, date_hired
-      ) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (user_uid) 
-      DO UPDATE SET 
-        last_name = EXCLUDED.last_name,
-        first_name = EXCLUDED.first_name,
-        middle_name = EXCLUDED.middle_name,
-        item_number = EXCLUDED.item_number,
-        position_title = EXCLUDED.position_title,
-        date_hired = EXCLUDED.date_hired,
-        updated_at = CURRENT_TIMESTAMP;
+      UPDATE school_profiles SET 
+        head_last_name = $2,
+        head_first_name = $3,
+        head_middle_name = $4,
+        head_item_number = $5,
+        head_position_title = $6,
+        head_date_hired = $7,
+        head_sex = $8,
+        head_region = $9,
+        head_division = $10,
+        updated_at = CURRENT_TIMESTAMP,
+        history_logs = history_logs || $11::jsonb
+      WHERE submitted_by = $1;
     `;
     
-    await pool.query(query, [uid, lastName, firstName, middleName, itemNumber, positionTitle, dateHired]);
-    res.json({ success: true, message: "School Head saved successfully" });
+    const values = [
+      data.uid, 
+      data.lastName || null, 
+      data.firstName || null, 
+      data.middleName || null, 
+      data.itemNumber || null, 
+      data.positionTitle || null, 
+      data.dateHired || null,
+      data.sex || null,
+      data.region || null,
+      data.division || null,
+      JSON.stringify(newLogEntry)
+    ];
 
+    const result = await pool.query(query, values);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "School Profile not found. Please create the School Profile first." });
+    }
+
+    res.json({ success: true, message: "School Head information updated successfully!" });
   } catch (err) {
     console.error("Save Head Error:", err);
     res.status(500).json({ error: err.message });
@@ -278,9 +303,24 @@ app.post('/api/save-school-head', async (req, res) => {
 app.get('/api/school-head/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_heads WHERE user_uid = $1', [uid]);
+    const query = `
+      SELECT 
+        head_last_name as last_name, 
+        head_first_name as first_name, 
+        head_middle_name as middle_name, 
+        head_item_number as item_number, 
+        head_position_title as position_title, 
+        head_date_hired as date_hired,
+        head_sex as sex, 
+        head_region as region, 
+        head_division as division,
+        updated_at
+      FROM school_profiles 
+      WHERE submitted_by = $1;
+    `;
+    const result = await pool.query(query, [uid]);
     
-    if (result.rows.length > 0) {
+    if (result.rows.length > 0 && result.rows[0].last_name) {
       res.json({ exists: true, data: result.rows[0] });
     } else {
       res.json({ exists: false });
@@ -687,27 +727,49 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
 });
 
 // --- 18. POST: Save Teaching Personnel ---
+// api/index.js
+
 app.post('/api/save-teaching-personnel', async (req, res) => {
-    const data = req.body;
+    const d = req.body;
+
+    // Logging to verify what the backend "sees"
+    console.log("Saving for UID:", d.uid);
+
     try {
         const query = `
-            UPDATE school_profiles SET
-                teachers_es = $2, 
-                teachers_jhs = $3, 
-                teachers_shs = $4
-            WHERE school_id = $1
+            UPDATE school_profiles 
+            SET 
+                teach_kinder = $2::INT, teach_g1 = $3::INT, teach_g2 = $4::INT, 
+                teach_g3 = $5::INT, teach_g4 = $6::INT, teach_g7 = $7::INT, 
+                teach_g8 = $8::INT, teach_g9 = $9::INT, teach_g10 = $10::INT, 
+                teach_g11 = $11::INT, teach_g12 = $12::INT, teach_g5 = $13::INT, 
+                teach_g6 = $14::INT,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE TRIM(submitted_by) = TRIM($1)
+            RETURNING school_id;
         `;
-        
-        await pool.query(query, [
-            data.schoolId, 
-            data.es, 
-            data.jhs, 
-            data.shs
-        ]);
-        
-        res.json({ message: "Teaching personnel saved successfully!" });
+
+        const values = [
+            d.uid,                          // $1
+            d.teach_kinder || 0, d.teach_g1 || 0, d.teach_g2 || 0, 
+            d.teach_g3 || 0, d.teach_g4 || 0, d.teach_g7 || 0, 
+            d.teach_g8 || 0, d.teach_g9 || 0, d.teach_g10 || 0, 
+            d.teach_g11 || 0, d.teach_g12 || 0, d.teach_g5 || 0, 
+            d.teach_g6 || 0
+        ];
+
+        const result = await pool.query(query, values);
+
+        if (result.rowCount === 0) {
+            console.error("❌ SQL matched 0 rows for UID:", d.uid);
+            return res.status(404).json({ error: "No matching record found in Neon." });
+        }
+
+        console.log("✅ Neon Updated Successfully for School:", result.rows[0].school_id);
+        res.json({ success: true });
+
     } catch (err) {
-        console.error(err);
+        console.error("❌ Neon Database Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -821,27 +883,39 @@ app.get('/api/teacher-specialization/:uid', async (req, res) => {
 
 // --- 24. POST: Save Teacher Specialization ---
 app.post('/api/save-teacher-specialization', async (req, res) => {
-    const data = req.body;
+    const d = req.body;
     try {
         const query = `
-            UPDATE school_profiles SET
-                spec_english_major=$2, spec_english_teaching=$3, spec_filipino_major=$4, spec_filipino_teaching=$5,
-                spec_math_major=$6, spec_math_teaching=$7, spec_science_major=$8, spec_science_teaching=$9,
-                spec_ap_major=$10, spec_ap_teaching=$11, spec_mapeh_major=$12, spec_mapeh_teaching=$13,
-                spec_esp_major=$14, spec_esp_teaching=$15, spec_tle_major=$16, spec_tle_teaching=$17,
-                spec_guidance=$18, spec_librarian=$19, spec_ict_coord=$20, spec_drrm_coord=$21,
-                updated_at=CURRENT_TIMESTAMP
-            WHERE school_id=$1
+            UPDATE school_profiles SET 
+                spec_english_major=$2, spec_english_teaching=$3,
+                spec_filipino_major=$4, spec_filipino_teaching=$5,
+                spec_math_major=$6, spec_math_teaching=$7,
+                spec_science_major=$8, spec_science_teaching=$9,
+                spec_ap_major=$10, spec_ap_teaching=$11,
+                spec_mapeh_major=$12, spec_mapeh_teaching=$13,
+                spec_esp_major=$14, spec_esp_teaching=$15,
+                spec_tle_major=$16, spec_tle_teaching=$17,
+                spec_guidance=$18, spec_librarian=$19,
+                spec_ict_coord=$20, spec_drrm_coord=$21,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE submitted_by = $1;
         `;
-        await pool.query(query, [
-            data.schoolId,
-            data.spec_english_major, data.spec_english_teaching, data.spec_filipino_major, data.spec_filipino_teaching,
-            data.spec_math_major, data.spec_math_teaching, data.spec_science_major, data.spec_science_teaching,
-            data.spec_ap_major, data.spec_ap_teaching, data.spec_mapeh_major, data.spec_mapeh_teaching,
-            data.spec_esp_major, data.spec_esp_teaching, data.spec_tle_major, data.spec_tle_teaching,
-            data.spec_guidance, data.spec_librarian, data.spec_ict_coord, data.spec_drrm_coord
-        ]);
-        res.json({ message: "Specialization saved!" });
+        const values = [
+            d.uid,
+            d.spec_english_major||0, d.spec_english_teaching||0,
+            d.spec_filipino_major||0, d.spec_filipino_teaching||0,
+            d.spec_math_major||0, d.spec_math_teaching||0,
+            d.spec_science_major||0, d.spec_science_teaching||0,
+            d.spec_ap_major||0, d.spec_ap_teaching||0,
+            d.spec_mapeh_major||0, d.spec_mapeh_teaching||0,
+            d.spec_esp_major||0, d.spec_esp_teaching||0,
+            d.spec_tle_major||0, d.spec_tle_teaching||0,
+            d.spec_guidance||0, d.spec_librarian||0,
+            d.spec_ict_coord||0, d.spec_drrm_coord||0
+        ];
+        const result = await pool.query(query, values);
+        if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
+        res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

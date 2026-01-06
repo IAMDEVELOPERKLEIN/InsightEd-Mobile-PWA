@@ -1,150 +1,139 @@
 // src/modules/UserProfile.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase'; 
-import { doc, getDoc } from 'firebase/firestore';
-import BottomNav from './BottomNav';
-import PageTransition from '../components/PageTransition'; 
+import { auth, db } from '../firebase';
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import LoadingScreen from '../components/LoadingScreen';
+import SchoolHeadBottomNav from './SchoolHeadBottomNav';
 
 const UserProfile = () => {
     const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
-    const [schoolId, setSchoolId] = useState(null); // <--- NEW STATE
-    const [homeRoute, setHomeRoute] = useState('/');
 
     useEffect(() => {
-        const fetchData = async () => {
-            const user = auth.currentUser;
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // 1. Fetch Basic Info from Firebase
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-                
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    setUserData(data);
-                    setHomeRoute(getDashboardPath(data.role));
-                }
-
-                // 2. Fetch Assigned School from Neon
                 try {
-                    const response = await fetch(`/api/school-by-user/${user.uid}`);
-                    const result = await response.json();
-                    if (result.exists) {
-                        setSchoolId(result.data.school_id);
+                    // Fetch extended user info from Firestore (Users collection)
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) {
+                        setUserData(userDoc.data());
+                    } else {
+                        // Fallback to Auth data if Firestore doc isn't found
+                        setUserData({
+                            firstName: user.displayName?.split(' ')[0] || 'User',
+                            lastName: user.displayName?.split(' ')[1] || '',
+                            email: user.email,
+                            role: 'School Head'
+                        });
                     }
                 } catch (error) {
-                    console.error("Failed to fetch school ID:", error);
+                    console.error("Error fetching profile:", error);
                 }
+            } else {
+                navigate('/login');
             }
-        };
-        fetchData();
-    }, []);
-
-    const getDashboardPath = (role) => {
-        const roleMap = {
-            'Engineer': '/engineer-dashboard',
-            'School Head': '/schoolhead-dashboard',
-            'Human Resource': '/hr-dashboard',
-            'Admin': '/admin-dashboard',
-        };
-        return roleMap[role] || '/';
-    };
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, [navigate]);
 
     const handleLogout = async () => {
-        if (window.confirm("Are you sure you want to log out?")) {
-            await auth.signOut();
-            navigate('/');
-        }
-    };
-
-    const getInitials = (first, last) => {
-        return `${first?.charAt(0) || ''}${last?.charAt(0) || ''}`.toUpperCase();
-    };
-
-    return (
-        <PageTransition>
-            <div style={styles.container}>
-                {/* HERO SECTION */}
-                <div style={styles.header}>
-                    <div style={styles.avatarCircle}>
-                        {userData ? getInitials(userData.firstName, userData.lastName) : "..."}
-                    </div>
-                    <h2 style={styles.name}>
-                        {userData ? `${userData.firstName} ${userData.lastName}` : "Loading..."}
-                    </h2>
-                    <span style={styles.roleBadge}>
-                        {userData?.role || "User"}
-                    </span>
-                </div>
-
-                {/* DETAILS CARD */}
-                <div style={styles.card}>
-                    <h3 style={styles.sectionTitle}>ℹ️ Employment Details</h3>
-                    
-                    {/* NEW ROW: School ID */}
-                    <div style={styles.row}>
-                        <span style={styles.label}>School ID</span>
-                        <span style={{...styles.value, color: schoolId ? '#004A99' : '#999'}}>
-                            {schoolId || "Not Assigned"}
-                        </span>
-                    </div>
-
-                    <div style={styles.row}>
-                        <span style={styles.label}>Email</span>
-                        <span style={styles.value}>{userData?.email || "..."}</span>
-                    </div>
-
-                    <div style={styles.divider}></div>
-
-                    <h3 style={styles.sectionTitle}>📍 Area of Assignment</h3>
-                    <div style={styles.row}>
-                        <span style={styles.label}>Region</span>
-                        <span style={styles.value}>{userData?.region || "..."}</span>
-                    </div>
-                    <div style={styles.row}>
-                        <span style={styles.label}>Province</span>
-                        <span style={styles.value}>{userData?.province || "..."}</span>
-                    </div>
-                    <div style={styles.row}>
-                        <span style={styles.label}>City/Mun</span>
-                        <span style={styles.value}>{userData?.city || "..."}</span>
-                    </div>
-                    {userData?.barangay && (
-                        <div style={styles.row}>
-                            <span style={styles.label}>Barangay</span>
-                            <span style={styles.value}>{userData.barangay}</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* ACTIONS */}
-                <div style={styles.actionContainer}>
-                    <button style={styles.logoutButton} onClick={handleLogout}>
-                        👋 Logout
-                    </button>
-                </div>
-
-                <BottomNav homeRoute={homeRoute} />
-            </div>
-        </PageTransition>
-    );
+    try {
+        await signOut(auth);
+        localStorage.clear();
+        sessionStorage.clear();
+        // Use window.location.href to force a full browser reload to the login page
+        // This clears any "stuck" React states that cause white screens
+        window.location.href = '/login'; 
+    } catch (error) {
+        console.error("Logout Error:", error);
+    }
 };
 
-const styles = {
-    container: { minHeight: '100vh', backgroundColor: '#f5f7fa', paddingBottom: '80px', fontFamily: 'Poppins, sans-serif' },
-    header: { background: 'linear-gradient(135deg, #004A99 0%, #003366 100%)', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', borderBottomLeftRadius: '30px', borderBottomRightRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', color: 'white' },
-    avatarCircle: { width: '80px', height: '80px', backgroundColor: 'white', color: '#004A99', borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '32px', fontWeight: 'bold', marginBottom: '10px', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' },
-    name: { margin: '0', fontSize: '22px', fontWeight: '600' },
-    roleBadge: { marginTop: '5px', backgroundColor: 'rgba(255,255,255,0.2)', padding: '5px 15px', borderRadius: '20px', fontSize: '14px', letterSpacing: '1px' },
-    card: { backgroundColor: 'white', margin: '20px', padding: '20px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
-    sectionTitle: { fontSize: '14px', color: '#888', textTransform: 'uppercase', marginBottom: '15px', marginTop: '10px', fontWeight: '700' },
-    row: { display: 'flex', justifyContent: 'space-between', marginBottom: '12px', fontSize: '15px' },
-    label: { color: '#666', fontWeight: '500' },
-    value: { color: '#333', fontWeight: '600', textAlign: 'right', maxWidth: '60%' },
-    divider: { height: '1px', backgroundColor: '#eee', margin: '15px 0' },
-    actionContainer: { padding: '0 20px', display: 'flex', flexDirection: 'column', gap: '10px' },
-    logoutButton: { width: '100%', padding: '15px', backgroundColor: '#ffebee', border: 'none', borderRadius: '12px', fontSize: '16px', color: '#CC0000', cursor: 'pointer', fontWeight: '600' },
+    if (loading) return <LoadingScreen message="Opening Profile..." />;
+
+    return (
+        <div className="min-h-screen bg-slate-50 font-sans pb-32">
+            {/* --- HEADER --- */}
+            <div className="bg-[#004A99] px-6 pt-16 pb-28 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                <div className="relative z-10 text-center">
+                    <div className="w-24 h-24 bg-white rounded-full mx-auto mb-4 border-4 border-white/20 flex items-center justify-center text-4xl shadow-lg">
+                        {userData?.firstName?.charAt(0)}{userData?.lastName?.charAt(0)}
+                    </div>
+                    <h1 className="text-2xl font-bold text-white uppercase tracking-tight">
+                        {userData?.firstName} {userData?.lastName}
+                    </h1>
+                    <p className="text-blue-200 text-sm font-medium">{userData?.role || 'School Head'}</p>
+                </div>
+            </div>
+
+            {/* --- CONTENT --- */}
+            <div className="px-6 -mt-16 relative z-20 max-w-md mx-auto space-y-4">
+                
+                {/* Account Details */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-4 border-b border-gray-50 bg-gray-50/50">
+                        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Account Information</h2>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-500">EMAIL</span>
+                            <span className="text-sm font-semibold text-gray-800">{userData?.email}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-500">POSITION</span>
+                            <span className="text-sm font-semibold text-gray-800">School Head / Principal</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-gray-500">STATUS</span>
+                            <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase">Verified Account</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* App Settings */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="p-4 border-b border-gray-50 bg-gray-50/50">
+                        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">App Settings</h2>
+                    </div>
+                    <div className="p-2">
+                        <button className="w-full flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">🔔</span>
+                                <span className="text-sm font-bold text-gray-700">Notifications</span>
+                            </div>
+                            <span className="text-gray-300">→</span>
+                        </button>
+                        <button className="w-full flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">🛡️</span>
+                                <span className="text-sm font-bold text-gray-700">Privacy & Security</span>
+                            </div>
+                            <span className="text-gray-300">→</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Logout Button */}
+                <button 
+                    onClick={handleLogout}
+                    className="w-full bg-white border-2 border-red-100 text-red-600 font-bold py-4 rounded-2xl shadow-sm hover:bg-red-50 active:scale-95 transition flex items-center justify-center gap-2"
+                >
+                    <span>🚪</span> Sign Out from InsightEd
+                </button>
+
+                <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest pt-4">
+                    InsightEd Mobile v2.0.4 • 2026
+                </p>
+            </div>
+
+            <SchoolHeadBottomNav />
+        </div>
+    );
 };
 
 export default UserProfile;
