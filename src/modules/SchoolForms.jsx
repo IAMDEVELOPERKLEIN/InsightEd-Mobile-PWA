@@ -119,6 +119,26 @@ const SchoolForms = () => {
                                       (schoolProfile.teachers_jhs || 0) + 
                                       (schoolProfile.teachers_shs || 0);
                 return totalTeachers > 0 ? 'completed' : 'pending';
+
+                case 'specialization':
+            // ✅ Check for any spec_ columns
+            // If even one major is recorded, mark as completed
+            const hasSpec = 
+                (schoolProfile.spec_math_major > 0) || 
+                (schoolProfile.spec_english_major > 0) || 
+                (schoolProfile.spec_ict_coord > 0) ||
+                (schoolProfile.spec_guidance > 0);
+            return hasSpec ? 'completed' : 'pending';
+
+            case 'resources':
+            // ✅ Check for the new res_ prefixes
+            const hasResources = 
+                (schoolProfile.res_armchairs_good > 0) || 
+                (schoolProfile.res_toilets_male > 0) || 
+                (schoolProfile.res_sci_labs > 0) ||
+                (schoolProfile.res_desktops_instructional > 0);
+            return hasResources ? 'completed' : 'pending';
+
             case 'infra':
                 if (!schoolProfile) return 'pending';
                 const hasShift = schoolProfile.shift_kinder || schoolProfile.shift_g1 || schoolProfile.shift_g7 || schoolProfile.shift_g11;
