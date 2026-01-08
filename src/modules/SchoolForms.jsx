@@ -1,7 +1,7 @@
 // src/modules/SchoolForms.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase'; 
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import SchoolHeadBottomNav from './SchoolHeadBottomNav'; // ✅ UPDATED IMPORT
 import LoadingScreen from '../components/LoadingScreen';
@@ -16,61 +16,61 @@ const SchoolForms = () => {
 
     // --- 1. DATA CONTENT ---
     const formsData = [
-        { 
-            id: 'profile', 
-            name: "School Profile", 
+        {
+            id: 'profile',
+            name: "School Profile",
             emoji: "🏫",
             description: "General school identification and classification.",
-            route: "/school-profile", 
+            route: "/school-profile",
         },
-        { 
-            id: 'head', 
-            name: "School Information (Head)", 
+        {
+            id: 'head',
+            name: "School Information (Head)",
             emoji: "👨‍💼",
             description: "Contact details and position of the School Head.",
-            route: "/school-information", 
+            route: "/school-information",
         },
-        { 
-            id: 'enrolment', 
-            name: "Enrolment per Grade Level", 
+        {
+            id: 'enrolment',
+            name: "Enrolment per Grade Level",
             emoji: "📊",
             description: "Total number of enrollees for Grades 1 through 12.",
-            route: "/enrolment", 
+            route: "/enrolment",
         },
-        { 
-            id: 'classes', 
-            name: "Organized Classes", 
+        {
+            id: 'classes',
+            name: "Organized Classes",
             emoji: "🗂️",
             description: "Number of sections/classes organized per grade level.",
-            route: "/organized-classes", 
+            route: "/organized-classes",
         },
-        { 
-            id: 'teachers', 
-            name: "Teaching Personnel", 
+        {
+            id: 'teachers',
+            name: "Teaching Personnel",
             emoji: "👩‍🏫",
             description: "Summary of teaching staff by level.",
-            route: "/teaching-personnel", 
+            route: "/teaching-personnel",
         },
-        { 
-            id: 'infra', 
-            name: "Shifting & Modality", 
+        {
+            id: 'infra',
+            name: "Shifting & Modality",
             emoji: "🔄",
             description: "Shifting schedules and learning delivery modes.",
-            route: "/shifting-modality", 
+            route: "/shifting-modality",
         },
-        { 
-            id: 'resources', 
-            name: "School Resources", 
+        {
+            id: 'resources',
+            name: "School Resources",
             emoji: "💻",
             description: "Inventory of equipment and facilities.",
-            route: "/school-resources", 
+            route: "/school-resources",
         },
-        { 
-            id: 'specialization', 
-            name: "Teacher Specialization", 
+        {
+            id: 'specialization',
+            name: "Teacher Specialization",
             emoji: "🎓",
             description: "Count of teachers by subject specialization.",
-            route: "/teacher-specialization", 
+            route: "/teacher-specialization",
         },
     ];
 
@@ -107,37 +107,41 @@ const SchoolForms = () => {
                 return (schoolProfile?.total_enrollment > 0) ? 'completed' : 'pending';
             case 'classes':
                 if (!schoolProfile) return 'pending';
-                const totalClasses = (schoolProfile.classes_kinder || 0) + 
-                                     (schoolProfile.classes_grade_1 || 0) + 
-                                     (schoolProfile.classes_grade_6 || 0) + 
-                                     (schoolProfile.classes_grade_10 || 0) + 
-                                     (schoolProfile.classes_grade_12 || 0);
+                const totalClasses = (schoolProfile.classes_kinder || 0) +
+                    (schoolProfile.classes_grade_1 || 0) +
+                    (schoolProfile.classes_grade_6 || 0) +
+                    (schoolProfile.classes_grade_10 || 0) +
+                    (schoolProfile.classes_grade_12 || 0);
                 return totalClasses > 0 ? 'completed' : 'pending';
             case 'teachers':
                 if (!schoolProfile) return 'pending';
-                const totalTeachers = (schoolProfile.teachers_es || 0) + 
-                                      (schoolProfile.teachers_jhs || 0) + 
-                                      (schoolProfile.teachers_shs || 0);
+                const totalTeachers = (schoolProfile.teach_kinder || 0) +
+                    (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g2 || 0) +
+                    (schoolProfile.teach_g3 || 0) + (schoolProfile.teach_g4 || 0) +
+                    (schoolProfile.teach_g5 || 0) + (schoolProfile.teach_g6 || 0) +
+                    (schoolProfile.teach_g7 || 0) + (schoolProfile.teach_g8 || 0) +
+                    (schoolProfile.teach_g9 || 0) + (schoolProfile.teach_g10 || 0) +
+                    (schoolProfile.teach_g11 || 0) + (schoolProfile.teach_g12 || 0);
                 return totalTeachers > 0 ? 'completed' : 'pending';
 
-                case 'specialization':
-            // ✅ Check for any spec_ columns
-            // If even one major is recorded, mark as completed
-            const hasSpec = 
-                (schoolProfile.spec_math_major > 0) || 
-                (schoolProfile.spec_english_major > 0) || 
-                (schoolProfile.spec_ict_coord > 0) ||
-                (schoolProfile.spec_guidance > 0);
-            return hasSpec ? 'completed' : 'pending';
+            case 'specialization':
+                // ✅ Check for any spec_ columns
+                // If even one major is recorded, mark as completed
+                const hasSpec =
+                    (schoolProfile.spec_math_major > 0) ||
+                    (schoolProfile.spec_english_major > 0) ||
+                    (schoolProfile.spec_ict_coord > 0) ||
+                    (schoolProfile.spec_guidance > 0);
+                return hasSpec ? 'completed' : 'pending';
 
             case 'resources':
-            // ✅ Check for the new res_ prefixes
-            const hasResources = 
-                (schoolProfile.res_armchairs_good > 0) || 
-                (schoolProfile.res_toilets_male > 0) || 
-                (schoolProfile.res_sci_labs > 0) ||
-                (schoolProfile.res_desktops_instructional > 0);
-            return hasResources ? 'completed' : 'pending';
+                // ✅ Check for the new res_ prefixes
+                const hasResources =
+                    (schoolProfile.res_armchairs_good > 0) ||
+                    (schoolProfile.res_toilets_male > 0) ||
+                    (schoolProfile.res_sci_labs > 0) ||
+                    (schoolProfile.res_desktops_instructional > 0);
+                return hasResources ? 'completed' : 'pending';
 
             case 'infra':
                 if (!schoolProfile) return 'pending';
@@ -145,7 +149,7 @@ const SchoolForms = () => {
                 const hasAdm = schoolProfile.adm_mdl || schoolProfile.adm_odl || schoolProfile.adm_others;
                 return (hasShift || hasAdm) ? 'completed' : 'pending';
             default:
-                return 'pending'; 
+                return 'pending';
         }
     };
 
@@ -157,7 +161,7 @@ const SchoolForms = () => {
     const FormCard = ({ item }) => {
         const status = getStatus(item.id);
         return (
-            <div 
+            <div
                 onClick={() => navigate(item.route)}
                 className={`p-5 rounded-2xl border flex items-center justify-between transition-all duration-200 relative overflow-hidden group bg-white border-gray-100 shadow-sm hover:shadow-md cursor-pointer active:scale-[0.98]`}
             >
@@ -183,7 +187,7 @@ const SchoolForms = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
-            
+
             {/* --- HEADER --- */}
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
@@ -204,7 +208,7 @@ const SchoolForms = () => {
             </div>
 
             {/* ✅ UPDATED NAVIGATION CALL */}
-            <SchoolHeadBottomNav /> 
+            <SchoolHeadBottomNav />
         </div>
     );
 };

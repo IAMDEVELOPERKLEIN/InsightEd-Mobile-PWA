@@ -13,13 +13,13 @@ const app = express();
 
 // --- MIDDLEWARE ---
 app.use(cors({
-    origin: [
-        'http://localhost:5173',           // Vite Local
-        'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
-        'https://insight-ed-frontend.vercel.app' 
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  origin: [
+    'http://localhost:5173',           // Vite Local
+    'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
+    'https://insight-ed-frontend.vercel.app'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -46,29 +46,29 @@ pool.connect((err, client, release) => {
 const valueOrNull = (value) => (value === '' ? null : value);
 
 const parseNumberOrNull = (value) => {
-    if (value === '' || value === null || value === undefined) return null;
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? null : parsed;
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? null : parsed;
 };
 
 const parseIntOrNull = (value) => {
-    if (value === '' || value === null || value === undefined) return null;
-    const parsed = parseInt(value);
-    return isNaN(parsed) ? null : parsed;
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = parseInt(value);
+  return isNaN(parsed) ? null : parsed;
 };
 
 /** Log Activity Helper */
 const logActivity = async (userUid, userName, role, actionType, targetEntity, details) => {
-    const query = `
+  const query = `
         INSERT INTO activity_logs (user_uid, user_name, role, action_type, target_entity, details)
         VALUES ($1, $2, $3, $4, $5, $6)
     `;
-    try {
-        await pool.query(query, [userUid, userName, role, actionType, targetEntity, details]);
-        console.log(`📝 Audit Logged: ${actionType} - ${targetEntity}`);
-    } catch (err) {
-        console.error("❌ Failed to log activity:", err.message);
-    }
+  try {
+    await pool.query(query, [userUid, userName, role, actionType, targetEntity, details]);
+    console.log(`📝 Audit Logged: ${actionType} - ${targetEntity}`);
+  } catch (err) {
+    console.error("❌ Failed to log activity:", err.message);
+  }
 };
 
 // ==================================================================
@@ -77,8 +77,8 @@ const logActivity = async (userUid, userName, role, actionType, targetEntity, de
 
 // --- 1. GET: Fetch Recent Activities ---
 app.get('/api/activities', async (req, res) => {
-    try {
-        const result = await pool.query(`
+  try {
+    const result = await pool.query(`
             SELECT 
                 log_id, user_name, role, action_type, target_entity, details, 
                 TO_CHAR(timestamp, 'Mon DD, HH12:MI AM') as formatted_time 
@@ -86,11 +86,11 @@ app.get('/api/activities', async (req, res) => {
             ORDER BY timestamp DESC 
             LIMIT 50
         `);
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: "Error fetching activities" });
-    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error fetching activities" });
+  }
 });
 
 // --- 2. GET: Check School by USER ID ---
@@ -143,7 +143,7 @@ app.post('/api/save-school', async (req, res) => {
 
     if (oldData) {
       actionType = "Profile Updated";
-      
+
       // List of fields to monitor for changes
       // (Map frontend keys to database columns)
       const fieldMap = {
@@ -170,11 +170,11 @@ app.post('/api/save-school', async (req, res) => {
         const cleanOld = String(oldValue || '').trim();
 
         if (cleanNew !== cleanOld) {
-            changes.push({
-                field: dbCol,
-                old_value: cleanOld || "N/A",
-                new_value: cleanNew || "N/A"
-            });
+          changes.push({
+            field: dbCol,
+            old_value: cleanOld || "N/A",
+            new_value: cleanNew || "N/A"
+          });
         }
       }
     }
@@ -215,18 +215,18 @@ app.post('/api/save-school', async (req, res) => {
         submitted_at = CURRENT_TIMESTAMP,
         history_logs = school_profiles.history_logs || $14::jsonb;
     `;
-    
+
     const values = [
-      data.schoolId, data.schoolName, data.region, data.province, 
-      data.division, data.district, data.municipality, data.legDistrict, 
-      data.barangay, data.motherSchoolId, data.latitude, data.longitude, 
+      data.schoolId, data.schoolName, data.region, data.province,
+      data.division, data.district, data.municipality, data.legDistrict,
+      data.barangay, data.motherSchoolId, data.latitude, data.longitude,
       data.submittedBy,
-      JSON.stringify(newLogEntry) 
+      JSON.stringify(newLogEntry)
     ];
 
     await client.query(query, values);
     await client.query('COMMIT');
-    
+
     // Optional: Log to your separate activity_logs table too if you want centralized logs
     /* if (changes.length > 0) {
        await logActivity(data.submittedBy, 'User', 'School Head', 'UPDATE', `School ${data.schoolId}`, `Changed ${changes.length} fields`);
@@ -247,7 +247,7 @@ app.post('/api/save-school', async (req, res) => {
 // --- 5. POST: Save School Head Info (Updated to match Enrolment logic) ---
 app.post('/api/save-school-head', async (req, res) => {
   const data = req.body;
-  
+
   // Create a log entry similar to your enrolment logic
   const newLogEntry = {
     timestamp: new Date().toISOString(),
@@ -271,14 +271,14 @@ app.post('/api/save-school-head', async (req, res) => {
         history_logs = history_logs || $11::jsonb
       WHERE submitted_by = $1;
     `;
-    
+
     const values = [
-      data.uid, 
-      data.lastName || null, 
-      data.firstName || null, 
-      data.middleName || null, 
-      data.itemNumber || null, 
-      data.positionTitle || null, 
+      data.uid,
+      data.lastName || null,
+      data.firstName || null,
+      data.middleName || null,
+      data.itemNumber || null,
+      data.positionTitle || null,
       data.dateHired || null,
       data.sex || null,
       data.region || null,
@@ -319,7 +319,7 @@ app.get('/api/school-head/:uid', async (req, res) => {
       WHERE submitted_by = $1;
     `;
     const result = await pool.query(query, [uid]);
-    
+
     if (result.rows.length > 0 && result.rows[0].last_name) {
       res.json({ exists: true, data: result.rows[0] });
     } else {
@@ -334,7 +334,7 @@ app.get('/api/school-head/:uid', async (req, res) => {
 // --- 7. POST: Save Enrolment ---
 app.post('/api/save-enrolment', async (req, res) => {
   const data = req.body;
-  
+
   const newLogEntry = {
     timestamp: new Date().toISOString(),
     user: data.submittedBy,
@@ -362,11 +362,11 @@ app.post('/api/save-enrolment', async (req, res) => {
         history_logs = history_logs || $40::jsonb
       WHERE school_id = $1;
     `;
-    
+
     const values = [
       data.schoolId, data.curricularOffering,
       data.esTotal, data.jhsTotal, data.shsTotal, data.grandTotal,
-      data.gradeKinder, data.grade1, data.grade2, data.grade3, 
+      data.gradeKinder, data.grade1, data.grade2, data.grade3,
       data.grade4, data.grade5, data.grade6,
       data.grade7, data.grade8, data.grade9, data.grade10,
       data.grade11, data.grade12,
@@ -403,15 +403,15 @@ app.post('/api/save-project', async (req, res) => {
   if (!data.schoolName || !data.projectName || !data.schoolId) {
     return res.status(400).json({ message: "Missing required fields" });
   }
-  
+
   // We added data.uid (the Firestore ID) as the 16th value ($16)
   const values = [
-    data.projectName, data.schoolName, data.schoolId, 
+    data.projectName, data.schoolName, data.schoolId,
     valueOrNull(data.region), valueOrNull(data.division),
-    data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage), 
-    valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),        
-    valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),             
-    valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),      
+    data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+    valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+    valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+    valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
     valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
     data.uid // <--- This captures the Firestore UID from the frontend
   ];
@@ -433,12 +433,12 @@ app.post('/api/save-project', async (req, res) => {
 
     // Your existing logging logic
     await logActivity(
-        data.uid, 
-        data.modifiedBy, 
-        'Engineer', 
-        'CREATE', 
-        `Project: ${newProject.project_name}`, 
-        `Created new project for ${data.schoolName}`
+      data.uid,
+      data.modifiedBy,
+      'Engineer',
+      'CREATE',
+      `Project: ${newProject.project_name}`,
+      `Created new project for ${data.schoolName}`
     );
 
     res.status(200).json({ message: "Project saved!", project: newProject });
@@ -467,16 +467,16 @@ app.put('/api/update-project/:id', async (req, res) => {
 
   try {
     const result = await pool.query(query, values);
-    
+
     if (result.rowCount === 0) return res.status(404).json({ message: "Project not found" });
 
     await logActivity(
-        data.uid, 
-        data.modifiedBy, 
-        'Engineer', 
-        'UPDATE', 
-        `Project ID: ${id}`, 
-        `Updated status to ${data.status} (${data.accomplishmentPercentage}%)`
+      data.uid,
+      data.modifiedBy,
+      'Engineer',
+      'UPDATE',
+      `Project ID: ${id}`,
+      `Updated status to ${data.status} (${data.accomplishmentPercentage}%)`
     );
 
     res.json({ message: "Update successful", project: result.rows[0] });
@@ -490,7 +490,7 @@ app.put('/api/update-project/:id', async (req, res) => {
 app.get('/api/projects', async (req, res) => {
   try {
     // We catch the engineer_id sent from EngineerDashboard.jsx
-    const { status, region, division, search, engineer_id } = req.query; 
+    const { status, region, division, search, engineer_id } = req.query;
     let queryParams = [];
     let whereClauses = [];
 
@@ -510,8 +510,8 @@ app.get('/api/projects', async (req, res) => {
 
     // 1. ADD FILTER: Only show projects belonging to this engineer
     if (engineer_id) {
-        queryParams.push(engineer_id);
-        whereClauses.push(`engineer_id = $${queryParams.length}`);
+      queryParams.push(engineer_id);
+      whereClauses.push(`engineer_id = $${queryParams.length}`);
     }
 
     // 2. Add your existing filters
@@ -621,10 +621,10 @@ app.get('/api/engineer-images/:engineerId', async (req, res) => {
 
 // --- 15. GET: Get Organized Classes Data ---
 app.get('/api/organized-classes/:uid', async (req, res) => {
-    const { uid } = req.params;
-    try {
-        // Fetch offering AND class counts from the SAME table
-        const query = `
+  const { uid } = req.params;
+  try {
+    // Fetch offering AND class counts from the SAME table
+    const query = `
             SELECT 
                 school_id, school_name, curricular_offering,
                 classes_kinder, classes_grade_1, classes_grade_2, classes_grade_3,
@@ -634,40 +634,40 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
-        
-        const result = await pool.query(query, [uid]);
-        
-        if (result.rows.length === 0) return res.json({ exists: false });
-        
-        // Return structured data for the frontend
-        const row = result.rows[0];
-        res.json({ 
-            exists: true, 
-            schoolId: row.school_id, 
-            offering: row.curricular_offering,
-            data: {
-                kinder: row.classes_kinder,
-                grade_1: row.classes_grade_1, grade_2: row.classes_grade_2, 
-                grade_3: row.classes_grade_3, grade_4: row.classes_grade_4, 
-                grade_5: row.classes_grade_5, grade_6: row.classes_grade_6,
-                grade_7: row.classes_grade_7, grade_8: row.classes_grade_8, 
-                grade_9: row.classes_grade_9, grade_10: row.classes_grade_10,
-                grade_11: row.classes_grade_11, grade_12: row.classes_grade_12
-            }
-        });
 
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Fetch failed" });
-    }
+    const result = await pool.query(query, [uid]);
+
+    if (result.rows.length === 0) return res.json({ exists: false });
+
+    // Return structured data for the frontend
+    const row = result.rows[0];
+    res.json({
+      exists: true,
+      schoolId: row.school_id,
+      offering: row.curricular_offering,
+      data: {
+        kinder: row.classes_kinder,
+        grade_1: row.classes_grade_1, grade_2: row.classes_grade_2,
+        grade_3: row.classes_grade_3, grade_4: row.classes_grade_4,
+        grade_5: row.classes_grade_5, grade_6: row.classes_grade_6,
+        grade_7: row.classes_grade_7, grade_8: row.classes_grade_8,
+        grade_9: row.classes_grade_9, grade_10: row.classes_grade_10,
+        grade_11: row.classes_grade_11, grade_12: row.classes_grade_12
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Fetch failed" });
+  }
 });
 
 // --- 16. POST: Save Organized Classes (UPDATED) ---
 app.post('/api/save-organized-classes', async (req, res) => {
-    const data = req.body;
-    try {
-        // We now UPDATE school_profiles instead of inserting into a new table
-        const query = `
+  const data = req.body;
+  try {
+    // We now UPDATE school_profiles instead of inserting into a new table
+    const query = `
             UPDATE school_profiles SET
                 classes_kinder = $2, 
                 classes_grade_1 = $3, classes_grade_2 = $4, classes_grade_3 = $5,
@@ -676,67 +676,71 @@ app.post('/api/save-organized-classes', async (req, res) => {
                 classes_grade_10 = $12, classes_grade_11 = $13, classes_grade_12 = $14
             WHERE school_id = $1
         `;
-        
-        await pool.query(query, [
-            data.schoolId, 
-            data.kinder, 
-            data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
-            data.g7, data.g8, data.g9, data.g10, 
-            data.g11, data.g12
-        ]);
-        
-        res.json({ message: "Classes saved successfully!" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-    }
+
+    await pool.query(query, [
+      data.schoolId,
+      data.kinder,
+      data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
+      data.g7, data.g8, data.g9, data.g10,
+      data.g11, data.g12
+    ]);
+
+    res.json({ message: "Classes saved successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- 17. GET: Get Teaching Personnel Data ---
 app.get('/api/teaching-personnel/:uid', async (req, res) => {
-    const { uid } = req.params;
-    try {
-        const query = `
+  const { uid } = req.params;
+  try {
+    const query = `
             SELECT 
                 school_id, school_name, curricular_offering,
-                teachers_es, teachers_jhs, teachers_shs
+                teach_kinder, teach_g1, teach_g2, teach_g3, teach_g4, teach_g5, teach_g6,
+                teach_g7, teach_g8, teach_g9, teach_g10,
+                teach_g11, teach_g12
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
-        
-        const result = await pool.query(query, [uid]);
-        
-        if (result.rows.length === 0) return res.json({ exists: false });
-        
-        const row = result.rows[0];
-        res.json({ 
-            exists: true, 
-            schoolId: row.school_id, 
-            offering: row.curricular_offering,
-            data: {
-                es: row.teachers_es,
-                jhs: row.teachers_jhs,
-                shs: row.teachers_shs
-            }
-        });
 
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Fetch failed" });
-    }
+    const result = await pool.query(query, [uid]);
+
+    if (result.rows.length === 0) return res.json({ exists: false });
+
+    const row = result.rows[0];
+    res.json({
+      exists: true,
+      schoolId: row.school_id,
+      offering: row.curricular_offering,
+      data: {
+        teach_kinder: row.teach_kinder,
+        teach_g1: row.teach_g1, teach_g2: row.teach_g2, teach_g3: row.teach_g3,
+        teach_g4: row.teach_g4, teach_g5: row.teach_g5, teach_g6: row.teach_g6,
+        teach_g7: row.teach_g7, teach_g8: row.teach_g8, teach_g9: row.teach_g9, teach_g10: row.teach_g10,
+        teach_g11: row.teach_g11, teach_g12: row.teach_g12
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Fetch failed" });
+  }
 });
 
 // --- 18. POST: Save Teaching Personnel ---
 // api/index.js
 
 app.post('/api/save-teaching-personnel', async (req, res) => {
-    const d = req.body;
+  const d = req.body;
 
-    // Logging to verify what the backend "sees"
-    console.log("Saving for UID:", d.uid);
+  // Logging to verify what the backend "sees"
+  console.log("Saving for UID:", d.uid);
 
-    try {
-        const query = `
+  try {
+    const query = `
             UPDATE school_profiles 
             SET 
                 teach_kinder = $2::INT, teach_g1 = $3::INT, teach_g2 = $4::INT, 
@@ -749,60 +753,60 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
             RETURNING school_id;
         `;
 
-        const values = [
-            d.uid,                          // $1
-            d.teach_kinder || 0, d.teach_g1 || 0, d.teach_g2 || 0, 
-            d.teach_g3 || 0, d.teach_g4 || 0, d.teach_g7 || 0, 
-            d.teach_g8 || 0, d.teach_g9 || 0, d.teach_g10 || 0, 
-            d.teach_g11 || 0, d.teach_g12 || 0, d.teach_g5 || 0, 
-            d.teach_g6 || 0
-        ];
+    const values = [
+      d.uid,                          // $1
+      d.teach_kinder || 0, d.teach_g1 || 0, d.teach_g2 || 0,
+      d.teach_g3 || 0, d.teach_g4 || 0, d.teach_g7 || 0,
+      d.teach_g8 || 0, d.teach_g9 || 0, d.teach_g10 || 0,
+      d.teach_g11 || 0, d.teach_g12 || 0, d.teach_g5 || 0,
+      d.teach_g6 || 0
+    ];
 
-        const result = await pool.query(query, values);
+    const result = await pool.query(query, values);
 
-        if (result.rowCount === 0) {
-            console.error("❌ SQL matched 0 rows for UID:", d.uid);
-            return res.status(404).json({ error: "No matching record found in Neon." });
-        }
-
-        console.log("✅ Neon Updated Successfully for School:", result.rows[0].school_id);
-        res.json({ success: true });
-
-    } catch (err) {
-        console.error("❌ Neon Database Error:", err.message);
-        res.status(500).json({ error: err.message });
+    if (result.rowCount === 0) {
+      console.error("❌ SQL matched 0 rows for UID:", d.uid);
+      return res.status(404).json({ error: "No matching record found in Neon." });
     }
+
+    console.log("✅ Neon Updated Successfully for School:", result.rows[0].school_id);
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ Neon Database Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- 19. GET: Get Learning Modalities (From School Profile) ---
 app.get('/api/learning-modalities/:uid', async (req, res) => {
-    const { uid } = req.params;
-    try {
-        const query = `
+  const { uid } = req.params;
+  try {
+    const query = `
             SELECT * FROM school_profiles WHERE submitted_by = $1
         `;
-        const result = await pool.query(query, [uid]);
+    const result = await pool.query(query, [uid]);
 
-        if (result.rows.length === 0) return res.json({ exists: false });
+    if (result.rows.length === 0) return res.json({ exists: false });
 
-        const row = result.rows[0];
-        res.json({ 
-            exists: true, 
-            schoolId: row.school_id, 
-            offering: row.curricular_offering,
-            data: row // We just send the whole row, frontend picks what it needs
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Fetch failed" });
-    }
+    const row = result.rows[0];
+    res.json({
+      exists: true,
+      schoolId: row.school_id,
+      offering: row.curricular_offering,
+      data: row // We just send the whole row, frontend picks what it needs
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Fetch failed" });
+  }
 });
 
 // --- 20. POST: Save Learning Modalities (Update School Profile) ---
 app.post('/api/save-learning-modalities', async (req, res) => {
-    const data = req.body;
-    try {
-        const query = `
+  const data = req.body;
+  try {
+    const query = `
             UPDATE school_profiles SET
                 shift_kinder = $2, shift_g1 = $3, shift_g2 = $4, shift_g3 = $5, shift_g4 = $6, shift_g5 = $7, shift_g6 = $8,
                 shift_g7 = $9, shift_g8 = $10, shift_g9 = $11, shift_g10 = $12, shift_g11 = $13, shift_g12 = $14,
@@ -815,39 +819,39 @@ app.post('/api/save-learning-modalities', async (req, res) => {
             WHERE school_id = $1
         `;
 
-        await pool.query(query, [
-            data.schoolId,
-            data.shift_kinder, data.shift_g1, data.shift_g2, data.shift_g3, data.shift_g4, data.shift_g5, data.shift_g6,
-            data.shift_g7, data.shift_g8, data.shift_g9, data.shift_g10, data.shift_g11, data.shift_g12,
-            
-            data.mode_kinder, data.mode_g1, data.mode_g2, data.mode_g3, data.mode_g4, data.mode_g5, data.mode_g6,
-            data.mode_g7, data.mode_g8, data.mode_g9, data.mode_g10, data.mode_g11, data.mode_g12,
+    await pool.query(query, [
+      data.schoolId,
+      data.shift_kinder, data.shift_g1, data.shift_g2, data.shift_g3, data.shift_g4, data.shift_g5, data.shift_g6,
+      data.shift_g7, data.shift_g8, data.shift_g9, data.shift_g10, data.shift_g11, data.shift_g12,
 
-            data.adm_mdl, data.adm_odl, data.adm_tvi, data.adm_blended, data.adm_others
-        ]);
-        
-        res.json({ message: "Modalities saved successfully!" });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-    }
+      data.mode_kinder, data.mode_g1, data.mode_g2, data.mode_g3, data.mode_g4, data.mode_g5, data.mode_g6,
+      data.mode_g7, data.mode_g8, data.mode_g9, data.mode_g10, data.mode_g11, data.mode_g12,
+
+      data.adm_mdl, data.adm_odl, data.adm_tvi, data.adm_blended, data.adm_others
+    ]);
+
+    res.json({ message: "Modalities saved successfully!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- 21. GET: School Resources Data ---
 app.get('/api/school-resources/:uid', async (req, res) => {
-    const { uid } = req.params;
-    try {
-        const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
-        if (result.rows.length === 0) return res.json({ exists: false });
-        res.json({ exists: true, data: result.rows[0] });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    res.json({ exists: true, data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // --- 22. POST: Save School Resources ---
 app.post('/api/save-school-resources', async (req, res) => {
-    const data = req.body;
-    try {
-        const query = `
+  const data = req.body;
+  try {
+    const query = `
             UPDATE school_profiles SET
                 res_armchairs_good=$2, res_armchairs_repair=$3, res_teacher_tables_good=$4, res_teacher_tables_repair=$5,
                 res_blackboards_good=$6, res_blackboards_defective=$7,
@@ -858,34 +862,34 @@ app.post('/api/save-school-resources', async (req, res) => {
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
         `;
-        await pool.query(query, [
-            data.schoolId,
-            data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
-            data.res_blackboards_good, data.res_blackboards_defective,
-            data.res_desktops_instructional, data.res_desktops_admin, data.res_laptops_teachers, data.res_tablets_learners,
-            data.res_printers_working, data.res_projectors_working, data.res_internet_type,
-            data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, data.res_water_source,
-            data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops
-        ]);
-        res.json({ message: "Resources saved!" });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    await pool.query(query, [
+      data.schoolId,
+      data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
+      data.res_blackboards_good, data.res_blackboards_defective,
+      data.res_desktops_instructional, data.res_desktops_admin, data.res_laptops_teachers, data.res_tablets_learners,
+      data.res_printers_working, data.res_projectors_working, data.res_internet_type,
+      data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, data.res_water_source,
+      data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops
+    ]);
+    res.json({ message: "Resources saved!" });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // --- 23. GET: Teacher Specialization Data ---
 app.get('/api/teacher-specialization/:uid', async (req, res) => {
-    const { uid } = req.params;
-    try {
-        const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
-        if (result.rows.length === 0) return res.json({ exists: false });
-        res.json({ exists: true, data: result.rows[0] });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    res.json({ exists: true, data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // --- 24. POST: Save Teacher Specialization ---
 app.post('/api/save-teacher-specialization', async (req, res) => {
-    const d = req.body;
-    try {
-        const query = `
+  const d = req.body;
+  try {
+    const query = `
             UPDATE school_profiles SET 
                 spec_english_major=$2, spec_english_teaching=$3,
                 spec_filipino_major=$4, spec_filipino_teaching=$5,
@@ -900,23 +904,23 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 updated_at = CURRENT_TIMESTAMP
             WHERE submitted_by = $1;
         `;
-        const values = [
-            d.uid,
-            d.spec_english_major||0, d.spec_english_teaching||0,
-            d.spec_filipino_major||0, d.spec_filipino_teaching||0,
-            d.spec_math_major||0, d.spec_math_teaching||0,
-            d.spec_science_major||0, d.spec_science_teaching||0,
-            d.spec_ap_major||0, d.spec_ap_teaching||0,
-            d.spec_mapeh_major||0, d.spec_mapeh_teaching||0,
-            d.spec_esp_major||0, d.spec_esp_teaching||0,
-            d.spec_tle_major||0, d.spec_tle_teaching||0,
-            d.spec_guidance||0, d.spec_librarian||0,
-            d.spec_ict_coord||0, d.spec_drrm_coord||0
-        ];
-        const result = await pool.query(query, values);
-        if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    const values = [
+      d.uid,
+      d.spec_english_major || 0, d.spec_english_teaching || 0,
+      d.spec_filipino_major || 0, d.spec_filipino_teaching || 0,
+      d.spec_math_major || 0, d.spec_math_teaching || 0,
+      d.spec_science_major || 0, d.spec_science_teaching || 0,
+      d.spec_ap_major || 0, d.spec_ap_teaching || 0,
+      d.spec_mapeh_major || 0, d.spec_mapeh_teaching || 0,
+      d.spec_esp_major || 0, d.spec_esp_teaching || 0,
+      d.spec_tle_major || 0, d.spec_tle_teaching || 0,
+      d.spec_guidance || 0, d.spec_librarian || 0,
+      d.spec_ict_coord || 0, d.spec_drrm_coord || 0
+    ];
+    const result = await pool.query(query, values);
+    if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ==================================================================
