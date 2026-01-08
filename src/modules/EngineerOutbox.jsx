@@ -22,7 +22,7 @@ const EngineerOutbox = () => {
     // --- NEW: DELETE HANDLER ---
     const handleDelete = async (id) => {
         const confirmDelete = window.confirm("Are you sure you want to delete this item? This data will be lost permanently.");
-        
+
         if (confirmDelete) {
             try {
                 await deleteEngineerFromOutbox(id);
@@ -40,7 +40,7 @@ const EngineerOutbox = () => {
         // 1. If we are testing locally (localhost), FORCE request to port 3000
         if (window.location.hostname === 'localhost') {
             let path = savedUrl;
-            
+
             // If savedUrl is absolute (starts with http), strip the domain
             if (savedUrl.startsWith('http')) {
                 try {
@@ -51,12 +51,12 @@ const EngineerOutbox = () => {
                 }
             }
             // Return the Local Backend URL (Port 3000)
-            return `http://localhost:3000${path}`;
+            return `/api${path}`;
         }
 
         // 2. If in Production (Vercel), ensure we use the relative path
         if (savedUrl.startsWith('http')) {
-             try {
+            try {
                 const urlObj = new URL(savedUrl);
                 return urlObj.pathname;
             } catch (e) {
@@ -89,7 +89,7 @@ const EngineerOutbox = () => {
 
                 if (response.ok) {
                     setStatusMap(prev => ({ ...prev, [item.id]: 'success' }));
-                    await new Promise(r => setTimeout(r, 500)); 
+                    await new Promise(r => setTimeout(r, 500));
                     await deleteEngineerFromOutbox(item.id);
                 } else {
                     console.error(`Server error for item ${item.id}:`, response.status);
@@ -124,12 +124,11 @@ const EngineerOutbox = () => {
                             {isSyncing && <span className="text-xs font-bold text-blue-600 animate-pulse">SYNCING...</span>}
                         </div>
 
-                        <button 
-                            onClick={handleSyncAll} 
+                        <button
+                            onClick={handleSyncAll}
                             disabled={isSyncing}
-                            className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${
-                                isSyncing ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#FDB913] hover:bg-yellow-500 text-blue-900'
-                            }`}
+                            className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${isSyncing ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#FDB913] hover:bg-yellow-500 text-blue-900'
+                                }`}
                         >
                             {isSyncing ? "Syncing..." : "Sync All Data Now"}
                         </button>
@@ -144,7 +143,7 @@ const EngineerOutbox = () => {
                                             {new Date(item.timestamp).toLocaleTimeString()} • {new Date(item.timestamp).toLocaleDateString()}
                                         </p>
                                     </div>
-                                    
+
                                     {/* Right side: Status Icon & Delete Button */}
                                     <div className="flex items-center gap-3">
                                         <div className="text-xl">
@@ -155,14 +154,13 @@ const EngineerOutbox = () => {
                                         </div>
 
                                         {/* DELETE BUTTON */}
-                                        <button 
+                                        <button
                                             onClick={() => handleDelete(item.id)}
                                             disabled={isSyncing || statusMap[item.id] === 'syncing'}
-                                            className={`p-2 rounded-full transition-colors ${
-                                                isSyncing 
-                                                    ? 'opacity-30 cursor-not-allowed' 
-                                                    : 'bg-red-50 text-red-500 hover:bg-red-100'
-                                            }`}
+                                            className={`p-2 rounded-full transition-colors ${isSyncing
+                                                ? 'opacity-30 cursor-not-allowed'
+                                                : 'bg-red-50 text-red-500 hover:bg-red-100'
+                                                }`}
                                             title="Delete this item"
                                         >
                                             🗑️

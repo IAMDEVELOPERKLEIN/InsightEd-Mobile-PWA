@@ -200,16 +200,18 @@ const UserProfile = () => {
 
                 {/* ADDRESS SECTION */}
                 <h4 style={styles.subTitle}>Address</h4>
-                <div style={styles.inputGroup}>
-                    <label style={styles.inputLabel}>Region</label>
-                    <input
-                        style={isEditing ? styles.input : styles.inputDisabled}
-                        name="region"
-                        value={formData.region}
-                        onChange={handleInputChange}
-                        disabled={!isEditing}
-                    />
-                </div>
+
+                {/* Replaced Input with StyledSelect */}
+                <StyledSelect
+                    label="Region"
+                    name="region"
+                    value={formData.region}
+                    onChange={handleInputChange}
+                    options={regions}
+                    disabled={!isEditing}
+                    placeholder="Select Region"
+                />
+
                 <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>Province</label>
                     <input

@@ -11,7 +11,7 @@ const DetailedProjInfo = () => {
     useEffect(() => {
         const fetchProjectDetails = async () => {
             try {
-                const response = await fetch(`http://localhost:3000/api/projects/${id}`);
+                const response = await fetch(`/api/projects/${id}`);
                 if (!response.ok) throw new Error("Project not found");
                 const data = await response.json();
                 setProject(data);
@@ -59,7 +59,7 @@ const DetailedProjInfo = () => {
 
                 {/* Content */}
                 <div className="px-5 -mt-8 relative z-10 space-y-4">
-                    
+
                     {/* Status Card */}
                     <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-blue-500 flex justify-between items-center">
                         <div>

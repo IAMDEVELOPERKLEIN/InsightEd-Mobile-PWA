@@ -444,7 +444,7 @@ app.post('/api/save-project', async (req, res) => {
         INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
         VALUES ($1, $2, $3)
       `;
-      
+
       // Loop through images and insert them linked to the newProjectId
       for (const imgBase64 of data.images) {
         await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
@@ -457,12 +457,12 @@ app.post('/api/save-project', async (req, res) => {
     // Note: Ensure logActivity uses 'pool' internally or pass 'client' if you want it in the transaction. 
     // Assuming logActivity works independently:
     await logActivity(
-        data.uid, 
-        data.modifiedBy, 
-        'Engineer', 
-        'CREATE', 
-        `Project: ${newProject.project_name}`, 
-        `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
+      data.uid,
+      data.modifiedBy,
+      'Engineer',
+      'CREATE',
+      `Project: ${newProject.project_name}`,
+      `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
     );
 
     res.status(200).json({ message: "Project and images saved!", project: newProject });

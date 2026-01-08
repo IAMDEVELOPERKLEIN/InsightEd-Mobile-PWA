@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
-import PageTransition from '../components/PageTransition'; 
+import PageTransition from '../components/PageTransition';
 
 const Activity = () => {
-    const [activities, setActivities] = useState([]); 
+    const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
 
     // --- Fetch Activities ---
@@ -11,7 +11,7 @@ const Activity = () => {
         const fetchActivities = async () => {
             try {
                 // Ensure this matches your backend endpoint
-                const response = await fetch('http://localhost:3000/api/activities');
+                const response = await fetch('/api/activities');
                 if (response.ok) {
                     const data = await response.json();
                     setActivities(data);
@@ -40,7 +40,7 @@ const Activity = () => {
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
-                
+
                 {/* HEADER */}
                 <div className="bg-white px-6 pt-12 pb-6 rounded-b-[2rem] shadow-sm relative z-10">
                     <h1 className="text-2xl font-bold text-slate-800">Activity Logs</h1>
@@ -66,7 +66,7 @@ const Activity = () => {
                                             {log.formatted_time?.split(',')[1]}
                                         </span>
                                     </div>
-                                    
+
                                     {/* Content Column */}
                                     <div className="flex-1 ml-3">
                                         <div className="flex justify-between items-start mb-1">

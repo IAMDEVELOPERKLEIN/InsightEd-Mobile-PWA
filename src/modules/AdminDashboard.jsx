@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
-import PageTransition from '../components/PageTransition'; 
-import { auth, db } from '../firebase'; 
+import PageTransition from '../components/PageTransition';
+import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
 // NOTE: Removed the problematic import: import { DashboardStats } from './EngineerDashboard'; 
@@ -67,10 +67,10 @@ const AdminDashboard = () => {
         setSchoolError(null);
         try {
             // Using Port 3000 as inferred from previous snippets
-            const response = await fetch('http://localhost:3000/api/schools'); 
-            
+            const response = await fetch('/api/schools');
+
             if (!response.ok) {
-                throw new Error('Failed to fetch school list from server (404/500)'); 
+                throw new Error('Failed to fetch school list from server (404/500)');
             }
             const data = await response.json();
             setSchools(data);
@@ -101,15 +101,15 @@ const AdminDashboard = () => {
         setProjectLoading(true);
         setProjectError(null);
         try {
-            // Check this URL carefully: http://localhost:3000/api/projects/stats
-            const response = await fetch('http://localhost:3000/api/projects/stats');
-            
+            // Check this URL carefully: /api/projects/stats
+            const response = await fetch('/api/projects/stats');
+
             if (!response.ok) {
                 // If the server response code is not 200 (like 404 or 500)
-                throw new Error('Failed to fetch project stats (404/500)'); 
+                throw new Error('Failed to fetch project stats (404/500)');
             }
             const data = await response.json();
-            
+
             // Map statuses from data 
             const ProjectStatus = {
                 Completed: 'Completed',
@@ -121,12 +121,12 @@ const AdminDashboard = () => {
             const completed = data.filter(p => p.status === ProjectStatus.Completed).length;
             const ongoing = data.filter(p => p.status === ProjectStatus.Ongoing).length;
             const delayed = data.filter(p => {
-               if (p.status === ProjectStatus.Completed) return false;
-               if (!p.targetCompletionDate) return false; 
-               const target = new Date(p.targetCompletionDate);
-               const now = new Date();
-               // A project is delayed if it's not completed AND its target date has passed
-               return now > target;
+                if (p.status === ProjectStatus.Completed) return false;
+                if (!p.targetCompletionDate) return false;
+                const target = new Date(p.targetCompletionDate);
+                const now = new Date();
+                // A project is delayed if it's not completed AND its target date has passed
+                return now > target;
             }).length;
 
             setProjects(data); // Store full list for rendering
@@ -146,7 +146,7 @@ const AdminDashboard = () => {
             setProjectLoading(false);
         }
     };
-    
+
     // --- Data Fetching Effect (Triggers based on view) ---
     useEffect(() => {
         if (currentView === 'SchoolHead') {
@@ -168,7 +168,7 @@ const AdminDashboard = () => {
     // ==========================================================
     //                        VIEW RENDERING FUNCTIONS
     // ==========================================================
-    
+
     // --- A. School Head View (Retained) ---
     const renderSchoolHeadView = () => {
         const handleView = (school) => setSelectedSchool(school);
@@ -180,7 +180,7 @@ const AdminDashboard = () => {
                 <p className="text-gray-400 text-sm">Synchronizing School Data...</p>
             </div>
         );
-        
+
         if (schoolError) return (
             <div className="bg-red-50 p-6 rounded-2xl shadow-lg border border-red-100 text-center">
                 <div className="text-3xl mb-2">⚠️</div>
@@ -257,8 +257,8 @@ const AdminDashboard = () => {
                 <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider ml-1 mt-4">School Master List</h3>
                 <div className="space-y-3">
                     {schools.map((school) => (
-                        <div 
-                            key={school.id} 
+                        <div
+                            key={school.id}
                             onClick={() => school.status === 'Submitted' && handleView(school)}
                             className={`relative bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transition-all ${school.status === 'Submitted' ? 'active:scale-95 cursor-pointer hover:shadow-md' : 'opacity-70 grayscale'}`}
                         >
@@ -303,13 +303,13 @@ const AdminDashboard = () => {
                 <p className="text-xs text-red-500 mt-2">Check the server log for details about the 404/500 error.</p>
             </div>
         );
-        
+
         const delayedProjects = projects.filter(p => {
-             if (p.status === 'Completed') return false;
-             if (!p.targetCompletionDate) return false; 
-             const target = new Date(p.targetCompletionDate);
-             const now = new Date();
-             return now > target;
+            if (p.status === 'Completed') return false;
+            if (!p.targetCompletionDate) return false;
+            const target = new Date(p.targetCompletionDate);
+            const now = new Date();
+            return now > target;
         });
 
         return (
@@ -333,17 +333,17 @@ const AdminDashboard = () => {
                     <ProjectStatCard icon="🚧" label="Ongoing" value={projectStats.ongoing} color="bg-yellow-100 text-yellow-800" />
                     <ProjectStatCard icon="🚨" label="Delayed" value={projectStats.delayed} color="bg-red-100 text-red-800" />
                 </div>
-                
+
                 {/* --- PROJECTS MASTER LIST (New User Request) --- */}
                 <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider ml-1 mt-4">Project Master List ({projects.length})</h3>
                 <div className="space-y-3">
                     {projects.map((project) => {
                         const isDelayed = delayedProjects.some(p => p.project_id === project.project_id);
                         const statusColor = isDelayed ? 'text-red-600' : project.status === 'Completed' ? 'text-green-600' : 'text-yellow-600';
-                        
+
                         return (
-                            <div 
-                                key={project.project_id} 
+                            <div
+                                key={project.project_id}
                                 className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-transform"
                             >
                                 <div className="flex justify-between items-center">
@@ -375,7 +375,7 @@ const AdminDashboard = () => {
             <p className="text-xs text-gray-400 mt-2">Monitor regional staffing and payroll data here.</p>
         </div>
     );
-    
+
     // --- View Switcher Logic ---
     const renderContent = () => {
         switch (currentView) {
@@ -393,11 +393,11 @@ const AdminDashboard = () => {
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
-                
+
                 {/* --- TOP HEADER (IDENTITY & METRICS) --- */}
                 <div className="bg-[#004A99] px-6 pt-12 pb-32 rounded-b-[3rem] shadow-xl relative overflow-hidden transition-all duration-500 ease-in-out">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-                    
+
                     <div className="relative z-10 flex justify-between items-start">
                         <div className="text-white">
                             <p className="text-blue-200 text-xs font-bold tracking-widest uppercase mb-1">
@@ -415,7 +415,7 @@ const AdminDashboard = () => {
 
                 {/* --- MAIN CONTENT AREA --- */}
                 <div className="px-5 -mt-24 relative z-20 space-y-5">
-                    
+
                     {/* --- TAB SLIDER/SWITCHER --- */}
                     <div className="bg-white p-1 rounded-full shadow-lg border border-gray-100 flex justify-between gap-1">
                         {['SchoolHead', 'Engineer', 'HR'].map((view) => (
@@ -425,11 +425,10 @@ const AdminDashboard = () => {
                                     setCurrentView(view);
                                     setSelectedSchool(null); // Reset detail view on tab switch
                                 }}
-                                className={`flex-1 py-3 text-sm font-semibold rounded-full transition-all duration-300 ${
-                                    currentView === view
-                                        ? 'bg-[#004A99] text-white shadow-md'
-                                        : 'text-gray-600 hover:bg-gray-50'
-                                }`}
+                                className={`flex-1 py-3 text-sm font-semibold rounded-full transition-all duration-300 ${currentView === view
+                                    ? 'bg-[#004A99] text-white shadow-md'
+                                    : 'text-gray-600 hover:bg-gray-50'
+                                    }`}
                             >
                                 {view === 'SchoolHead' ? 'School Head' : view === 'Engineer' ? 'Engineer' : 'HR (Soon)'}
                             </button>
