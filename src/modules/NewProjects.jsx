@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse'; 
@@ -18,6 +18,11 @@ const NewProjects = () => {
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
     
+    // --- NEW STATE FOR FAB AND IMAGES ---
+    const fileInputRef = useRef(null);
+    const [showUploadOptions, setShowUploadOptions] = useState(false);
+    const [selectedFiles, setSelectedFiles] = useState([]);
+    
     // State to hold the CSV data
     const [schoolData, setSchoolData] = useState([]); 
 
@@ -25,7 +30,7 @@ const NewProjects = () => {
     useEffect(() => {
         Papa.parse('/schools.csv', {
             download: true,
-            header: true, // Uses the first row as keys (school_id, school_name, etc.)
+            header: true, 
             skipEmptyLines: true,
             complete: (results) => {
                 console.log("Loaded schools:", results.data.length);
@@ -64,14 +69,32 @@ const NewProjects = () => {
         otherRemarks: ''
     });
 
+    // --- NEW: FILE HANDLING FUNCTIONS ---
+    const handleFileChange = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+            setSelectedFiles(prev => [...prev, ...files]);
+            setShowUploadOptions(false);
+        }
+    };
+
+    const triggerFilePicker = (mode) => {
+        if (fileInputRef.current) {
+            if (mode === 'camera') {
+                fileInputRef.current.setAttribute('capture', 'environment');
+            } else {
+                fileInputRef.current.removeAttribute('capture');
+            }
+            fileInputRef.current.click();
+        }
+    };
+
     // --- 2. AUTOFILL LOGIC ---
     const handleAutoFill = (name, value, currentData) => {
         let updates = {};
 
-        // Case A: User types SCHOOL ID
         if (name === 'schoolId') {
             const foundSchool = schoolData.find(s => s.school_id === value);
-            
             if (foundSchool) {
                 updates.schoolName = foundSchool.school_name || currentData.schoolName;
                 updates.region = foundSchool.region || currentData.region;
@@ -79,112 +102,39 @@ const NewProjects = () => {
             }
         }
 
-        // Case B: User types/selects SCHOOL NAME
         if (name === 'schoolName') {
             const foundSchool = schoolData.find(s => 
                 s.school_name && s.school_name.toLowerCase() === value.toLowerCase()
             );
-
             if (foundSchool) {
                 updates.schoolId = foundSchool.school_id || currentData.schoolId;
                 updates.region = foundSchool.region || currentData.region;
                 updates.division = foundSchool.division || currentData.division;
             }
         }
-
         return updates;
     };
 
     // --- 3. HANDLE CHANGE WITH STRICT VALIDATION ---
     const handleChange = (e) => {
         let { name, value } = e.target;
-
         if (name === 'schoolId') {
             value = value.replace(/\D/g, ''); 
-            if (value.length > 6) {
-                value = value.slice(0, 6);
-            }
+            if (value.length > 6) value = value.slice(0, 6);
         }
 
         setFormData(prev => {
             let newData = { ...prev, [name]: value };
             const autoFillUpdates = handleAutoFill(name, value, prev);
-            
             if (Object.keys(autoFillUpdates).length > 0) {
                 newData = { ...newData, ...autoFillUpdates };
             }
-
             return newData;
         });
     };
 
-    // --- 4. UPDATED SUBMIT LOGIC (WITH OFFLINE SUPPORT) ---
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-
-        const payload = {
-            url: 'https://insight-ed-frontend.vercel.app/api/save-project',
-            method: 'POST',
-            body: { 
-                ...formData, 
-                uid: auth.currentUser?.uid,
-                modifiedBy: auth.currentUser?.displayName || 'Engineer'
-            },
-            formName: `Project: ${formData.projectName}`
-        };
-
-        // --- OFFLINE CHECK ---
-        if (!navigator.onLine) {
-            await addEngineerToOutbox(payload);
-            alert("📁 No internet. Project saved to Sync Center (Engineer Outbox).");
-            setIsSubmitting(false);
-            navigate('/engineer-dashboard');
-            return;
-        }
-
-        try {
-            // 1. Save Project Text Data
-            const response = await fetch(payload.url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload.body),
-            });
-
-            const result = await response.json();
-
-            // 2. Capture the project_id and handle images
-            if (response.ok && result.project?.project_id) {
-                const newProjectId = result.project.project_id;
-
-                if (selectedFiles.length > 0) {
-                    for (const file of selectedFiles) {
-                        const base64Image = await convertToBase64(file);
-                        await fetch('https://insight-ed-frontend.vercel.app/api/upload-image', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                projectId: newProjectId,
-                                imageData: base64Image,
-                                uploadedBy: auth.currentUser.uid
-                            }),
-                        });
-                    }
-                }
-                alert('Project and photos saved successfully!');
-                navigate('/engineer-dashboard');
-            }
-        } catch (error) {
-            console.error("Online Error, saving to outbox:", error);
-            await addEngineerToOutbox(payload);
-            alert("⚠️ Connection failed. Saved to Sync Center.");
-            navigate('/engineer-dashboard');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
     // Helper function to convert File objects to Base64 strings
+    // (Moved up so it can be used inside handleSubmit)
     const convertToBase64 = (file) => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -192,6 +142,75 @@ const NewProjects = () => {
         reader.onload = () => resolve(reader.result);
         reader.onerror = (error) => reject(error);
       });
+    };
+
+    // --- 4. FIXED SUBMIT LOGIC (BUNDLES IMAGES) ---
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+
+        // 1. PRE-PROCESS IMAGES (Convert to Base64 strings immediately)
+        let imagePayload = [];
+        if (selectedFiles.length > 0) {
+            try {
+                imagePayload = await Promise.all(selectedFiles.map(file => convertToBase64(file)));
+            } catch (err) {
+                console.error("Error processing images", err);
+                alert("Error processing images");
+                setIsSubmitting(false);
+                return;
+            }
+        }
+
+        // 2. CONSTRUCT SINGLE PAYLOAD
+        // We use relative URL '/api/save-project' so it works both Localhost & Production
+        const payload = {
+            url: '/api/save-project', 
+            method: 'POST',
+            body: { 
+                ...formData, 
+                uid: auth.currentUser?.uid,
+                modifiedBy: auth.currentUser?.displayName || 'Engineer',
+                images: imagePayload // <--- Images are now bundled HERE
+            },
+            formName: `Project: ${formData.projectName}`
+        };
+
+        // 3. OFFLINE CHECK
+        if (!navigator.onLine) {
+            // Because 'payload' now includes the Base64 images, 
+            // addEngineerToOutbox saves EVERYTHING (Text + Photos) in one go.
+            await addEngineerToOutbox(payload);
+            alert("📁 No internet. Project & Photos saved to Sync Center.");
+            setIsSubmitting(false);
+            navigate('/engineer-dashboard');
+            return;
+        }
+
+        // 4. ONLINE SUBMISSION
+        try {
+            const response = await fetch(payload.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload.body), // Sends Project + Images in one request
+            });
+
+            if (response.ok) {
+                alert('Project and photos saved successfully!');
+                navigate('/engineer-dashboard');
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Server responded with error');
+            }
+        } catch (error) {
+            console.error("Submission failed, saving to outbox:", error);
+            // On error, we save the FULL payload (with images) to the outbox
+            await addEngineerToOutbox(payload);
+            alert("⚠️ Connection failed. Saved to Sync Center.");
+            navigate('/engineer-dashboard');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -212,7 +231,7 @@ const NewProjects = () => {
                 <form onSubmit={handleSubmit} className="px-6 -mt-10">
                     <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
 
-                        <SectionHeader title="Project Identification" icon="🏗️" />
+                        <SectionHeader title="Project Identification" icon="🏢" />
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
@@ -313,7 +332,7 @@ const NewProjects = () => {
                         </div>
 
                         <SectionHeader title="Other Remarks" icon="📝" />
-                        <div>
+                        <div className="mb-4">
                             <textarea 
                                 name="otherRemarks" 
                                 rows="3" 

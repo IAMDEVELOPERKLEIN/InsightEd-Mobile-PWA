@@ -396,58 +396,85 @@ app.post('/api/save-enrolment', async (req, res) => {
 //                    ENGINEER FORMS ROUTES
 // ==================================================================
 
-// --- 8. POST: Save New Project ---
+// --- 8. POST: Save New Project (Updated for Images & Transactions) ---
 app.post('/api/save-project', async (req, res) => {
+  const client = await pool.connect(); // Use a client to handle transactions
   const data = req.body;
 
   if (!data.schoolName || !data.projectName || !data.schoolId) {
+    client.release();
     return res.status(400).json({ message: "Missing required fields" });
   }
 
-  // We added data.uid (the Firestore ID) as the 16th value ($16)
-  const values = [
-    data.projectName, data.schoolName, data.schoolId,
-    valueOrNull(data.region), valueOrNull(data.division),
-    data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
-    valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
-    valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
-    valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
-    valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
-    data.uid // <--- This captures the Firestore UID from the frontend
-  ];
-
-  const query = `
-    INSERT INTO "engineer_form" (
-      project_name, school_name, school_id, region, division,
-      status, accomplishment_percentage, status_as_of,
-      target_completion_date, actual_completion_date, notice_to_proceed,
-      contractor_name, project_allocation, batch_of_funds, other_remarks,
-      engineer_id
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-    RETURNING project_id, project_name;
-  `;
-
   try {
-    const result = await pool.query(query, values);
-    const newProject = result.rows[0];
+    await client.query('BEGIN'); // Start Transaction
 
-    // Your existing logging logic
+    // 1. Prepare Project Data
+    // We added data.uid (the Firestore ID) as the 16th value ($16)
+    const projectValues = [
+      data.projectName, data.schoolName, data.schoolId,
+      valueOrNull(data.region), valueOrNull(data.division),
+      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+      valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+      valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+      valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+      valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+      data.uid // <--- This captures the Firestore UID from the frontend
+    ];
+
+    const projectQuery = `
+      INSERT INTO "engineer_form" (
+        project_name, school_name, school_id, region, division,
+        status, accomplishment_percentage, status_as_of,
+        target_completion_date, actual_completion_date, notice_to_proceed,
+        contractor_name, project_allocation, batch_of_funds, other_remarks,
+        engineer_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      RETURNING project_id, project_name;
+    `;
+
+    // 2. Insert Project
+    const projectResult = await client.query(projectQuery, projectValues);
+    const newProject = projectResult.rows[0];
+    const newProjectId = newProject.project_id;
+
+    // 3. Insert Images (If they exist in the payload)
+    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+      const imageQuery = `
+        INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
+        VALUES ($1, $2, $3)
+      `;
+      
+      // Loop through images and insert them linked to the newProjectId
+      for (const imgBase64 of data.images) {
+        await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+      }
+    }
+
+    await client.query('COMMIT'); // Commit the transaction (save everything)
+
+    // 4. Log Activity (Outside transaction is fine, or inside if preferred)
+    // Note: Ensure logActivity uses 'pool' internally or pass 'client' if you want it in the transaction. 
+    // Assuming logActivity works independently:
     await logActivity(
-      data.uid,
-      data.modifiedBy,
-      'Engineer',
-      'CREATE',
-      `Project: ${newProject.project_name}`,
-      `Created new project for ${data.schoolName}`
+        data.uid, 
+        data.modifiedBy, 
+        'Engineer', 
+        'CREATE', 
+        `Project: ${newProject.project_name}`, 
+        `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
     );
 
-    res.status(200).json({ message: "Project saved!", project: newProject });
+    res.status(200).json({ message: "Project and images saved!", project: newProject });
+
   } catch (err) {
+    await client.query('ROLLBACK'); // Revert changes if anything fails
     console.error("❌ SQL ERROR:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
+  } finally {
+    client.release(); // Release the client back to the pool
   }
 });
-
 // --- 9. PUT: Update Project ---
 app.put('/api/update-project/:id', async (req, res) => {
   const { id } = req.params;
