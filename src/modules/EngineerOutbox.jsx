@@ -37,33 +37,23 @@ const EngineerOutbox = () => {
 
     // --- HELPER TO FIX URLS AUTOMATICALLY ---
     const getCorrectEndpoint = (savedUrl) => {
-        // 1. If we are testing locally (localhost), FORCE request to port 3000
-        if (window.location.hostname === 'localhost') {
-            let path = savedUrl;
-
-            // If savedUrl is absolute (starts with http), strip the domain
+        // Always try to use the relative /api path
+        try {
+            // If it's a full URL (http...), extract the pathname (e.g., /api/damage-assessment)
             if (savedUrl.startsWith('http')) {
-                try {
-                    const urlObj = new URL(savedUrl);
-                    path = urlObj.pathname;
-                } catch (e) {
-                    console.error("URL parsing error:", e);
-                }
-            }
-            // Return the Local Backend URL (Port 3000)
-            return `/api${path}`;
-        }
-
-        // 2. If in Production (Vercel), ensure we use the relative path
-        if (savedUrl.startsWith('http')) {
-            try {
                 const urlObj = new URL(savedUrl);
                 return urlObj.pathname;
-            } catch (e) {
-                return savedUrl;
             }
+            // If it's safe to assume it's already a path or needs /api prefix
+            if (!savedUrl.startsWith('/api')) {
+                return `/api${savedUrl.startsWith('/') ? '' : '/'}${savedUrl}`;
+            }
+            return savedUrl;
+        } catch (e) {
+            console.error("URL parsing error:", e);
+            // Fallback: just return it, hoping it works or user cleans it later
+            return savedUrl;
         }
-        return savedUrl;
     };
 
     const handleSyncAll = async () => {
