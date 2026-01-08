@@ -51,7 +51,7 @@ const SchoolHeadDashboard = () => {
         setProgress(Math.round((count / totalForms) * 100));
     }, [schoolProfile, headProfile]);
 
-    if (loading) return <LoadingScreen message="Loading Command Center..." />;
+    if (loading) return <LoadingScreen message="Please wait..." />;
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
@@ -71,10 +71,10 @@ const SchoolHeadDashboard = () => {
                     <div className="relative w-16 h-16 flex items-center justify-center">
                         <svg className="w-full h-full transform -rotate-90">
                             <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-blue-900/30" />
-                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" 
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent"
                                 className={`${progress === 100 ? 'text-green-400' : 'text-[#FDB913]'}`}
-                                strokeDasharray={175} 
-                                strokeDashoffset={175 - (175 * progress) / 100} 
+                                strokeDasharray={175}
+                                strokeDashoffset={175 - (175 * progress) / 100}
                                 strokeLinecap="round"
                             />
                         </svg>
@@ -99,7 +99,7 @@ const SchoolHeadDashboard = () => {
                 </div>
 
                 {/* 2. THE MAIN ACTION BUTTON */}
-                <button 
+                <button
                     onClick={() => navigate('/school-forms')}
                     className="w-full bg-gradient-to-r from-[#CC0000] to-[#990000] text-white font-bold py-8 px-6 rounded-2xl shadow-lg shadow-red-900/20 hover:scale-[1.02] transition-transform flex flex-col items-center justify-center gap-2"
                 >

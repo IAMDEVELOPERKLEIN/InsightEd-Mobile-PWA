@@ -143,7 +143,7 @@ const SchoolHeadDashboard = () => {
         return () => unsubscribe();
     }, []);
 
-    if (loading) return <LoadingScreen message="Loading Command Center..." />;
+    if (loading) return <LoadingScreen message="Please wait..." />;
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
