@@ -34,32 +34,23 @@ const formatAllocation = (value) => {
 // --- SUB-COMPONENTS ---
 
 const DashboardStats = ({ projects }) => {
-  // 1. Get the current date for comparison
   const now = new Date();
 
-  // 2. Define a helper to check if a specific project is delayed
   const isProjectDelayed = (p) => {
-    if (p.status === ProjectStatus.Completed) return false; // Completed is never delayed
-    if (!p.targetCompletionDate) return false; // No date, can't be delayed
+    if (p.status === ProjectStatus.Completed) return false;
+    if (!p.targetCompletionDate) return false;
     
     const target = new Date(p.targetCompletionDate);
-    // It is delayed if NOW is past Target AND it's not 100% done
     return now > target && p.accomplishmentPercentage < 100;
   };
 
   const stats = {
     total: projects.length,
-    
     completed: projects.filter((p) => p.status === ProjectStatus.Completed).length,
-    
-    // UPDATED: Count strictly "Delayed" projects
     delayed: projects.filter((p) => isProjectDelayed(p)).length,
-
-    // UPDATED: Count "Ongoing" as ONLY those active AND NOT delayed
     ongoing: projects.filter((p) => 
       p.status === ProjectStatus.Ongoing && !isProjectDelayed(p)
     ).length,
-
     totalAllocation: projects.reduce(
       (acc, curr) => acc + (Number(curr.projectAllocation) || 0),
       0
@@ -172,13 +163,11 @@ const DashboardStats = ({ projects }) => {
 const EngineerDashboard = () => {
   const [userName, setUserName] = useState("Engineer");
   const [projects, setProjects] = useState([]);
-  const [activities, setActivities] = useState([]); // [NEW] Activity State
-//   const [isLoading, setIsLoading] = useState(true); // Unused in this simplified version if we don't show loading spinner for stats, but good to keep if we want to add it back.
+  const [activities, setActivities] = useState([]); 
+  const [isLoading, setIsLoading] = useState(true);
 
-  // API Base URL
   const API_BASE = "";
 
-  // Fetch User & Projects
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
       const user = auth.currentUser;
@@ -190,7 +179,7 @@ const EngineerDashboard = () => {
         }
 
         try {
-        //   setIsLoading(true);
+          setIsLoading(true);
           const response = await fetch(
             `${API_BASE}/api/projects?engineer_id=${user.uid}`
           );
@@ -198,7 +187,6 @@ const EngineerDashboard = () => {
           const data = await response.json();
 
           const mappedData = data.map((item) => ({
-             // Keeping map same as before to ensure consistency
             id: item.id,
             projectName: item.projectName,
             schoolName: item.schoolName,
@@ -213,17 +201,15 @@ const EngineerDashboard = () => {
           }));
           setProjects(mappedData);
 
-          // [NEW] Fetch Recent Activities for this Engineer
           const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${user.uid}`);
           if (actResponse.ok) {
             const actData = await actResponse.json();
             setActivities(actData);
           }
-
         } catch (err) {
-          console.error("Error loading projects:", err);
+          console.error("Error loading projects/activities:", err);
         } finally {
-        //   setIsLoading(false);
+          setIsLoading(false);
         }
       }
     };
@@ -264,7 +250,6 @@ const EngineerDashboard = () => {
               autoplay={{ delay: 5000 }}
               className="w-full"
             >
-              {/* --- SLIDE 1: WELCOME --- */}
               <SwiperSlide className="pb-8">
                 <div className="bg-white p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
                   <h3 className="text-[#004A99] font-bold text-sm flex items-center mb-1">
@@ -277,7 +262,6 @@ const EngineerDashboard = () => {
                 </div>
               </SwiperSlide>
 
-              {/* --- SLIDE 2: PROJECTS LIST --- */}
               <SwiperSlide className="pb-8">
                 <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500 flex flex-col h-[140px]">
                   <h3 className="text-emerald-700 font-bold text-sm flex items-center mb-2 shrink-0">
@@ -301,7 +285,6 @@ const EngineerDashboard = () => {
                 </div>
               </SwiperSlide>
 
-              {/* --- SLIDE 3: REMARKS --- */}
               <SwiperSlide className="pb-8">
                 <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 flex flex-col h-[140px]">
                   <h3 className="text-blue-700 font-bold text-sm flex items-center mb-2 shrink-0">
@@ -325,11 +308,13 @@ const EngineerDashboard = () => {
             </Swiper>
           </div>
 
-          {/* --- RECENT ACTIVITIES (NEW SECTION) --- */}
-          <div className="w-full">
+          {/* --- RECENT ACTIVITIES section --- */}
+          <div className="w-full mb-6">
                <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mb-3 ml-1">Recent Activities</h3>
                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                   {activities.length > 0 ? (
+                   {isLoading ? (
+                       <div className="p-8 text-center text-xs text-slate-400">Loading activities...</div>
+                   ) : activities.length > 0 ? (
                        <>
                            <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto custom-scrollbar">
                                {activities.map((log, idx) => (
@@ -356,7 +341,7 @@ const EngineerDashboard = () => {
                                ))}
                            </div>
                            <div className="p-3 text-center bg-slate-50/50 border-t border-slate-50">
-                               <p className="text-[10px] text-slate-400 font-medium">Showing all {activities.length} recent activities</p>
+                               <p className="text-[10px] text-slate-400 font-medium">Showing {activities.length} recent activities</p>
                            </div>
                        </>
                    ) : (

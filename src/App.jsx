@@ -8,7 +8,7 @@ import Register from './Register';
 
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard'; 
-import EngineerProjects from './modules/EngineerProjects';
+import EngineerProjects from './modules/EngineerProjects'; 
 import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard'; 

@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Icons 
-import { TbHomeEdit, TbCloudUpload } from "react-icons/tb";
+import { TbHomeEdit, TbCloudUpload, TbClipboardList } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings } from "react-icons/fi"; // Changed to Gear icon
 
@@ -14,7 +14,7 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
     const navConfigs = {
         'Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit }, 
-            { label: 'Projects', path: '/engineer-projects', icon: LuCompass },
+            { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings }, 
         ],
