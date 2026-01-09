@@ -6,6 +6,11 @@ import { Pagination, Autoplay } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
 
+// Icons (Using the libraries you already have installed)
+import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell } from "react-icons/tb";
+import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
+import { FiUser } from "react-icons/fi";
+
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
@@ -35,14 +40,23 @@ const SchoolHeadDashboard = () => {
     const [searchResults, setSearchResults] = useState([]);
 
     const SEARCHABLE_ITEMS = [
-        { name: "School Profile", route: "/school-profile", type: "Form" },
-        { name: "School Information (Head)", route: "/school-information", type: "Form" },
-        { name: "Enrollment per Grade Level", route: "/enrolment", type: "Form" },
-        { name: "Organized Classes", route: "/organized-classes", type: "Form" },
-        { name: "Teaching Personnel", route: "/teaching-personnel", type: "Form" },
-        { name: "Shifting & Modality", route: "/shifting-modality", type: "Form" },
-        { name: "School Resources", route: "/school-resources", type: "Form" },
-        { name: "Teacher Specialization", route: "/teacher-specialization", type: "Form" },
+        { name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600" },
+        { name: "Enrollment", route: "/enrolment", icon: TbUsers, color: "bg-orange-100 text-orange-600" },
+        { name: "Resources", route: "/school-resources", icon: TbBooks, color: "bg-emerald-100 text-emerald-600" },
+        { name: "Classes", route: "/organized-classes", icon: LuLayoutDashboard, color: "bg-purple-100 text-purple-600" },
+        // Add more here if needed, or keep the full list for search
+    ];
+
+    // Full list for search logic
+    const ALL_ITEMS = [
+        { name: "School Profile", route: "/school-profile" },
+        { name: "School Information (Head)", route: "/school-information" },
+        { name: "Enrollment per Grade Level", route: "/enrolment" },
+        { name: "Organized Classes", route: "/organized-classes" },
+        { name: "Teaching Personnel", route: "/teaching-personnel" },
+        { name: "Shifting & Modality", route: "/shifting-modality" },
+        { name: "School Resources", route: "/school-resources" },
+        { name: "Teacher Specialization", route: "/teacher-specialization" },
     ];
 
     const handleSearch = (e) => {
@@ -54,20 +68,17 @@ const SchoolHeadDashboard = () => {
             return;
         }
 
-        const filtered = SEARCHABLE_ITEMS.filter(item =>
+        const filtered = ALL_ITEMS.filter(item =>
             item.name.toLowerCase().includes(query.toLowerCase())
         );
         setSearchResults(filtered);
     };
 
-    // Stats for the "cards"
-    // Calculate Completion Logic
+    // ... [Keep your useEffects for Stats/Auth exactly as they were] ...
     useEffect(() => {
         if (!schoolProfile) return;
-
         let completed = 0;
-
-        // Helper to check if any field with prefix has value > 0 (or non-empty for strings)
+        // Helper to check if any field with prefix has value > 0
         const hasData = (prefix, type = 'number') => {
             return Object.keys(schoolProfile).some(key => {
                 if (!key.startsWith(prefix)) return false;
@@ -77,29 +88,14 @@ const SchoolHeadDashboard = () => {
             });
         };
 
-        // 1. School Profile (Always true if we have the object)
         if (schoolProfile.school_id) completed++;
-
-        // 2. School Head (Check if name exists)
         if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completed++;
-
-        // 3. Enrolment (Check Total > 0)
         if (schoolProfile.total_enrollment > 0) completed++;
-
-        // 4. Organized Classes (Check any class count > 0)
         if (hasData('classes_', 'number')) completed++;
-
-        // 5. Teaching Personnel (Check any teacher count > 0)
         if (hasData('teach_', 'number')) completed++;
-
-        // 6. Shifting & Modality (Check if any shift strategy is set)
         if (hasData('shift_', 'string') || hasData('mode_', 'string')) completed++;
-
-        // 7. School Resources (Check any resource > 0 or existing string for water/internet)
         const hasResources = hasData('res_', 'number') || (schoolProfile.res_water_source && schoolProfile.res_water_source !== '');
         if (hasResources) completed++;
-
-        // 8. Teacher Specialization (Check any spec > 0)
         if (hasData('spec_', 'number')) completed++;
 
         setStats(prev => ({
@@ -137,66 +133,79 @@ const SchoolHeadDashboard = () => {
 
     return (
         <PageTransition>
-            <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
-                {/* --- TOP HEADER --- */}
-                <div className="relative bg-[#004A99] pt-12 pb-24 px-6 rounded-b-[2.5rem] shadow-xl">
-                    <div className="flex justify-between items-start">
+            <div className="min-h-screen bg-slate-50 font-sans pb-28 relative">
+
+                {/* --- HEADER SECTION --- */}
+                <div className="relative bg-[#004A99] pt-14 pb-20 px-6 rounded-b-[3rem] shadow-2xl z-0 overflow-hidden">
+                    {/* Background Decorative Circles */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl"></div>
+                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/10 rounded-full translate-y-1/2 -translate-x-1/4 blur-2xl"></div>
+
+                    <div className="relative flex justify-between items-start z-10">
                         <div>
-                            <p className="text-blue-200 text-xs font-bold tracking-wider uppercase">
-                                {schoolProfile ? `ID: ${schoolProfile.school_id}` : 'InsightEd Mobile'}
-                            </p>
-                            <h1 className="text-2xl font-bold text-white mt-1">
-                                {schoolProfile ? schoolProfile.school_name : 'Dashboard'}
+                            <div className="inline-flex items-center gap-2 bg-blue-800/50 px-3 py-1 rounded-full border border-blue-400/20 backdrop-blur-sm mb-3">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                <p className="text-blue-100 text-[10px] font-bold tracking-wider uppercase">
+                                    {schoolProfile ? `ID: ${schoolProfile.school_id}` : 'Sync Active'}
+                                </p>
+                            </div>
+                            <h1 className="text-3xl font-bold text-white tracking-tight">
+                                {userName}
                             </h1>
-                            <p className="text-blue-100 mt-1 text-sm">
-                                Principal {userName}
+                            <p className="text-blue-200 text-sm mt-1 opacity-90">
+                                {schoolProfile ? schoolProfile.school_name : 'School Principal'}
                             </p>
                         </div>
-                        <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
-                            🏫
-                        </div>
+                        <button className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-lg hover:bg-white/20 transition-all">
+                            <FiUser size={20} />
+                        </button>
                     </div>
 
-                    {/* Search Bar Embedded in Header */}
-                    <div className="mt-6 relative">
-                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-3 flex items-center gap-3">
-                            <span className="text-blue-200 text-lg">🔍</span>
+                    {/* Search Bar */}
+                    <div className="mt-8 relative z-50">
+                        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-1 flex items-center shadow-lg transition-all focus-within:bg-white/20 focus-within:border-white/40">
+                            <div className="pl-4 pr-3 text-blue-200">
+                                <TbSearch size={20} />
+                            </div>
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={handleSearch}
-                                placeholder="Search forms..."
-                                className="bg-transparent border-none text-white text-sm w-full placeholder-blue-200/50 focus:outline-none"
+                                placeholder="Find a form or report..."
+                                className="bg-transparent border-none text-white text-sm w-full placeholder-blue-200/60 focus:outline-none py-3"
                             />
                             {searchQuery && (
-                                <button onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-blue-200 hover:text-white">✕</button>
+                                <button onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="pr-4 text-blue-200 hover:text-white transition-colors">
+                                    <TbX size={18} />
+                                </button>
                             )}
                         </div>
-                        {/* Search Results Dropdown */}
+
+                        {/* Search Dropdown */}
                         {searchQuery && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-[60] animate-in fade-in zoom-in-95 duration-200">
                                 {searchResults.length > 0 ? (
-                                    <ul>
+                                    <ul className="max-h-60 overflow-y-auto">
                                         {searchResults.map((item, idx) => (
                                             <li key={idx}>
                                                 <button
                                                     onClick={() => navigate(item.route)}
-                                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center justify-between group"
+                                                    className="w-full text-left px-5 py-4 hover:bg-slate-50 transition-colors flex items-center justify-between group border-b border-slate-50 last:border-none"
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#004A99] flex items-center justify-center text-xs font-bold">
-                                                            📝
+                                                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#004A99] flex items-center justify-center">
+                                                            <LuFileCheck size={16} />
                                                         </div>
-                                                        <span className="text-sm font-semibold text-gray-700 group-hover:text-[#004A99]">{item.name}</span>
+                                                        <span className="text-sm font-semibold text-slate-700 group-hover:text-[#004A99] transition-colors">{item.name}</span>
                                                     </div>
-                                                    <span className="text-gray-300 group-hover:text-[#004A99] text-xs">Jump &rarr;</span>
+                                                    <TbChevronRight size={16} className="text-slate-300 group-hover:text-[#004A99] transition-colors" />
                                                 </button>
                                             </li>
                                         ))}
                                     </ul>
                                 ) : (
-                                    <div className="p-4 text-center text-gray-400 text-xs italic">
-                                        No results found.
+                                    <div className="p-6 text-center text-slate-400 text-xs italic">
+                                        No forms found matching "{searchQuery}"
                                     </div>
                                 )}
                             </div>
@@ -204,101 +213,120 @@ const SchoolHeadDashboard = () => {
                     </div>
                 </div>
 
-                {/* --- MAIN CONTENT --- */}
-                <div className="px-5 -mt-16 relative z-10 space-y-6">
+                {/* --- DASHBOARD CONTENT --- */}
+                <div className="px-6 -mt-12 relative z-10 space-y-8">
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-3 gap-2 mb-2">
-                        <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Completion</p>
-                            <p className={`text-xl font-bold mt-1 ${progress === 100 ? 'text-green-600' : 'text-[#004A99]'}`}>
-                                {progress}%
-                            </p>
+                    {/* 1. Quick Stats Row */}
+                    <div className="grid grid-cols-3 gap-3">
+                        {/* Progress Card */}
+                        <div className="col-span-1 bg-white p-4 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 flex flex-col justify-center items-center text-center">
+                            <div className="relative w-12 h-12 flex items-center justify-center mb-2">
+                                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                                    <path className="text-slate-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                    <path className={`${progress === 100 ? 'text-green-500' : 'text-[#004A99]'} transition-all duration-1000 ease-out`} strokeDasharray={`${progress}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                </svg>
+                                <span className="absolute text-[10px] font-bold text-slate-700">{progress}%</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Overall</p>
                         </div>
-                        <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">Forms</p>
-                            <p className="text-xl font-bold text-slate-800 mt-1">{completedForms}/{totalForms}</p>
+
+                        {/* Forms Count */}
+                        <div className="col-span-1 bg-white p-4 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 flex flex-col justify-center items-center text-center">
+                            <div className="w-10 h-10 rounded-full bg-blue-50 text-[#004A99] flex items-center justify-center mb-2">
+                                <LuFileCheck size={20} />
+                            </div>
+                            <p className="text-xl font-bold text-slate-800 leading-none">{completedForms}<span className="text-slate-300 text-sm">/{totalForms}</span></p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">Forms</p>
                         </div>
-                        <div
-                            className="bg-gradient-to-br from-[#004A99] to-[#003377] p-3 rounded-xl shadow-lg shadow-blue-900/20 flex flex-col justify-center items-center text-center text-white"
-                        >
-                            <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide">Total Learners</p>
-                            <p className="text-xl font-bold mt-1">{stats.enrollment || 0}</p>
+
+                        {/* Learners Highlight */}
+                        <div className="col-span-1 bg-gradient-to-br from-[#004A99] to-[#003377] p-4 rounded-2xl shadow-xl shadow-blue-900/20 flex flex-col justify-center items-center text-center text-white relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-2 opacity-10">
+                                <TbUsers size={40} />
+                            </div>
+                            <p className="text-2xl font-bold leading-none">{stats.enrollment || 0}</p>
+                            <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1">Learners</p>
                         </div>
                     </div>
 
-                    {/* Swiper Carousel */}
+                    {/* 2. Swiper / Highlights */}
                     <div className="w-full">
                         <Swiper
                             modules={[Pagination, Autoplay]}
-                            spaceBetween={15}
+                            spaceBetween={20}
                             slidesPerView={1}
                             pagination={{ clickable: true, dynamicBullets: true }}
-                            autoplay={{ delay: 6000 }}
-                            className="w-full"
+                            autoplay={{ delay: 5000 }}
+                            className="w-full rounded-2xl"
                         >
-                            <SwiperSlide className="pb-8">
-                                <div className="bg-white p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
-                                    <h3 className="text-[#004A99] font-bold text-sm flex items-center mb-1">
-                                        <span className="text-xl mr-2">👋</span>
+                            <SwiperSlide>
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-[#FDB913] min-h-[140px] flex flex-col justify-center relative overflow-hidden">
+                                    <div className="absolute right-[-10px] top-[-10px] opacity-5">
+                                        <TbSchool size={100} />
+                                    </div>
+                                    <h3 className="text-[#004A99] font-bold text-lg flex items-center mb-2 z-10">
                                         Welcome, Principal!
                                     </h3>
-                                    <p className="text-slate-500 text-xs leading-relaxed ml-7">
-                                        Monitor your school's data and ensure all reports are submitted on time.
+                                    <p className="text-slate-500 text-xs leading-relaxed max-w-[85%] z-10">
+                                        Ensure all school forms are up to date before the division deadline. Sync your data when online.
                                     </p>
                                 </div>
                             </SwiperSlide>
-
-                            <SwiperSlide className="pb-8">
-                                <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500 flex flex-col h-[140px]">
-                                    <h3 className="text-emerald-700 font-bold text-sm flex items-center mb-2 shrink-0">
-                                        <span className="text-xl mr-2">�</span>
-                                        Data Status
-                                    </h3>
-                                    <div className="flex-1 flex flex-col justify-center pl-7">
-                                        <p className="text-slate-600 text-xs mb-1">
-                                            You have completed <span className="font-bold text-emerald-600">{completedForms}</span> out of {totalForms} forms.
-                                        </p>
-                                        <div className="w-full bg-slate-100 rounded-full h-2 mt-2">
-                                            <div
-                                                className="bg-emerald-500 h-2 rounded-full transition-all duration-1000"
-                                                style={{ width: `${progress}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </SwiperSlide>
+                            {/* Add more slides if needed */}
                         </Swiper>
                     </div>
 
-                    {/* Recent Activities */}
-                    <div className="w-full mb-6">
-                        <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mb-3 ml-1">Recent Updates</h3>
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    {/* 3. Quick Actions Grid (NEW) */}
+                    <div>
+                        <div className="flex justify-between items-end mb-4 px-1">
+                            <h3 className="text-slate-700 font-bold text-sm uppercase tracking-wider">Quick Actions</h3>
+                            <button onClick={() => navigate('/school-forms')} className="text-[#004A99] text-xs font-semibold">View All</button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3">
+                            {SEARCHABLE_ITEMS.map((item, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => navigate(item.route)}
+                                    className="flex flex-col items-center gap-2 group"
+                                >
+                                    <div className={`w-14 h-14 rounded-2xl ${item.color} flex items-center justify-center shadow-sm group-active:scale-95 transition-all border border-transparent group-hover:border-slate-200`}>
+                                        <item.icon size={24} />
+                                    </div>
+                                    <span className="text-[10px] font-semibold text-slate-600 text-center leading-tight max-w-[60px]">
+                                        {item.name}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 4. Recent Activity Timeline */}
+                    <div className="pb-4">
+                        <h3 className="text-slate-700 font-bold text-sm uppercase tracking-wider mb-4 px-1">Recent History</h3>
+                        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
                             {schoolProfile?.history_logs && schoolProfile.history_logs.length > 0 ? (
-                                <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto custom-scrollbar">
+                                <div className="relative border-l-2 border-slate-100 ml-2 space-y-6 my-2">
                                     {[...schoolProfile.history_logs].reverse().slice(0, 5).map((log, idx) => (
-                                        <div key={idx} className="p-4 flex gap-3 hover:bg-slate-50 transition-colors">
-                                            <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-blue-500"></div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex justify-between items-start">
-                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border mb-1 inline-block bg-blue-50 text-blue-600 border-blue-100">
-                                                        UPDATE
-                                                    </span>
-                                                    <span className="text-[10px] text-slate-400">{new Date(log.timestamp).toLocaleDateString()}</span>
-                                                </div>
-                                                <p className="text-xs font-bold text-slate-700 truncate">{log.action}</p>
-                                                <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                                                    Updated by {userName}
-                                                </p>
+                                        <div key={idx} className="relative pl-6">
+                                            {/* Timeline Dot */}
+                                            <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white border-4 border-blue-500"></div>
+
+                                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start">
+                                                <p className="text-sm font-bold text-slate-700">{log.action}</p>
+                                                <span className="text-[10px] font-medium text-slate-400 mt-0.5 bg-slate-50 px-2 py-0.5 rounded-full w-fit">
+                                                    {new Date(log.timestamp).toLocaleDateString()}
+                                                </span>
                                             </div>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                Updated by <span className="text-[#004A99] font-medium">{userName}</span>
+                                            </p>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="p-8 text-center">
-                                    <p className="text-2xl mb-2">💤</p>
-                                    <p className="text-sm font-bold text-slate-600">No recent activity</p>
+                                <div className="py-8 flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                    <LuHistory size={32} className="mb-2" />
+                                    <p className="text-xs">No recent activity recorded</p>
                                 </div>
                             )}
                         </div>

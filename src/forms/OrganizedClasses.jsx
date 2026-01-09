@@ -238,7 +238,7 @@ const OrganizedClasses = () => {
                     {showElem() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
-                                <span className="text-xl">賜</span> Elementary School
+                                <span className="text-xl"></span> Elementary School
                             </h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <ClassInput label="Kinder" name="kinder" />
@@ -255,7 +255,7 @@ const OrganizedClasses = () => {
                     {showJHS() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
-                                <span className="text-xl">祷</span> Junior High School
+                                <span className="text-xl"></span> Junior High School
                             </h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <ClassInput label="Grade 7" name="g7" />
@@ -269,7 +269,7 @@ const OrganizedClasses = () => {
                     {showSHS() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
-                                <span className="text-xl">雌</span> Senior High School
+                                <span className="text-xl"></span> Senior High School
                             </h2>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <ClassInput label="Grade 11" name="g11" />
