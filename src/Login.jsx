@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
+import LoadingScreen from './components/LoadingScreen';
 import './Login.css';
 
 // Helper function to map roles to dashboard URLs
@@ -152,12 +153,9 @@ const Login = () => {
     };
 
     // --- 5. RENDER UI ---
+    // --- 5. RENDER UI ---
     if (loading) {
-        return (
-            <div className="login-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <div style={{ color: 'white', fontWeight: 'bold' }}>Please wait...</div>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     return (

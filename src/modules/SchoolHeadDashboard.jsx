@@ -5,7 +5,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
 import SchoolHeadBottomNav from './SchoolHeadBottomNav';
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 
 // Icons
 import { FiFileText, FiActivity, FiUsers, FiBox, FiCheckCircle, FiAlertCircle, FiClock } from "react-icons/fi";
@@ -18,6 +18,36 @@ const SchoolHeadDashboard = () => {
     const [userName, setUserName] = useState('School Head');
     const [schoolProfile, setSchoolProfile] = useState(null);
     const [headProfile, setHeadProfile] = useState(null);
+
+    // --- SEARCH STATE ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+
+    const SEARCHABLE_ITEMS = [
+        { name: "School Profile", route: "/school-profile", type: "Form" },
+        { name: "School Information (Head)", route: "/school-information", type: "Form" },
+        { name: "Enrollment per Grade Level", route: "/enrolment", type: "Form" },
+        { name: "Organized Classes", route: "/organized-classes", type: "Form" },
+        { name: "Teaching Personnel", route: "/teaching-personnel", type: "Form" },
+        { name: "Shifting & Modality", route: "/shifting-modality", type: "Form" },
+        { name: "School Resources", route: "/school-resources", type: "Form" },
+        { name: "Teacher Specialization", route: "/teacher-specialization", type: "Form" },
+    ];
+
+    const handleSearch = (e) => {
+        const query = e.target.value;
+        setSearchQuery(query);
+
+        if (query.trim() === '') {
+            setSearchResults([]);
+            return;
+        }
+
+        const filtered = SEARCHABLE_ITEMS.filter(item =>
+            item.name.toLowerCase().includes(query.toLowerCase())
+        );
+        setSearchResults(filtered);
+    };
 
     // Stats for the "cards"
     const [stats, setStats] = useState({
@@ -143,7 +173,7 @@ const SchoolHeadDashboard = () => {
         return () => unsubscribe();
     }, []);
 
-    if (loading) return <LoadingScreen message="Please wait..." />;
+    // LoadingScreen check removed
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
@@ -172,14 +202,51 @@ const SchoolHeadDashboard = () => {
                     </div>
 
                     {/* Quick Search / Filter Placeholder (Visual only for now) */}
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-3 flex items-center gap-3">
-                        <span className="text-blue-200 text-lg">🔍</span>
-                        <input
-                            type="text"
-                            placeholder="Search forms or reports..."
-                            className="bg-transparent border-none text-white text-sm w-full placeholder-blue-200/50 focus:outline-none"
-                            disabled
-                        />
+                    {/* Quick Search */}
+                    <div className="relative z-50">
+                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-3 flex items-center gap-3">
+                            <span className="text-blue-200 text-lg">🔍</span>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={handleSearch}
+                                placeholder="Search forms (e.g., Enrolment, Teachers)..."
+                                className="bg-transparent border-none text-white text-sm w-full placeholder-blue-200/50 focus:outline-none"
+                            />
+                            {searchQuery && (
+                                <button onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-blue-200 hover:text-white">✕</button>
+                            )}
+                        </div>
+
+                        {/* Search Results Dropdown */}
+                        {searchQuery && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                {searchResults.length > 0 ? (
+                                    <ul>
+                                        {searchResults.map((item, idx) => (
+                                            <li key={idx}>
+                                                <button
+                                                    onClick={() => navigate(item.route)}
+                                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center justify-between group"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#004A99] flex items-center justify-center text-xs font-bold">
+                                                            {item.type === 'Form' ? '📝' : '📄'}
+                                                        </div>
+                                                        <span className="text-sm font-semibold text-gray-700 group-hover:text-[#004A99]">{item.name}</span>
+                                                    </div>
+                                                    <span className="text-gray-300 group-hover:text-[#004A99] text-xs">Jump &rarr;</span>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="p-4 text-center text-gray-400 text-xs italic">
+                                        No results found for "{searchQuery}"
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
