@@ -8,6 +8,7 @@ import Register from './Register';
 
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard'; 
+import EngineerProjects from './modules/EngineerProjects'; 
 import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard'; 
@@ -55,6 +56,7 @@ function App() {
         
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
+        <Route path="/engineer-projects" element={<EngineerProjects />} />
         <Route path="/schoolhead-dashboard" element={<SchoolHeadDashboard />} />
         <Route path="/hr-dashboard" element={<HRDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />

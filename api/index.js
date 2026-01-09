@@ -76,16 +76,26 @@ const logActivity = async (userUid, userName, role, actionType, targetEntity, de
 // ==================================================================
 
 // --- 1. GET: Fetch Recent Activities ---
+// --- 1. GET: Fetch Recent Activities ---
 app.get('/api/activities', async (req, res) => {
   try {
-    const result = await pool.query(`
-            SELECT 
-                log_id, user_name, role, action_type, target_entity, details, 
-                TO_CHAR(timestamp, 'Mon DD, HH:MI AM') as formatted_time 
-            FROM activity_logs 
-            ORDER BY timestamp DESC 
-            LIMIT 100
-        `);
+    const { user_uid } = req.query;
+    let query = `
+      SELECT 
+          log_id, user_name, role, action_type, target_entity, details, 
+          TO_CHAR(timestamp, 'Mon DD, HH:MI AM') as formatted_time 
+      FROM activity_logs 
+    `;
+
+    const params = [];
+    if (user_uid) {
+      query += ` WHERE user_uid = $1 `;
+      params.push(user_uid);
+    }
+
+    query += ` ORDER BY timestamp DESC LIMIT 100 `;
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err);

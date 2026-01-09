@@ -350,6 +350,29 @@ const NewProjects = () => {
                             </div>
                         )}
 
+                        {/* --- ATTACH PHOTOS SECTION --- */}
+                        <div className="mt-4 pt-4 border-t border-slate-100">
+                             <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Attach Site Photos</label>
+                             <div className="grid grid-cols-2 gap-3">
+                                <button 
+                                    type="button"
+                                    onClick={() => triggerFilePicker('camera')} 
+                                    className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
+                                >
+                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">📸</div>
+                                    <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">Take Photo</span>
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => triggerFilePicker('gallery')} 
+                                    className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
+                                >
+                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">🖼️</div>
+                                    <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">From Gallery</span>
+                                </button>
+                             </div>
+                        </div>
+
                     </div>
 
                     <div className="pt-4 flex gap-3 sticky bottom-0 bg-white pb-2 border-t border-slate-50">
@@ -366,7 +389,7 @@ const NewProjects = () => {
                     </div>
                 </form>
 
-                <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-3">
+                <div className="hidden">
                     <input 
                         type="file" 
                         ref={fileInputRef} 
@@ -375,35 +398,6 @@ const NewProjects = () => {
                         accept="image/*" 
                         className="hidden" 
                     />
-                    
-                    {showUploadOptions && (
-                        <div className="flex flex-col gap-3 mb-2 animate-in slide-in-from-bottom-4 duration-200">
-                            <button 
-                                type="button"
-                                onClick={() => triggerFilePicker('camera')} 
-                                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all"
-                            >
-                                <span className="text-lg">📸</span>
-                                <span className="text-xs font-bold uppercase">Take Photo</span>
-                            </button>
-                            <button 
-                                type="button"
-                                onClick={() => triggerFilePicker('gallery')} 
-                                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all"
-                            >
-                                <span className="text-lg">🖼️</span>
-                                <span className="text-xs font-bold uppercase">From Gallery</span>
-                            </button>
-                        </div>
-                    )}
-
-                    <button 
-                        type="button"
-                        onClick={() => setShowUploadOptions(!showUploadOptions)} 
-                        className={`bg-[#FDB913] hover:bg-yellow-500 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-white transition-all transform ${showUploadOptions ? 'rotate-45 bg-red-500' : ''} border-4 border-white`}
-                    >
-                        <span className="text-2xl">{showUploadOptions ? '✕' : '📸'}</span>
-                    </button>
                 </div>
 
             </div>
