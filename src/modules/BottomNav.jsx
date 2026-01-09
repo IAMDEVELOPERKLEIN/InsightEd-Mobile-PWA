@@ -14,7 +14,7 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
     const navConfigs = {
         'Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit }, 
-            { label: 'Forms', path: '/new-project', icon: LuCompass },
+            { label: 'Projects', path: '/engineer-projects', icon: LuCompass },
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings }, 
         ],
