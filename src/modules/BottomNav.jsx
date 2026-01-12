@@ -19,13 +19,15 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings }, 
         ],
         'School Head': [
-            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Home', path: '/schoolhead-dashboard', icon: TbHomeEdit },
+            { label: 'Forms', path: '/school-forms', icon: TbClipboardList },
+            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
-            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
+            { label: 'Activity', path: '/activity', icon: TbClipboardList },
+            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
