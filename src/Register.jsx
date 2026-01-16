@@ -274,6 +274,7 @@ const Register = () => {
             lastName: lastName,
             schoolId: schoolIdToSave,
             region: formData.region || "",
+            division: formData.division || "",
             province: formData.province || "",
             city: formData.city || "",
             barangay: formData.barangay || "",
@@ -292,49 +293,7 @@ const Register = () => {
                 {/* RICH DYNAMIC BACKGROUND */}
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-white to-blue-100 animate-gradient-xy"></div>
 
-                <div className="input-group">
-                    <label className="section-label">1. Profile & Location</label>
-                    
-                    <select name="role" onChange={handleChange} value={formData.role} className="custom-select">
-                        <option value="Engineer">Engineer</option>
-                        <option value="School Head">School Head</option>
-                        <option value="Human Resource">Human Resource</option>
-                        <option value="Regional Office">Regional Office</option>
-                        <option value="School Division Office">School Division Office</option>
-                        <option value="Admin">Admin</option>
-                    </select>
 
-                    {formData.role === 'School Division Office' && (
-                        <div className="mb-4">
-                            <label className="section-label">2. Division Name</label>
-                            <input 
-                                name="division" 
-                                placeholder="Enter Division (e.g. Cebu City)" 
-                                onChange={handleChange} 
-                                className="custom-input" 
-                                style={{ marginTop: '5px' }}
-                                required 
-                            />
-                        </div>
-                    )}
-
-                    <div className="form-grid">
-                        {/* REGION */}
-                        <select name="region" onChange={handleRegionChange} value={formData.region} className="custom-select" required>
-                            <option value="">Select Region</option>
-                            {Object.keys(locationData).sort().map((reg) => (
-                                <option key={reg} value={reg}>{reg}</option>
-                            ))}
-                        </select>
-
-                        {/* PROVINCE */}
-                        <select name="province" onChange={handleProvinceChange} value={formData.province} className="custom-select" disabled={!formData.region} required>
-                            <option value="">Select Province</option>
-                            {provinceOptions.map((prov) => (
-                                <option key={prov} value={prov}>{prov}</option>
-                            ))}
-                        </select>
-                    </div>
                 {/* DECORATIVE SHAPES */}
                 <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-purple-300/20 rounded-full blur-[100px] animate-blob"></div>
                 <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-400/20 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
@@ -365,6 +324,8 @@ const Register = () => {
                                         <option value="Engineer">Engineer</option>
                                         <option value="School Head">School Head</option>
                                         <option value="Human Resource">Human Resource</option>
+                                        <option value="Regional Office">Regional Office</option>
+                                        <option value="School Division Office">School Division Office</option>
                                         <option value="Admin">Admin</option>
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
@@ -372,6 +333,21 @@ const Register = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* CONDITIONAL: DIVISION NAME */}
+                            {formData.role === 'School Division Office' && (
+                                <div className="bg-white/50 rounded-2xl p-4 border border-slate-100 animate-in fade-in slide-in-from-top-2">
+                                    <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">Division Details</label>
+                                    <input
+                                        name="division"
+                                        placeholder="Enter Division (e.g. Cebu City)"
+                                        value={formData.division || ''}
+                                        onChange={handleChange}
+                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder-slate-400"
+                                        required
+                                    />
+                                </div>
+                            )}
 
                             {/* SECTION 1: PERSONAL / DETAILS */}
                             <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
