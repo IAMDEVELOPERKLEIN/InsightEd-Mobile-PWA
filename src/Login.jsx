@@ -19,6 +19,8 @@ const getDashboardPath = (role) => {
         'Engineer': '/engineer-dashboard',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
+        'Regional Office': '/monitoring-dashboard',
+        'School Division Office': '/monitoring-dashboard',
         'Admin': '/admin-dashboard',
     };
     return roleMap[role] || '/';

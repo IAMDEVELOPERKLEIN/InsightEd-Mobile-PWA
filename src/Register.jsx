@@ -292,6 +292,49 @@ const Register = () => {
                 {/* RICH DYNAMIC BACKGROUND */}
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-white to-blue-100 animate-gradient-xy"></div>
 
+                <div className="input-group">
+                    <label className="section-label">1. Profile & Location</label>
+                    
+                    <select name="role" onChange={handleChange} value={formData.role} className="custom-select">
+                        <option value="Engineer">Engineer</option>
+                        <option value="School Head">School Head</option>
+                        <option value="Human Resource">Human Resource</option>
+                        <option value="Regional Office">Regional Office</option>
+                        <option value="School Division Office">School Division Office</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+
+                    {formData.role === 'School Division Office' && (
+                        <div className="mb-4">
+                            <label className="section-label">2. Division Name</label>
+                            <input 
+                                name="division" 
+                                placeholder="Enter Division (e.g. Cebu City)" 
+                                onChange={handleChange} 
+                                className="custom-input" 
+                                style={{ marginTop: '5px' }}
+                                required 
+                            />
+                        </div>
+                    )}
+
+                    <div className="form-grid">
+                        {/* REGION */}
+                        <select name="region" onChange={handleRegionChange} value={formData.region} className="custom-select" required>
+                            <option value="">Select Region</option>
+                            {Object.keys(locationData).sort().map((reg) => (
+                                <option key={reg} value={reg}>{reg}</option>
+                            ))}
+                        </select>
+
+                        {/* PROVINCE */}
+                        <select name="province" onChange={handleProvinceChange} value={formData.province} className="custom-select" disabled={!formData.region} required>
+                            <option value="">Select Province</option>
+                            {provinceOptions.map((prov) => (
+                                <option key={prov} value={prov}>{prov}</option>
+                            ))}
+                        </select>
+                    </div>
                 {/* DECORATIVE SHAPES */}
                 <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-purple-300/20 rounded-full blur-[100px] animate-blob"></div>
                 <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-400/20 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
