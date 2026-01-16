@@ -235,8 +235,8 @@ const TeacherSpecialization = () => {
             {/* Floating Action Bar */}
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
                 {viewOnly ? (
-                    <button 
-                        onClick={() => navigate('/jurisdiction-schools')} 
+                    <button
+                        onClick={() => navigate('/jurisdiction-schools')}
                         className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
                     >
                         Back to Schools List
@@ -261,18 +261,5 @@ const TeacherSpecialization = () => {
         </div>
     );
 };
-
-const getInitialFields = () => ({
-    spec_math_major: 0, spec_math_teaching: 0,
-    spec_english_major: 0, spec_english_teaching: 0,
-    spec_filipino_major: 0, spec_filipino_teaching: 0,
-    spec_science_major: 0, spec_science_teaching: 0,
-    spec_ap_major: 0, spec_ap_teaching: 0,
-    spec_mapeh_major: 0, spec_mapeh_teaching: 0,
-    spec_esp_major: 0, spec_esp_teaching: 0,
-    spec_tle_major: 0, spec_tle_teaching: 0,
-    spec_guidance: 0, spec_librarian: 0,
-    spec_ict_coord: 0, spec_drrm_coord: 0
-});
 
 export default TeacherSpecialization;
