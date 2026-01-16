@@ -44,7 +44,7 @@ const SchoolHeadDashboard = () => {
         { name: "Enrollment", route: "/enrolment", icon: TbUsers, color: "bg-orange-100 text-orange-600" },
         { name: "Resources", route: "/school-resources", icon: TbBooks, color: "bg-emerald-100 text-emerald-600" },
         { name: "Classes", route: "/organized-classes", icon: LuLayoutDashboard, color: "bg-purple-100 text-purple-600" },
-        // Add more here if needed, or keep the full list for search
+        { name: "Validate Projects", route: "/project-validation", icon: TbSchool, color: "bg-red-100 text-red-600" },
     ];
 
     // Full list for search logic
@@ -57,6 +57,7 @@ const SchoolHeadDashboard = () => {
         { name: "Shifting & Modality", route: "/shifting-modality" },
         { name: "School Resources", route: "/school-resources" },
         { name: "Teacher Specialization", route: "/teacher-specialization" },
+        { name: "Validate Projects", route: "/project-validation" },
     ];
 
     const handleSearch = (e) => {

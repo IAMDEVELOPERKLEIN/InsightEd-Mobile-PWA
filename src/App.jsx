@@ -40,6 +40,7 @@ import SiteInspection from './forms/SiteInspection';
 import MaterialInventory from './forms/MaterialInventory';
 import NewProjects from './modules/NewProjects';
 import DetailedProjInfo from './modules/DetailedProjInfo';
+import ProjectValidation from './modules/ProjectValidation';
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
 const AnimatedRoutes = () => {
@@ -79,6 +80,7 @@ const AnimatedRoutes = () => {
         <Route path="/school-resources" element={<SchoolResources />} />
         <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
         <Route path="/shifting-modality" element={<ShiftingModalities />} />
+        <Route path="/project-validation" element={<ProjectValidation />} />
 
         {/* Engineer Forms */}
         <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
