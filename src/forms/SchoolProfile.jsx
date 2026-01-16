@@ -413,12 +413,12 @@ const SchoolProfile = () => {
 
     // LoadingScreen check removed
 
-    const inputClass = `w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all`;
-    const labelClass = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 ml-1";
-    const sectionClass = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6";
+    const inputClass = `w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all`;
+    const labelClass = "block text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1 ml-1";
+    const sectionClass = "bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-6";
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
 
             {/* HEADER */}
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
@@ -443,13 +443,13 @@ const SchoolProfile = () => {
                     {/* 1. IDENTITY */}
                     <div className={sectionClass}>
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2"><span className="text-xl">🏫</span> Identity</h2>
+                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2"><span className="text-xl">🏫</span> Identity</h2>
                         </div>
                         <div className="grid grid-cols-1 gap-4">
                             <div>
                                 <label className={labelClass}>School ID (6-Digit)</label>
-                                <input type="text" name="schoolId" value={formData.schoolId} onChange={handleChange} onBlur={handleIdBlur} placeholder="100001" maxLength="6" className={`${inputClass} text-center text-xl tracking-widest font-bold ${hasSavedData ? 'bg-gray-200 cursor-not-allowed' : ''}`} required disabled={hasSavedData} />
-                                {hasSavedData && <p className="text-[10px] text-gray-400 mt-1 text-center">Permanently linked.</p>}
+                                <input type="text" name="schoolId" value={formData.schoolId} onChange={handleChange} onBlur={handleIdBlur} placeholder="100001" maxLength="6" className={`${inputClass} text-center text-xl tracking-widest font-bold ${hasSavedData ? 'bg-gray-200 dark:bg-slate-700 cursor-not-allowed' : ''}`} required disabled={hasSavedData} />
+                                {hasSavedData && <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1 text-center">Permanently linked.</p>}
                             </div>
                             <div>
                                 <label className={labelClass}>School Name</label>
@@ -464,9 +464,9 @@ const SchoolProfile = () => {
 
                     {/* 2. CLASSIFICATION */}
                     <div className={sectionClass}>
-                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📊</span> Classification</h2>
-                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
-                            <p className="text-xs text-blue-800 italic">This setting determines which fields appear in other Forms.</p>
+                        <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📊</span> Classification</h2>
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 mb-4">
+                            <p className="text-xs text-blue-800 dark:text-blue-300 italic">This setting determines which fields appear in other Forms.</p>
                         </div>
                         <div>
                             <label className={labelClass}>Curricular Offering</label>
@@ -484,7 +484,7 @@ const SchoolProfile = () => {
 
                     {/* 3. LOCATION */}
                     <div className={sectionClass}>
-                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📍</span> Location</h2>
+                        <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📍</span> Location</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label className={labelClass}>Region</label><select name="region" value={formData.region} onChange={handleRegionChange} className={inputClass} required><option value="">Select Region</option>{Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}</select></div>
                             <div><label className={labelClass}>Province</label><select name="province" value={formData.province} onChange={handleProvinceChange} className={inputClass} disabled={!formData.region} required><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
@@ -495,7 +495,7 @@ const SchoolProfile = () => {
 
                     {/* 4. HIERARCHY */}
                     <div className={sectionClass}>
-                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">🏛️</span> Administration</h2>
+                        <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">🏛️</span> Administration</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label className={labelClass}>Division</label><select name="division" value={formData.division} onChange={handleDivisionChange} className={inputClass} disabled={!formData.region} required><option value="">Select Division</option>{divisionOptions.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
                             <div><label className={labelClass}>District</label><select name="district" value={formData.district} onChange={handleChange} className={inputClass} disabled={!formData.division} required><option value="">Select District</option>{districtOptions.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
@@ -504,9 +504,9 @@ const SchoolProfile = () => {
                     </div>
 
                     {/* 5. COORDINATES */}
-                    <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 mb-6">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30 mb-6">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-blue-800 font-bold text-sm uppercase tracking-wide">🌐 Geo-Tagging</h2>
+                            <h2 className="text-blue-800 dark:text-blue-300 font-bold text-sm uppercase tracking-wide">🌐 Geo-Tagging</h2>
                             <button type="button" onClick={handleGetLocation} className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-all"><span>📍</span> Get My Location</button>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -516,13 +516,13 @@ const SchoolProfile = () => {
                         {/* 👇 ADD THIS BLOCK BACK 👇 */}
                         {formData.latitude && formData.longitude && (
                             <div className="mt-4 flex gap-2 justify-end">
-                                <a href={`geo:${formData.latitude},${formData.longitude}?q=${formData.latitude},${formData.longitude}`} className="flex items-center gap-2 text-[#004A99] hover:text-white hover:bg-[#004A99] text-xs font-bold bg-white px-3 py-2 rounded-lg border border-blue-100 shadow-sm transition-all no-underline"><span>📱</span> Open App</a>
-                                <a href={`https://www.openstreetmap.org/?mlat=${formData.latitude}&mlon=${formData.longitude}#map=18/${formData.latitude}/${formData.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-green-700 hover:text-white hover:bg-green-600 text-xs font-bold bg-white px-3 py-2 rounded-lg border border-green-100 shadow-sm transition-all no-underline"><span>🗺️</span> Confirm Location</a>
+                                <a href={`geo:${formData.latitude},${formData.longitude}?q=${formData.latitude},${formData.longitude}`} className="flex items-center gap-2 text-[#004A99] dark:text-blue-400 hover:text-white hover:bg-[#004A99] dark:hover:bg-blue-600 text-xs font-bold bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-blue-100 dark:border-blue-900/30 shadow-sm transition-all no-underline"><span>📱</span> Open App</a>
+                                <a href={`https://www.openstreetmap.org/?mlat=${formData.latitude}&mlon=${formData.longitude}#map=18/${formData.latitude}/${formData.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-green-700 dark:text-green-400 hover:text-white hover:bg-green-600 text-xs font-bold bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-green-100 dark:border-green-900/30 shadow-sm transition-all no-underline"><span>🗺️</span> Confirm Location</a>
                             </div>
                         )}
                     </div>
 
-                    <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+                    <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                         <button type="submit" disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
                             {isSaving ? "Saving..." : "Save Changes"}
                         </button>
