@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TbArrowLeft, TbCheck, TbX, TbBuildingSkyscraper, TbFileDescription, TbCalendar, TbCoin, TbActivity, TbPhoto } from "react-icons/tb";
+import { TbArrowLeft, TbCheck, TbX, TbBuildingSkyscraper, TbFileDescription, TbCalendar, TbCoin, TbActivity, TbPhoto, TbSearch } from "react-icons/tb";
 import { FiChevronRight } from "react-icons/fi";
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -255,8 +255,8 @@ const ProjectValidation = () => {
                         </div>
                     ) : selectedProject ? (
                         <div className="space-y-6 animate-in slide-in-from-right duration-300">
-                             {/* Project Details Card */}
-                             <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-slate-100 space-y-4">
+                            {/* Project Details Card */}
+                            <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-slate-100 space-y-4">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0">
                                         <TbBuildingSkyscraper size={24} />
@@ -400,11 +400,10 @@ const ProjectValidation = () => {
                                         className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 relative overflow-hidden active:scale-[0.98] transition-all cursor-pointer group"
                                     >
                                         {/* Status Badge */}
-                                        <div className={`absolute top-0 right-0 text-[10px] font-bold px-4 py-1.5 rounded-bl-2xl ${
-                                            project.validation_status === 'Validated' ? 'bg-green-500 text-white' : 
-                                            project.validation_status === 'Rejected' ? 'bg-red-500 text-white' : 
-                                            'bg-orange-500 text-white'
-                                        }`}>
+                                        <div className={`absolute top-0 right-0 text-[10px] font-bold px-4 py-1.5 rounded-bl-2xl ${project.validation_status === 'Validated' ? 'bg-green-500 text-white' :
+                                            project.validation_status === 'Rejected' ? 'bg-red-500 text-white' :
+                                                'bg-orange-500 text-white'
+                                            }`}>
                                             {project.validation_status || 'Submitted'}
                                         </div>
 
@@ -422,45 +421,34 @@ const ProjectValidation = () => {
                                             <div className="text-slate-300 group-hover:text-[#004A99] transition-colors pr-1">
                                                 <FiChevronRight size={20} />
                                             </div>
+                                        </div>
 
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0 shadow-sm group-hover:bg-[#004A99] group-hover:text-white transition-colors duration-300">
-                                                    <TbBuildingSkyscraper size={24} />
-                                                </div>
-                                                <div className="flex-1 min-w-0 pr-16">
-                                                    <h3 className="font-bold text-slate-800 leading-tight truncate">{project.projectName}</h3>
-                                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                                                        <TbCalendar size={12} />
-                                                        {formatDate(project.statusAsOfDate)}
-                                                    </p>
-                                                </div>
-                                                <div className="text-slate-300 group-hover:text-[#004A99] transition-colors pr-1">
-                                                    <TbArrowLeft className="rotate-180" size={20} />
-                                                </div>
+
+
+                                        <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Progress</span>
+                                                <span className="text-sm font-bold text-slate-700">{project.accomplishmentPercentage}%</span>
                                             </div>
-
-                                            <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Progress</span>
-                                                    <span className="text-sm font-bold text-slate-700">{project.accomplishmentPercentage}%</span>
-                                                </div>
-                                                {/* Mini visual bar/pill could go here */}
-                                                <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-blue-500 rounded-full"
-                                                        style={{ width: `${project.accomplishmentPercentage}%` }}
-                                                    ></div>
-                                                </div>
+                                            {/* Mini visual bar/pill could go here */}
+                                            <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-blue-500 rounded-full"
+                                                    style={{ width: `${project.accomplishmentPercentage}%` }}
+                                                ></div>
                                             </div>
                                         </div>
-                                    ))
+                                    </div>
+
+
+                                )
                                 )}
                             </div>
-                        )
-                    )}
+                        ))
+                    }
                 </div>
+                <BottomNav userRole={userRole} />
             </div>
-            <BottomNav userRole={userRole} />
         </PageTransition>
     );
 };
