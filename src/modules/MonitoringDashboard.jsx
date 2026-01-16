@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin } from 'react-icons/fi';
+import { TbTrophy } from 'react-icons/tb';
 
 const MonitoringDashboard = () => {
     const navigate = useNavigate();
@@ -20,7 +21,7 @@ const MonitoringDashboard = () => {
 
             const docRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(docRef);
-            
+
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setUserData(data);
@@ -63,8 +64,8 @@ const MonitoringDashboard = () => {
                 </div>
                 <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300">{title}</h3>
                 <div className="mt-3 w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                        className={`h-full ${color} transition-all duration-1000`} 
+                    <div
+                        className={`h-full ${color} transition-all duration-1000`}
                         style={{ width: `${percentage}%` }}
                     ></div>
                 </div>
@@ -86,7 +87,7 @@ const MonitoringDashboard = () => {
                     <div className="absolute top-0 right-0 p-8 opacity-10">
                         <FiTrendingUp size={120} />
                     </div>
-                    
+
                     <div className="relative z-10">
                         <div className="flex items-center gap-2 mb-2 opacity-80">
                             <FiMapPin size={14} />
@@ -96,6 +97,12 @@ const MonitoringDashboard = () => {
                         </div>
                         <h1 className="text-3xl font-black tracking-tight">Monitoring Dashboard</h1>
                         <p className="text-blue-100/70 text-sm mt-1">Status of schools & infrastructure projects.</p>
+
+                        <div className="absolute top-6 right-6 z-30">
+                            <button onClick={() => navigate('/leaderboard')} className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 hover:bg-white/30 transition-all active:scale-95 shadow-lg relative group">
+                                <TbTrophy size={20} className="text-yellow-300 drop-shadow-sm group-hover:scale-110 transition-transform" />
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -119,35 +126,35 @@ const MonitoringDashboard = () => {
                     <div className="space-y-4">
                         <div className="flex justify-between items-center">
                             <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Form Submissions</h2>
-                            <button 
+                            <button
                                 onClick={() => navigate('/jurisdiction-schools')}
                                 className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg"
                             >
                                 View All Schools
                             </button>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatCard 
-                                title="School Profiles" 
-                                value={stats?.profile || 0} 
-                                total={stats?.total_schools || 0} 
-                                color="bg-blue-500" 
-                                icon={FiFileText} 
+                            <StatCard
+                                title="School Profiles"
+                                value={stats?.profile || 0}
+                                total={stats?.total_schools || 0}
+                                color="bg-blue-500"
+                                icon={FiFileText}
                             />
-                            <StatCard 
-                                title="Enrollment Data" 
-                                value={stats?.enrollment || 0} 
-                                total={stats?.total_schools || 0} 
-                                color="bg-emerald-500" 
-                                icon={FiCheckCircle} 
+                            <StatCard
+                                title="Enrollment Data"
+                                value={stats?.enrollment || 0}
+                                total={stats?.total_schools || 0}
+                                color="bg-emerald-500"
+                                icon={FiCheckCircle}
                             />
-                            <StatCard 
-                                title="School Resources" 
-                                value={stats?.resources || 0} 
-                                total={stats?.total_schools || 0} 
-                                color="bg-amber-500" 
-                                icon={FiClock} 
+                            <StatCard
+                                title="School Resources"
+                                value={stats?.resources || 0}
+                                total={stats?.total_schools || 0}
+                                color="bg-amber-500"
+                                icon={FiClock}
                             />
                         </div>
                     </div>
