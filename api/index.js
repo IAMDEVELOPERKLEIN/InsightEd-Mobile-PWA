@@ -673,6 +673,59 @@ app.get('/api/projects/:id', async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+// --- 11b. GET: Get Projects by School ID (For School Head Validation) ---
+app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const query = `
+      SELECT 
+        project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
+        school_id AS "schoolId", division, region, status, validation_status,
+        validation_remarks AS "validationRemarks", validated_by AS "validatedBy",
+        accomplishment_percentage AS "accomplishmentPercentage",
+        project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
+        contractor_name AS "contractorName", other_remarks AS "otherRemarks",
+        TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
+        TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
+        TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
+      FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
+      ORDER BY project_id DESC;
+    `;
+    const result = await pool.query(query, [schoolId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Projects by School Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// --- 11c. POST: Validate Project (School Head) ---
+app.post('/api/validate-project', async (req, res) => {
+  const { projectId, status, userUid, userName, remarks } = req.body;
+  try {
+    const query = `
+      UPDATE "engineer_form" 
+      SET validation_status = $1, validation_remarks = $3, validated_by = $4
+      WHERE project_id = $2;
+    `;
+    await pool.query(query, [status, projectId, remarks || '', userName]);
+
+    await logActivity(
+      userUid,
+      userName || 'School Head',
+      'School Head',
+      'VALIDATE',
+      `Project ID: ${projectId}`,
+      `Marked as ${status}. Remarks: ${remarks || 'None'}`
+    );
+
+    res.json({ success: true, message: `Project ${status}` });
+  } catch (err) {
+    console.error("Validation Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // --- 20. POST: Upload Project Image (Base64) ---
 app.post('/api/upload-image', async (req, res) => {
@@ -954,6 +1007,7 @@ app.get('/api/school-resources/:uid', async (req, res) => {
 // --- 22. POST: Save School Resources ---
 app.post('/api/save-school-resources', async (req, res) => {
   const data = req.body;
+  console.log(`[Resources] Saving SchoolID: ${data.schoolId}`);
   try {
     const query = `
             UPDATE school_profiles SET
@@ -963,20 +1017,43 @@ app.post('/api/save-school-resources', async (req, res) => {
                 res_printers_working=$12, res_projectors_working=$13, res_internet_type=$14,
                 res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_faucets=$18, res_water_source=$19,
                 res_sci_labs=$20, res_com_labs=$21, res_tvl_workshops=$22,
+                
+                res_ownership_type=$23, res_electricity_source=$24, res_buildable_space=$25,
+
+                seats_kinder=$26, seats_grade_1=$27, seats_grade_2=$28, seats_grade_3=$29,
+                seats_grade_4=$30, seats_grade_5=$31, seats_grade_6=$32,
+                seats_grade_7=$33, seats_grade_8=$34, seats_grade_9=$35, seats_grade_10=$36,
+                seats_grade_11=$37, seats_grade_12=$38,
+
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
         `;
-    await pool.query(query, [
+    const result = await pool.query(query, [
       data.schoolId,
       data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
       data.res_blackboards_good, data.res_blackboards_defective,
       data.res_desktops_instructional, data.res_desktops_admin, data.res_laptops_teachers, data.res_tablets_learners,
       data.res_printers_working, data.res_projectors_working, data.res_internet_type,
       data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, data.res_water_source,
-      data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops
+      data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops,
+
+      data.res_ownership_type, data.res_electricity_source, data.res_buildable_space,
+
+      data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
+      data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
+      data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
+      data.seats_grade_11, data.seats_grade_12
     ]);
+    if (result.rowCount === 0) {
+      console.warn(`[Resources] ID ${data.schoolId} not found.`);
+      return res.status(404).json({ error: "School Profile not found" });
+    }
+    console.log("[Resources] Success");
     res.json({ message: "Resources saved!" });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- 23. GET: Teacher Specialization Data ---

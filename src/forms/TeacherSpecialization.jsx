@@ -16,21 +16,10 @@ const TeacherSpecialization = () => {
     const [showSaveModal, setShowSaveModal] = useState(false);
 
     const [schoolId, setSchoolId] = useState(null);
-    const [formData, setFormData] = useState({});
+    const [formData, setFormData] = useState(getInitialFields());
     const [originalData, setOriginalData] = useState(null);
 
     const goBack = () => navigate('/school-forms');
-
-    // Init Data Structure
-    const subjects = ['english', 'filipino', 'math', 'science', 'ap', 'mapeh', 'esp', 'tle'];
-    const ancillary = ['guidance', 'librarian', 'ict_coord', 'drrm_coord'];
-
-    const initialFields = {};
-    subjects.forEach(s => {
-        initialFields[`spec_${s}_major`] = 0;
-        initialFields[`spec_${s}_teaching`] = 0;
-    });
-    ancillary.forEach(a => { initialFields[`spec_${a}`] = 0; });
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -49,7 +38,9 @@ const TeacherSpecialization = () => {
                         const db = json.data;
                         const loaded = {};
 
-                        Object.keys(initialFields).forEach(key => {
+                        // Use getInitialFields keys to ensure all are present
+                        const defaults = getInitialFields();
+                        Object.keys(defaults).forEach(key => {
                             loaded[key] = db[key] !== null ? db[key] : 0;
                         });
 
@@ -59,11 +50,11 @@ const TeacherSpecialization = () => {
                         // Lock if data exists
                         if (db.spec_math_major > 0 || db.spec_guidance > 0) setIsLocked(true);
                     } else {
-                        setFormData(initialFields);
+                        setFormData(getInitialFields());
                     }
                 } catch (e) {
                     console.error("Fetch error:", e);
-                    setFormData(initialFields);
+                    setFormData(getInitialFields());
                 }
             }
             setLoading(false);
