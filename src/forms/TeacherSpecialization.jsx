@@ -25,7 +25,7 @@ const TeacherSpecialization = () => {
     const [formData, setFormData] = useState(getInitialFields());
     const [originalData, setOriginalData] = useState(null);
 
-    const goBack = () => navigate('/school-forms');
+    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -166,7 +166,7 @@ const TeacherSpecialization = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white text-2xl transition">←</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Teacher Specialization</h1>
                         <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Actual Teaching Loads"}</p>
