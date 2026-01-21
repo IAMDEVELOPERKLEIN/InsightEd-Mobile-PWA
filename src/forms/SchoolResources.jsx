@@ -36,9 +36,6 @@ const SchoolResources = () => {
         res_internet_type: '',
         res_toilets_male: 0,
         res_toilets_female: 0,
-        res_internet_type: '',
-        res_toilets_male: 0,
-        res_toilets_female: 0,
         res_toilets_common: 0, // [NEW] Common CR
         res_toilets_pwd: 0,
         res_water_source: '',
