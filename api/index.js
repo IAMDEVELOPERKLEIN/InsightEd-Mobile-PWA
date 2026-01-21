@@ -119,8 +119,22 @@ app.post('/api/log-activity', async (req, res) => {
 //                        OTP & AUTH ROUTES
 // ==================================================================
 
-// Temporary in-memory store for OTPs (Use Redis/DB in production)
-const otpStore = {};
+// Initialize OTP Table
+const initOtpTable = async () => {
+  try {
+    await pool.query(`
+            CREATE TABLE IF NOT EXISTS verification_codes (
+                email VARCHAR(255) PRIMARY KEY,
+                code VARCHAR(10) NOT NULL,
+                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
+            );
+        `);
+    console.log("✅ OTP Table Initialized");
+  } catch (err) {
+    console.error("❌ Failed to init OTP table:", err);
+  }
+};
+initOtpTable();
 
 // --- POST: Send OTP (Real Email via Nodemailer) ---
 app.post('/api/send-otp', async (req, res) => {
@@ -130,10 +144,19 @@ app.post('/api/send-otp', async (req, res) => {
   // Generate 6-digit code
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  // Store in memory
-  otpStore[email] = otp;
-
   try {
+    // 1. SAVE TO DATABASE (Upsert)
+    // "ON CONFLICT (email)" means if a code already exists for this email, replace it
+    await pool.query(`
+        INSERT INTO verification_codes (email, code, expires_at)
+        VALUES ($1, $2, NOW() + INTERVAL '10 minutes')
+        ON CONFLICT (email) 
+        DO UPDATE SET code = $2, expires_at = NOW() + INTERVAL '10 minutes';
+    `, [email, otp]);
+
+    console.log(`💾 OTP saved to DB for ${email}`);
+
+    // 2. SEND EMAIL
     // Dynamic import to avoid crash if not installed yet
     const nodemailer = await import('nodemailer');
 
@@ -164,7 +187,7 @@ app.post('/api/send-otp', async (req, res) => {
     res.json({ success: true, message: "Verification code sent to your email!" });
 
   } catch (error) {
-    console.error("❌ Email Error:", error);
+    console.error("❌ OTP Error:", error);
 
     // Fallback to console for dev if email fails
     console.log(`⚠️ FALLBACK: OTP for ${email} is ${otp}`);
@@ -184,15 +207,23 @@ app.post('/api/send-otp', async (req, res) => {
 app.post('/api/verify-otp', async (req, res) => {
   const { email, code } = req.body;
 
-  if (!otpStore[email]) {
-    return res.status(400).json({ success: false, message: "No OTP found for this email. Request a new one." });
-  }
+  try {
+    // 1. Check DB for valid code
+    const result = await pool.query(`
+          SELECT * FROM verification_codes 
+          WHERE email = $1 AND code = $2 AND expires_at > NOW()
+      `, [email, code]);
 
-  if (otpStore[email] === code) {
-    delete otpStore[email]; // Clear after usage
-    return res.json({ success: true, message: "Email Verified!" });
-  } else {
-    return res.status(400).json({ success: false, message: "Invalid Code. Please try again." });
+    if (result.rows.length > 0) {
+      // 2. Success: Delete the code so it can't be reused
+      await pool.query('DELETE FROM verification_codes WHERE email = $1', [email]);
+      return res.json({ success: true, message: "Email Verified!" });
+    } else {
+      return res.status(400).json({ success: false, message: "Invalid or Expired Code." });
+    }
+  } catch (err) {
+    console.error("Verify Error:", err);
+    return res.status(500).json({ success: false, message: "Server Verification Error" });
   }
 });
 

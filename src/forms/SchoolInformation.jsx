@@ -12,6 +12,7 @@ const SchoolInformation = () => {
 
     // --- STATE MANAGEMENT ---
     const location = useLocation();
+    const isDummy = location.state?.isDummy || false; // NEW: Dummy Mode Check
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
@@ -100,7 +101,7 @@ const SchoolInformation = () => {
                     // If viewOnly and schoolIdParam are present, we fetch by School ID
                     // BUT /api/school-head/:uid usually takes user UID. 
                     // Let's check api/index.js for a dedicated monitor endpoint or use school-detail
-                    
+
                     let fetchUrl = `/api/school-head/${user.uid}`;
                     if (viewOnly && schoolIdParam) {
                         fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
@@ -111,7 +112,7 @@ const SchoolInformation = () => {
                         const result = await response.json();
                         // Handle difference in response structure: result.data (from school-head) vs result (from school-detail)
                         const data = (viewOnly && schoolIdParam) ? result : (result.exists ? result.data : null);
-                        
+
                         if (data) {
                             const loadedData = {
                                 lastName: data.head_last_name || data.last_name || '',
@@ -207,6 +208,12 @@ const SchoolInformation = () => {
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
+            {/* DUMMY MODE BANNER */}
+            {isDummy && (
+                <div className="bg-amber-100 border-b border-amber-200 px-6 py-3 sticky top-0 z-50 flex items-center justify-center gap-2 shadow-sm">
+                    <span className="font-bold text-amber-800 text-sm uppercase tracking-wide">⚠️ Sample Mode: Read-Only Preview</span>
+                </div>
+            )}
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -233,7 +240,7 @@ const SchoolInformation = () => {
                             onBlur={handleItemNumberBlur}
                             placeholder="Enter PSI_CD for autofill..."
                             className={`${inputClass} !border-blue-200`}
-                            disabled={isLocked || viewOnly}
+                            disabled={isLocked || viewOnly || isDummy}
                         />
                         {isSearching && <span className="absolute right-4 top-3 animate-spin">⏳</span>}
                     </div>
@@ -250,15 +257,15 @@ const SchoolInformation = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className={labelClass}>First Name</label>
-                            <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
+                            <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
                         <div>
                             <label className={labelClass}>Middle Name</label>
-                            <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
+                            <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
                         <div>
                             <label className={labelClass}>Last Name</label>
-                            <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
+                            <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
                         <div className="md:col-span-3">
                             <label className={labelClass}>Sex</label>
@@ -292,40 +299,46 @@ const SchoolInformation = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className={labelClass}>Position Title</label>
-                            <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly}>
+                            <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy}>
                                 <option value="">Select Position...</option>
                                 {positionOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className={labelClass}>Date of Appointment</label>
-                            <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
+                            <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-lg">
-                {viewOnly ? (
+            {/* FOOTER */}
+            {(viewOnly || isDummy) ? (
+                <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-lg">
                     <button
-                        onClick={() => navigate('/jurisdiction-schools')}
+                        type="button"
+                        onClick={() => navigate(-1)}
                         className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
                     >
-                        ← Back to Schools List
+                        ← Back
                     </button>
-                ) : isLocked ? (
-                    <button onClick={() => { setShowEditModal(true); }} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 flex items-center justify-center gap-2">
-                        <span>✏️</span> Unlock to Edit
-                    </button>
-                ) : (
-                    <>
-                        <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-bold py-4 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
-                            {isSaving ? "Saving..." : "Save Changes"}
+                </div>
+            ) : (
+                <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-lg">
+                    {isLocked ? (
+                        <button onClick={() => { setShowEditModal(true); }} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                            <span>✏️</span> Unlock to Edit
                         </button>
-                    </>
-                )}
-            </div>
+                    ) : (
+                        <>
+                            <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-bold py-4 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
+                                {isSaving ? "Saving..." : "Save Changes"}
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
 
             {/* Save Modal */}
             {showSaveModal && (

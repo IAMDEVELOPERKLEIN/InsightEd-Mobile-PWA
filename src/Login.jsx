@@ -6,7 +6,8 @@ import {
     signInWithPopup,
     setPersistence,
     browserLocalPersistence,
-    onAuthStateChanged
+    onAuthStateChanged,
+    sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
@@ -31,6 +32,9 @@ const Login = () => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(true);
     const [focusedInput, setFocusedInput] = useState(null);
+    const [showForgotModal, setShowForgotModal] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
     const navigate = useNavigate();
 
     // --- 1. AUTO-LOGIN & THEME CLEANUP ---
@@ -76,6 +80,24 @@ const Login = () => {
             console.error(error);
             alert("Google Login Failed: " + error.message);
             setLoading(false);
+        }
+    };
+
+    // --- 3.5 HANDLE PASSWORD RESET ---
+    const handlePasswordReset = async (e) => {
+        e.preventDefault();
+        if (!resetEmail) return alert("Please enter your email.");
+
+        setResetLoading(true);
+        try {
+            await sendPasswordResetEmail(auth, resetEmail);
+            alert("Password reset email sent! Check your inbox.");
+            setShowForgotModal(false);
+        } catch (error) {
+            console.error(error);
+            alert("Failed to send reset email: " + error.message);
+        } finally {
+            setResetLoading(false);
         }
     };
 
@@ -217,6 +239,16 @@ const Login = () => {
                                 </div>
                             </div>
 
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => { setResetEmail(email); setShowForgotModal(true); }}
+                                    className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                                >
+                                    Forgot Password?
+                                </button>
+                            </div>
+
                             <button
                                 type="submit"
                                 disabled={loading}
@@ -228,6 +260,16 @@ const Login = () => {
                                 </svg>
                             </button>
                         </form>
+
+
+                        <div className="mt-4">
+                            <Link
+                                to="/register"
+                                className="w-full block text-center py-3.5 border-2 border-blue-100 bg-blue-50/50 rounded-xl text-blue-600 font-bold hover:bg-blue-100 hover:border-blue-200 transition-all active:scale-[0.98]"
+                            >
+                                Create New Account
+                            </Link>
+                        </div>
 
                         {/* DIVIDER */}
                         <div className="relative my-8">
@@ -253,15 +295,7 @@ const Login = () => {
                             <span>Google Account</span>
                         </button>
 
-                        {/* FOOTER */}
-                        <div className="mt-8 text-center">
-                            <p className="text-slate-500 text-sm">
-                                New to InsightEd?{' '}
-                                <Link to="/register" className="text-blue-600 font-bold hover:text-blue-700 transition-colors">
-                                    Create Account
-                                </Link>
-                            </p>
-                        </div>
+
 
                     </div>
 
@@ -286,6 +320,46 @@ const Login = () => {
                         </g>
                     </svg>
                 </div>
+
+                {/* FORGOT PASSWORD MODAL */}
+                {showForgotModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative">
+                            <h2 className="text-xl font-bold text-slate-800 mb-2">Reset Password</h2>
+                            <p className="text-sm text-slate-500 mb-4">Enter your email address and we'll send you a link to reset your password.</p>
+
+                            <form onSubmit={handlePasswordReset}>
+                                <div className="mb-4">
+                                    <input
+                                        type="email"
+                                        value={resetEmail}
+                                        onChange={(e) => setResetEmail(e.target.value)}
+                                        placeholder="Enter your email"
+                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowForgotModal(false)}
+                                        className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={resetLoading}
+                                        className="flex-1 py-3 bg-[#004A99] text-white font-bold rounded-xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 disabled:opacity-70"
+                                    >
+                                        {resetLoading ? 'Sending...' : 'Send Link'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
             </div>
         </PageTransition>
     );

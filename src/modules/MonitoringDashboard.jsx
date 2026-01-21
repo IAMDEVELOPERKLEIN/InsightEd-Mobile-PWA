@@ -109,11 +109,10 @@ const MonitoringDashboard = () => {
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                                    activeTab === tab 
-                                    ? 'bg-white text-[#004A99] shadow-lg' 
-                                    : 'bg-white/10 text-white hover:bg-white/20'
-                                }`}
+                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab
+                                        ? 'bg-white text-[#004A99] shadow-lg'
+                                        : 'bg-white/10 text-white hover:bg-white/20'
+                                    }`}
                             >
                                 {tab}
                             </button>
@@ -162,14 +161,22 @@ const MonitoringDashboard = () => {
                         <div className="space-y-4">
                             <div className="flex justify-between items-center">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Form Submissions</h2>
-                                <button 
-                                    onClick={() => navigate('/jurisdiction-schools')}
-                                    className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg"
-                                >
-                                    View All Schools
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => navigate('/dummy-forms')}
+                                        className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest bg-amber-50 dark:bg-amber-900/30 px-3 py-1.5 rounded-lg border border-amber-100 hover:bg-amber-100 transition-colors"
+                                    >
+                                        View Sample Forms
+                                    </button>
+                                    <button
+                                        onClick={() => navigate('/jurisdiction-schools')}
+                                        className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg border border-blue-50 hover:bg-blue-100 transition-colors"
+                                    >
+                                        View All Schools
+                                    </button>
+                                </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <StatCard title="Profiles" value={stats?.profile || 0} total={stats?.total_schools || 0} color="bg-blue-500" icon={FiFileText} />
                                 <StatCard title="School Head" value={stats?.head || 0} total={stats?.total_schools || 0} color="bg-indigo-500" icon={FiCheckCircle} />
@@ -213,7 +220,7 @@ const MonitoringDashboard = () => {
                                 ) : (
                                     <div className="space-y-3 pb-6">
                                         {jurisdictionProjects.map((project) => (
-                                            <div 
+                                            <div
                                                 key={project.id}
                                                 onClick={() => navigate(`/project-validation?schoolId=${project.schoolId}`)}
                                                 className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 active:scale-[0.98] transition-all cursor-pointer group"
@@ -225,18 +232,17 @@ const MonitoringDashboard = () => {
                                                             <FiMapPin size={10} /> {project.schoolName}
                                                         </p>
                                                     </div>
-                                                    <div className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${
-                                                        project.validation_status === 'Validated' ? 'bg-emerald-50 text-emerald-600' :
-                                                        project.validation_status === 'Rejected' ? 'bg-red-50 text-red-600' :
-                                                        'bg-orange-50 text-orange-600'
-                                                    }`}>
+                                                    <div className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${project.validation_status === 'Validated' ? 'bg-emerald-50 text-emerald-600' :
+                                                            project.validation_status === 'Rejected' ? 'bg-red-50 text-red-600' :
+                                                                'bg-orange-50 text-orange-600'
+                                                        }`}>
                                                         {project.validation_status || 'Pending'}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                        <div 
-                                                            className="h-full bg-blue-500 rounded-full" 
+                                                        <div
+                                                            className="h-full bg-blue-500 rounded-full"
                                                             style={{ width: `${project.accomplishmentPercentage}%` }}
                                                         ></div>
                                                     </div>
