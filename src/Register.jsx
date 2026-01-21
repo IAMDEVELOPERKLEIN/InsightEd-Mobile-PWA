@@ -1,6 +1,6 @@
 // src/Register.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import logo from './assets/InsightEd1.png';
 import { auth, db, googleProvider } from './firebase'; // kept googleProvider just in case they sign in later, but unused for register now
 import { createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
@@ -47,7 +47,24 @@ const Register = () => {
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [isOtpSent, setIsOtpSent] = useState(false);
     const [isOtpVerified, setIsOtpVerified] = useState(false);
+
     const [otpLoading, setOtpLoading] = useState(false);
+
+    // --- TIMER STATE ---
+    const [timer, setTimer] = useState(0);
+    const [canResend, setCanResend] = useState(true);
+
+    useEffect(() => {
+        let interval;
+        if (timer > 0) {
+            interval = setInterval(() => {
+                setTimer((prev) => prev - 1);
+            }, 1000);
+        } else {
+            setCanResend(true);
+        }
+        return () => clearInterval(interval);
+    }, [timer]);
 
     // --- OTP HANDLERS ---
     const handleSendOtp = async () => {
@@ -70,6 +87,9 @@ const Register = () => {
             const data = await res.json();
             if (data.success) {
                 setIsOtpSent(true);
+                // Start Timer
+                setCanResend(false);
+                setTimer(30);
                 alert("Verification code sent to your email!");
             } else {
                 alert(data.message || "Failed to send OTP");
@@ -432,7 +452,7 @@ const Register = () => {
                                             <button
                                                 type="button"
                                                 onClick={handleSendOtp}
-                                                disabled={otpLoading || isOtpSent || !formData.email}
+                                                disabled={otpLoading || !canResend || !formData.email}
                                                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-bold disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30"
                                             >
                                                 {otpLoading ? (
@@ -443,7 +463,7 @@ const Register = () => {
                                                         </svg>
                                                         Sending
                                                     </span>
-                                                ) : isOtpSent ? 'Resend Code' : 'Get Verification Code'}
+                                                ) : !canResend ? `Resend Code in ${timer}s` : isOtpSent ? 'Resend Code' : 'Get Verification Code'}
                                             </button>
                                         )}
                                     </div>

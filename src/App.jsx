@@ -13,6 +13,7 @@ import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard';
 import MonitoringDashboard from './modules/MonitoringDashboard';
+import DummyDashboard from './modules/DummyDashboard';
 import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
 import UserProfile from './modules/UserProfile';
 import Activity from './modules/Activity';
@@ -65,6 +66,7 @@ const AnimatedRoutes = () => {
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
         <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
+        <Route path="/dummy-forms" element={<DummyDashboard />} />
 
         {/* Menus */}
         <Route path="/school-forms" element={<SchoolForms />} />
