@@ -6,6 +6,8 @@ import { addToOutbox } from '../db';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 import { FiBox } from 'react-icons/fi';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal';
 
 const PhysicalFacilities = () => {
     const navigate = useNavigate();
@@ -19,6 +21,8 @@ const PhysicalFacilities = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
     const [originalData, setOriginalData] = useState(null);
@@ -100,7 +104,7 @@ const PhysicalFacilities = () => {
                 body: JSON.stringify(payload)
             });
             if (res.ok) {
-                alert("Saved successfully!");
+                setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
                 localStorage.setItem('physicalFacilitiesData', JSON.stringify(formData));
@@ -114,7 +118,7 @@ const PhysicalFacilities = () => {
                 url: '/api/save-physical-facilities',
                 payload
             });
-            alert("Saved to Outbox (Offline Mode)");
+            setShowOfflineModal(true);
             setIsLocked(true);
         } finally {
             setIsSaving(false);
@@ -214,6 +218,9 @@ const PhysicalFacilities = () => {
                     </div>
                 </div>
             )}
+
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Physical Facilities report saved successfully!" />
         </div>
     );
 };

@@ -6,6 +6,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal';
 
 
 const SchoolResources = () => {
@@ -22,6 +24,8 @@ const SchoolResources = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
     const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
 
@@ -185,7 +189,7 @@ const SchoolResources = () => {
             });
 
             if (res.ok) {
-                alert('Success: Database updated!');
+                setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
@@ -205,7 +209,7 @@ const SchoolResources = () => {
             url: '/api/save-school-resources',
             payload: payload
         });
-        alert("Saved to Outbox (Offline Mode)");
+        setShowOfflineModal(true);
         setOriginalData({ ...formData });
         setIsLocked(true);
         setIsSaving(false);
@@ -326,7 +330,7 @@ const SchoolResources = () => {
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-40">
+        <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 font-sans pb-40">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="relative z-10 flex items-center gap-4">
                     <button onClick={goBack} className="text-white text-2xl">←</button>
@@ -535,6 +539,9 @@ const SchoolResources = () => {
                     </div>
                 </div>
             )}
+
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="School Resources updated successfully!" />
 
 
         </div>

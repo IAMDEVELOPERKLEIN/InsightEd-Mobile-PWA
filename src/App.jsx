@@ -110,11 +110,13 @@ const AnimatedRoutes = () => {
 };
 
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+import ScrollToTop from './components/ScrollToTop';
 
 function App() {
   return (
     <GlobalErrorBoundary>
       <Router>
+        <ScrollToTop />
         <AnimatedRoutes />
       </Router>
     </GlobalErrorBoundary>

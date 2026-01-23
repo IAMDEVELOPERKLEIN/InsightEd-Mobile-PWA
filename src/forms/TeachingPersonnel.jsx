@@ -6,6 +6,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal';
 
 
 const TeachingPersonnel = () => {
@@ -22,6 +24,8 @@ const TeachingPersonnel = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
 
     // Data
@@ -160,7 +164,7 @@ const TeachingPersonnel = () => {
                     url: '/api/save-teaching-personnel',
                     payload: payload
                 });
-                alert("⚠️ Saved to Outbox! Sync when you have internet.");
+                setShowOfflineModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } finally {
@@ -178,7 +182,7 @@ const TeachingPersonnel = () => {
             });
 
             if (response.ok) {
-                alert('✅ Teaching Personnel saved successfully to Neon!');
+                setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
@@ -201,7 +205,7 @@ const TeachingPersonnel = () => {
                 url: '/api/save-teaching-personnel',
                 payload: payload
             });
-            alert("📴 Offline: Saved to Outbox!");
+            setShowOfflineModal(true);
             setOriginalData({ ...formData });
             setIsLocked(true);
         } catch (e) { alert("Offline save failed."); }
@@ -372,7 +376,8 @@ const TeachingPersonnel = () => {
             {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Edit Personnel?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
             {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Save Changes?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
 
-
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Teaching Personnel saved successfully!" />
         </div >
     );
 };

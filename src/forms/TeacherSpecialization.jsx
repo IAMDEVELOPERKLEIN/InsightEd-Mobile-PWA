@@ -6,6 +6,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal';
 
 // Helper: Define initial state structure
 const getInitialFields = () => ({
@@ -20,6 +22,26 @@ const getInitialFields = () => ({
     spec_tle_major: 0, spec_tle_teaching: 0
 });
 
+// --- SUB-COMPONENT (Moved Outside) ---
+const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) => {
+    const major = formData[`spec_${id}_major`];
+    const teaching = formData[`spec_${id}_teaching`];
+
+    return (
+        <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 dark:border-slate-700 py-4 last:border-0">
+            <div className="col-span-3">
+                <span className="font-bold text-gray-700 dark:text-slate-300 text-sm block">{label}</span>
+            </div>
+            <div className="col-span-1 text-center">
+                <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800 transition-colors" />
+            </div>
+            <div className="col-span-1 text-center">
+                <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-orange-50 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200 font-bold focus:ring-2 focus:ring-orange-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800 transition-colors" />
+            </div>
+        </div>
+    );
+};
+
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -32,6 +54,8 @@ const TeacherSpecialization = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
 
     const [schoolId, setSchoolId] = useState(null);
@@ -115,7 +139,7 @@ const TeacherSpecialization = () => {
                     url: '/api/save-teacher-specialization',
                     payload: payload
                 });
-                alert("📴 Saved to Outbox! Data will sync when you are online.");
+                setShowOfflineModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } catch (e) { alert("Offline save failed."); }
@@ -135,7 +159,7 @@ const TeacherSpecialization = () => {
             });
 
             if (res.ok) {
-                alert('✅ Saved successfully to Neon!');
+                setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
@@ -151,29 +175,12 @@ const TeacherSpecialization = () => {
     };
 
     // Components
-    const SubjectRow = ({ label, id }) => {
-        const major = formData[`spec_${id}_major`];
-        const teaching = formData[`spec_${id}_teaching`];
 
-        return (
-            <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 dark:border-slate-700 py-4 last:border-0">
-                <div className="col-span-3">
-                    <span className="font-bold text-gray-700 dark:text-slate-300 text-sm block">{label}</span>
-                </div>
-                <div className="col-span-1 text-center">
-                    <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
-                </div>
-                <div className="col-span-1 text-center">
-                    <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-orange-50 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200 font-bold focus:ring-2 focus:ring-orange-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
-                </div>
-            </div>
-        );
-    };
 
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative text-sm">
+        <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative text-sm">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -197,14 +204,14 @@ const TeacherSpecialization = () => {
                         </div>
                     </div>
 
-                    <SubjectRow label="English" id="english" />
-                    <SubjectRow label="Filipino" id="filipino" />
-                    <SubjectRow label="Mathematics" id="math" />
-                    <SubjectRow label="Science" id="science" />
-                    <SubjectRow label="Araling Panlipunan" id="ap" />
-                    <SubjectRow label="MAPEH" id="mapeh" />
-                    <SubjectRow label="EsP" id="esp" />
-                    <SubjectRow label="TLE / TVL" id="tle" />
+                    <SubjectRow label="English" id="english" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <SubjectRow label="Filipino" id="filipino" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <SubjectRow label="Mathematics" id="math" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <SubjectRow label="Science" id="science" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <SubjectRow label="Araling Panlipunan" id="ap" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <SubjectRow label="MAPEH" id="mapeh" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <SubjectRow label="EsP" id="esp" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <SubjectRow label="TLE / TVL" id="tle" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                 </div>
             </div>
 
@@ -233,7 +240,8 @@ const TeacherSpecialization = () => {
             {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Modify Data?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
             {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
 
-
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Specialization saved successfully!" />
         </div>
     );
 };

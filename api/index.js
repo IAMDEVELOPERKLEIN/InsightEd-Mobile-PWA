@@ -954,7 +954,20 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
                 classes_kinder, classes_grade_1, classes_grade_2, classes_grade_3,
                 classes_grade_4, classes_grade_5, classes_grade_6,
                 classes_grade_7, classes_grade_8, classes_grade_9, classes_grade_10,
-                classes_grade_11, classes_grade_12
+                classes_grade_11, classes_grade_12,
+                
+                cnt_less_g1, cnt_within_g1, cnt_above_g1,
+                cnt_less_g2, cnt_within_g2, cnt_above_g2,
+                cnt_less_g3, cnt_within_g3, cnt_above_g3,
+                cnt_less_g4, cnt_within_g4, cnt_above_g4,
+                cnt_less_g5, cnt_within_g5, cnt_above_g5,
+                cnt_less_g6, cnt_within_g6, cnt_above_g6,
+                cnt_less_g7, cnt_within_g7, cnt_above_g7,
+                cnt_less_g8, cnt_within_g8, cnt_above_g8,
+                cnt_less_g9, cnt_within_g9, cnt_above_g9,
+                cnt_less_g10, cnt_within_g10, cnt_above_g10,
+                cnt_less_g11, cnt_within_g11, cnt_above_g11,
+                cnt_less_g12, cnt_within_g12, cnt_above_g12
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
@@ -976,7 +989,20 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
         grade_5: row.classes_grade_5, grade_6: row.classes_grade_6,
         grade_7: row.classes_grade_7, grade_8: row.classes_grade_8,
         grade_9: row.classes_grade_9, grade_10: row.classes_grade_10,
-        grade_11: row.classes_grade_11, grade_12: row.classes_grade_12
+        grade_11: row.classes_grade_11, grade_12: row.classes_grade_12,
+
+        cnt_less_g1: row.cnt_less_g1, cnt_within_g1: row.cnt_within_g1, cnt_above_g1: row.cnt_above_g1,
+        cnt_less_g2: row.cnt_less_g2, cnt_within_g2: row.cnt_within_g2, cnt_above_g2: row.cnt_above_g2,
+        cnt_less_g3: row.cnt_less_g3, cnt_within_g3: row.cnt_within_g3, cnt_above_g3: row.cnt_above_g3,
+        cnt_less_g4: row.cnt_less_g4, cnt_within_g4: row.cnt_within_g4, cnt_above_g4: row.cnt_above_g4,
+        cnt_less_g5: row.cnt_less_g5, cnt_within_g5: row.cnt_within_g5, cnt_above_g5: row.cnt_above_g5,
+        cnt_less_g6: row.cnt_less_g6, cnt_within_g6: row.cnt_within_g6, cnt_above_g6: row.cnt_above_g6,
+        cnt_less_g7: row.cnt_less_g7, cnt_within_g7: row.cnt_within_g7, cnt_above_g7: row.cnt_above_g7,
+        cnt_less_g8: row.cnt_less_g8, cnt_within_g8: row.cnt_within_g8, cnt_above_g8: row.cnt_above_g8,
+        cnt_less_g9: row.cnt_less_g9, cnt_within_g9: row.cnt_within_g9, cnt_above_g9: row.cnt_above_g9,
+        cnt_less_g10: row.cnt_less_g10, cnt_within_g10: row.cnt_within_g10, cnt_above_g10: row.cnt_above_g10,
+        cnt_less_g11: row.cnt_less_g11, cnt_within_g11: row.cnt_within_g11, cnt_above_g11: row.cnt_above_g11,
+        cnt_less_g12: row.cnt_less_g12, cnt_within_g12: row.cnt_within_g12, cnt_above_g12: row.cnt_above_g12
       }
     });
 
@@ -987,17 +1013,32 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
 });
 
 // --- 16. POST: Save Organized Classes (UPDATED) ---
+// --- 16. POST: Save Organized Classes (UPDATED with Class Size Standards) ---
 app.post('/api/save-organized-classes', async (req, res) => {
   const data = req.body;
   try {
-    // We now UPDATE school_profiles instead of inserting into a new table
     const query = `
             UPDATE school_profiles SET
                 classes_kinder = $2, 
                 classes_grade_1 = $3, classes_grade_2 = $4, classes_grade_3 = $5,
                 classes_grade_4 = $6, classes_grade_5 = $7, classes_grade_6 = $8,
                 classes_grade_7 = $9, classes_grade_8 = $10, classes_grade_9 = $11,
-                classes_grade_10 = $12, classes_grade_11 = $13, classes_grade_12 = $14
+                classes_grade_10 = $12, classes_grade_11 = $13, classes_grade_12 = $14,
+                
+                cnt_less_g1 = $15, cnt_within_g1 = $16, cnt_above_g1 = $17,
+                cnt_less_g2 = $18, cnt_within_g2 = $19, cnt_above_g2 = $20,
+                cnt_less_g3 = $21, cnt_within_g3 = $22, cnt_above_g3 = $23,
+                cnt_less_g4 = $24, cnt_within_g4 = $25, cnt_above_g4 = $26,
+                cnt_less_g5 = $27, cnt_within_g5 = $28, cnt_above_g5 = $29,
+                cnt_less_g6 = $30, cnt_within_g6 = $31, cnt_above_g6 = $32,
+                cnt_less_g7 = $33, cnt_within_g7 = $34, cnt_above_g7 = $35,
+                cnt_less_g8 = $36, cnt_within_g8 = $37, cnt_above_g8 = $38,
+                cnt_less_g9 = $39, cnt_within_g9 = $40, cnt_above_g9 = $41,
+                cnt_less_g10 = $42, cnt_within_g10 = $43, cnt_above_g10 = $44,
+                cnt_less_g11 = $45, cnt_within_g11 = $46, cnt_above_g11 = $47,
+                cnt_less_g12 = $48, cnt_within_g12 = $49, cnt_above_g12 = $50,
+
+                updated_at = CURRENT_TIMESTAMP
             WHERE school_id = $1
         `;
 
@@ -1006,7 +1047,20 @@ app.post('/api/save-organized-classes', async (req, res) => {
       data.kinder,
       data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
       data.g7, data.g8, data.g9, data.g10,
-      data.g11, data.g12
+      data.g11, data.g12,
+
+      data.cntLessG1 || 0, data.cntWithinG1 || 0, data.cntAboveG1 || 0,
+      data.cntLessG2 || 0, data.cntWithinG2 || 0, data.cntAboveG2 || 0,
+      data.cntLessG3 || 0, data.cntWithinG3 || 0, data.cntAboveG3 || 0,
+      data.cntLessG4 || 0, data.cntWithinG4 || 0, data.cntAboveG4 || 0,
+      data.cntLessG5 || 0, data.cntWithinG5 || 0, data.cntAboveG5 || 0,
+      data.cntLessG6 || 0, data.cntWithinG6 || 0, data.cntAboveG6 || 0,
+      data.cntLessG7 || 0, data.cntWithinG7 || 0, data.cntAboveG7 || 0,
+      data.cntLessG8 || 0, data.cntWithinG8 || 0, data.cntAboveG8 || 0,
+      data.cntLessG9 || 0, data.cntWithinG9 || 0, data.cntAboveG9 || 0,
+      data.cntLessG10 || 0, data.cntWithinG10 || 0, data.cntAboveG10 || 0,
+      data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
+      data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0
     ]);
 
     res.json({ message: "Classes saved successfully!" });

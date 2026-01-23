@@ -52,21 +52,7 @@ const Enrolment = () => {
         arts11: 0, arts12: 0, sports11: 0, sports12: 0
     });
 
-    // CLASS SIZE STANDARDS (Grades 1-12)
-    const [classSizeData, setClassSizeData] = useState({
-        cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
-        cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
-        cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
-        cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
-        cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
-        cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
-        cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
-        cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
-        cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
-        cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
-        cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
-        cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
-    });
+
 
     // ARAL ENROLLEES (Grades 1-6)
     const [aralData, setAralData] = useState({
@@ -174,20 +160,7 @@ const Enrolment = () => {
                                 sports11: data.sports_11 || 0, sports12: data.sports_12 || 0
                             });
 
-                            setClassSizeData({
-                                cntLessG1: data.cnt_less_g1 || 0, cntWithinG1: data.cnt_within_g1 || 0, cntAboveG1: data.cnt_above_g1 || 0,
-                                cntLessG2: data.cnt_less_g2 || 0, cntWithinG2: data.cnt_within_g2 || 0, cntAboveG2: data.cnt_above_g2 || 0,
-                                cntLessG3: data.cnt_less_g3 || 0, cntWithinG3: data.cnt_within_g3 || 0, cntAboveG3: data.cnt_above_g3 || 0,
-                                cntLessG4: data.cnt_less_g4 || 0, cntWithinG4: data.cnt_within_g4 || 0, cntAboveG4: data.cnt_above_g4 || 0,
-                                cntLessG5: data.cnt_less_g5 || 0, cntWithinG5: data.cnt_within_g5 || 0, cntAboveG5: data.cnt_above_g5 || 0,
-                                cntLessG6: data.cnt_less_g6 || 0, cntWithinG6: data.cnt_within_g6 || 0, cntAboveG6: data.cnt_above_g6 || 0,
-                                cntLessG7: data.cnt_less_g7 || 0, cntWithinG7: data.cnt_within_g7 || 0, cntAboveG7: data.cnt_above_g7 || 0,
-                                cntLessG8: data.cnt_less_g8 || 0, cntWithinG8: data.cnt_within_g8 || 0, cntAboveG8: data.cnt_above_g8 || 0,
-                                cntLessG9: data.cnt_less_g9 || 0, cntWithinG9: data.cnt_within_g9 || 0, cntAboveG9: data.cnt_above_g9 || 0,
-                                cntLessG10: data.cnt_less_g10 || 0, cntWithinG10: data.cnt_within_g10 || 0, cntAboveG10: data.cnt_above_g10 || 0,
-                                cntLessG11: data.cnt_less_g11 || 0, cntWithinG11: data.cnt_within_g11 || 0, cntAboveG11: data.cnt_above_g11 || 0,
-                                cntLessG12: data.cnt_less_g12 || 0, cntWithinG12: data.cnt_within_g12 || 0, cntAboveG12: data.cnt_above_g12 || 0
-                            });
+
 
                             setAralData({
                                 aral_math_g1: data.aral_math_g1 || 0, aral_read_g1: data.aral_read_g1 || 0, aral_sci_g1: data.aral_sci_g1 || 0,
@@ -203,7 +176,6 @@ const Enrolment = () => {
                                 setOriginalData({
                                     basic: { ...basicGrades },
                                     strands: { ...shsStrands },
-                                    classSize: { ...classSizeData },
                                     aral: { ...aralData }
                                 });
                             }
@@ -228,13 +200,13 @@ const Enrolment = () => {
     // --- HANDLERS ---
     const handleBasicChange = (e) => setBasicGrades({ ...basicGrades, [e.target.name]: parseInt(e.target.value) || 0 });
     const handleStrandChange = (e) => setShsStrands({ ...shsStrands, [e.target.name]: parseInt(e.target.value) || 0 });
-    const handleClassSizeChange = (e) => setClassSizeData({ ...classSizeData, [e.target.name]: parseInt(e.target.value) || 0 });
+
     const handleAralChange = (e) => setAralData({ ...aralData, [e.target.name]: parseInt(e.target.value) || 0 });
 
     const handleUpdateClick = () => { setEditAgreement(false); setShowEditModal(true); };
 
     const handleConfirmEdit = () => {
-        setOriginalData({ basic: { ...basicGrades }, strands: { ...shsStrands }, classSize: { ...classSizeData }, aral: { ...aralData } });
+        setOriginalData({ basic: { ...basicGrades }, strands: { ...shsStrands }, aral: { ...aralData } });
         setIsLocked(false);
         setShowEditModal(false);
     };
@@ -243,7 +215,7 @@ const Enrolment = () => {
         if (originalData) {
             setBasicGrades(originalData.basic);
             setShsStrands(originalData.strands);
-            setClassSizeData(originalData.classSize);
+
             setAralData(originalData.aral);
         }
         setIsLocked(true);
@@ -271,7 +243,7 @@ const Enrolment = () => {
             curricularOffering,
             ...basicGrades,
             ...shsStrands,
-            ...classSizeData,
+
             ...aralData,
             grade11: getG11Total(),
             grade12: getG12Total(),
@@ -520,76 +492,7 @@ const Enrolment = () => {
                     </div>
                 )}
 
-                {/* --- CLASS SIZE STANDARD --- */}
-                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                        <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-xl">
-                            ✅
-                        </div>
-                        <div>
-                            <h2 className="text-base font-bold text-slate-800">Class Size Standards</h2>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Number of Classes per Category</p>
-                        </div>
-                    </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center border-b border-slate-100">
-                                <tr>
-                                    <th className="pb-3 text-left pl-2">Grade Level</th>
-                                    <th className="pb-3 text-emerald-600">{"< 50"} <br /> (Less than)</th>
-                                    <th className="pb-3 text-blue-600">{"50 - 60"} <br /> (Within)</th>
-                                    <th className="pb-3 text-red-600">{"> 60"} <br /> (Above)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {/* Generate Rows Dynamically */}
-                                {[
-                                    ...(showElem() ? [1, 2, 3, 4, 5, 6] : []),
-                                    ...(showJHS() ? [7, 8, 9, 10] : []),
-                                    ...(showSHS() ? [11, 12] : [])
-                                ].map(g => (
-                                    <tr key={g} className="group hover:bg-slate-50/50 transition-colors">
-                                        <td className="py-2 pl-2 font-bold text-slate-600 text-xs">Grade {g}</td>
-                                        <td className="p-1">
-                                            <input
-                                                type="number" min="0"
-                                                name={`cntLessG${g}`}
-                                                value={classSizeData[`cntLessG${g}`]}
-                                                onChange={handleClassSizeChange}
-                                                disabled={isLocked}
-                                                onFocus={e => e.target.select()}
-                                                className="w-full h-10 text-center font-bold text-emerald-700 bg-emerald-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-xs transition-all hover:border-emerald-200"
-                                            />
-                                        </td>
-                                        <td className="p-1">
-                                            <input
-                                                type="number" min="0"
-                                                name={`cntWithinG${g}`}
-                                                value={classSizeData[`cntWithinG${g}`]}
-                                                onChange={handleClassSizeChange}
-                                                disabled={isLocked}
-                                                onFocus={e => e.target.select()}
-                                                className="w-full h-10 text-center font-bold text-blue-700 bg-blue-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-xs transition-all hover:border-blue-200"
-                                            />
-                                        </td>
-                                        <td className="p-1">
-                                            <input
-                                                type="number" min="0"
-                                                name={`cntAboveG${g}`}
-                                                value={classSizeData[`cntAboveG${g}`]}
-                                                onChange={handleClassSizeChange}
-                                                disabled={isLocked}
-                                                onFocus={e => e.target.select()}
-                                                className="w-full h-10 text-center font-bold text-red-700 bg-red-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-xs transition-all hover:border-red-200"
-                                            />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
 
                 {/* --- PROSPECTIVE ARAL ENROLLEES (Grades 1-6) --- */}
                 {showElem() && (
