@@ -24,6 +24,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 // --- CONSTANTS ---
 const CSV_PATH = '/schools.csv';
+const OFFICES_CSV_PATH = '/Personnel Positions by Functional Division at RO and SDO Levels - Sheet1.csv';
 
 import locationData from './locations.json';
 
@@ -81,6 +82,10 @@ const Register = () => {
     const [csvData, setCsvData] = useState([]);
     const [isCsvLoaded, setIsCsvLoaded] = useState(false);
 
+    // --- OFFICE DATA STATE ---
+    const [officeData, setOfficeData] = useState([]);
+    const [isOfficeCsvLoaded, setIsOfficeCsvLoaded] = useState(false);
+
     // Cascading Selections (5-Step Hierarchy)
     const [selectedRegion, setSelectedRegion] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('');
@@ -106,6 +111,7 @@ const Register = () => {
 
     // --- 1. LOAD CSV DATA ---
     useEffect(() => {
+        // Load Schools CSV
         Papa.parse(CSV_PATH, {
             download: true,
             header: true,
@@ -118,6 +124,22 @@ const Register = () => {
             },
             error: (err) => {
                 console.error("CSV Load Error:", err);
+            }
+        });
+
+        // Load Offices CSV
+        Papa.parse(OFFICES_CSV_PATH, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                if (results.data && results.data.length > 0) {
+                    setOfficeData(results.data);
+                    setIsOfficeCsvLoaded(true);
+                }
+            },
+            error: (err) => {
+                console.error("Office CSV Load Error:", err);
             }
         });
     }, []);
@@ -153,6 +175,25 @@ const Register = () => {
             s.municipality === selectedMunicipality
         ).sort((a, b) => a.school_name.localeCompare(b.school_name))
         : [];
+
+    // --- OFFICE DROPDOWN LOGIC ---
+    const regionalOffices = useMemo(() => {
+        if (!isOfficeCsvLoaded) return [];
+        return [...new Set(officeData
+            .filter(row => row['Governance Level'] && row['Governance Level'].includes('Regional Office'))
+            .map(row => row['Functional Division'])
+            .filter(Boolean)
+        )].sort();
+    }, [officeData, isOfficeCsvLoaded]);
+
+    const divisionOffices = useMemo(() => {
+        if (!isOfficeCsvLoaded) return [];
+        return [...new Set(officeData
+            .filter(row => row['Governance Level'] && row['Governance Level'].includes('Schools Division Office'))
+            .map(row => row['Functional Division'])
+            .filter(Boolean)
+        )].sort();
+    }, [officeData, isOfficeCsvLoaded]);
 
     // --- HANDLERS ---
     const handleChange = (e) => {
@@ -200,6 +241,13 @@ const Register = () => {
             alert("Please enter your email first.");
             return;
         }
+
+        // STRICT EMAIL VALIDATION
+        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
+            alert("Registration is restricted to official DepEd accounts.");
+            return;
+        }
+
         if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
             alert("Passwords do not match!");
             return;
@@ -345,6 +393,11 @@ const Register = () => {
             return;
         }
 
+        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
+            alert("Registration is restricted to official DepEd accounts.");
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -423,7 +476,9 @@ const Register = () => {
                     createdAt: new Date(),
                     // Save other fields if needed
                     region: formData.region,
-                    division: formData.division
+                    division: formData.division,
+                    office: formData.office,
+                    position: formData.position
                 });
             }
 
@@ -664,14 +719,20 @@ const Register = () => {
                                                     <option key={reg} value={reg}>{reg}</option>
                                                 ))}
                                             </select>
-                                            <input
+                                            <select
                                                 name="office"
                                                 value={formData.office}
-                                                placeholder="Office Name (Do not abbreviate)"
                                                 onChange={handleChange}
-                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
                                                 required
-                                            />
+                                            >
+                                                <option value="">Select Office</option>
+                                                {regionalOffices.map((office) => (
+                                                    <option key={office} value={office}>{office}</option>
+                                                ))}
+                                            </select>
+
+
                                             <input
                                                 name="position"
                                                 value={formData.position}
@@ -718,6 +779,19 @@ const Register = () => {
                                                         <option key={div} value={div}>{div}</option>
                                                     ))
                                                 }
+                                            </select>
+
+                                            <select
+                                                name="office"
+                                                value={formData.office}
+                                                onChange={handleChange}
+                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500"
+                                                required
+                                            >
+                                                <option value="">Select Office</option>
+                                                {divisionOffices.map((office) => (
+                                                    <option key={office} value={office}>{office}</option>
+                                                ))}
                                             </select>
 
                                             <input

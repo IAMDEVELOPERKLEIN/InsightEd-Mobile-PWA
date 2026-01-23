@@ -27,6 +27,7 @@ const MonitoringDashboard = () => {
 
     // NEW: Regional Stats for National View
     const [regionalStats, setRegionalStats] = useState([]);
+    const [divisionStats, setDivisionStats] = useState([]); // Per-division stats for RO
 
     const fetchData = async (overrideRegion, overrideDivision) => {
         const user = auth.currentUser;
@@ -71,15 +72,27 @@ const MonitoringDashboard = () => {
                 ...(queryDivision && { division: queryDivision })
             });
 
-            const [statsRes, engStatsRes, projectsRes] = await Promise.all([
+            const fetchPromises = [
                 fetch(`/api/monitoring/stats?${params.toString()}`),
                 fetch(`/api/monitoring/engineer-stats?${params.toString()}`),
                 fetch(`/api/monitoring/engineer-projects?${params.toString()}`)
-            ]);
+            ];
+
+            // Fetch Division Stats only for Regional Office
+            if (currentUserData.role === 'Regional Office') {
+                fetchPromises.push(fetch(`/api/monitoring/division-stats?${params.toString()}`));
+            }
+
+            const results = await Promise.all(fetchPromises);
+            const statsRes = results[0];
+            const engStatsRes = results[1];
+            const projectsRes = results[2];
+            const divStatsRes = currentUserData.role === 'Regional Office' ? results[3] : null;
 
             if (statsRes.ok) setStats(await statsRes.json());
             if (engStatsRes.ok) setEngStats(await engStatsRes.json());
             if (projectsRes.ok) setJurisdictionProjects(await projectsRes.json());
+            if (divStatsRes && divStatsRes.ok) setDivisionStats(await divStatsRes.json());
         } catch (err) {
             console.error("Dashboard Fetch Error:", err);
         } finally {
@@ -376,19 +389,42 @@ const MonitoringDashboard = () => {
                             </div>
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
-                                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Quick Stats</h2>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500 dark:text-slate-400">Avg. Project Physical Accomp.</span>
-                                        <span className="font-bold text-[#004A99] dark:text-blue-400">{engStats?.avg_progress || 0}%</span>
+                                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
+                                {divisionStats.length === 0 ? (
+                                    <p className="text-sm text-slate-400 italic">No division data available.</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {divisionStats.map((div, idx) => {
+                                            const total = parseInt(div.total_schools) || 0;
+                                            const completed = parseInt(div.completed_schools) || 0;
+                                            const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+                                            
+                                            // Define colors for progress bars (cycling)
+                                            const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500'];
+                                            const color = colors[idx % colors.length];
+
+                                            return (
+                                                <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <div>
+                                                            <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">{div.division}</h3>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
+                                                                {completed} out of {total} forms completed
+                                                            </p>
+                                                        </div>
+                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className={`h-full ${color} transition-all duration-1000`} 
+                                                            style={{ width: `${percentage}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500 dark:text-slate-400">Profile Completion</span>
-                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                            {stats?.total_schools ? Math.round(((stats?.profile || 0) / stats.total_schools) * 100) : 0}%
-                                        </span>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         </>
                     )}

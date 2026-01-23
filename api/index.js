@@ -1574,6 +1574,40 @@ app.get('/api/monitoring/stats', async (req, res) => {
   }
 });
 
+// --- 25b. GET: Monitoring Stats per Division (RO View) ---
+// --- 25b. GET: Monitoring Stats per Division (RO View) ---
+app.get('/api/monitoring/division-stats', async (req, res) => {
+  const { region } = req.query;
+  console.log("DEBUG: FETCHING DIV STATS FOR REGION:", region);
+  try {
+    const query = `
+      SELECT 
+        division,
+        COUNT(*) as total_schools,
+        SUM(CASE WHEN (
+           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+        ) = 7 THEN 1 ELSE 0 END) as completed_schools
+      FROM school_profiles
+      WHERE TRIM(region) = TRIM($1)
+      GROUP BY division
+      ORDER BY division ASC
+    `;
+
+    const result = await pool.query(query, [region]);
+    console.log("DEBUG: DIV STATS RESULT:", result.rows);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Division Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch division stats" });
+  }
+});
+
 // --- 26. GET: List Schools in Jurisdiction ---
 app.get('/api/monitoring/schools', async (req, res) => {
   const { region, division } = req.query;
