@@ -7,40 +7,53 @@ import { addToOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
+import { FiArrowLeft, FiCalendar, FiClock, FiWifi, FiCheckCircle, FiSave, FiAlertCircle, FiBookOpen } from 'react-icons/fi';
+import { TbSchool } from 'react-icons/tb';
+
 // --- SUB-COMPONENT (Moved Outside) ---
 const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLocked, viewOnly }) => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-gray-100 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-slate-50 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
         <div className="flex items-center">
-            <span className="font-bold text-gray-700 text-sm">{label}</span>
+            <span className="font-bold text-slate-700 text-sm">{label}</span>
         </div>
         <div>
-            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Shifting Strategy</label>
-            <select
-                value={shifts[`shift_${lvl}`] || ''}
-                onChange={(e) => onShiftChange(e, lvl)}
-                disabled={isLocked || viewOnly}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
-            >
-                <option value="">Select...</option>
-                <option value="Single Shift">Single Shift</option>
-                <option value="Double Shift">Double Shift</option>
-                <option value="Triple Shift">Triple Shift</option>
-            </select>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Shifting Strategy</label>
+            <div className="relative">
+                <select
+                    value={shifts[`shift_${lvl}`] || ''}
+                    onChange={(e) => onShiftChange(e, lvl)}
+                    disabled={isLocked || viewOnly}
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                    <option value="">Select Strategy...</option>
+                    <option value="Single Shift">Single Shift</option>
+                    <option value="Double Shift">Double Shift</option>
+                    <option value="Triple Shift">Triple Shift</option>
+                </select>
+                <div className="absolute right-3 top-2.5 text-slate-400 pointer-events-none">
+                    <FiClock size={14} />
+                </div>
+            </div>
         </div>
         <div>
-            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Learning Delivery</label>
-            <select
-                value={modes[`mode_${lvl}`] || ''}
-                onChange={(e) => onModeChange(e, lvl)}
-                disabled={isLocked || viewOnly}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
-            >
-                <option value="">Select...</option>
-                <option value="In-Person Classes">In-Person Classes</option>
-                <option value="Blended Learning (3-2)">Blended (3-2)</option>
-                <option value="Blended Learning (4-1)">Blended (4-1)</option>
-                <option value="Full Distance Learning">Full Distance Learning</option>
-            </select>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Learning Delivery</label>
+            <div className="relative">
+                <select
+                    value={modes[`mode_${lvl}`] || ''}
+                    onChange={(e) => onModeChange(e, lvl)}
+                    disabled={isLocked || viewOnly}
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                    <option value="">Select Mode...</option>
+                    <option value="In-Person Classes">In-Person Classes</option>
+                    <option value="Blended Learning (3-2)">Blended (3-2)</option>
+                    <option value="Blended Learning (4-1)">Blended (4-1)</option>
+                    <option value="Full Distance Learning">Full Distance Learning</option>
+                </select>
+                <div className="absolute right-3 top-2.5 text-slate-400 pointer-events-none">
+                    <FiBookOpen size={14} />
+                </div>
+            </div>
         </div>
     </div>
 );
@@ -237,28 +250,49 @@ const ShiftingModalities = () => {
     };
 
     return (
-        <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
-            <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="min-h-screen bg-slate-50 font-sans pb-40">
+            {/* --- PREMIUM BLUE HEADER --- */}
+            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white text-2xl">←</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiArrowLeft size={24} />
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Shifting & Modality</h1>
-                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Manage schedules and delivery modes"}</p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Shifting & Modality</h1>
+                            {offering && (
+                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                    {offering}
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-blue-100 text-xs font-medium mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Manage schedules and delivery modes"}</p>
                     </div>
                 </div>
             </div>
 
-            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="font-bold text-gray-800 dark:text-slate-200 flex items-center gap-2">🗓️ Per Grade Strategy</h2>
-                        {offering && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-full font-bold uppercase">{offering}</span>}
+            <div className="px-5 -mt-10 relative z-20 max-w-4xl mx-auto space-y-6">
+
+                {/* --- GRADE LEVEL STRATEGIES --- */}
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+                            <FiCalendar />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-slate-800">Per Grade Strategy</h2>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Schedule & Learning Mode</p>
+                        </div>
                     </div>
 
                     {showElem() && (
                         <div className="mb-6">
-                            <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-lg text-xs font-bold inline-block mb-4">Elementary</div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Elementary</span>
+                            </div>
                             {/* Passed props to external GradeRow */}
                             <GradeRow label="Kinder" lvl="kinder" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                             <GradeRow label="Grade 1" lvl="g1" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
@@ -272,7 +306,10 @@ const ShiftingModalities = () => {
 
                     {showJHS() && (
                         <div className="mb-6">
-                            <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-lg text-xs font-bold inline-block mb-4">Junior High School</div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Junior High School</span>
+                            </div>
                             <GradeRow label="Grade 7" lvl="g7" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                             <GradeRow label="Grade 8" lvl="g8" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                             <GradeRow label="Grade 9" lvl="g9" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
@@ -282,59 +319,110 @@ const ShiftingModalities = () => {
 
                     {showSHS() && (
                         <div>
-                            <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-lg text-xs font-bold inline-block mb-4">Senior High School</div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Senior High School</span>
+                            </div>
                             <GradeRow label="Grade 11" lvl="g11" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                             <GradeRow label="Grade 12" lvl="g12" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                         </div>
                     )}
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                    <h2 className="font-bold text-gray-800 dark:text-slate-200 mb-2 flex items-center gap-2">📡 Emergency ADMs</h2>
-                    <p className="text-xs text-gray-400 dark:text-slate-500 mb-4 tracking-tight">Utilized during class suspensions or emergencies.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* --- EMERGENCY ADMS --- */}
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-xl">
+                            <FiWifi />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-slate-800">Emergency ADMs</h2>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Alternative Delivery Modes</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                         {['adm_mdl', 'adm_odl', 'adm_tvi', 'adm_blended'].map(adm => (
-                            <label key={adm} className="flex items-center gap-3 p-3 border border-gray-100 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer transition">
-                                <input type="checkbox" name={adm} checked={adms[adm]} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 accent-[#004A99] dark:accent-blue-500" />
-                                <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase">
+                            <label key={adm} className="group flex items-center gap-3 p-4 border border-slate-100 rounded-2xl hover:bg-slate-50 cursor-pointer transition-all border-l-4 border-l-transparent hover:border-l-blue-500">
+                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${adms[adm] ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-300 bg-slate-50'}`}>
+                                    {adms[adm] && <FiCheckCircle size={12} />}
+                                    <input type="checkbox" name={adm} checked={adms[adm]} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="hidden" />
+                                </div>
+
+                                <span className="text-xs font-bold text-slate-600 uppercase group-hover:text-blue-700 transition-colors">
                                     {adm === 'adm_mdl' ? 'Modular' : adm === 'adm_odl' ? 'Online' : adm === 'adm_tvi' ? 'TV/Radio' : 'Blended'}
                                 </span>
                             </label>
                         ))}
                     </div>
-                    <div className="mt-4">
-                        <label className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase mb-2">Other Strategies</label>
+                    <div>
+                        <label className="text-[9px] font-bold text-slate-400 uppercase mb-2 block ml-1">Other Strategies</label>
                         <textarea
                             value={adms.adm_others} onChange={handleAdmText} disabled={isLocked || viewOnly}
                             placeholder="Specify other modes..."
-                            className="w-full p-4 border border-gray-200 dark:border-slate-700 rounded-xl text-sm bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" rows="2"
+                            className="w-full p-4 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows="2"
                         />
                     </div>
                 </div>
             </div>
 
-            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-lg">
-                {viewOnly ? (
-                    <button
-                        onClick={() => navigate('/jurisdiction-schools')}
-                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
-                    >
-                        Back to Schools List
-                    </button>
-                ) : isLocked ? (
-                    <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
-                ) : (
-                    <>
-                        {originalData && hasSavedData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-500 font-bold py-4 rounded-xl">Cancel</button>}
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg">
-                            {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Settings")}
+            {/* --- FLOATING ACTION BAR --- */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
+                <div className="max-w-4xl mx-auto flex gap-3">
+                    {viewOnly ? (
+                        <button
+                            onClick={() => navigate('/jurisdiction-schools')}
+                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
+                        >
+                            <FiArrowLeft /> Back to Schools List
                         </button>
-                    </>
-                )}
+                    ) : isLocked ? (
+                        <button onClick={handleUpdateClick} className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
+                            <span>✏️</span> UNLOCK EDIT
+                        </button>
+                    ) : (
+                        <>
+                            {originalData && hasSavedData && <button onClick={handleCancelEdit} className="w-1/3 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors">Cancel</button>}
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="w-2/3 py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+                                {isSaving ? "Saving..." : (hasSavedData ? <><FiSave /> Update Changes</> : <><FiSave /> Save Settings</>)}
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Modalities?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">{hasSavedData ? "Confirm Update?" : "Confirm Save?"}</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
+            {/* --- MODALS --- */}
+            {showEditModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl">
+                            <FiAlertCircle />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800">Edit Modalities?</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6">You are to update shifting schedules. Proceed carefully.</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                            <button onClick={handleConfirmEdit} className="flex-1 py-3 rounded-xl bg-amber-500 text-white font-bold shadow-sm hover:bg-amber-600">Unlock</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showSaveModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 text-blue-600 text-2xl">
+                            <FiCheckCircle />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800">{hasSavedData ? "Confirm Update?" : "Confirm Save?"}</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6">Are you sure you want to save these modality settings?</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message={hasSavedData ? 'Settings Updated!' : 'Settings Saved!'} />

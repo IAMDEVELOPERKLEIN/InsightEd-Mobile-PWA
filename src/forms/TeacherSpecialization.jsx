@@ -1,6 +1,7 @@
 // src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { FiArrowLeft, FiBook, FiAward, FiBriefcase, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
@@ -28,15 +29,37 @@ const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) =
     const teaching = formData[`spec_${id}_teaching`];
 
     return (
-        <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 dark:border-slate-700 py-4 last:border-0">
-            <div className="col-span-3">
-                <span className="font-bold text-gray-700 dark:text-slate-300 text-sm block">{label}</span>
+        <div className="group flex items-center justify-between py-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors px-2 -mx-2 rounded-xl">
+            <div className="flex-1 pr-4">
+                <span className="font-bold text-slate-700 text-sm block group-hover:text-blue-700 transition-colors">{label}</span>
             </div>
-            <div className="col-span-1 text-center">
-                <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800 transition-colors" />
+            <div className="w-24 px-1">
+                <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    name={`spec_${id}_major`}
+                    value={major}
+                    onChange={handleChange}
+                    disabled={isLocked || viewOnly}
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border border-slate-200 rounded-xl py-2.5 bg-blue-50/50 text-blue-700 font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:opacity-50 text-base shadow-sm"
+                    onFocus={(e) => e.target.select()}
+                />
             </div>
-            <div className="col-span-1 text-center">
-                <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-orange-50 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200 font-bold focus:ring-2 focus:ring-orange-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800 transition-colors" />
+            <div className="w-24 px-1">
+                <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    name={`spec_${id}_teaching`}
+                    value={teaching}
+                    onChange={handleChange}
+                    disabled={isLocked || viewOnly}
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center border border-slate-200 rounded-xl py-2.5 bg-orange-50/50 text-orange-700 font-bold focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all disabled:opacity-50 text-base shadow-sm"
+                    onFocus={(e) => e.target.select()}
+                />
             </div>
         </div>
     );
@@ -115,7 +138,9 @@ const TeacherSpecialization = () => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: parseInt(value) || 0 }));
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
     const confirmSave = async () => {
@@ -180,65 +205,121 @@ const TeacherSpecialization = () => {
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative text-sm">
-            <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+            {/* Header */}
+            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">←</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiArrowLeft size={24} />
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Teacher Specialization</h1>
-                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Non-Major Teachers"}</p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Teacher Specialization</h1>
+                        </div>
+                        <p className="text-blue-100 text-xs font-medium mt-1">
+                            {viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Teaching Load"}
+                        </p>
                     </div>
                 </div>
             </div>
 
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
-
-                {/* 2. CORE SUBJECTS TABLE */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-20">
-                    <div className="flex justify-between items-end mb-4 border-b pb-2 border-gray-100 dark:border-slate-700">
-                        <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md flex items-center gap-2"><span className="text-xl">📚</span> Core Subjects</h2>
-                        <div className="flex gap-4 text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500">
-                            <span className="text-blue-600 dark:text-blue-400">Specialized (Major)</span>
-                            <span className="text-orange-500 dark:text-orange-400">Non-Major (Teaching)</span>
+                {/* CORE SUBJECTS TABLE */}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                    <div className="flex items-end justify-between mb-6 pb-4 border-b border-slate-50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                <FiBook size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-slate-800 font-bold text-lg">Core Subjects</h2>
+                                <p className="text-xs text-slate-400 font-medium">Subject assignments</p>
+                            </div>
                         </div>
                     </div>
 
-                    <SubjectRow label="English" id="english" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                    <SubjectRow label="Filipino" id="filipino" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                    <SubjectRow label="Mathematics" id="math" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                    <SubjectRow label="Science" id="science" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                    <SubjectRow label="Araling Panlipunan" id="ap" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                    <SubjectRow label="MAPEH" id="mapeh" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                    <SubjectRow label="EsP" id="esp" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                    <SubjectRow label="TLE / TVL" id="tle" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    {/* Column Headers */}
+                    <div className="flex justify-end gap-2 mb-2 px-2">
+                        <div className="w-24 text-center">
+                            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block bg-blue-50 py-1 rounded-lg">Major</span>
+                        </div>
+                        <div className="w-24 text-center">
+                            <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider block bg-orange-50 py-1 rounded-lg">Teaching</span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-1">
+                        <SubjectRow label="English" id="english" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="Filipino" id="filipino" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="Mathematics" id="math" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="Science" id="science" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="Araling Panlipunan" id="ap" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="MAPEH" id="mapeh" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="EsP" id="esp" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="TLE / TVL" id="tle" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    </div>
                 </div>
             </div>
 
             {/* Floating Action Bar */}
-            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
-                {viewOnly ? (
-                    <button
-                        onClick={() => navigate('/jurisdiction-schools')}
-                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
-                    >
-                        Back to Schools List
-                    </button>
-                ) : isLocked ? (
-                    <button onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition">✏️ Unlock to Edit</button>
-                ) : (
-                    <>
-                        {originalData && <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl">Cancel</button>}
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition">
-                            {isSaving ? "Saving..." : "Save Changes"}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-4xl mx-auto flex gap-3">
+                    {viewOnly ? (
+                        <button
+                            onClick={() => navigate('/jurisdiction-schools')}
+                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-transform"
+                        >
+                            Back to Schools List
                         </button>
-                    </>
-                )}
+                    ) : isLocked ? (
+                        <button
+                            onClick={() => setShowEditModal(true)}
+                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        >
+                            <span>Enable Editing</span>
+                        </button>
+                    ) : (
+                        <>
+                            {originalData && <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>}
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all">
+                                {isSaving ? "Saving..." : "Save Changes"}
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Modals */}
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Modify Data?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
+            {showEditModal && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                        <h3 className="font-bold text-xl text-slate-800 mb-2">Enable Editing?</h3>
+                        <p className="text-slate-500 text-sm mb-6">This allows you to modify the specialization data.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showSaveModal && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto">
+                            <FiCheckCircle size={24} />
+                        </div>
+                        <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Save Changes?</h3>
+                        <p className="text-slate-500 text-center text-sm mb-6">You are about to update the specialization record.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Specialization saved successfully!" />

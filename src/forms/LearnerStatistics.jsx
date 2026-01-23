@@ -34,9 +34,9 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
     const totals = calculateTotals();
 
     const offering = formData.curricular_offering?.toLowerCase() || '';
-    const showElem = offering.includes('elementary') || offering.includes('integrated') || !offering;
-    const showJhs = offering.includes('secondary') || offering.includes('integrated') || offering.includes('jhs') || !offering;
-    const showShs = offering.includes('secondary') || offering.includes('integrated') || offering.includes('shs') || !offering;
+    const showElem = offering.includes('elementary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || !offering;
+    const showJhs = offering.includes('junior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || !offering;
+    const showShs = offering.includes('senior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || !offering;
 
     return (
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">
@@ -79,9 +79,9 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
 
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 gap-3">
                 {grades.map((g) => {
-                    const isElem = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'].includes(g) && (offering.includes('elementary') || offering.includes('integrated'));
-                    const isJhs = ['g7', 'g8', 'g9', 'g10'].includes(g) && (offering.includes('secondary') || offering.includes('integrated') || offering.includes('jhs'));
-                    const isShs = ['g11', 'g12'].includes(g) && (offering.includes('secondary') || offering.includes('integrated') || offering.includes('shs'));
+                    const isElem = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'].includes(g) && (offering.includes('elementary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10'));
+                    const isJhs = ['g7', 'g8', 'g9', 'g10'].includes(g) && (offering.includes('junior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10'));
+                    const isShs = ['g11', 'g12'].includes(g) && (offering.includes('senior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12'));
 
                     const shouldShow = isElem || isJhs || isShs || !offering;
                     if (!shouldShow) return null;
@@ -90,13 +90,12 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
                         <div key={g} className="text-center group">
                             <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors">{g === 'k' ? 'Kinder' : g.toUpperCase()}</label>
                             <input
-                                type="number"
-                                min="0"
+                                type="text" inputMode="numeric" pattern="[0-9]*"
                                 value={getGridValue(category, g)}
-                                // Use value directly, prevent leading zeros if possible or handle in onChange
                                 onChange={(e) => onGridChange(category, g, e.target.value)}
                                 disabled={isLocked}
                                 className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                onFocus={(e) => e.target.select()}
                             />
                         </div>
                     );
@@ -123,9 +122,12 @@ const LearnerStatistics = () => {
 
     const handleGridChange = (category, grade, value) => {
         const key = `stat_${category}_${grade}`;
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+
         setFormData(prev => ({
             ...prev,
-            [key]: value === '' ? 0 : parseInt(value) || 0 // Handle empty string gracefully
+            [key]: intValue
         }));
     };
 

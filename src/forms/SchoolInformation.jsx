@@ -8,6 +8,7 @@ import { addToOutbox } from '../db';
 import Papa from 'papaparse'; //
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
+import { FiArrowLeft, FiUser, FiMapPin, FiBriefcase, FiHash, FiSearch, FiCheckCircle, FiSave, FiAlertCircle } from 'react-icons/fi';
 
 const SchoolInformation = () => {
     const navigate = useNavigate();
@@ -213,109 +214,156 @@ const SchoolInformation = () => {
 
     // LoadingScreen check removed
 
-    const inputClass = `w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all`;
-    const labelClass = "block text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1 ml-1";
-    const sectionClass = "bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-6";
+    if (loading) return (
+        <div className="min-h-screen grid place-items-center bg-slate-50">
+            <div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div>
+        </div>
+    );
+
+    const inputClass = "w-full h-12 px-4 font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all hover:border-blue-200 disabled:bg-slate-100 disabled:text-slate-400";
+    const labelClass = "text-[9px] font-bold text-slate-400 uppercase mb-1 block ml-1";
+    const sectionClass = "bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-5";
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
-            {/* DUMMY MODE BANNER */}
-            {isDummy && (
-                <div className="bg-amber-100 border-b border-amber-200 px-6 py-3 sticky top-0 z-50 flex items-center justify-center gap-2 shadow-sm">
-                    <span className="font-bold text-amber-800 text-sm uppercase tracking-wide">⚠️ Sample Mode: Read-Only Preview</span>
-                </div>
-            )}
-            <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+        <div className="min-h-screen bg-slate-50 font-sans pb-40">
+            {/* --- PREMIUM BLUE HEADER --- */}
+            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiArrowLeft size={24} />
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-white">School Head Info</h1>
-                        <p className="text-blue-200 text-xs mt-1">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-white tracking-tight">School Head Info</h1>
+                            {isDummy && (
+                                <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-200 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-amber-500/30">
+                                    Sample Mode
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-blue-100 text-xs font-medium mt-1">
                             {viewOnly ? "Monitor View (Read-Only)" : (lastUpdated ? `Last Verified: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage personnel record')}
                         </p>
                     </div>
                 </div>
             </div>
 
-            <div className="px-5 -mt-12 relative z-20 max-w-3xl mx-auto">
-                {/* PSI_CD LOOKUP SECTION */}
+            <div className="px-5 -mt-10 relative z-20 max-w-3xl mx-auto space-y-5">
+
+                {/* --- PSI_CD LOOKUP SECTION --- */}
                 <div className={sectionClass}>
-                    <label className={labelClass}>Item Number (PSI_CD)</label>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+                            <FiHash />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-slate-800">Item Number</h2>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">PSI_CD Lookup</p>
+                        </div>
+                    </div>
+
                     <div className="relative">
+                        <label className={labelClass}>PSI_CD / Item No.</label>
                         <input
                             type="text"
                             name="itemNumber"
                             value={formData.itemNumber}
                             onChange={handleChange}
                             onBlur={handleItemNumberBlur}
-                            placeholder="Enter PSI_CD for autofill..."
-                            className={`${inputClass} !border-blue-200`}
+                            placeholder="e.g. OSEC-DECSB-ADA1-27-2004"
+                            className={`${inputClass} !border-blue-200 text-blue-700`}
                             disabled={isLocked || viewOnly || isDummy}
                         />
-                        {isSearching && <span className="absolute right-4 top-3 animate-spin">⏳</span>}
+                        {isSearching && (
+                            <div className="absolute right-4 bottom-3 animate-spin text-blue-500">
+                                <FiSearch />
+                            </div>
+                        )}
                     </div>
-                    <p className="text-[10px] text-blue-500 mt-2 italic font-medium">
-                        💡 Enter your Item Number (e.g. OSEC-DECSB-ADA1-27-2004) and tap outside to autofill.
-                    </p>
+                    {!isLocked && !viewOnly && !isDummy && (
+                        <p className="text-[10px] text-blue-400 mt-2 font-medium ml-1">
+                            💡 Enter Item Number and tap outside to autofill details.
+                        </p>
+                    )}
                 </div>
 
-                {/* PERSONAL DETAILS */}
+                {/* --- PERSONAL DETAILS --- */}
                 <div className={sectionClass}>
-                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4">
-                        <span className="text-xl">🆔</span> Personal Details
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl">
+                            <FiUser />
+                        </div>
                         <div>
+                            <h2 className="text-base font-bold text-slate-800">Personal Details</h2>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Basic Information</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="space-y-1">
                             <label className={labelClass}>First Name</label>
                             <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
-                        <div>
+                        <div className="space-y-1">
                             <label className={labelClass}>Middle Name</label>
                             <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
-                        <div>
+                        <div className="space-y-1">
                             <label className={labelClass}>Last Name</label>
                             <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
-                        <div className="md:col-span-3">
+                        <div className="md:col-span-3 space-y-1">
                             <label className={labelClass}>Sex</label>
-                            <input type="text" name="sex" value={formData.sex} readOnly className={inputClass} disabled={true} />
+                            <input type="text" name="sex" value={formData.sex} readOnly className={`${inputClass} !bg-slate-100 !text-slate-500`} disabled={true} />
                         </div>
                     </div>
                 </div>
 
-                {/* STATION DETAILS */}
+                {/* --- STATION DETAILS --- */}
                 <div className={sectionClass}>
-                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4">
-                        <span className="text-xl">📍</span> Station Details
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl">
+                            <FiMapPin />
+                        </div>
                         <div>
+                            <h2 className="text-base font-bold text-slate-800">Station Details</h2>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Location Assignment</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
                             <label className={labelClass}>Region</label>
-                            <input type="text" value={formData.region} readOnly className={inputClass} disabled={true} />
+                            <input type="text" value={formData.region} readOnly className={`${inputClass} !bg-slate-100 !text-slate-500`} disabled={true} />
                         </div>
-                        <div>
+                        <div className="space-y-1">
                             <label className={labelClass}>Division</label>
-                            <input type="text" value={formData.division} readOnly className={inputClass} disabled={true} />
+                            <input type="text" value={formData.division} readOnly className={`${inputClass} !bg-slate-100 !text-slate-500`} disabled={true} />
                         </div>
                     </div>
                 </div>
 
-                {/* APPOINTMENT DATA */}
+                {/* --- APPOINTMENT DATA --- */}
                 <div className={sectionClass}>
-                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4">
-                        <span className="text-xl">💼</span> Appointment Data
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
+                            <FiBriefcase />
+                        </div>
                         <div>
+                            <h2 className="text-base font-bold text-slate-800">Appointment</h2>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Position & Hiring Date</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-1">
                             <label className={labelClass}>Position Title</label>
                             <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy}>
                                 <option value="">Select Position...</option>
                                 {positionOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                             </select>
                         </div>
-                        <div>
+                        <div className="space-y-1">
                             <label className={labelClass}>Date of Appointment</label>
                             <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
@@ -323,46 +371,85 @@ const SchoolInformation = () => {
                 </div>
             </div>
 
-            {/* FOOTER */}
-            {(viewOnly || isDummy) ? (
-                    <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-lg">
+            {/* --- FLOATING ACTION BAR --- */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
+                <div className="max-w-4xl mx-auto flex gap-3">
+                    {(viewOnly || isDummy) ? (
                         <button
                             type="button"
                             onClick={() => navigate('/jurisdiction-schools')}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
+                            className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
                         >
-                            ← Back to School List
+                            <FiArrowLeft /> Back to School List
                         </button>
-                    </div>
-            ) : (
-                <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-lg">
-                    {isLocked ? (
-                        <button onClick={() => { setShowEditModal(true); }} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                    ) : isLocked ? (
+                        <button
+                            onClick={() => setShowEditModal(true)}
+                            className="w-full py-4 rounded-2xl bg-amber-500 text-white font-bold shadow-lg shadow-amber-900/20 flex items-center justify-center gap-2 hover:bg-amber-600 transition-colors"
+                        >
                             <span>✏️</span> Unlock to Edit
                         </button>
                     ) : (
                         <>
-                            <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-bold py-4 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
-                                {isSaving ? "Saving..." : "Save Changes"}
+                            <button
+                                onClick={() => { setFormData(originalData); setIsLocked(true); }}
+                                className="w-1/3 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => setShowSaveModal(true)}
+                                disabled={isSaving}
+                                className="w-2/3 py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                            >
+                                {isSaving ? "Saving..." : <><FiSave /> Save Changes</>}
                             </button>
                         </>
                     )}
                 </div>
+            </div>
+
+            {/* --- MODALS --- */}
+            {showSaveModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 text-blue-600 text-2xl">
+                            <FiCheckCircle />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800">Confirm Updates</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6">Are you sure the information is correct?</p>
+
+                        <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer mb-6 border border-transparent hover:border-slate-100 transition">
+                            <input type="checkbox" checked={isChecked} onChange={(e) => setIsChecked(e.target.checked)} className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-600" />
+                            <span className="text-xs font-bold text-slate-600 select-none">I certify this information is correct.</span>
+                        </label>
+
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                            <button onClick={confirmSave} disabled={!isChecked} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${isChecked ? 'bg-[#004A99] hover:bg-blue-800' : 'bg-slate-200 cursor-not-allowed'}`}>Save</button>
+                        </div>
+                    </div>
+                </div>
             )}
 
-            {/* Save Modal */}
-            {showSaveModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
-                        <h3 className="text-lg font-bold dark:text-slate-200">Confirm Updates</h3>
-                        <label className="flex items-start gap-3 my-6">
-                            <input type="checkbox" checked={isChecked} onChange={(e) => setIsChecked(e.target.checked)} className="mt-1" />
-                            <span className="text-xs font-bold text-gray-700 dark:text-slate-400">I certify this information is correct.</span>
+            {/* Edit Warning Modal for Unlock */}
+            {showEditModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl">
+                            <FiAlertCircle />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800">Edit Information?</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6">You are about to modify official school head records. Please confirm to proceed.</p>
+
+                        <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer mb-6 border border-transparent hover:border-slate-100 transition">
+                            <input type="checkbox" checked={editAgreement} onChange={(e) => setEditAgreement(e.target.checked)} className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-600" />
+                            <span className="text-xs font-bold text-slate-600 select-none">I understand and wish to proceed.</span>
                         </label>
+
                         <div className="flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl dark:text-slate-400">Cancel</button>
-                            <button onClick={confirmSave} disabled={!isChecked} className="flex-1 py-3 rounded-xl bg-[#CC0000] text-white font-bold">Save</button>
+                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                            <button onClick={() => { setShowEditModal(false); setIsLocked(false); }} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-200 cursor-not-allowed'}`}>Proceed</button>
                         </div>
                     </div>
                 </div>

@@ -1,6 +1,7 @@
 // src/forms/TeachingPersonnel.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { FiArrowLeft, FiUser, FiBriefcase, FiAward, FiBookOpen, FiUserCheck, FiUsers } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
@@ -9,6 +10,26 @@ import { addToOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
+
+// --- EXTRACTED COMPONENT ---
+const TeacherInput = ({ label, name, value, onChange, disabled }) => (
+    <div className="flex flex-col">
+        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 text-center h-6 flex items-end justify-center">{label}</label>
+        <div className="relative group">
+            <input
+                type="number"
+                min="0"
+                name={name}
+                value={value}
+                onChange={onChange}
+                disabled={disabled}
+                onWheel={(e) => e.target.blur()}
+                onFocus={(e) => e.target.select()}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center font-bold text-slate-700 text-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed group-hover:border-blue-300"
+            />
+        </div>
+    </div>
+);
 
 const TeachingPersonnel = () => {
     const navigate = useNavigate();
@@ -211,103 +232,148 @@ const TeachingPersonnel = () => {
         } catch (e) { alert("Offline save failed."); }
     };
 
-    const TeacherInput = ({ label, name }) => (
-        <div className="flex flex-col items-center">
-            <label className="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1 text-center">{label}</label>
-            <input
-                type="number" min="0"
-                name={name}
-                value={formData[name]}
-                onChange={handleChange}
-                disabled={isLocked || viewOnly}
-                className="w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all"
-            />
-        </div>
-    );
-
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
-            <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+            {/* Header */}
+            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white text-2xl">←</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiArrowLeft size={24} />
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-white tracking-tight">Teaching Personnel</h1>
-                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Teacher count per grade level"}</p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Teaching Personnel</h1>
+                            {offering && (
+                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                    {offering}
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-blue-100 text-xs font-medium mt-1">
+                            {viewOnly ? "Monitor View (Read-Only)" : "Manage faculty distribution"}
+                        </p>
                     </div>
                 </div>
             </div>
 
-            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto">
-                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 mb-4 flex justify-between items-center">
-                    <div>
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-wider">Curricular Offering</p>
-                        <p className="text-blue-900 dark:text-blue-400 font-bold text-sm uppercase">{offering || 'Not Set'}</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-wider">Total Faculty</p>
-                        <p className="text-2xl font-extrabold text-[#004A99] dark:text-blue-500">{getTotal()}</p>
+            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
+
+                {/* Total Counts Banner */}
+                <div className="bg-white rounded-3xl p-6 shadow-xl shadow-blue-900/5 border border-slate-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-16 -mt-16 blur-2xl opacity-50" />
+                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-amber-50 rounded-full -ml-12 -mb-12 blur-xl opacity-50" />
+
+                    <div className="relative flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm">
+                                <FiUsers size={24} />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Faculty</p>
+                                <p className="text-2xl font-black text-slate-800 tracking-tight">{getTotal()}</p>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${isLocked ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-green-50 text-green-600 border-green-100'}`}>
+                                {isLocked ? 'View Mode' : 'Editing'}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
                     {showElem() && (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">🎒 Elementary</h2>
+                        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                                    <FiUser size={20} />
+                                </div>
+                                <div>
+                                    <h2 className="text-slate-800 font-bold text-lg">Elementary</h2>
+                                    <p className="text-xs text-slate-400 font-medium">Kinder to Grade 6 Faculty</p>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <TeacherInput label="Kinder" name="teach_kinder" />
-                                <TeacherInput label="Grade 1" name="teach_g1" />
-                                <TeacherInput label="Grade 2" name="teach_g2" />
-                                <TeacherInput label="Grade 3" name="teach_g3" />
-                                <TeacherInput label="Grade 4" name="teach_g4" />
-                                <TeacherInput label="Grade 5" name="teach_g5" />
-                                <TeacherInput label="Grade 6" name="teach_g6" />
+                                <TeacherInput label="Kinder" name="teach_kinder" value={formData.teach_kinder} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 1" name="teach_g1" value={formData.teach_g1} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 2" name="teach_g2" value={formData.teach_g2} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 3" name="teach_g3" value={formData.teach_g3} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 4" name="teach_g4" value={formData.teach_g4} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 5" name="teach_g5" value={formData.teach_g5} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 6" name="teach_g6" value={formData.teach_g6} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
                         </div>
                     )}
 
                     {showJHS() && (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">📘 Junior High</h2>
+                        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                    <FiBookOpen size={20} />
+                                </div>
+                                <div>
+                                    <h2 className="text-slate-800 font-bold text-lg">Junior High School</h2>
+                                    <p className="text-xs text-slate-400 font-medium">Grade 7 to Grade 10 Faculty</p>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <TeacherInput label="Grade 7" name="teach_g7" />
-                                <TeacherInput label="Grade 8" name="teach_g8" />
-                                <TeacherInput label="Grade 9" name="teach_g9" />
-                                <TeacherInput label="Grade 10" name="teach_g10" />
+                                <TeacherInput label="Grade 7" name="teach_g7" value={formData.teach_g7} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 8" name="teach_g8" value={formData.teach_g8} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 9" name="teach_g9" value={formData.teach_g9} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 10" name="teach_g10" value={formData.teach_g10} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
                         </div>
                     )}
 
                     {showSHS() && (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">🎓 Senior High</h2>
+                        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                                <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                                    <FiAward size={20} />
+                                </div>
+                                <div>
+                                    <h2 className="text-slate-800 font-bold text-lg">Senior High School</h2>
+                                    <p className="text-xs text-slate-400 font-medium">Grade 11 & 12 Faculty</p>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <TeacherInput label="Grade 11" name="teach_g11" />
-                                <TeacherInput label="Grade 12" name="teach_g12" />
+                                <TeacherInput label="Grade 11" name="teach_g11" value={formData.teach_g11} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 12" name="teach_g12" value={formData.teach_g12} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
                         </div>
                     )}
 
                     {showElem() && (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">🎒 Multigrade COMBINATION</h2>
-                            <div className="grid grid-cols-2 gap-4">
-                                <TeacherInput label="Grade 1 & 2" name="teach_multi_1_2" />
-                                <TeacherInput label="Grade 3 & 4" name="teach_multi_3_4" />
-                                <TeacherInput label="Grade 5 & 6" name="teach_multi_5_6" />
+                        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                    <FiUserCheck size={20} />
+                                </div>
+                                <div>
+                                    <h2 className="text-slate-800 font-bold text-lg">Multigrade Classes</h2>
+                                    <p className="text-xs text-slate-400 font-medium">Combined grade level assignments</p>
+                                </div>
                             </div>
 
-                            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-slate-700">
-                                <p className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-2">
-                                    Is there a teacher handling AT LEAST 3 grades?
+                            <div className="grid grid-cols-2 gap-4 mb-8">
+                                <TeacherInput label="Grade 1 & 2" name="teach_multi_1_2" value={formData.teach_multi_1_2} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 3 & 4" name="teach_multi_3_4" value={formData.teach_multi_3_4} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 5 & 6" name="teach_multi_5_6" value={formData.teach_multi_5_6} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            </div>
+
+                            <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-4 text-center">
+                                    Does any teacher handle 3+ grades?
                                 </p>
-                                <div className="flex gap-2">
+                                <div className="flex gap-3">
                                     <button
                                         type="button"
                                         onClick={() => !isLocked && !viewOnly && setFormData({ ...formData, teach_multi_3plus_flag: true })}
                                         className={`flex-1 py-3 rounded-xl font-bold border transition-all ${formData.teach_multi_3plus_flag
-                                            ? 'bg-blue-600 text-white border-blue-600'
-                                            : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700'
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]'
+                                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                                             }`}
                                         disabled={isLocked || viewOnly}
                                     >
@@ -317,8 +383,8 @@ const TeachingPersonnel = () => {
                                         type="button"
                                         onClick={() => !isLocked && !viewOnly && setFormData({ ...formData, teach_multi_3plus_flag: false, teach_multi_3plus_count: 0 })}
                                         className={`flex-1 py-3 rounded-xl font-bold border transition-all ${!formData.teach_multi_3plus_flag
-                                            ? 'bg-red-500 text-white border-red-500'
-                                            : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700'
+                                            ? 'bg-slate-700 text-white border-slate-700 shadow-md transform scale-[1.02]'
+                                            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                                             }`}
                                         disabled={isLocked || viewOnly}
                                     >
@@ -327,58 +393,109 @@ const TeachingPersonnel = () => {
                                 </div>
 
                                 {formData.teach_multi_3plus_flag && (
-                                    <div className="mt-4 animate-fadeIn">
-                                        <TeacherInput label="How many teachers?" name="teach_multi_3plus_count" />
+                                    <div className="mt-6 animate-in slide-in-from-top-2 fade-in duration-300">
+                                        <TeacherInput label="How many teachers?" name="teach_multi_3plus_count" value={formData.teach_multi_3plus_count} onChange={handleChange} disabled={isLocked || viewOnly} />
                                     </div>
                                 )}
                             </div>
                         </div>
                     )}
 
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                        <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">⏳ DepEd Teaching Experience (Years)</h2>
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+                                <FiBriefcase size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-slate-800 font-bold text-lg">Teaching Experience</h2>
+                                <p className="text-xs text-slate-400 font-medium">Based on service duration</p>
+                            </div>
+                        </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            <TeacherInput label="0-1 Years" name="teach_exp_0_1" />
-                            <TeacherInput label="2-5 Years" name="teach_exp_2_5" />
-                            <TeacherInput label="6-10 Years" name="teach_exp_6_10" />
-                            <TeacherInput label="11-15 Years" name="teach_exp_11_15" />
-                            <TeacherInput label="16-20 Years" name="teach_exp_16_20" />
-                            <TeacherInput label="21-25 Years" name="teach_exp_21_25" />
-                            <TeacherInput label="26-30 Years" name="teach_exp_26_30" />
-                            <TeacherInput label="31-35 Years" name="teach_exp_31_35" />
-                            <TeacherInput label="36-40 Years" name="teach_exp_36_40" />
-                            <TeacherInput label="40-45 Years" name="teach_exp_40_45" />
+                            <TeacherInput label="0-1 Years" name="teach_exp_0_1" value={formData.teach_exp_0_1} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="2-5 Years" name="teach_exp_2_5" value={formData.teach_exp_2_5} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="6-10 Years" name="teach_exp_6_10" value={formData.teach_exp_6_10} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="11-15 Years" name="teach_exp_11_15" value={formData.teach_exp_11_15} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="16-20 Years" name="teach_exp_16_20" value={formData.teach_exp_16_20} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="21-25 Years" name="teach_exp_21_25" value={formData.teach_exp_21_25} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="26-30 Years" name="teach_exp_26_30" value={formData.teach_exp_26_30} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="31-35 Years" name="teach_exp_31_35" value={formData.teach_exp_31_35} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="36-40 Years" name="teach_exp_36_40" value={formData.teach_exp_36_40} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="40-45 Years" name="teach_exp_40_45" value={formData.teach_exp_40_45} onChange={handleChange} disabled={isLocked || viewOnly} />
                         </div>
                     </div>
                 </form>
             </div >
 
-            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
-                {viewOnly ? (
-                    <button
-                        onClick={() => navigate('/jurisdiction-schools')}
-                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
-                    >
-                        Back to Schools List
-                    </button>
-                ) : isLocked ? (
-                    <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
-                ) : (
-                    <>
-                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300 font-bold py-4 rounded-xl">Cancel</button>}
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg">
-                            {isSaving ? "Saving..." : "Save Changes"}
+            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-4xl mx-auto flex gap-3">
+                    {viewOnly ? (
+                        <button
+                            onClick={() => navigate('/jurisdiction-schools')}
+                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-transform"
+                        >
+                            Back to Schools List
                         </button>
-                    </>
-                )}
+                    ) : isLocked ? (
+                        <button
+                            onClick={handleUpdateClick}
+                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        >
+                            <span>Enable Editing</span>
+                        </button>
+                    ) : (
+                        <>
+                            <button
+                                onClick={handleCancelEdit}
+                                className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => setShowSaveModal(true)}
+                                disabled={isSaving}
+                                className="flex-[2] bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all"
+                            >
+                                {isSaving ? "Saving..." : "Save Changes"}
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Edit Personnel?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Save Changes?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
+            {showEditModal && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                        <h3 className="font-bold text-xl text-slate-800 mb-2">Enable Editing?</h3>
+                        <p className="text-slate-500 text-sm mb-6">This allows you to modify the teaching personnel data.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={handleConfirmEdit} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showSaveModal && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto">
+                            <FiUsers size={24} />
+                        </div>
+                        <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Save Changes?</h3>
+                        <p className="text-slate-500 text-center text-sm mb-6">You are about to update the teaching personnel record.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Teaching Personnel saved successfully!" />
-        </div >
+        </div>
     );
 };
 
