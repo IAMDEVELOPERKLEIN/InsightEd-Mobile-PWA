@@ -9,6 +9,9 @@ dotenv.config();
 // Destructure Pool from pg
 const { Pool } = pg;
 
+// --- STATE ---
+let isDbConnected = false;
+
 const app = express();
 
 // --- MIDDLEWARE ---
@@ -30,11 +33,36 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// Initialize OTP Table
+const initOtpTable = async () => {
+  if (!isDbConnected) {
+    console.log("⚠️ Skipping OTP Table Init (Offline Mode)");
+    return;
+  }
+
+  try {
+    await pool.query(`
+            CREATE TABLE IF NOT EXISTS verification_codes (
+                email VARCHAR(255) PRIMARY KEY,
+                code VARCHAR(10) NOT NULL,
+                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
+            );
+        `);
+    console.log("✅ OTP Table Initialized");
+  } catch (err) {
+    console.error("❌ Failed to init OTP table:", err);
+  }
+};
+
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
+    console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
+    isDbConnected = false;
   } else {
     console.log('✅ Connected to Neon Database successfully!');
+    isDbConnected = true;
+    initOtpTable();
     release();
   }
 });
@@ -120,21 +148,7 @@ app.post('/api/log-activity', async (req, res) => {
 // ==================================================================
 
 // Initialize OTP Table
-const initOtpTable = async () => {
-  try {
-    await pool.query(`
-            CREATE TABLE IF NOT EXISTS verification_codes (
-                email VARCHAR(255) PRIMARY KEY,
-                code VARCHAR(10) NOT NULL,
-                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
-            );
-        `);
-    console.log("✅ OTP Table Initialized");
-  } catch (err) {
-    console.error("❌ Failed to init OTP table:", err);
-  }
-};
-initOtpTable();
+
 
 // --- POST: Send OTP (Real Email via Nodemailer) ---
 app.post('/api/send-otp', async (req, res) => {
@@ -143,6 +157,15 @@ app.post('/api/send-otp', async (req, res) => {
 
   // Generate 6-digit code
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // --- MOCK MODE HANDLING ---
+  if (!isDbConnected) {
+    console.log(`⚠️  [OFFLINE] Mock OTP for ${email}: ${otp}`);
+    return res.json({
+      success: true,
+      message: `OFFLINE MODE: Code is ${otp} (Check Console)`
+    });
+  }
 
   try {
     // 1. SAVE TO DATABASE (Upsert)
@@ -206,6 +229,15 @@ app.post('/api/send-otp', async (req, res) => {
 // --- POST: Verify OTP ---
 app.post('/api/verify-otp', async (req, res) => {
   const { email, code } = req.body;
+
+  // --- MOCK MODE HANDLING ---
+  if (!isDbConnected) {
+    if (code && code.length === 6) {
+      console.log(`⚠️  [OFFLINE] Verifying Mock OTP: ${code} for ${email} -> SUCCESS`);
+      return res.json({ success: true, message: "Offline Login Successful!" });
+    }
+    return res.status(400).json({ success: false, message: "Invalid Mock Code" });
+  }
 
   try {
     // 1. Check DB for valid code

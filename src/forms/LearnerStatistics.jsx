@@ -15,8 +15,8 @@ const LearnerStatistics = () => {
     // Core Form Data + JSONB Grids
     const [formData, setFormData] = useState({
         schoolId: '',
-        learner_stats_grids: {} // Stores { sned: { k:0, g1:0... }, ip: {...} }
-        // learner_stats_grids: {} // Stores { sned: { k:0, g1:0... }, ip: {...} } - REMOVED
+        curricular_offering: localStorage.getItem('schoolOffering') || '', // Load from cache initially
+        learner_stats_grids: {}
     });
 
     // --- HELPERS ---
@@ -137,15 +137,22 @@ const LearnerStatistics = () => {
                 const res = await fetch(`/api/learner-statistics/${user.uid}`);
                 const result = await res.json();
                 if (result.exists) {
+                    const fallbackOffering = result.data.curricular_offering || localStorage.getItem('schoolOffering') || '';
                     setFormData(prev => ({
                         ...prev,
                         ...result.data,
+                        curricular_offering: fallbackOffering,
                         learner_stats_grids: result.data.learner_stats_grids || {} // Ensure grid object exists
                     }));
                     setIsLocked(true);
                 }
             } catch (err) {
                 console.error("Fetch Error:", err);
+                // Offline Fallback: Ensure offering is respected
+                const cachedOffering = localStorage.getItem('schoolOffering');
+                if (cachedOffering) {
+                    setFormData(prev => ({ ...prev, curricular_offering: cachedOffering }));
+                }
             } finally {
                 setLoading(false);
             }
@@ -208,7 +215,12 @@ const LearnerStatistics = () => {
             }
         } catch (err) {
             console.warn("Saving to outbox...");
-            await addToOutbox('Learner Statistics', payload);
+            await addToOutbox({
+                type: 'LEARNER_STATISTICS',
+                label: 'Learner Statistics',
+                url: '/api/save-learner-statistics',
+                payload: payload
+            });
             alert('Offline: Saved to Outbox');
             setIsLocked(true);
         } finally {

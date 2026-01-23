@@ -35,7 +35,13 @@ const TeachingPersonnel = () => {
         teach_g11: 0, teach_g12: 0,
         teach_multi_1_2: 0, teach_multi_3_4: 0, teach_multi_5_6: 0,
         teach_multi_3plus_flag: false,
-        teach_multi_3plus_count: 0
+        teach_multi_3plus_count: 0,
+
+        // TEACHING EXPERIENCE
+        teach_exp_0_1: 0, teach_exp_2_5: 0, teach_exp_6_10: 0,
+        teach_exp_11_15: 0, teach_exp_16_20: 0, teach_exp_21_25: 0,
+        teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
+        teach_exp_40_45: 0,
     });
     const [originalData, setOriginalData] = useState(null);
 
@@ -79,6 +85,17 @@ const TeachingPersonnel = () => {
                             teach_multi_5_6: dbData.teach_multi_5_6 || 0,
                             teach_multi_3plus_flag: dbData.teach_multi_3plus_flag || false,
                             teach_multi_3plus_count: dbData.teach_multi_3plus_count || 0,
+
+                            teach_exp_0_1: dbData.teach_exp_0_1 || 0,
+                            teach_exp_2_5: dbData.teach_exp_2_5 || 0,
+                            teach_exp_6_10: dbData.teach_exp_6_10 || 0,
+                            teach_exp_11_15: dbData.teach_exp_11_15 || 0,
+                            teach_exp_16_20: dbData.teach_exp_16_20 || 0,
+                            teach_exp_21_25: dbData.teach_exp_21_25 || 0,
+                            teach_exp_26_30: dbData.teach_exp_26_30 || 0,
+                            teach_exp_31_35: dbData.teach_exp_31_35 || 0,
+                            teach_exp_36_40: dbData.teach_exp_36_40 || 0,
+                            teach_exp_40_45: dbData.teach_exp_40_45 || 0,
                         };
                         setFormData(initialData);
                         setOriginalData(initialData);
@@ -313,8 +330,24 @@ const TeachingPersonnel = () => {
                             </div>
                         </div>
                     )}
+
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                        <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">⏳ DepEd Teaching Experience (Years)</h2>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <TeacherInput label="0-1 Years" name="teach_exp_0_1" />
+                            <TeacherInput label="2-5 Years" name="teach_exp_2_5" />
+                            <TeacherInput label="6-10 Years" name="teach_exp_6_10" />
+                            <TeacherInput label="11-15 Years" name="teach_exp_11_15" />
+                            <TeacherInput label="16-20 Years" name="teach_exp_16_20" />
+                            <TeacherInput label="21-25 Years" name="teach_exp_21_25" />
+                            <TeacherInput label="26-30 Years" name="teach_exp_26_30" />
+                            <TeacherInput label="31-35 Years" name="teach_exp_31_35" />
+                            <TeacherInput label="36-40 Years" name="teach_exp_36_40" />
+                            <TeacherInput label="40-45 Years" name="teach_exp_40_45" />
+                        </div>
+                    </div>
                 </form>
-            </div>
+            </div >
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
                 {viewOnly ? (
@@ -340,7 +373,7 @@ const TeachingPersonnel = () => {
             {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Save Changes?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
 
 
-        </div>
+        </div >
     );
 };
 

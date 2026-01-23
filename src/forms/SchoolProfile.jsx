@@ -9,6 +9,8 @@ import locationData from '../locations.json';
 import { addToOutbox } from '../db';
 import PageTransition from '../components/PageTransition';
 import LocationPickerMap from '../components/LocationPickerMap';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal'; // NEW // NEW
 
 const SchoolProfile = () => {
     const navigate = useNavigate();
@@ -32,6 +34,9 @@ const SchoolProfile = () => {
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [showRegisteredModal, setShowRegisteredModal] = useState(false); // New: Registered Modal State
     const [showIernModal, setShowIernModal] = useState(false); // New: IERN Modal
+    const [showOfflineModal, setShowOfflineModal] = useState(false); // NEW
+    const [showSuccessModal, setShowSuccessModal] = useState(false); // NEW
+    const [successMessage, setSuccessMessage] = useState(""); // NEW
     const [generatedIern, setGeneratedIern] = useState(""); // New: Store IERN
     const [ack1, setAck1] = useState(false);
     const [ack2, setAck2] = useState(false);
@@ -483,8 +488,15 @@ const SchoolProfile = () => {
 
         if (!navigator.onLine) {
             try {
-                // ... (offline logic)
-            } catch (e) { alert("Save failed."); }
+                await addToOutbox({
+                    type: 'SCHOOL_PROFILE',
+                    label: 'School Profile',
+                    url: '/api/save-school',
+                    payload: payload
+                });
+                setShowOfflineModal(true); // USE MODAL
+                finalize();
+            } catch (e) { console.error(e); alert("Offline save failed."); }
             finally { setIsSaving(false); }
             return;
         }
@@ -497,13 +509,17 @@ const SchoolProfile = () => {
             });
             if (response.ok) {
                 const resData = await response.json();
-                if (resData.iern) {
+
+                // Only show IERN Modal for NEW profiles
+                if (resData.iern && !hasSavedData) {
                     setGeneratedIern(resData.iern);
                     setShowIernModal(true);
                     finalize(resData.iern);
                 } else {
-                    alert(hasSavedData ? 'Changes Saved!' : 'Profile Created Successfully!');
-                    finalize();
+                    // For updates, just show success message
+                    setSuccessMessage(hasSavedData ? 'Changes Saved Successfully!' : 'Profile Created Successfully!');
+                    setShowSuccessModal(true); // USE MODAL
+                    finalize(resData.iern); // Update IERN in state if returned, but silent
                     if (isFirstTime) navigate('/schoolhead-dashboard');
                 }
             } else {
@@ -705,7 +721,7 @@ const SchoolProfile = () => {
                                             latitude={formData.latitude}
                                             longitude={formData.longitude}
                                             onLocationSelect={(lat, lng) => setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }))}
-                                            disabled={isDummy || viewOnly}
+                                            disabled={isDummy || viewOnly || isLocked || isOffline}
                                         />
                                     </div>
 
@@ -766,6 +782,9 @@ const SchoolProfile = () => {
             </PageTransition >
 
             {/* MODALS - MOVED OUTSIDE TRANSITION TO FIX FIXED POSITIONING */}
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message={successMessage} />
+
             {showEditModal && (
                 <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
@@ -792,10 +811,10 @@ const SchoolProfile = () => {
                             We could not find this ID in our directory. Please contact the <b>Planning Officer</b> to verify your School ID.
                         </p>
                         <button
-                            onClick={() => setShowErrorModal(false)}
-                            className="w-full py-3.5 bg-red-600 text-white rounded-xl font-bold shadow-lg hover:bg-red-700 active:scale-[0.98] transition"
+                            onClick={handleUpdateClick}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                         >
-                            OK, I Understand
+                            <span>✏️</span> UNLOCK EDIT
                         </button>
                     </div>
                 </div>
