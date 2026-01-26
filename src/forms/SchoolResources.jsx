@@ -6,7 +6,7 @@ import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -127,44 +127,82 @@ const SchoolResources = () => {
                     }
                 }
 
-                // 2. Fetch RESOURCES
+                // 2. FETCH RESOURCES (With Outbox Priority)
                 try {
-                    let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
-                    if (viewOnly && schoolIdParam) {
-                        resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                    }
-                    const res = await fetch(resourcesFetchUrl);
-                    const json = await res.json();
+                    let restored = false;
 
-                    if (json.exists || (viewOnly && schoolIdParam)) {
-                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-                        setSchoolId(dbData.school_id || dbData.schoolId || cachedId);
+                    // A. CHECK OUTBOX FIRST (Inverted Logic)
+                    if (!viewOnly) {
+                        try {
+                            const cachedId = localStorage.getItem('schoolId') || (viewOnly && schoolIdParam ? schoolIdParam : null);
+                            const drafts = await getOutbox();
+                            const draft = drafts.find(d => d.type === 'SCHOOL_RESOURCES' && (cachedId ? d.payload.schoolId === cachedId : true));
 
-                        // Map database columns to state
-                        const loaded = {};
-                        Object.keys(initialFields).forEach(key => {
-                            loaded[key] = dbData[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
-                        });
-
-                        setFormData(loaded);
-                        setOriginalData(loaded);
-
-                        // Lock if data is already present or viewOnly
-                        if (dbData.res_armchairs_good > 0 || dbData.res_toilets_male > 0 || dbData.res_buildable_space || dbData.res_electricity_source || viewOnly) {
-                            setIsLocked(true);
+                            if (draft) {
+                                console.log("Restored draft from Outbox (Instant Load)");
+                                const p = draft.payload;
+                                setFormData(prev => ({ ...prev, ...p }));
+                                setIsLocked(false);
+                                restored = true;
+                                setLoading(false);
+                                // We don't return here because we still want Step 1 (Enrollment) to have finished or run, 
+                                // but typically Step 1 runs before this block anyway.
+                                // If we return, we skip the API fetch below, which is correct.
+                            }
+                        } catch (e) {
+                            console.error("Outbox check failed:", e);
                         }
-                    } else {
-                        setFormData(initialFields);
+                    }
+
+                    // B. FETCH FROM API (If not restored)
+                    if (!restored) {
+                        let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
+                        if (viewOnly && schoolIdParam) {
+                            resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
+                        const res = await fetch(resourcesFetchUrl);
+                        const json = await res.json();
+
+                        if (json.exists || (viewOnly && schoolIdParam)) {
+                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                            setSchoolId(dbData.school_id || dbData.schoolId || cachedId);
+
+                            // Map database columns to state
+                            const loaded = {};
+                            Object.keys(initialFields).forEach(key => {
+                                loaded[key] = dbData[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
+                            });
+
+                            setFormData(loaded);
+                            setOriginalData(loaded);
+
+                            if (loaded.res_internet_type || loaded.res_toilets_male) { // Simple check if data exists
+                                setIsLocked(true);
+                            }
+
+                            // CACHE DATA
+                            localStorage.setItem(`CACHE_RESOURCES_${dbData.school_id || cachedId}`, JSON.stringify(loaded));
+                        }
                     }
                 } catch (e) {
-                    console.error("Fetch failed:", e);
-                    setFormData(initialFields);
+                    console.error("Fetch Resources Error:", e);
+                    // OFFLINE CACHE RECOVERY
+                    const cachedId = localStorage.getItem('schoolId');
+                    const cached = localStorage.getItem(`CACHE_RESOURCES_${cachedId || 'default'}`);
+                    if (cached) {
+                        console.log("Loaded cached data for Resources (Offline Mode)");
+                        const data = JSON.parse(cached);
+                        setFormData(data);
+                        setOriginalData(data);
+                        setIsLocked(true);
+                    }
                 }
+                setLoading(false);
             }
-            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
+
 
     const handleChange = (e) => {
         const { name, value, type } = e.target;

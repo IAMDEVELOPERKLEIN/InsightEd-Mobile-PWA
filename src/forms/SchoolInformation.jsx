@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed 
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import Papa from 'papaparse'; //
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
@@ -108,45 +108,87 @@ const SchoolInformation = () => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 try {
-                    // Determine which ID to use for fetching
-                    // If viewOnly and schoolIdParam are present, we fetch by School ID
-                    // BUT /api/school-head/:uid usually takes user UID. 
-                    // Let's check api/index.js for a dedicated monitor endpoint or use school-detail
+                    // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                    let restored = false;
+                    if (!viewOnly) {
+                        try {
+                            const drafts = await getOutbox();
+                            const draft = drafts.find(d => d.type === 'SCHOOL_HEAD_INFO' && d.payload.uid === user.uid);
 
-                    let fetchUrl = `/api/school-head/${user.uid}`;
-                    if (viewOnly && schoolIdParam) {
-                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                    }
-
-                    const response = await fetch(fetchUrl);
-                    if (response.ok) {
-                        const result = await response.json();
-                        // Handle difference in response structure: result.data (from school-head) vs result (from school-detail)
-                        const data = (viewOnly && schoolIdParam) ? result : (result.exists ? result.data : null);
-
-                        if (data) {
-                            const loadedData = {
-                                lastName: data.head_last_name || data.last_name || '',
-                                firstName: data.head_first_name || data.first_name || '',
-                                middleName: data.head_middle_name || data.middle_name || '',
-                                itemNumber: data.head_item_number || data.item_number || '',
-                                positionTitle: data.head_position_title || data.position_title || '',
-                                dateHired: (data.date_hired || data.head_date_hired) ? (data.date_hired || data.head_date_hired).split('T')[0] : '',
-                                sex: data.head_sex || '',
-                                region: data.head_region || '',
-                                division: data.head_division || ''
-                            };
-                            setFormData(loadedData);
-                            setOriginalData(loadedData);
-                            setLastUpdated(data.updated_at || data.submitted_at);
-                            setIsLocked(true);
+                            if (draft) {
+                                console.log("Restored draft from Outbox (Instant Load)");
+                                const draftData = draft.payload;
+                                setFormData({
+                                    lastName: draftData.lastName || '',
+                                    firstName: draftData.firstName || '',
+                                    middleName: draftData.middleName || '',
+                                    itemNumber: draftData.itemNumber || '',
+                                    positionTitle: draftData.positionTitle || '',
+                                    dateHired: draftData.dateHired || '',
+                                    sex: draftData.sex || '',
+                                    region: draftData.region || '',
+                                    division: draftData.division || ''
+                                });
+                                setIsLocked(false);
+                                restored = true;
+                                setLoading(false);
+                                return; // EXIT EARLY
+                            }
+                        } catch (e) {
+                            console.error("Outbox check failed:", e);
                         }
                     }
-                } catch (error) {
-                    console.log("Offline or Server Error.");
+
+                    // 2. FETCH FROM API (Only if no draft found)
+                    if (!restored) {
+                        // Determine which ID to use for fetching
+                        let fetchUrl = `/api/school-head/${user.uid}`;
+                        if (viewOnly && schoolIdParam) {
+                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
+
+                        const response = await fetch(fetchUrl);
+                        if (response.ok) {
+                            const result = await response.json();
+                            const data = (viewOnly && schoolIdParam) ? result : (result.exists ? result.data : null);
+
+                            if (data) {
+                                const loadedData = {
+                                    lastName: data.head_last_name || data.last_name || '',
+                                    firstName: data.head_first_name || data.first_name || '',
+                                    middleName: data.head_middle_name || data.middle_name || '',
+                                    itemNumber: data.head_item_number || data.item_number || '',
+                                    positionTitle: data.head_position_title || data.position_title || '',
+                                    dateHired: (data.date_hired || data.head_date_hired) ? (data.date_hired || data.head_date_hired).split('T')[0] : '',
+                                    sex: data.head_sex || '',
+                                    region: data.head_region || '',
+                                    division: data.head_division || ''
+                                };
+                                setFormData(loadedData);
+                                setOriginalData(loadedData);
+                                setLastUpdated(data.updated_at || data.submitted_at);
+                                setIsLocked(true);
+
+                                // CACHE DATA
+                                localStorage.setItem(`CACHE_SCHOOL_INFO_${user.uid}`, JSON.stringify(loadedData));
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("Fetch Error:", e);
+                    // OFFLINE CACHE RECOVERY
+                    const cached = localStorage.getItem(`CACHE_SCHOOL_INFO_${user.uid}`);
+                    if (cached) {
+                        console.log("Loaded cached data for School Info (Offline Mode)");
+                        const loadedData = JSON.parse(cached);
+                        setFormData(loadedData);
+                        setOriginalData(loadedData);
+                        setIsLocked(true); // Read-only
+                    }
                 }
             }
-            setTimeout(() => setLoading(false), 1000);
+            // Remove artifical delay
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);

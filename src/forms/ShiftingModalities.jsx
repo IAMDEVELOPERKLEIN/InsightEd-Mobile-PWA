@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -101,7 +101,6 @@ const ShiftingModalities = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // 1. OFFLINE RECOVERY: Load from LocalStorage first
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
 
@@ -109,70 +108,128 @@ const ShiftingModalities = () => {
                 if (storedOffering) setOffering(storedOffering);
 
                 try {
-                    let fetchUrl = `/api/learning-modalities/${user.uid}`;
-                    if (viewOnly && schoolIdParam) {
-                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                    let restored = false;
+                    if (!viewOnly) {
+                        try {
+                            const cachedId = storedSchoolId || (viewOnly && schoolIdParam ? schoolIdParam : null);
+                            const drafts = await getOutbox();
+                            const draft = drafts.find(d => d.type === 'SHIFTING_MODALITIES' && (cachedId ? d.payload.schoolId === cachedId : true));
+
+                            if (draft) {
+                                console.log("Restored draft from Outbox (Instant Load)");
+                                const p = draft.payload;
+
+                                const loadedShifts = {};
+                                const loadedModes = {};
+                                const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+
+                                levels.forEach(lvl => {
+                                    loadedShifts[`shift_${lvl}`] = p[`shift_${lvl}`] || '';
+                                    loadedModes[`mode_${lvl}`] = p[`mode_${lvl}`] || '';
+                                });
+
+                                const loadedAdms = {
+                                    adm_mdl: p.adm_mdl || false,
+                                    adm_odl: p.adm_odl || false,
+                                    adm_tvi: p.adm_tvi || false,
+                                    adm_blended: p.adm_blended || false,
+                                    adm_others: p.adm_others || ''
+                                };
+
+                                setShifts(loadedShifts);
+                                setModes(loadedModes);
+                                setAdms(loadedAdms);
+
+                                setIsLocked(false);
+                                restored = true;
+                                setLoading(false);
+                                return; // EXIT EARLY
+                            }
+                        } catch (e) {
+                            console.error("Outbox check failed:", e);
+                        }
                     }
 
-                    const res = await fetch(fetchUrl);
-                    const json = await res.json();
+                    // 2. FETCH FROM API (If not restored) 
+                    if (!restored) {
+                        let fetchUrl = `/api/learning-modalities/${user.uid}`;
+                        if (viewOnly && schoolIdParam) {
+                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
 
-                    if (json.exists || (viewOnly && schoolIdParam)) {
-                        setSchoolId(json.school_id || json.schoolId || storedSchoolId);
-                        setOffering(json.curricular_offering || json.offering || storedOffering || '');
+                        const res = await fetch(fetchUrl);
+                        const json = await res.json();
 
-                        // Keep cache in sync
-                        localStorage.setItem('schoolId', json.schoolId);
-                        localStorage.setItem('schoolOffering', json.offering || '');
+                        if (json.exists || (viewOnly && schoolIdParam)) {
+                            setSchoolId(json.school_id || json.schoolId || storedSchoolId);
+                            setOffering(json.curricular_offering || json.offering || storedOffering || '');
 
-                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-                        const loadedShifts = {};
-                        const loadedModes = {};
-                        const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+                            // Keep cache in sync
+                            if (!viewOnly) {
+                                localStorage.setItem('schoolId', json.schoolId || json.school_id || storedSchoolId);
+                                localStorage.setItem('schoolOffering', json.curricular_offering || json.offering || '');
+                            }
 
-                        levels.forEach(lvl => {
-                            loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
-                            loadedModes[`mode_${lvl}`] = dbData[`mode_${lvl}`] || '';
-                        });
+                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                            const loadedShifts = {};
+                            const loadedModes = {};
+                            const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
 
-                        const loadedAdms = {
-                            adm_mdl: dbData.adm_mdl || false,
-                            adm_odl: dbData.adm_odl || false,
-                            adm_tvi: dbData.adm_tvi || false,
-                            adm_blended: dbData.adm_blended || false,
-                            adm_others: dbData.adm_others || ''
-                        };
+                            levels.forEach(lvl => {
+                                loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
+                                loadedModes[`mode_${lvl}`] = dbData[`mode_${lvl}`] || '';
+                            });
 
-                        setShifts(loadedShifts);
-                        setModes(loadedModes);
-                        setAdms(loadedAdms);
-                        setOriginalData({ shifts: loadedShifts, modes: loadedModes, adms: loadedAdms });
+                            const loadedAdms = {
+                                adm_mdl: dbData.adm_mdl || false,
+                                adm_odl: dbData.adm_odl || false,
+                                adm_tvi: dbData.adm_tvi || false,
+                                adm_blended: dbData.adm_blended || false,
+                                adm_others: dbData.adm_others || ''
+                            };
 
-                        // Check if specifically Modalities data exists
-                        const relevantKeys = [
-                            ...levels.map(l => `shift_${l}`),
-                            ...levels.map(l => `mode_${l}`),
-                            "adm_mdl", "adm_odl", "adm_tvi", "adm_blended", "adm_others"
-                        ];
-                        const hasModalitiesData = relevantKeys.some(k => dbData[k] && dbData[k] !== '' && dbData[k] !== false);
+                            setShifts(loadedShifts);
+                            setModes(loadedModes);
+                            setAdms(loadedAdms);
+                            setOriginalData({ shifts: loadedShifts, modes: loadedModes, adms: loadedAdms });
 
-                        if (hasModalitiesData || viewOnly) {
-                            setIsLocked(true);
-                            setHasSavedData(true);
-                        } else {
-                            setHasSavedData(false);
-                            setIsLocked(false);
+                            // Check if has content to lock
+                            // Check if has content to lock
+                            const hasContent = Object.values(loadedShifts).some(v => v) ||
+                                Object.values(loadedModes).some(v => v) ||
+                                loadedAdms.adm_mdl || loadedAdms.adm_odl ||
+                                loadedAdms.adm_tvi || loadedAdms.adm_blended || loadedAdms.adm_others;
+                            if (hasContent) {
+                                setIsLocked(true);
+                                setHasSavedData(true);
+                            }
+
+                            // CACHE DATA
+                            const cachePayload = { shifts: loadedShifts, modes: loadedModes, adms: loadedAdms, schoolId: dbData.school_id };
+                            localStorage.setItem(`CACHE_SHIFTING_${dbData.school_id || storedSchoolId}`, JSON.stringify(cachePayload));
                         }
                     }
                 } catch (error) {
-                    console.error("Offline or Error fetching modalities:", error);
-                    // UI will rely on storedOffering from step 1
+                    console.error("Fetch Error:", error);
+                    // OFFLINE CACHE RECOVERY
+                    const cached = localStorage.getItem(`CACHE_SHIFTING_${storedSchoolId || 'default'}`);
+                    if (cached) {
+                        console.log("Loaded cached data for Shifting (Offline Mode)");
+                        const data = JSON.parse(cached);
+                        setShifts(data.shifts);
+                        setModes(data.modes);
+                        setAdms(data.adms);
+                        setOriginalData(data);
+                        setIsLocked(true);
+                    }
                 }
             }
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
+
 
     // --- VISIBILITY HELPERS (Uses 'offering' which is now offline-available) ---
     const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");

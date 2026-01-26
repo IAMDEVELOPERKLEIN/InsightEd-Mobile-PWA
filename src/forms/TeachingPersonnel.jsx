@@ -6,7 +6,7 @@ import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -89,23 +89,96 @@ const TeachingPersonnel = () => {
                 if (storedOffering) setOffering(storedOffering);
 
                 try {
-                    // Fetch user role for BottomNav
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) setUserRole(userDoc.data().role);
+                    // 1. Check Outbox FIRST (Inverted Logic)
+                    let restored = false;
+                    if (!viewOnly) {
+                        try {
+                            const cachedId = storedSchoolId || (viewOnly && schoolIdParam ? schoolIdParam : null);
+                            const drafts = await getOutbox();
 
-                    let fetchUrl = `/api/teaching-personnel/${user.uid}`;
-                    if (viewOnly && schoolIdParam) {
-                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                            const draft = drafts.find(d => d.type === 'TEACHING_PERSONNEL' && (cachedId ? d.payload.schoolId === cachedId : true));
+
+                            if (draft) {
+                                console.log("Restored draft from Outbox (Instant Load)");
+                                setFormData(prev => ({ ...prev, ...draft.payload }));
+                                restored = true;
+                                setLoading(false);
+
+                                // Fetch role in background
+                                const docRef = doc(db, "users", user.uid);
+                                getDoc(docRef).then(snap => { if (snap.exists()) setUserRole(snap.data().role); });
+                                return; // EXIT EARLY
+                            }
+                        } catch (e) {
+                            console.error("Outbox check failed:", e);
+                        }
                     }
 
-                    const res = await fetch(fetchUrl);
-                    const json = await res.json();
+                    // 2. FETCH FROM API (Only if no draft found)
+                    if (!restored) {
+                        let fetchUrl = `/api/teaching-personnel/${user.uid}`;
+                        if (viewOnly && schoolIdParam) {
+                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
 
-                    if (json.exists || (viewOnly && schoolIdParam)) {
-                        setSchoolId(json.school_id || json.schoolId || storedSchoolId);
-                        setOffering(json.curricular_offering || json.offering || storedOffering || '');
+                        // START PARALLEL REQUESTS
+                        const [userDoc, apiResult] = await Promise.all([
+                            getDoc(doc(db, "users", user.uid)),
+                            fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
+                        ]);
 
-                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                        // 1. Handle Role
+                        if (userDoc.exists()) setUserRole(userDoc.data().role);
+
+                        // 2. Handle API Data
+                        const json = apiResult;
+
+                        if (json.exists || (viewOnly && schoolIdParam)) {
+                            setSchoolId(json.school_id || json.schoolId || storedSchoolId);
+                            setOffering(json.curricular_offering || json.offering || storedOffering || '');
+
+                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                            const initialData = {
+                                teach_kinder: dbData.teach_kinder || 0,
+                                teach_g1: dbData.teach_g1 || 0, teach_g2: dbData.teach_g2 || 0, teach_g3: dbData.teach_g3 || 0,
+                                teach_g4: dbData.teach_g4 || 0, teach_g5: dbData.teach_g5 || 0, teach_g6: dbData.teach_g6 || 0,
+                                teach_g7: dbData.teach_g7 || 0, teach_g8: dbData.teach_g8 || 0, teach_g9: dbData.teach_g9 || 0, teach_g10: dbData.teach_g10 || 0,
+                                teach_g11: dbData.teach_g11 || 0, teach_g12: dbData.teach_g12 || 0,
+                                teach_multi_1_2: dbData.teach_multi_1_2 || 0,
+                                teach_multi_3_4: dbData.teach_multi_3_4 || 0,
+                                teach_multi_5_6: dbData.teach_multi_5_6 || 0,
+                                teach_multi_3plus_flag: dbData.teach_multi_3plus_flag || false,
+                                teach_multi_3plus_count: dbData.teach_multi_3plus_count || 0,
+
+                                teach_exp_0_1: dbData.teach_exp_0_1 || 0,
+                                teach_exp_2_5: dbData.teach_exp_2_5 || 0,
+                                teach_exp_6_10: dbData.teach_exp_6_10 || 0,
+                                teach_exp_11_15: dbData.teach_exp_11_15 || 0,
+                                teach_exp_16_20: dbData.teach_exp_16_20 || 0,
+                                teach_exp_21_25: dbData.teach_exp_21_25 || 0,
+                                teach_exp_26_30: dbData.teach_exp_26_30 || 0,
+                                teach_exp_31_35: dbData.teach_exp_31_35 || 0,
+                                teach_exp_36_40: dbData.teach_exp_36_40 || 0,
+                                teach_exp_40_45: dbData.teach_exp_40_45 || 0,
+                            };
+                            setFormData(initialData);
+                            setOriginalData(initialData);
+
+                            const hasData = Object.values(dbData).some(val => val > 0);
+                            if (hasData || viewOnly) setIsLocked(true);
+
+                            // Save to Cache
+                            localStorage.setItem(`CACHE_TEACHING_PERSONNEL_${json.schoolId || storedSchoolId || 'default'}`, JSON.stringify(dbData));
+                        }
+                    }
+                } catch (error) {
+                    console.error("Fetch error:", error);
+                    // OFFLINE CACHE RECOVERY
+                    const cached = localStorage.getItem(`CACHE_TEACHING_PERSONNEL_${schoolIdParam || localStorage.getItem('schoolId') || 'default'}`);
+                    if (cached) {
+                        console.log("Loaded cached data for Teaching Personnel (Offline Mode)");
+                        const dbData = JSON.parse(cached);
+
                         const initialData = {
                             teach_kinder: dbData.teach_kinder || 0,
                             teach_g1: dbData.teach_g1 || 0, teach_g2: dbData.teach_g2 || 0, teach_g3: dbData.teach_g3 || 0,
@@ -131,12 +204,8 @@ const TeachingPersonnel = () => {
                         };
                         setFormData(initialData);
                         setOriginalData(initialData);
-
-                        const hasData = Object.values(dbData).some(val => val > 0);
-                        if (hasData || viewOnly) setIsLocked(true);
+                        setIsLocked(true);
                     }
-                } catch (error) {
-                    console.error("Fetch error:", error);
                 }
             }
             setLoading(false);

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 import { FiBox, FiArrowLeft, FiCheckCircle } from 'react-icons/fi';
@@ -65,40 +65,83 @@ const PhysicalFacilities = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                const cachedId = localStorage.getItem('schoolId');
-                if (cachedId) setSchoolId(cachedId);
+                const storedSchoolId = localStorage.getItem('schoolId');
+                if (storedSchoolId) setSchoolId(storedSchoolId);
 
-                // Check Local Cache first
-                const localData = localStorage.getItem('physicalFacilitiesData');
-                if (localData) {
-                    setFormData(JSON.parse(localData));
-                    setIsLocked(true);
+                // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                let restored = false;
+                if (!viewOnly) {
+                    try {
+                        const cachedId = storedSchoolId || (viewOnly && schoolIdParam ? schoolIdParam : null);
+                        const drafts = await getOutbox();
+                        const draft = drafts.find(d => d.type === 'PHYSICAL_FACILITIES' && (cachedId ? d.payload.schoolId === cachedId : true));
+
+                        if (draft) {
+                            console.log("Restored draft from Outbox (Instant Load)");
+                            setFormData(prev => ({ ...prev, ...draft.payload }));
+                            setIsLocked(false);
+                            restored = true;
+                            setLoading(false);
+                            return; // EXIT EARLY
+                        }
+                    } catch (e) {
+                        console.error("Outbox check failed:", e);
+                    }
                 }
 
-                // Fetch Data
-                try {
-                    let fetchUrl = `/api/physical-facilities/${user.uid}`;
-                    if (viewOnly && schoolIdParam) fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                // 2. FETCH FROM API (If not restored)
+                if (!restored) {
+                    try {
+                        let fetchUrl = `/api/physical-facilities/${user.uid}`;
+                        if (viewOnly && schoolIdParam) fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
 
-                    const res = await fetch(fetchUrl);
-                    const json = await res.json();
+                        const res = await fetch(fetchUrl);
+                        const json = await res.json();
 
-                    if (json.exists || (viewOnly && schoolIdParam)) {
-                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-                        if (!schoolIdParam) setSchoolId(dbData.school_id || dbData.schoolId);
+                        if (json.exists || (viewOnly && schoolIdParam)) {
+                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                            if (!schoolIdParam) setSchoolId(dbData.school_id || dbData.schoolId || storedSchoolId);
 
-                        const loaded = {};
-                        Object.keys(initialFields).forEach(key => {
-                            loaded[key] = dbData[key] ?? 0;
-                        });
-                        setFormData(loaded);
-                        setOriginalData(loaded);
-                        if (dbData.build_classrooms_total > 0 || viewOnly) setIsLocked(true);
-                    } else {
-                        setFormData(initialFields);
+                            // Keep cache in sync
+                            if (dbData.school_id) localStorage.setItem('schoolId', dbData.school_id);
+
+                            const loaded = {};
+                            Object.keys(initialFields).forEach(key => {
+                                loaded[key] = dbData[key] ?? 0;
+                            });
+                            setFormData(loaded);
+                            setOriginalData(loaded);
+
+                            // Lock if data exists
+                            if (dbData.build_classrooms_total > 0 || viewOnly) setIsLocked(true);
+
+                            // CACHE DATA
+                            localStorage.setItem(`CACHE_FACILITIES_${dbData.school_id || storedSchoolId}`, JSON.stringify(loaded));
+
+                        } else {
+                            setFormData(initialFields);
+                        }
+                    } catch (err) {
+                        console.log("Offline/Error fetching facilities:", err);
+                        // OFFLINE CACHE RECOVERY
+                        const cached = localStorage.getItem(`CACHE_FACILITIES_${storedSchoolId || 'default'}`);
+                        if (cached) {
+                            console.log("Loaded cached data for Facilities (Offline Mode)");
+                            const data = JSON.parse(cached);
+                            setFormData(data);
+                            setOriginalData(data);
+                            setIsLocked(true);
+                        } else {
+                            // Try legacy cache key if exists? Or just fallback
+                            const localData = localStorage.getItem('physicalFacilitiesData');
+                            if (localData) {
+                                setFormData(JSON.parse(localData));
+                                setIsLocked(true);
+                            } else {
+                                setFormData(initialFields);
+                            }
+                        }
                     }
-                } catch (err) {
-                    console.log("Offline/Error fetching facilities:", err);
                 }
                 setLoading(false);
             }

@@ -3,7 +3,7 @@ import { FiSave, FiUsers, FiArrowLeft, FiGrid } from 'react-icons/fi';
 import { TbActivity } from 'react-icons/tb';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -158,46 +158,110 @@ const LearnerStatistics = () => {
             const user = auth.currentUser;
             if (!user) return;
 
+            const storedSchoolId = localStorage.getItem('schoolId');
+            const storedOffering = localStorage.getItem('schoolOffering');
+
             try {
-                const res = await fetch(`/api/learner-statistics/${user.uid}`);
-                const result = await res.json();
-                if (result.exists) {
-                    const fallbackOffering = result.data.curricular_offering || localStorage.getItem('schoolOffering') || '';
+                // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                let restored = false;
+                try {
+                    const drafts = await getOutbox();
+                    // Try to match by SchoolID if possible. If not, maybe just match by type if user only has one school?
+                    // Typically School Head has one school.
+                    const targetId = storedSchoolId || (user.uid ? undefined : undefined); // Weak match if no ID, but better than nothing
 
-                    // Flatten the grids into formData so inputs can read them directly
-                    const flattenedGrids = {};
-                    if (result.data.learner_stats_grids) {
-                        Object.entries(result.data.learner_stats_grids).forEach(([key, val]) => {
-                            flattenedGrids[key] = val;
-                        });
+                    const draft = drafts.find(d => d.type === 'LEARNER_STATISTICS' && (targetId ? d.payload.schoolId === targetId : true));
+
+                    if (draft) {
+                        console.log("Restored draft from Outbox (Instant Load)");
+                        setFormData(prev => ({ ...prev, ...draft.payload }));
+                        setIsLocked(false);
+                        restored = true;
+                        setLoading(false);
+                        return; // EXIT EARLY
                     }
+                } catch (e) {
+                    console.error("Outbox check failed:", e);
+                }
 
-                    // Also flatten any existing stat_ keys from root data
+                // 2. FETCH FROM API (If not restored)
+                if (!restored) {
+                    const res = await fetch(`/api/learner-statistics/${user.uid}`);
+                    const result = await res.json();
+                    if (result.exists) {
+                        const fallbackOffering = result.data.curricular_offering || storedOffering || '';
+
+                        // Flatten the grids into formData
+                        const flattenedGrids = {};
+                        if (result.data.learner_stats_grids) {
+                            Object.entries(result.data.learner_stats_grids).forEach(([key, val]) => {
+                                flattenedGrids[key] = val;
+                            });
+                        }
+
+                        // Also flatten any existing stat_ keys from root data
+                        const categories = ['sned', 'disability', 'als', 'muslim', 'ip', 'displaced', 'repetition', 'overage', 'dropout'];
+                        const grades = getGrades();
+                        categories.forEach(cat => {
+                            grades.forEach(g => {
+                                const key = `stat_${cat}_${g}`;
+                                if (result.data[key] !== undefined) {
+                                    flattenedGrids[key] = result.data[key];
+                                }
+                            });
+                        });
+
+                        const loadedData = {
+                            ...result.data,
+                            ...flattenedGrids,
+                            curricular_offering: fallbackOffering,
+                            learner_stats_grids: result.data.learner_stats_grids || {}
+                        };
+
+                        setFormData(prev => ({ ...prev, ...loadedData }));
+                        setIsLocked(true);
+
+                        // CACHE DATA
+                        // We cache the raw result.data or the processed?
+                        // If we cache result.data, we need to re-process on load. 
+                        // Let's cache the RESULT.DATA to maintain source of truth structure.
+                        localStorage.setItem(`CACHE_LEARNER_STATS_${result.data.schoolId || storedSchoolId || 'default'}`, JSON.stringify(result.data));
+                    }
+                }
+            } catch (err) {
+                console.error("Fetch Error:", err);
+
+                // OFFLINE CACHE RECOVERY
+                const cached = localStorage.getItem(`CACHE_LEARNER_STATS_${storedSchoolId || 'default'}`);
+                if (cached) {
+                    console.log("Loaded cached data for Learner Stats (Offline Mode)");
+                    const dbData = JSON.parse(cached);
+                    const fallbackOffering = dbData.curricular_offering || localStorage.getItem('schoolOffering') || '';
+
+                    // Re-apply flattening logic
+                    const flattenedGrids = {};
+                    if (dbData.learner_stats_grids) {
+                        Object.entries(dbData.learner_stats_grids).forEach(([key, val]) => { flattenedGrids[key] = val; });
+                    }
                     const categories = ['sned', 'disability', 'als', 'muslim', 'ip', 'displaced', 'repetition', 'overage', 'dropout'];
                     const grades = getGrades();
                     categories.forEach(cat => {
                         grades.forEach(g => {
                             const key = `stat_${cat}_${g}`;
-                            if (result.data[key] !== undefined) {
-                                flattenedGrids[key] = result.data[key];
-                            }
+                            if (dbData[key] !== undefined) flattenedGrids[key] = dbData[key];
                         });
                     });
 
                     setFormData(prev => ({
                         ...prev,
-                        ...result.data,
-                        ...flattenedGrids, // Merge flattened keys
+                        ...dbData,
+                        ...flattenedGrids,
                         curricular_offering: fallbackOffering,
-                        learner_stats_grids: result.data.learner_stats_grids || {}
+                        learner_stats_grids: dbData.learner_stats_grids || {}
                     }));
-                    setIsLocked(true);
-                }
-            } catch (err) {
-                console.error("Fetch Error:", err);
-                const cachedOffering = localStorage.getItem('schoolOffering');
-                if (cachedOffering) {
-                    setFormData(prev => ({ ...prev, curricular_offering: cachedOffering }));
+                    setIsLocked(true); // Read-Only
+                } else if (storedOffering) {
+                    setFormData(prev => ({ ...prev, curricular_offering: storedOffering }));
                 }
             } finally {
                 setLoading(false);

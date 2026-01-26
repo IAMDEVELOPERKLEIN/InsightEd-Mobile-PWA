@@ -6,7 +6,7 @@ import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -102,40 +102,90 @@ const TeacherSpecialization = () => {
                 if (cachedId) setSchoolId(cachedId);
 
                 try {
-                    // Fetch user role for BottomNav
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) setUserRole(userDoc.data().role);
+                    // 1. Check Outbox FIRST (Inverted Logic)
+                    let restored = false;
+                    if (!viewOnly) {
+                        try {
+                            const currentId = cachedId || (viewOnly && schoolIdParam ? schoolIdParam : null);
+                            const drafts = await getOutbox();
 
-                    let fetchUrl = `/api/teacher-specialization/${user.uid}`;
-                    if (viewOnly && schoolIdParam) {
-                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                            const draft = drafts.find(d => d.type === 'TEACHER_SPECIALIZATION' && (currentId ? d.payload.schoolId === currentId : true));
+
+                            if (draft) {
+                                console.log("Restored draft from Outbox (Instant Load)");
+                                setFormData(prev => ({ ...prev, ...draft.payload }));
+                                setIsLocked(false);
+                                restored = true;
+                                setLoading(false);
+
+                                // Fetch role in background
+                                const docRef = doc(db, "users", user.uid);
+                                getDoc(docRef).then(snap => { if (snap.exists()) setUserRole(snap.data().role); });
+                                return; // EXIT EARLY
+                            }
+                        } catch (e) {
+                            console.error("Outbox check failed:", e);
+                        }
                     }
 
-                    const res = await fetch(fetchUrl);
-                    const json = await res.json();
+                    // 2. FETCH FROM API (Only if no draft found)
+                    if (!restored) {
+                        let fetchUrl = `/api/teacher-specialization/${user.uid}`;
+                        if (viewOnly && schoolIdParam) {
+                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
 
-                    if (json.exists || (viewOnly && schoolIdParam)) {
-                        setSchoolId(json.school_id || json.schoolId || cachedId);
-                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-                        const loaded = {};
+                        // START PARALLEL REQUESTS
+                        const [userDoc, apiResult] = await Promise.all([
+                            getDoc(doc(db, "users", user.uid)),
+                            fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
+                        ]);
 
-                        // Use getInitialFields keys to ensure all are present
-                        const defaults = getInitialFields();
-                        Object.keys(defaults).forEach(key => {
-                            loaded[key] = dbData[key] !== null ? dbData[key] : 0;
-                        });
+                        // 1. Handle Role
+                        if (userDoc.exists()) setUserRole(userDoc.data().role);
 
-                        setFormData(loaded);
-                        setOriginalData(loaded);
+                        // 2. Handle API Data
+                        const json = apiResult;
 
-                        // Lock if data exists or viewOnly
-                        if (dbData.spec_math_major > 0 || dbData.spec_guidance > 0 || viewOnly) setIsLocked(true);
-                    } else {
-                        setFormData(getInitialFields());
+                        if (json.exists || (viewOnly && schoolIdParam)) {
+                            setSchoolId(json.school_id || json.schoolId || cachedId);
+                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                            const loaded = {};
+
+                            // Use getInitialFields keys to ensure all are present
+                            const defaults = getInitialFields();
+                            Object.keys(defaults).forEach(key => {
+                                loaded[key] = dbData[key] !== null ? dbData[key] : 0;
+                            });
+
+                            setFormData(loaded);
+                            setOriginalData(loaded);
+
+                            // Lock if data exists or viewOnly
+                            if (dbData.spec_math_major > 0 || dbData.spec_guidance > 0 || viewOnly) setIsLocked(true);
+
+                            // Save to Cache
+                            localStorage.setItem(`CACHE_TEACHER_SPEC_${json.schoolId || json.school_id || cachedId}`, JSON.stringify(dbData));
+                        } else {
+                            setFormData(getInitialFields());
+                        }
                     }
                 } catch (e) {
                     console.error("Fetch error:", e);
-                    setFormData(getInitialFields());
+                    // OFFLINE CACHE RECOVERY
+                    const cached = localStorage.getItem(`CACHE_TEACHER_SPEC_${schoolIdParam || localStorage.getItem('schoolId') || 'default'}`);
+                    if (cached) {
+                        console.log("Loaded cached data for Teacher Specialization (Offline Mode)");
+                        const dbData = JSON.parse(cached);
+                        const loaded = {};
+                        const defaults = getInitialFields();
+                        Object.keys(defaults).forEach(key => { loaded[key] = dbData[key] !== null ? dbData[key] : 0; });
+                        setFormData(loaded);
+                        setOriginalData(loaded);
+                        setIsLocked(true);
+                    } else {
+                        setFormData(getInitialFields());
+                    }
                 }
             }
             setLoading(false);
