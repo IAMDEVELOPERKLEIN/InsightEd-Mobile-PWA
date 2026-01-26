@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import logo from './assets/InsightEd1.png';
-import { auth, googleProvider, db } from './firebase';
+import { auth, db } from './firebase';
 import {
     signInWithEmailAndPassword,
-    signInWithPopup,
     setPersistence,
     browserLocalPersistence,
     onAuthStateChanged,
@@ -127,19 +126,7 @@ const Login = () => {
         }
     };
 
-    // --- 3. HANDLE GOOGLE LOGIN ---
-    const handleGoogleLogin = async () => {
-        setLoading(true);
-        try {
-            await setPersistence(auth, browserLocalPersistence);
-            await signInWithPopup(auth, googleProvider);
-            // The Listener above will catch the change
-        } catch (error) {
-            console.error(error);
-            alert("Google Login Failed: " + error.message);
-            setLoading(false);
-        }
-    };
+
 
     // --- 3.5 HANDLE PASSWORD RESET ---
     const handlePasswordReset = async (e) => {
@@ -362,32 +349,6 @@ const Login = () => {
                                 Create New Account
                             </Link>
                         </div>
-
-                        {/* DIVIDER */}
-                        <div className="relative my-8">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-slate-200"></div>
-                            </div>
-                            <div className="relative flex justify-center text-xs uppercase">
-                                <span className="bg-white/80 backdrop-blur px-4 text-slate-400 font-bold tracking-wider">Or continue with</span>
-                            </div>
-                        </div>
-
-                        {/* SOCIAL LOGIN */}
-                        <button
-                            onClick={handleGoogleLogin}
-                            className="w-full bg-white hover:bg-slate-50 text-slate-600 font-semibold py-3.5 rounded-xl border border-slate-200 shadow-sm transition-all flex items-center justify-center gap-3 group"
-                        >
-                            <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4" />
-                                <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.836.86-3.048.86-2.344 0-4.328-1.584-5.032-3.716H.96v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853" />
-                                <path d="M3.968 10.705A5.366 5.366 0 0 1 3.682 9c0-.593.102-1.17.286-1.705V4.962H.96A9.006 9.006 0 0 0 0 9c0 1.452.348 2.827.96 4.095l3.008-2.39z" fill="#FBBC05" />
-                                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .96 4.962l3.008 2.392C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335" />
-                            </svg>
-                            <span>Google Account</span>
-                        </button>
-
-
 
                     </div>
 

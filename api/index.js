@@ -108,6 +108,43 @@ pool.connect(async (err, client, release) => {
       console.error('❌ Failed to migrate curricular_offering:', migErr.message);
     }
 
+    // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
+    try {
+      await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                uid TEXT PRIMARY KEY,
+                email TEXT,
+                role TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                first_name TEXT,
+                last_name TEXT,
+                region TEXT,
+                division TEXT,
+                province TEXT,
+                city TEXT,
+                barangay TEXT,
+                office TEXT,
+                position TEXT
+            );
+        `);
+      // If table exists, ensure columns exist
+      await client.query(`
+            ALTER TABLE users 
+            ADD COLUMN IF NOT EXISTS first_name TEXT,
+            ADD COLUMN IF NOT EXISTS last_name TEXT,
+            ADD COLUMN IF NOT EXISTS region TEXT,
+            ADD COLUMN IF NOT EXISTS division TEXT,
+            ADD COLUMN IF NOT EXISTS province TEXT,
+            ADD COLUMN IF NOT EXISTS city TEXT,
+            ADD COLUMN IF NOT EXISTS barangay TEXT,
+            ADD COLUMN IF NOT EXISTS office TEXT,
+            ADD COLUMN IF NOT EXISTS position TEXT;
+        `);
+      console.log('✅ Checked/Extended users table schema');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate users table:', migErr.message);
+    }
+
     release();
   }
 });
@@ -453,6 +490,60 @@ app.post('/api/register-school', async (req, res) => {
     res.status(500).json({ error: "Registration failed: " + err.message });
   } finally {
     client.release();
+  }
+});
+
+// --- 3e. POST: Register Generic User (Engineer, RO, SDO) ---
+app.post('/api/register-user', async (req, res) => {
+  const { uid, email, role, firstName, lastName, region, division, province, city, barangay, office, position } = req.body;
+
+  if (!uid || !email || !role) {
+    return res.status(400).json({ error: "Missing required fields (uid, email, role)" });
+  }
+
+  try {
+    const query = `
+            INSERT INTO users (
+                uid, email, role, created_at,
+                first_name, last_name,
+                region, division, province, city, barangay,
+                office, position
+            ) VALUES (
+                $1, $2, $3, CURRENT_TIMESTAMP,
+                $4, $5, $6, $7, $8, $9, $10, $11, $12
+            )
+            ON CONFLICT (uid) DO UPDATE SET
+                email = EXCLUDED.email,
+                role = EXCLUDED.role,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                region = EXCLUDED.region,
+                division = EXCLUDED.division,
+                province = EXCLUDED.province,
+                city = EXCLUDED.city,
+                barangay = EXCLUDED.barangay,
+                office = EXCLUDED.office,
+                position = EXCLUDED.position;
+        `;
+
+    const values = [
+      uid, email, role,
+      valueOrNull(firstName), valueOrNull(lastName),
+      valueOrNull(region), valueOrNull(division),
+      valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
+      valueOrNull(office), valueOrNull(position)
+    ];
+
+    await pool.query(query, values);
+    console.log(`✅ [NEON] Synced generic user: ${email} (${role})`);
+
+    // Log Activity
+    await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
+
+    res.json({ success: true, message: "User synced to NeonSQL" });
+  } catch (err) {
+    console.error("❌ Register User Error:", err);
+    res.status(500).json({ error: "Failed to sync user to NeonSQL" });
   }
 });
 
@@ -1605,6 +1696,39 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
   } catch (err) {
     console.error("Division Stats Error:", err);
     res.status(500).json({ error: "Failed to fetch division stats" });
+  }
+});
+
+// --- 25c. GET: Monitoring Stats per District (SDO View) ---
+app.get('/api/monitoring/district-stats', async (req, res) => {
+  const { region, division } = req.query;
+  console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division);
+  try {
+    const query = `
+      SELECT 
+        district,
+        COUNT(*) as total_schools,
+        SUM(CASE WHEN (
+           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+        ) = 7 THEN 1 ELSE 0 END) as completed_schools
+      FROM school_profiles
+      WHERE TRIM(region) = TRIM($1) AND TRIM(division) = TRIM($2)
+      GROUP BY district
+      ORDER BY district ASC
+    `;
+
+    const result = await pool.query(query, [region, division]);
+    console.log("DEBUG: DISTRICT STATS RESULT:", result.rows);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("District Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch district stats" });
   }
 });
 
