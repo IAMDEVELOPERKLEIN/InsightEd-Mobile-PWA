@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import logo from './assets/InsightEd1.png';
 import { auth, db } from './firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; // Added signIn for recovery
+import { doc, setDoc, getDoc } from 'firebase/firestore'; // Added getDoc for recovery
 import { useNavigate, Link } from 'react-router-dom';
 import PageTransition from './components/PageTransition';
 import Papa from 'papaparse';
@@ -268,7 +268,7 @@ const Register = () => {
             if (data.success) {
                 setIsOtpSent(true);
                 setCanResend(false);
-                setTimer(30);
+                setTimer(90);
                 alert(data.message); // Show actual message from server (might contain fallback info)
             } else {
                 alert(data.message || "Failed to send OTP");
@@ -397,8 +397,10 @@ const Register = () => {
             return;
         }
 
-        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
-            alert("Registration is restricted to official DepEd accounts.");
+        
+        // STRICT OTP ENFORCEMENT
+        if (!isOtpVerified) {
+            alert("Please verify your email via OTP before registering.");
             return;
         }
 
@@ -423,13 +425,60 @@ const Register = () => {
                 }
             }
 
-            // STEP B: Firebase Auth Create
-            const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-            const user = userCredential.user;
+            // STEP B: Firebase Auth Create (WITH ZOMBIE RECOVERY)
+            let user;
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+                user = userCredential.user;
+            } catch (authError) {
+                if (authError.code === 'auth/email-already-in-use') {
+                    // ATTEMPT RECOVERY: Try logging in to see if it's a "Zombie" account (No Firestore Data)
+                    // If they entered the CORRECT password for the existing email, we can proceed to check if it's a zombie.
+                    
+                    try {
+                        const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+                        user = userCredential.user;
+                    } catch (loginError) {
+                        // If login fails, we cannot proceed with Zombie recovery.
+                        if (loginError.code === 'auth/wrong-password') {
+                            throw new Error("Account already exists with a different password. Please log in or reset your password.");
+                        } else if (loginError.code === 'auth/too-many-requests') {
+                             throw new Error("Access temporarily disabled due to many failed attempts. Reset your password or try again later.");
+                        } else {
+                             // Network error or other auth issue
+                             console.error("Recovery Login Error:", loginError);
+                             throw new Error("Email already in use. Please log in.");
+                        }
+                    }
+
+                    // If we get here, Auth Login was SUCCESSFUL (User knows password).
+                    // Now check if they have a profile (Real User) or not (Zombie).
+                    try {
+                        const userDoc = await getDoc(doc(db, "users", user.uid));
+                        if (userDoc.exists()) {
+                            alert("This email is already registered. Please use the Login page to access your account.");
+                            // navigate(getDashboardPath(formData.role)); // REMOVED per user request
+                            return;
+                        } else {
+                            // ZOMBIE DETECTED: Auth exists, Firestore missing.
+                            // Allow code to proceed to Step C to "repair"/complete registration.
+                            console.log("Resuming registration for orphaned Auth account...");
+                        }
+                    } catch (firestoreError) {
+                        console.error("Firestore Check Error:", firestoreError);
+                        // If we can't check Firestore (e.g. offline), we shouldn't overwrite blindly, 
+                        // but usually if we are offline, we wouldn't have gotten past Auth.
+                        // We will assume if Auth works, we should be able to check Profile.
+                        throw new Error("Connection error checking existing account profile.");
+                    }
+
+                } else {
+                    throw authError; // Genuine other error (e.g. weak-password)
+                }
+            }
 
             // STEP C: Role-Specific Persistence
             if (formData.role === 'School Head') {
-                // CALL NEW ONE-SHOT ENDPOINT
                 // CALL NEW ONE-SHOT ENDPOINT
                 console.log("SENDING REGISTRATION DATA:", {
                     ...selectedSchool
@@ -486,6 +535,32 @@ const Register = () => {
                     office: formData.office,
                     position: formData.position
                 });
+
+                // SYNC TO NEONSQL (Tabular Data)
+                try {
+                    console.log("Syncing to NeonSQL...", user.uid);
+                    await fetch('/api/register-user', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            uid: user.uid,
+                            email: user.email,
+                            role: formData.role,
+                            firstName: formData.firstName,
+                            lastName: formData.lastName,
+                            region: formData.region,
+                            division: formData.division,
+                            province: formData.province,
+                            city: formData.city,
+                            barangay: formData.barangay,
+                            office: formData.office,
+                            position: formData.position
+                        })
+                    });
+                } catch (neonErr) {
+                    console.error("Neon Sync Failed (Non-Fatal):", neonErr);
+                    // We don't block registration if Neon fails, but we log it.
+                }
             }
 
             // STEP D: Success
@@ -705,13 +780,15 @@ const Register = () => {
                                 <div className="space-y-4 animate-in fade-in">
                                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                                         <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">1</span>
-                                        Personal & Assignment
+                                        Personal Information
                                     </h3>
 
                                     <div className="grid grid-cols-2 gap-3">
                                         <input name="firstName" value={formData.firstName} placeholder="First Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
                                         <input name="lastName" value={formData.lastName} placeholder="Last Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
                                     </div>
+
+                                    <input name="email" type="email" placeholder="DepEd Email Address" onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required readOnly={isOtpVerified} />
 
                                     {/* REGIONAL OFFICE FIELDS */}
                                     {formData.role === 'Regional Office' && (
@@ -817,13 +894,16 @@ const Register = () => {
                                     )}
 
 
-                                    <input name="email" type="email" placeholder="Email Address" onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required readOnly={isOtpVerified} />
-
                                     {/* Generic Location Dropdowns (For Engineer, Admin if needed - Optional but good practice) */}
                                     {/* Hiding them for minimal Engineer view unless requested. User snippet had them for Generic. I'll add them if Engineer */}
                                     {['Engineer'].includes(formData.role) && (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {/* Using locations.json for hierarchy */}
+                                        <div className="space-y-4 pt-4 border-t border-slate-100">
+                                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                                <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">2</span>
+                                                Assignment Details
+                                            </h3>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {/* Using locations.json for hierarchy */}
                                             <select name="region" onChange={handleRegionChange} value={formData.region} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500">
                                                 <option value="">Region</option>
                                                 {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
@@ -840,6 +920,7 @@ const Register = () => {
                                                 <option value="">Barangay</option>
                                                 {barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}
                                             </select>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -849,7 +930,7 @@ const Register = () => {
                             <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3 hidden">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
-                                        {formData.role === 'School Head' ? 2 : 2}
+                                        {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
                                     </span>
                                     Account Security
                                 </h3>

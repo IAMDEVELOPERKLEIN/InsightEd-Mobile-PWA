@@ -28,6 +28,7 @@ const MonitoringDashboard = () => {
     // NEW: Regional Stats for National View
     const [regionalStats, setRegionalStats] = useState([]);
     const [divisionStats, setDivisionStats] = useState([]); // Per-division stats for RO
+    const [districtStats, setDistrictStats] = useState([]); // Per-district stats for SDO
 
     const fetchData = async (overrideRegion, overrideDivision) => {
         const user = auth.currentUser;
@@ -82,17 +83,24 @@ const MonitoringDashboard = () => {
             if (currentUserData.role === 'Regional Office') {
                 fetchPromises.push(fetch(`/api/monitoring/division-stats?${params.toString()}`));
             }
+            
+            // Fetch District Stats only for SDO
+            if (currentUserData.role === 'School Division Office') {
+                fetchPromises.push(fetch(`/api/monitoring/district-stats?${params.toString()}`));
+            }
 
             const results = await Promise.all(fetchPromises);
             const statsRes = results[0];
             const engStatsRes = results[1];
             const projectsRes = results[2];
             const divStatsRes = currentUserData.role === 'Regional Office' ? results[3] : null;
+            const distStatsRes = currentUserData.role === 'School Division Office' ? results[3] : null;
 
             if (statsRes.ok) setStats(await statsRes.json());
             if (engStatsRes.ok) setEngStats(await engStatsRes.json());
             if (projectsRes.ok) setJurisdictionProjects(await projectsRes.json());
             if (divStatsRes && divStatsRes.ok) setDivisionStats(await divStatsRes.json());
+            if (distStatsRes && distStatsRes.ok) setDistrictStats(await distStatsRes.json());
         } catch (err) {
             console.error("Dashboard Fetch Error:", err);
         } finally {
@@ -388,44 +396,134 @@ const MonitoringDashboard = () => {
                                 </div>
                             </div>
 
-                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
-                                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
-                                {divisionStats.length === 0 ? (
-                                    <p className="text-sm text-slate-400 italic">No division data available.</p>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {divisionStats.map((div, idx) => {
-                                            const total = parseInt(div.total_schools) || 0;
-                                            const completed = parseInt(div.completed_schools) || 0;
-                                            const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-                                            
-                                            // Define colors for progress bars (cycling)
-                                            const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500'];
-                                            const color = colors[idx % colors.length];
+                            {/* Accomplishment Rate per School Division (Regional Office Only) */}
+                            {userData?.role === 'Regional Office' && (
+                                <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
+                                    <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
+                                    {(() => {
+                                        // 1. Get List of Divisions for Current Region from CSV Data
+                                        // Use userData.region or coRegion depending on role
+                                        const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
+                                        
+                                        // Filter unique divisions from CSV
+                                        const regionDivisions = [...new Set(schoolData
+                                            .filter(s => s.region === targetRegion)
+                                            .map(s => s.division))]
+                                            .sort();
 
-                                            return (
-                                                <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <div>
-                                                            <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">{div.division}</h3>
-                                                            <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                {completed} out of {total} forms completed
-                                                            </p>
+                                        if (regionDivisions.length === 0) {
+                                            return <p className="text-sm text-slate-400 italic">No division data available in Master List (CSV).</p>;
+                                        }
+
+                                        return (
+                                            <div className="space-y-4">
+                                                {regionDivisions.map((divName, idx) => {
+                                                    // 2. Calculate Total Schools from CSV for this Division
+                                                    const totalSchools = schoolData.filter(s => 
+                                                        s.region === targetRegion && s.division === divName
+                                                    ).length;
+
+                                                    // 3. Get Completed Count from Backend Stats
+                                                    // Find the matching entry in divisionStats array
+                                                    const startStat = divisionStats.find(d => d.division === divName);
+                                                    const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+
+                                                    // 4. Calculate Percentage
+                                                    const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
+                                                    
+                                                    // Define colors for progress bars (cycling)
+                                                    const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500'];
+                                                    const color = colors[idx % colors.length];
+
+                                                    return (
+                                                        <div key={divName} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <div>
+                                                                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">{divName}</h3>
+                                                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
+                                                                        {completedCount} out of {totalSchools} schools completed all forms
+                                                                    </p>
+                                                                </div>
+                                                                <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                                <div 
+                                                                    className={`h-full ${color} transition-all duration-1000`} 
+                                                                    style={{ width: `${percentage}%` }}
+                                                                ></div>
+                                                            </div>
                                                         </div>
-                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
-                                                    </div>
-                                                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                                                        <div 
-                                                            className={`h-full ${color} transition-all duration-1000`} 
-                                                            style={{ width: `${percentage}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        
+                            {/* NEW: District Accomplishment Rate for SDO */}
+                            {userData?.role === 'School Division Office' && (
+                                <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
+                                    <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per District</h2>
+                                    {(() => {
+                                        const targetRegion = userData.region;
+                                        const targetDivision = userData.division;
+                                        
+                                        // 1. Get unique districts from CSV
+                                        const divisionDistricts = [...new Set(schoolData
+                                            .filter(s => s.region === targetRegion && s.division === targetDivision)
+                                            .map(s => s.district))]
+                                            .sort();
+                                            
+                                        if (divisionDistricts.length === 0) {
+                                            return <p className="text-sm text-slate-400 italic">No district data available in Master List (CSV).</p>;
+                                        }
+
+                                        return (
+                                            <div className="space-y-4">
+                                                {divisionDistricts.map((distName, idx) => {
+                                                    // 2. Count Total from CSV
+                                                    const totalSchools = schoolData.filter(s => 
+                                                        s.region === targetRegion && 
+                                                        s.division === targetDivision && 
+                                                        s.district === distName
+                                                    ).length;
+
+                                                    // 3. Count Completed from DB Stats
+                                                    const startStat = districtStats.find(d => d.district === distName);
+                                                    const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+
+                                                    const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
+                                                    
+                                                    // Colors
+                                                    const colors = ['bg-orange-500', 'bg-cyan-500', 'bg-lime-500', 'bg-fuchsia-500', 'bg-indigo-500'];
+                                                    const color = colors[idx % colors.length];
+
+                                                    return (
+                                                         <div key={distName} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <div>
+                                                                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">{distName}</h3>
+                                                                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
+                                                                        {completedCount} out of {totalSchools} schools completed all forms
+                                                                    </p>
+                                                                </div>
+                                                                <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                                <div 
+                                                                    className={`h-full ${color} transition-all duration-1000`} 
+                                                                    style={{ width: `${percentage}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
                         </>
                     )}
 
