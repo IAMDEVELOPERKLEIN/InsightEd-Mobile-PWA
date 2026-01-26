@@ -122,7 +122,8 @@ const LearnerStatistics = () => {
 
     const handleGridChange = (category, grade, value) => {
         const key = `stat_${category}_${grade}`;
-        const cleanValue = value.replace(/[^0-9]/g, '');
+        // Limit to 3 digits
+        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
         const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
 
         setFormData(prev => ({

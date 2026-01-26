@@ -150,7 +150,7 @@ const SchoolResources = () => {
                         setOriginalData(loaded);
 
                         // Lock if data is already present or viewOnly
-                        if (dbData.res_armchairs_good > 0 || dbData.res_toilets_male > 0 || viewOnly) {
+                        if (dbData.res_armchairs_good > 0 || dbData.res_toilets_male > 0 || dbData.res_buildable_space || dbData.res_electricity_source || viewOnly) {
                             setIsLocked(true);
                         }
                     } else {
@@ -168,11 +168,24 @@ const SchoolResources = () => {
 
     const handleChange = (e) => {
         const { name, value, type } = e.target;
+        let finalValue = value;
+
+        if (type === 'number') {
+            // Limit to 5 digits
+            const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 5);
+            finalValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        }
+
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'number' ? (parseInt(value) || 0) : value
+            [name]: finalValue
         }));
     };
+
+    useEffect(() => {
+        // Debugging: Log formData to check if res_buildable_space is populated
+        console.log("FormData Snapshot:", formData);
+    }, [formData]);
 
     // --- SAVE LOGIC ---
     const confirmSave = async () => {
@@ -242,7 +255,7 @@ const SchoolResources = () => {
             {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">{label}</label>}
             <select
                 name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked || viewOnly}
-                className="w-full font-bold text-slate-700 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm text-sm"
+                className="w-full font-bold text-slate-700 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-800 disabled:border-transparent shadow-sm text-sm"
             >
                 <option value="">-- Select --</option>
                 {options.map(opt => (

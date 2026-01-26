@@ -131,7 +131,7 @@ const SchoolInformation = () => {
                                 middleName: data.head_middle_name || data.middle_name || '',
                                 itemNumber: data.head_item_number || data.item_number || '',
                                 positionTitle: data.head_position_title || data.position_title || '',
-                                dateHired: data.head_date_hired ? data.head_date_hired.split('T')[0] : '',
+                                dateHired: (data.date_hired || data.head_date_hired) ? (data.date_hired || data.head_date_hired).split('T')[0] : '',
                                 sex: data.head_sex || '',
                                 region: data.head_region || '',
                                 division: data.head_division || ''
@@ -153,7 +153,30 @@ const SchoolInformation = () => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+
+        let finalValue = value;
+        if (name === 'itemNumber') {
+            // Logic to enforce/suggest prefix
+            // If user deletes everything, let them. If they start typing, maybe partial matches?
+            // Actually, simplest is just normal input. But user asked "make the first letters are...".
+            // Let's auto-prepend on blur or just specific handling? 
+            // Better: If they type, just normal. But maybe on Focus, if empty, set it?
+            // Or handle it here: If value doesn't start with prefix, maybe warn or correct?
+            // Let's try: if value length > 0 and doesn't start with OSEC-DECSB-, prepend it? No that's annoying while typing.
+            // Let's just handle it in the input component itself with a specialized handler or just let it be free-text but with a placeholder/default.
+            // However, the user request "can we make... first letters are..." suggests forcing it.
+            // Let's try this: If the user types, we ensure the prefix stays if it was there?
+            // Let's go with a simple approach: if it's itemNumber, we do nothing special HERE, but handle it in the input specific props or useEffect.
+
+            // Actually, let's just do standard update here.
+        }
+        setFormData(prev => ({ ...prev, [name]: finalValue }));
+    };
+
+    const handleItemNumberFocus = () => {
+        if (!formData.itemNumber) {
+            setFormData(prev => ({ ...prev, itemNumber: 'OSEC-DECSB-' }));
+        }
     };
 
     // Trigger lookup when user finishes typing the Item Number
@@ -278,6 +301,7 @@ const SchoolInformation = () => {
                             value={formData.itemNumber}
                             onChange={handleChange}
                             onBlur={handleItemNumberBlur}
+                            onFocus={handleItemNumberFocus}
                             placeholder="e.g. OSEC-DECSB-ADA1-27-2004"
                             className={`${inputClass} !border-blue-200 text-blue-700`}
                             disabled={isLocked || viewOnly || isDummy}

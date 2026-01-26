@@ -152,8 +152,13 @@ const TeachingPersonnel = () => {
     const getTotal = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0);
 
     const handleChange = (e) => {
-        const val = e.target.value === '' ? '' : parseInt(e.target.value);
-        setFormData({ ...formData, [e.target.name]: val });
+        let val = e.target.value;
+        // Limit to 3 digits
+        if (typeof val === 'string') {
+            val = val.replace(/[^0-9]/g, '').slice(0, 3);
+        }
+        const intVal = val === '' ? '' : parseInt(val);
+        setFormData({ ...formData, [e.target.name]: intVal });
     };
 
     const handleUpdateClick = () => setShowEditModal(true);

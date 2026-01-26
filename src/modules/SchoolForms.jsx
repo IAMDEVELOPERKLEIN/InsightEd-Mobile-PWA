@@ -23,6 +23,9 @@ const SchoolForms = () => {
     const [headProfile, setHeadProfile] = useState(null);
     const [curricularOffering, setCurricularOffering] = useState('');
     const [isSavingOffering, setIsSavingOffering] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [pendingOffering, setPendingOffering] = useState('');
+    const [isOfferingLocked, setIsOfferingLocked] = useState(false);
 
     // --- 1. DATA CONTENT (Categorized) ---
     const formsData = [
@@ -122,7 +125,13 @@ const SchoolForms = () => {
                     const profileJson = await profileRes.json();
                     if (profileJson.exists) {
                         setSchoolProfile(profileJson.data);
-                        setCurricularOffering(profileJson.data.curricular_offering || '');
+                        if (profileJson.data.curricular_offering) {
+                            setCurricularOffering(profileJson.data.curricular_offering);
+                            setIsOfferingLocked(true);
+                        } else {
+                            setCurricularOffering('');
+                            setIsOfferingLocked(false);
+                        }
                         // Cache for offline usage
                         localStorage.setItem('fullSchoolProfile', JSON.stringify(profileJson.data));
                         localStorage.setItem('schoolOffering', profileJson.data.curricular_offering || '');
@@ -141,9 +150,15 @@ const SchoolForms = () => {
                         try {
                             const parsedProfile = JSON.parse(cachedProfile);
                             setSchoolProfile(parsedProfile);
-                            if (cachedOffering) setCurricularOffering(cachedOffering);
+                            if (cachedOffering) {
+                                setCurricularOffering(cachedOffering);
+                                setIsOfferingLocked(true);
+                            }
                             // Fallback if not separately saved
-                            else if (parsedProfile.curricular_offering) setCurricularOffering(parsedProfile.curricular_offering);
+                            else if (parsedProfile.curricular_offering) {
+                                setCurricularOffering(parsedProfile.curricular_offering);
+                                setIsOfferingLocked(true);
+                            }
 
                             console.log("✅ School profile loaded from cache.");
                         } catch (e) {
@@ -217,8 +232,20 @@ const SchoolForms = () => {
     }, [schoolProfile, headProfile, filter]);
 
     // --- 5. HANDLE OFFERING CHANGE ---
-    const handleOfferingChange = async (e) => {
-        const newValue = e.target.value;
+    const handleOfferingChange = (e) => {
+        setPendingOffering(e.target.value);
+        setShowConfirmModal(true);
+    };
+
+    const cancelOfferingChange = () => {
+        setShowConfirmModal(false);
+        setPendingOffering('');
+    };
+
+    const confirmOfferingChange = async () => {
+        setShowConfirmModal(false);
+        const newValue = pendingOffering;
+
         setCurricularOffering(newValue);
         localStorage.setItem('schoolOffering', newValue); // Immediate local update
 
@@ -254,6 +281,7 @@ const SchoolForms = () => {
                 console.log("✅ Curricular offering updated via API");
                 // Update local profile state to reflect change
                 setSchoolProfile(prev => ({ ...prev, curricular_offering: newValue }));
+                setIsOfferingLocked(true);
             } else {
                 console.warn("⚠️ Failed to update offering on server");
             }
@@ -379,6 +407,42 @@ const SchoolForms = () => {
                 </div>
             )}
 
+            {/* CONFIRMATION MODAL */}
+            {showConfirmModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 relative overflow-hidden">
+                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl mx-auto">
+                            <FiAlertCircle />
+                        </div>
+                        <div className="text-center">
+                            <h2 className="text-lg font-bold text-slate-800">Confirm Change?</h2>
+                            <p className="text-sm text-slate-500 mt-2">
+                                You are about to change the Curricular Offering to <br />
+                                <span className="font-bold text-slate-800">"{pendingOffering}"</span>.
+                            </p>
+                            <p className="text-xs text-amber-600 mt-2 font-bold bg-amber-50 p-2 rounded-lg border border-amber-100">
+                                Note: This may affect which forms are visible.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3 mt-4">
+                            <button
+                                onClick={cancelOfferingChange}
+                                className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmOfferingChange}
+                                className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition"
+                            >
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* --- HEADER --- */}
             <div className="bg-[#004A99] pt-8 pb-20 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
                 {/* Background Decor */}
@@ -413,21 +477,42 @@ const SchoolForms = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-[10px] text-blue-200 uppercase tracking-wider font-semibold">Curricular Offering</p>
-                            <div className="relative">
-                                <select
-                                    value={curricularOffering}
-                                    onChange={handleOfferingChange}
-                                    disabled={isSavingOffering}
-                                    className="w-full bg-transparent text-white font-bold text-sm focus:outline-none cursor-pointer appearance-none truncate pr-6"                                >
-                                    <option value="" className="text-slate-800">Select Offering...</option>
-                                    <option value="Purely Elementary" className="text-slate-800">Purely Elementary</option>
-                                    <option value="Elementary School and Junior High School (K-10)" className="text-slate-800">Elementary School and Junior High School (K-10)</option>
-                                    <option value="All Offering (K-12)" className="text-slate-800">All Offering (K-12)</option>
-                                    <option value="Junior and Senior High" className="text-slate-800">Junior and Senior High</option>
-                                    <option value="Purely Junior High School" className="text-slate-800">Purely Junior High School</option>
-                                    <option value="Purely Senior High School" className="text-slate-800">Purely Senior High School</option>
-                                </select>
-                                <FiChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
+                            <div className="relative flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <select
+                                        value={curricularOffering}
+                                        onChange={handleOfferingChange}
+                                        disabled={isSavingOffering || isOfferingLocked}
+                                        className={`w-full bg-transparent font-bold text-sm focus:outline-none appearance-none truncate pr-6 transition-colors
+                                            ${isOfferingLocked ? 'text-white/70 cursor-not-allowed' : 'text-white cursor-pointer'}
+                                        `}
+                                    >
+                                        <option value="" className="text-slate-800">Select Offering...</option>
+                                        <option value="Purely Elementary" className="text-slate-800">Purely Elementary</option>
+                                        <option value="Elementary School and Junior High School (K-10)" className="text-slate-800">Elementary School and Junior High School (K-10)</option>
+                                        <option value="All Offering (K-12)" className="text-slate-800">All Offering (K-12)</option>
+                                        <option value="Junior and Senior High" className="text-slate-800">Junior and Senior High</option>
+                                        <option value="Purely Junior High School" className="text-slate-800">Purely Junior High School</option>
+                                        <option value="Purely Senior High School" className="text-slate-800">Purely Senior High School</option>
+                                    </select>
+                                    {!isOfferingLocked && (
+                                        <FiChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
+                                    )}
+                                </div>
+
+                                {isOfferingLocked ? (
+                                    <button
+                                        onClick={() => setIsOfferingLocked(false)}
+                                        className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-200 hover:text-white transition"
+                                        title="Unlock to Edit"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                    </button>
+                                ) : (
+                                    <div className="p-1.5 text-white/40">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

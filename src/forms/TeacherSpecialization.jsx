@@ -145,7 +145,8 @@ const TeacherSpecialization = () => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        const cleanValue = value.replace(/[^0-9]/g, '');
+        // Limit to 3 digits
+        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
         const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };

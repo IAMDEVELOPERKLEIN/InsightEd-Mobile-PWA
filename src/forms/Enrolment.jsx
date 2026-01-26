@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { addToOutbox } from '../db';
@@ -15,11 +15,44 @@ const Enrolment = () => {
     // --- STATE ---
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [schoolId, setSchoolId] = useState(null);
+    const [curricularOffering, setCurricularOffering] = useState('');
+    const [lastUpdated, setLastUpdated] = useState(null);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+    // Data States
+    const [basicGrades, setBasicGrades] = useState({
+        gradeKinder: 0, grade1: 0, grade2: 0, grade3: 0, grade4: 0, grade5: 0, grade6: 0,
+        grade7: 0, grade8: 0, grade9: 0, grade10: 0
+    });
+    const [shsStrands, setShsStrands] = useState({
+        abm11: 0, abm12: 0, stem11: 0, stem12: 0, humss11: 0, humss12: 0, gas11: 0, gas12: 0,
+        ict11: 0, ict12: 0, he11: 0, he12: 0, ia11: 0, ia12: 0, afa11: 0, afa12: 0,
+        arts11: 0, arts12: 0, sports11: 0, sports12: 0
+    });
+    const [aralData, setAralData] = useState({
+        aral_math_g1: 0, aral_read_g1: 0, aral_sci_g1: 0,
+        aral_math_g2: 0, aral_read_g2: 0, aral_sci_g2: 0,
+        aral_math_g3: 0, aral_read_g3: 0, aral_sci_g3: 0,
+        aral_math_g4: 0, aral_read_g4: 0, aral_sci_g4: 0,
+        aral_math_g5: 0, aral_read_g5: 0, aral_sci_g5: 0,
+        aral_math_g6: 0, aral_read_g6: 0, aral_sci_g6: 0
+    });
+
+    // UI States
+    const [isLocked, setIsLocked] = useState(false);
+    const [originalData, setOriginalData] = useState(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editAgreement, setEditAgreement] = useState(false);
+    const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
 
     const queryParams = new URLSearchParams(window.location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
+    const monitorSchoolId = location.state?.schoolId;
 
     const goBack = () => {
         if (isDummy) {
@@ -160,10 +193,23 @@ const Enrolment = () => {
     }, []);
 
     // --- HANDLERS ---
-    const handleBasicChange = (e) => setBasicGrades({ ...basicGrades, [e.target.name]: parseInt(e.target.value) || 0 });
-    const handleStrandChange = (e) => setShsStrands({ ...shsStrands, [e.target.name]: parseInt(e.target.value) || 0 });
+    const handleBasicChange = (e) => {
+        let val = parseInt(e.target.value) || 0;
+        if (val > 99999) val = parseInt(e.target.value.toString().slice(0, 5));
+        setBasicGrades({ ...basicGrades, [e.target.name]: val });
+    };
 
-    const handleAralChange = (e) => setAralData({ ...aralData, [e.target.name]: parseInt(e.target.value) || 0 });
+    const handleStrandChange = (e) => {
+        let val = parseInt(e.target.value) || 0;
+        if (val > 99999) val = parseInt(e.target.value.toString().slice(0, 5));
+        setShsStrands({ ...shsStrands, [e.target.name]: val });
+    };
+
+    const handleAralChange = (e) => {
+        let val = parseInt(e.target.value) || 0;
+        if (val > 99999) val = parseInt(e.target.value.toString().slice(0, 5));
+        setAralData({ ...aralData, [e.target.name]: val });
+    };
 
     const handleUpdateClick = () => { setEditAgreement(false); setShowEditModal(true); };
 
@@ -207,6 +253,7 @@ const Enrolment = () => {
             ...shsStrands,
 
             ...aralData,
+            aral_total: Object.values(aralData).reduce((a, b) => a + (b || 0), 0),
             grade11: getG11Total(),
             grade12: getG12Total(),
             esTotal: finalESTotal,

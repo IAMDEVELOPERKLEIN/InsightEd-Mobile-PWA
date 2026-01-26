@@ -127,8 +127,8 @@ const PhysicalFacilities = () => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        // Robust numeric input handling
-        const cleanValue = value.replace(/[^0-9]/g, '');
+        // Robust numeric input handling with 5-digit limit
+        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 5);
         const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };

@@ -151,14 +151,16 @@ const OrganizedClasses = () => {
     // --- HANDLER FIXES ---
     const handleChange = (e) => {
         const { name, value } = e.target;
-        const cleanValue = value.replace(/[^0-9]/g, '');
+        // Limit to 2 digits
+        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
         const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
     const handleClassSizeChange = (e) => {
         const { name, value } = e.target;
-        const cleanValue = value.replace(/[^0-9]/g, '');
+        // Limit to 2 digits
+        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
         const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
         setClassSizeData(prev => ({ ...prev, [name]: intValue }));
     };
