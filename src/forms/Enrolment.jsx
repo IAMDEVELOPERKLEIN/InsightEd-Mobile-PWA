@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
@@ -15,11 +15,44 @@ const Enrolment = () => {
     // --- STATE ---
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [schoolId, setSchoolId] = useState(null);
+    const [curricularOffering, setCurricularOffering] = useState('');
+    const [lastUpdated, setLastUpdated] = useState(null);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+    // Data States
+    const [basicGrades, setBasicGrades] = useState({
+        gradeKinder: 0, grade1: 0, grade2: 0, grade3: 0, grade4: 0, grade5: 0, grade6: 0,
+        grade7: 0, grade8: 0, grade9: 0, grade10: 0
+    });
+    const [shsStrands, setShsStrands] = useState({
+        abm11: 0, abm12: 0, stem11: 0, stem12: 0, humss11: 0, humss12: 0, gas11: 0, gas12: 0,
+        ict11: 0, ict12: 0, he11: 0, he12: 0, ia11: 0, ia12: 0, afa11: 0, afa12: 0,
+        arts11: 0, arts12: 0, sports11: 0, sports12: 0
+    });
+    const [aralData, setAralData] = useState({
+        aral_math_g1: 0, aral_read_g1: 0, aral_sci_g1: 0,
+        aral_math_g2: 0, aral_read_g2: 0, aral_sci_g2: 0,
+        aral_math_g3: 0, aral_read_g3: 0, aral_sci_g3: 0,
+        aral_math_g4: 0, aral_read_g4: 0, aral_sci_g4: 0,
+        aral_math_g5: 0, aral_read_g5: 0, aral_sci_g5: 0,
+        aral_math_g6: 0, aral_read_g6: 0, aral_sci_g6: 0
+    });
+
+    // UI States
+    const [isLocked, setIsLocked] = useState(false);
+    const [originalData, setOriginalData] = useState(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editAgreement, setEditAgreement] = useState(false);
+    const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
 
     const queryParams = new URLSearchParams(window.location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
+    const monitorSchoolId = location.state?.schoolId;
 
     const goBack = () => {
         if (isDummy) {
@@ -75,95 +108,202 @@ const Enrolment = () => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 const storedSchoolId = localStorage.getItem('schoolId');
-                const storedOffering = localStorage.getItem('schoolOffering');
+                let storedOffering = localStorage.getItem('schoolOffering');
 
                 if (storedSchoolId) setSchoolId(storedSchoolId);
-                if (storedOffering) setCurricularOffering(storedOffering);
+                // We will set offering after we find data
 
                 try {
-                    const fetchUrl = viewOnly && monitorSchoolId
-                        ? `/api/monitoring/school-detail/${monitorSchoolId}`
-                        : `/api/school-by-user/${user.uid}`;
+                    // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                    let restored = false;
+                    if (!viewOnly) {
+                        try {
+                            const cachedId = storedSchoolId || (viewOnly && monitorSchoolId ? monitorSchoolId : null);
+                            const drafts = await getOutbox();
+                            // Attempt to match by SchoolID if we have it, otherwise we might look for specific draft types
+                            // For Enrolment, schoolId is primary key effectively.
+                            const draft = drafts.find(d => d.type === 'ENROLMENT' && (cachedId ? d.payload.schoolId === cachedId : true));
 
-                    const response = await fetch(fetchUrl);
-                    if (response.ok) {
-                        const result = await response.json();
-                        const data = (viewOnly && monitorSchoolId) ? result : result.data;
+                            if (draft) {
+                                console.log("Restored draft from Outbox (Instant Load)");
+                                const p = draft.payload;
 
-                        if (data) {
-                            setSchoolId(data.school_id);
-                            setLastUpdated(data.submitted_at);
-                            setCurricularOffering(data.curricular_offering || storedOffering || '');
+                                setSchoolId(p.schoolId); // Ensure ID is sync
+                                if (p.curricularOffering) setCurricularOffering(p.curricularOffering);
 
-                            if (!viewOnly) {
-                                localStorage.setItem('schoolId', data.school_id);
-                                localStorage.setItem('schoolOffering', data.curricular_offering || '');
-                            }
-
-                            setBasicGrades({
-                                gradeKinder: data.grade_kinder || 0,
-                                grade1: data.grade_1 || 0, grade2: data.grade_2 || 0,
-                                grade3: data.grade_3 || 0, grade4: data.grade_4 || 0,
-                                grade5: data.grade_5 || 0, grade6: data.grade_6 || 0,
-                                grade7: data.grade_7 || 0, grade8: data.grade_8 || 0,
-                                grade9: data.grade_9 || 0, grade10: data.grade_10 || 0
-                            });
-
-                            setShsStrands({
-                                abm11: data.abm_11 || 0, abm12: data.abm_12 || 0,
-                                stem11: data.stem_11 || 0, stem12: data.stem_12 || 0,
-                                humss11: data.humss_11 || 0, humss12: data.humss_12 || 0,
-                                gas11: data.gas_11 || 0, gas12: data.gas_12 || 0,
-                                ict11: data.tvl_ict_11 || 0, ict12: data.tvl_ict_12 || 0,
-                                he11: data.tvl_he_11 || 0, he12: data.tvl_he_12 || 0,
-                                ia11: data.tvl_ia_11 || 0, ia12: data.tvl_ia_12 || 0,
-                                afa11: data.tvl_afa_11 || 0, afa12: data.tvl_afa_12 || 0,
-                                arts11: data.arts_11 || 0, arts12: data.arts_12 || 0,
-                                sports11: data.sports_11 || 0, sports12: data.sports_12 || 0
-                            });
-
-
-
-                            setAralData({
-                                aral_math_g1: data.aral_math_g1 || 0, aral_read_g1: data.aral_read_g1 || 0, aral_sci_g1: data.aral_sci_g1 || 0,
-                                aral_math_g2: data.aral_math_g2 || 0, aral_read_g2: data.aral_read_g2 || 0, aral_sci_g2: data.aral_sci_g2 || 0,
-                                aral_math_g3: data.aral_math_g3 || 0, aral_read_g3: data.aral_read_g3 || 0, aral_sci_g3: data.aral_sci_g3 || 0,
-                                aral_math_g4: data.aral_math_g4 || 0, aral_read_g4: data.aral_read_g4 || 0, aral_sci_g4: data.aral_sci_g4 || 0,
-                                aral_math_g5: data.aral_math_g5 || 0, aral_read_g5: data.aral_read_g5 || 0, aral_sci_g5: data.aral_sci_g5 || 0,
-                                aral_math_g6: data.aral_math_g6 || 0, aral_read_g6: data.aral_read_g6 || 0, aral_sci_g6: data.aral_sci_g6 || 0
-                            });
-
-                            if (data.grade_1 || data.grade_7 || data.stem_11) {
-                                setIsLocked(true);
-                                setOriginalData({
-                                    basic: { ...basicGrades },
-                                    strands: { ...shsStrands },
-                                    aral: { ...aralData }
+                                setBasicGrades({
+                                    gradeKinder: p.gradeKinder || 0, grade1: p.grade1 || 0, grade2: p.grade2 || 0,
+                                    grade3: p.grade3 || 0, grade4: p.grade4 || 0, grade5: p.grade5 || 0, grade6: p.grade6 || 0,
+                                    grade7: p.grade7 || 0, grade8: p.grade8 || 0, grade9: p.grade9 || 0, grade10: p.grade10 || 0
                                 });
+
+                                setShsStrands({
+                                    abm11: p.abm11 || 0, abm12: p.abm12 || 0,
+                                    stem11: p.stem11 || 0, stem12: p.stem12 || 0,
+                                    humss11: p.humss11 || 0, humss12: p.humss12 || 0,
+                                    gas11: p.gas11 || 0, gas12: p.gas12 || 0,
+                                    ict11: p.ict11 || 0, ict12: p.ict12 || 0,
+                                    he11: p.he11 || 0, he12: p.he12 || 0,
+                                    ia11: p.ia11 || 0, ia12: p.ia12 || 0,
+                                    afa11: p.afa11 || 0, afa12: p.afa12 || 0,
+                                    arts11: p.arts11 || 0, arts12: p.arts12 || 0,
+                                    sports11: p.sports11 || 0, sports12: p.sports12 || 0
+                                });
+
+                                setAralData({
+                                    aral_math_g1: p.aral_math_g1 || 0, aral_read_g1: p.aral_read_g1 || 0, aral_sci_g1: p.aral_sci_g1 || 0,
+                                    aral_math_g2: p.aral_math_g2 || 0, aral_read_g2: p.aral_read_g2 || 0, aral_sci_g2: p.aral_sci_g2 || 0,
+                                    aral_math_g3: p.aral_math_g3 || 0, aral_read_g3: p.aral_read_g3 || 0, aral_sci_g3: p.aral_sci_g3 || 0,
+                                    aral_math_g4: p.aral_math_g4 || 0, aral_read_g4: p.aral_read_g4 || 0, aral_sci_g4: p.aral_sci_g4 || 0,
+                                    aral_math_g5: p.aral_math_g5 || 0, aral_read_g5: p.aral_read_g5 || 0, aral_sci_g5: p.aral_sci_g5 || 0,
+                                    aral_math_g6: p.aral_math_g6 || 0, aral_read_g6: p.aral_read_g6 || 0, aral_sci_g6: p.aral_sci_g6 || 0
+                                });
+
+                                setIsLocked(false);
+                                restored = true;
+                                setLoading(false);
+                                return; // EXIT EARLY
                             }
-                        } else if (!viewOnly && !storedSchoolId) {
-                            alert("School Profile missing. Redirecting to setup...");
-                            navigate('/school-profile', { state: { isFirstTime: true } });
+                        } catch (e) {
+                            console.error("Outbox check failed:", e);
+                        }
+                    }
+
+                    // 2. FETCH FROM API (If not restored)
+                    if (!restored) {
+                        const fetchUrl = viewOnly && monitorSchoolId
+                            ? `/api/monitoring/school-detail/${monitorSchoolId}`
+                            : `/api/school-by-user/${user.uid}`;
+
+                        const response = await fetch(fetchUrl);
+                        if (response.ok) {
+                            const result = await response.json();
+                            const data = (viewOnly && monitorSchoolId) ? result : result.data;
+
+                            if (data) {
+                                setSchoolId(data.school_id);
+                                setLastUpdated(data.submitted_at);
+                                setCurricularOffering(data.curricular_offering || storedOffering || '');
+
+                                if (!viewOnly) {
+                                    localStorage.setItem('schoolId', data.school_id);
+                                    localStorage.setItem('schoolOffering', data.curricular_offering || '');
+                                }
+
+                                const basic = {
+                                    gradeKinder: data.grade_kinder || 0,
+                                    grade1: data.grade_1 || 0, grade2: data.grade_2 || 0,
+                                    grade3: data.grade_3 || 0, grade4: data.grade_4 || 0,
+                                    grade5: data.grade_5 || 0, grade6: data.grade_6 || 0,
+                                    grade7: data.grade_7 || 0, grade8: data.grade_8 || 0,
+                                    grade9: data.grade_9 || 0, grade10: data.grade_10 || 0
+                                };
+                                setBasicGrades(basic);
+
+                                const strands = {
+                                    abm11: data.abm_11 || 0, abm12: data.abm_12 || 0,
+                                    stem11: data.stem_11 || 0, stem12: data.stem_12 || 0,
+                                    humss11: data.humss_11 || 0, humss12: data.humss_12 || 0,
+                                    gas11: data.gas_11 || 0, gas12: data.gas_12 || 0,
+                                    ict11: data.tvl_ict_11 || 0, ict12: data.tvl_ict_12 || 0,
+                                    he11: data.tvl_he_11 || 0, he12: data.tvl_he_12 || 0,
+                                    ia11: data.tvl_ia_11 || 0, ia12: data.tvl_ia_12 || 0,
+                                    afa11: data.tvl_afa_11 || 0, afa12: data.tvl_afa_12 || 0,
+                                    arts11: data.arts_11 || 0, arts12: data.arts_12 || 0,
+                                    sports11: data.sports_11 || 0, sports12: data.sports_12 || 0
+                                };
+                                setShsStrands(strands);
+
+                                const aral = {
+                                    aral_math_g1: data.aral_math_g1 || 0, aral_read_g1: data.aral_read_g1 || 0, aral_sci_g1: data.aral_sci_g1 || 0,
+                                    aral_math_g2: data.aral_math_g2 || 0, aral_read_g2: data.aral_read_g2 || 0, aral_sci_g2: data.aral_sci_g2 || 0,
+                                    aral_math_g3: data.aral_math_g3 || 0, aral_read_g3: data.aral_read_g3 || 0, aral_sci_g3: data.aral_sci_g3 || 0,
+                                    aral_math_g4: data.aral_math_g4 || 0, aral_read_g4: data.aral_read_g4 || 0, aral_sci_g4: data.aral_sci_g4 || 0,
+                                    aral_math_g5: data.aral_math_g5 || 0, aral_read_g5: data.aral_read_g5 || 0, aral_sci_g5: data.aral_sci_g5 || 0,
+                                    aral_math_g6: data.aral_math_g6 || 0, aral_read_g6: data.aral_read_g6 || 0, aral_sci_g6: data.aral_sci_g6 || 0
+                                };
+                                setAralData(aral);
+
+                                if (data.grade_1 || data.grade_7 || data.stem_11) {
+                                    setIsLocked(true);
+                                    setOriginalData({ basic, strands, aral });
+                                }
+
+                                // CACHE DATA
+                                localStorage.setItem(`CACHE_ENROLMENT_${data.school_id || storedSchoolId}`, JSON.stringify(data));
+
+                            } else if (!viewOnly && !storedSchoolId) {
+                                alert("School Profile missing. Redirecting to setup...");
+                                navigate('/school-profile', { state: { isFirstTime: true } });
+                            }
                         }
                     }
                 } catch (error) {
-                    console.log("Fetch Error:", error);
-                    if (!viewOnly && !storedSchoolId) {
-                        alert("⚠️ You are offline and no School ID is saved. Please connect to internet.");
-                        navigate('/schoolhead-dashboard');
+                    console.error("Fetch Error:", error);
+                    // OFFLINE CACHE RECOVERY
+                    const cached = localStorage.getItem(`CACHE_ENROLMENT_${storedSchoolId || monitorSchoolId || 'default'}`);
+                    if (cached) {
+                        console.log("Loaded cached data for Enrolment (Offline Mode)");
+                        const data = JSON.parse(cached);
+
+                        setBasicGrades({
+                            gradeKinder: data.grade_kinder || 0,
+                            grade1: data.grade_1 || 0, grade2: data.grade_2 || 0,
+                            grade3: data.grade_3 || 0, grade4: data.grade_4 || 0,
+                            grade5: data.grade_5 || 0, grade6: data.grade_6 || 0,
+                            grade7: data.grade_7 || 0, grade8: data.grade_8 || 0,
+                            grade9: data.grade_9 || 0, grade10: data.grade_10 || 0
+                        });
+
+                        setShsStrands({
+                            abm11: data.abm_11 || 0, abm12: data.abm_12 || 0,
+                            stem11: data.stem_11 || 0, stem12: data.stem_12 || 0,
+                            humss11: data.humss_11 || 0, humss12: data.humss_12 || 0,
+                            gas11: data.gas_11 || 0, gas12: data.gas_12 || 0,
+                            ict11: data.tvl_ict_11 || 0, ict12: data.tvl_ict_12 || 0,
+                            he11: data.tvl_he_11 || 0, he12: data.tvl_he_12 || 0,
+                            ia11: data.tvl_ia_11 || 0, ia12: data.tvl_ia_12 || 0,
+                            afa11: data.tvl_afa_11 || 0, afa12: data.tvl_afa_12 || 0,
+                            arts11: data.arts_11 || 0, arts12: data.arts_12 || 0,
+                            sports11: data.sports_11 || 0, sports12: data.sports_12 || 0
+                        });
+
+                        setAralData({
+                            aral_math_g1: data.aral_math_g1 || 0, aral_read_g1: data.aral_read_g1 || 0, aral_sci_g1: data.aral_sci_g1 || 0,
+                            aral_math_g2: data.aral_math_g2 || 0, aral_read_g2: data.aral_read_g2 || 0, aral_sci_g2: data.aral_sci_g2 || 0,
+                            aral_math_g3: data.aral_math_g3 || 0, aral_read_g3: data.aral_read_g3 || 0, aral_sci_g3: data.aral_sci_g3 || 0,
+                            aral_math_g4: data.aral_math_g4 || 0, aral_read_g4: data.aral_read_g4 || 0, aral_sci_g4: data.aral_sci_g4 || 0,
+                            aral_math_g5: data.aral_math_g5 || 0, aral_read_g5: data.aral_read_g5 || 0, aral_sci_g5: data.aral_sci_g5 || 0,
+                            aral_math_g6: data.aral_math_g6 || 0, aral_read_g6: data.aral_read_g6 || 0, aral_sci_g6: data.aral_sci_g6 || 0
+                        });
+
+                        setIsLocked(true); // Read-only
                     }
                 }
             }
-            setTimeout(() => { setLoading(false); }, 1000);
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
     // --- HANDLERS ---
-    const handleBasicChange = (e) => setBasicGrades({ ...basicGrades, [e.target.name]: parseInt(e.target.value) || 0 });
-    const handleStrandChange = (e) => setShsStrands({ ...shsStrands, [e.target.name]: parseInt(e.target.value) || 0 });
+    const handleBasicChange = (e) => {
+        let val = parseInt(e.target.value) || 0;
+        if (val > 99999) val = parseInt(e.target.value.toString().slice(0, 5));
+        setBasicGrades({ ...basicGrades, [e.target.name]: val });
+    };
 
-    const handleAralChange = (e) => setAralData({ ...aralData, [e.target.name]: parseInt(e.target.value) || 0 });
+    const handleStrandChange = (e) => {
+        let val = parseInt(e.target.value) || 0;
+        if (val > 99999) val = parseInt(e.target.value.toString().slice(0, 5));
+        setShsStrands({ ...shsStrands, [e.target.name]: val });
+    };
+
+    const handleAralChange = (e) => {
+        let val = parseInt(e.target.value) || 0;
+        if (val > 99999) val = parseInt(e.target.value.toString().slice(0, 5));
+        setAralData({ ...aralData, [e.target.name]: val });
+    };
 
     const handleUpdateClick = () => { setEditAgreement(false); setShowEditModal(true); };
 
@@ -207,6 +347,7 @@ const Enrolment = () => {
             ...shsStrands,
 
             ...aralData,
+            aral_total: Object.values(aralData).reduce((a, b) => a + (b || 0), 0),
             grade11: getG11Total(),
             grade12: getG12Total(),
             esTotal: finalESTotal,

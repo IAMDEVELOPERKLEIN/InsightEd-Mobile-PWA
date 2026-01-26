@@ -143,6 +143,196 @@ pool.connect(async (err, client, release) => {
       console.log('✅ Checked/Extended users table schema');
     } catch (migErr) {
       console.error('❌ Failed to migrate users table:', migErr.message);
+    // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
+    try {
+      await client.query(`
+        ALTER TABLE school_profiles 
+        ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS sha_category TEXT,
+        ADD COLUMN IF NOT EXISTS res_faucets INTEGER DEFAULT 0;
+      `);
+      console.log('✅ Checked/Added new School Resources columns');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate resources columns:', migErr.message);
+    }
+
+    // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
+    try {
+      await client.query(`
+        ALTER TABLE school_profiles 
+        -- Site & Utils
+        ADD COLUMN IF NOT EXISTS res_ownership_type TEXT,
+        ADD COLUMN IF NOT EXISTS res_electricity_source TEXT,
+        ADD COLUMN IF NOT EXISTS res_buildable_space TEXT,
+        ADD COLUMN IF NOT EXISTS res_water_source TEXT,
+        ADD COLUMN IF NOT EXISTS res_internet_type TEXT,
+        
+        -- Toilets & Labs
+        ADD COLUMN IF NOT EXISTS res_toilets_pwd INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_sci_labs INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_com_labs INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_tvl_workshops INTEGER DEFAULT 0,
+
+        -- Seats Analysis
+        ADD COLUMN IF NOT EXISTS seats_kinder INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_6 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_7 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_8 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_9 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_10 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS seats_grade_12 INTEGER DEFAULT 0,
+
+        -- Organized Classes (Counters)
+        ADD COLUMN IF NOT EXISTS classes_kinder INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_6 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_7 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_8 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_9 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_10 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS classes_grade_12 INTEGER DEFAULT 0,
+
+        -- Class Size Analysis
+        ADD COLUMN IF NOT EXISTS cnt_less_g1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g6 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g6 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g6 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g7 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g7 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g7 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g8 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g8 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g8 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g9 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g9 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g9 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g10 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g10 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g10 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_less_g12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_g12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_g12 INTEGER DEFAULT 0,
+
+        -- Equipment Inventory
+        ADD COLUMN IF NOT EXISTS res_ecart_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_ecart_nonfunc INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_laptop_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_laptop_nonfunc INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_tv_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_tv_nonfunc INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_printer_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_printer_nonfunc INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_desk_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_desk_nonfunc INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_armchair_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_armchair_nonfunc INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_toilet_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_toilet_nonfunc INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_handwash_func INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS res_handwash_nonfunc INTEGER DEFAULT 0;
+      `);
+      console.log('✅ Checked/Added ALL missing School Resources & Class Analysis columns');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate extra columns:', migErr.message);
+    }
+
+    // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
+    try {
+      await client.query(`
+        ALTER TABLE school_profiles 
+        ADD COLUMN IF NOT EXISTS spec_english_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_english_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_filipino_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_filipino_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_math_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_math_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_science_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_science_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ap_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ap_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_mapeh_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_mapeh_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_esp_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_esp_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_tle_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_tle_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_guidance INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_librarian INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ict_coord INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0;
+      `);
+      console.log('✅ Checked/Added Teacher Specialization columns');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate specialization columns:', migErr.message);
+    }
+
+    // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
+    try {
+      await client.query(`
+        ALTER TABLE school_profiles 
+        -- ARAL (Grades 1-6)
+        ADD COLUMN IF NOT EXISTS aral_math_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS aral_math_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS aral_math_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS aral_math_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS aral_math_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS aral_math_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g6 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS aral_total INTEGER DEFAULT 0,
+
+        -- Teaching Experience
+        ADD COLUMN IF NOT EXISTS teach_exp_0_1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_2_5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_6_10 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_11_15 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_16_20 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_21_25 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_26_30 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_31_35 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_36_40 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teach_exp_40_45 INTEGER DEFAULT 0;
+      `);
+      console.log('✅ Checked/Added ARAL and Teaching Experience columns');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate ARAL/Exp columns:', migErr.message);
+    }
+
+    // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
+    try {
+      await client.query(`
+        ALTER TABLE school_profiles 
+        ALTER COLUMN res_buildable_space TYPE TEXT;
+      `);
+      console.log('✅ Ensured res_buildable_space is TEXT');
+    } catch (migErr) {
+      console.log('ℹ️  res_buildable_space type check skipped/validated');
     }
 
     release();
@@ -431,9 +621,24 @@ app.post('/api/register-school', async (req, res) => {
       return res.status(400).json({ error: "This school is already registered." });
     }
 
-    // 2. GENERATE IERN
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const newIern = `IERN-${schoolData.school_id}-${randomSuffix}`;
+    // 2. GENERATE IERN (Sequential: YYYY-XXXXXX)
+    const year = new Date().getFullYear();
+    const iernResult = await client.query(
+      "SELECT iern FROM school_profiles WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
+      [`${year}-%`]
+    );
+
+    let nextSeq = 1;
+    if (iernResult.rows.length > 0) {
+      const lastIern = iernResult.rows[0].iern;
+      // Extract sequence part (assuming format YYYY-XXXXXX)
+      const parts = lastIern.split('-');
+      if (parts.length === 2 && !isNaN(parts[1])) {
+        const lastSeq = parseInt(parts[1]);
+        nextSeq = lastSeq + 1;
+      }
+    }
+    const newIern = `${year}-${String(nextSeq).padStart(6, '0')}`;
 
     // 3. CREATE USER (Optional)
     try {
@@ -810,6 +1015,8 @@ app.get('/api/school-head/:uid', async (req, res) => {
 app.post('/api/save-enrolment', async (req, res) => {
   const data = req.body;
 
+  console.log("📥 RECEIVED ENROLMENT DATA:", JSON.stringify(data, null, 2));
+
   const newLogEntry = {
     timestamp: new Date().toISOString(),
     user: data.submittedBy,
@@ -833,6 +1040,16 @@ app.post('/api/save-enrolment', async (req, res) => {
         tvl_ict_11=$28, tvl_ict_12=$29, tvl_he_11=$30, tvl_he_12=$31,
         tvl_ia_11=$32, tvl_ia_12=$33, tvl_afa_11=$34, tvl_afa_12=$35,
         arts_11=$36, arts_12=$37, sports_11=$38, sports_12=$39,
+        
+        -- ARAL Fields
+        aral_math_g1=$41, aral_read_g1=$42, aral_sci_g1=$43,
+        aral_math_g2=$44, aral_read_g2=$45, aral_sci_g2=$46,
+        aral_math_g3=$47, aral_read_g3=$48, aral_sci_g3=$49,
+        aral_math_g4=$50, aral_read_g4=$51, aral_sci_g4=$52,
+        aral_math_g5=$53, aral_read_g5=$54, aral_sci_g5=$55,
+        aral_math_g6=$56, aral_read_g6=$57, aral_sci_g6=$58,
+        aral_total=$59,
+
         submitted_at = CURRENT_TIMESTAMP,
         history_logs = history_logs || $40::jsonb
       WHERE school_id = $1;
@@ -850,7 +1067,16 @@ app.post('/api/save-enrolment', async (req, res) => {
       data.ict11, data.ict12, data.he11, data.he12,
       data.ia11, data.ia12, data.afa11, data.afa12,
       data.arts11, data.arts12, data.sports11, data.sports12,
-      JSON.stringify(newLogEntry)
+      JSON.stringify(newLogEntry),
+
+      // ARAL Values (41-58)
+      data.aral_math_g1 || 0, data.aral_read_g1 || 0, data.aral_sci_g1 || 0, // 41-43
+      data.aral_math_g2 || 0, data.aral_read_g2 || 0, data.aral_sci_g2 || 0, // 44-46
+      data.aral_math_g3 || 0, data.aral_read_g3 || 0, data.aral_sci_g3 || 0, // 47-49
+      data.aral_math_g4 || 0, data.aral_read_g4 || 0, data.aral_sci_g4 || 0, // 50-52
+      data.aral_math_g5 || 0, data.aral_read_g5 || 0, data.aral_sci_g5 || 0, // 53-55
+      data.aral_math_g6 || 0, data.aral_read_g6 || 0, data.aral_sci_g6 || 0,  // 56-58
+      data.aral_total || 0 // 59
     ];
 
     const result = await pool.query(query, values);
@@ -1284,7 +1510,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
             WHERE school_id = $1
         `;
 
-    await pool.query(query, [
+    const result = await pool.query(query, [
       data.schoolId,
       data.kinder,
       data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
@@ -1305,6 +1531,10 @@ app.post('/api/save-organized-classes', async (req, res) => {
       data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0
     ]);
 
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "School Profile not found (Check School ID)" });
+    }
+
     res.json({ message: "Classes saved successfully!" });
   } catch (err) {
     console.error(err);
@@ -1322,7 +1552,13 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
                 teach_kinder, teach_g1, teach_g2, teach_g3, teach_g4, teach_g5, teach_g6,
                 teach_g7, teach_g8, teach_g9, teach_g10,
                 teach_g11, teach_g12,
-                teach_multi_1_2, teach_multi_3_4, teach_multi_5_6, teach_multi_3plus_flag, teach_multi_3plus_count
+                teach_multi_1_2, teach_multi_3_4, teach_multi_5_6, teach_multi_3plus_flag, teach_multi_3plus_count,
+                
+                -- Experience
+                teach_exp_0_1, teach_exp_2_5, teach_exp_6_10,
+                teach_exp_11_15, teach_exp_16_20, teach_exp_21_25,
+                teach_exp_26_30, teach_exp_31_35, teach_exp_36_40,
+                teach_exp_40_45
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
@@ -1344,7 +1580,19 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
         teach_g11: row.teach_g11, teach_g12: row.teach_g12,
         teach_multi_1_2: row.teach_multi_1_2, teach_multi_3_4: row.teach_multi_3_4, teach_multi_5_6: row.teach_multi_5_6,
         teach_multi_3plus_flag: row.teach_multi_3plus_flag,
-        teach_multi_3plus_count: row.teach_multi_3plus_count
+        teach_multi_3plus_count: row.teach_multi_3plus_count,
+
+        // Experience
+        teach_exp_0_1: row.teach_exp_0_1,
+        teach_exp_2_5: row.teach_exp_2_5,
+        teach_exp_6_10: row.teach_exp_6_10,
+        teach_exp_11_15: row.teach_exp_11_15,
+        teach_exp_16_20: row.teach_exp_16_20,
+        teach_exp_21_25: row.teach_exp_21_25,
+        teach_exp_26_30: row.teach_exp_26_30,
+        teach_exp_31_35: row.teach_exp_31_35,
+        teach_exp_36_40: row.teach_exp_36_40,
+        teach_exp_40_45: row.teach_exp_40_45
       }
     });
 
@@ -1361,6 +1609,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
   const d = req.body;
 
   // Logging to verify what the backend "sees"
+  console.log("📥 RECEIVED TEACHING PERSONNEL DATA:", JSON.stringify(d, null, 2));
   console.log("Saving for UID:", d.uid);
 
   try {
@@ -1375,6 +1624,13 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
                 teach_multi_1_2 = $15::INT, teach_multi_3_4 = $16::INT, teach_multi_5_6 = $17::INT,
                 teach_multi_3plus_flag = $18::BOOLEAN,
                 teach_multi_3plus_count = $19::INT,
+
+                -- Experience Fields
+                teach_exp_0_1 = $20::INT, teach_exp_2_5 = $21::INT, teach_exp_6_10 = $22::INT,
+                teach_exp_11_15 = $23::INT, teach_exp_16_20 = $24::INT, teach_exp_21_25 = $25::INT,
+                teach_exp_26_30 = $26::INT, teach_exp_31_35 = $27::INT, teach_exp_36_40 = $28::INT,
+                teach_exp_40_45 = $29::INT,
+
                 updated_at = CURRENT_TIMESTAMP
             WHERE TRIM(submitted_by) = TRIM($1)
             RETURNING school_id;
@@ -1389,7 +1645,12 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
       d.teach_g6 || 0,
       d.teach_multi_1_2 || 0, d.teach_multi_3_4 || 0, d.teach_multi_5_6 || 0,
       d.teach_multi_3plus_flag || false,
-      d.teach_multi_3plus_count || 0
+      d.teach_multi_3plus_count || 0,
+      // Experience Values (20-29)
+      d.teach_exp_0_1 || 0, d.teach_exp_2_5 || 0, d.teach_exp_6_10 || 0, // 20-22
+      d.teach_exp_11_15 || 0, d.teach_exp_16_20 || 0, d.teach_exp_21_25 || 0, // 23-25
+      d.teach_exp_26_30 || 0, d.teach_exp_31_35 || 0, d.teach_exp_36_40 || 0, // 26-28
+      d.teach_exp_40_45 || 0 // 29
     ];
 
     const result = await pool.query(query, values);
@@ -1481,6 +1742,7 @@ app.get('/api/school-resources/:uid', async (req, res) => {
 app.post('/api/save-school-resources', async (req, res) => {
   const data = req.body;
   console.log(`[Resources] Saving SchoolID: ${data.schoolId}`);
+  console.log(`[Resources] Buildable Space: ${data.res_buildable_space}`);
   try {
     const query = `
             UPDATE school_profiles SET
@@ -1488,15 +1750,26 @@ app.post('/api/save-school-resources', async (req, res) => {
                 res_blackboards_good=$6, res_blackboards_defective=$7,
                 res_desktops_instructional=$8, res_desktops_admin=$9, res_laptops_teachers=$10, res_tablets_learners=$11,
                 res_printers_working=$12, res_projectors_working=$13, res_internet_type=$14,
-                res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_toilets_common=$40, res_faucets=$18, res_water_source=$19,
+                res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_toilets_common=$39, res_faucets=$18, res_water_source=$19,
                 res_sci_labs=$20, res_com_labs=$21, res_tvl_workshops=$22,
                 
                 res_ownership_type=$23, res_electricity_source=$24, res_buildable_space=$25,
+                sha_category=$40,
 
                 seats_kinder=$26, seats_grade_1=$27, seats_grade_2=$28, seats_grade_3=$29,
                 seats_grade_4=$30, seats_grade_5=$31, seats_grade_6=$32,
                 seats_grade_7=$33, seats_grade_8=$34, seats_grade_9=$35, seats_grade_10=$36,
                 seats_grade_11=$37, seats_grade_12=$38,
+
+                -- New Inventory Fields
+                res_ecart_func=$41, res_ecart_nonfunc=$42,
+                res_laptop_func=$43, res_laptop_nonfunc=$44,
+                res_tv_func=$45, res_tv_nonfunc=$46,
+                res_printer_func=$47, res_printer_nonfunc=$48,
+                res_desk_func=$49, res_desk_nonfunc=$50,
+                res_armchair_func=$51, res_armchair_nonfunc=$52,
+                res_toilet_func=$53, res_toilet_nonfunc=$54,
+                res_handwash_func=$55, res_handwash_nonfunc=$56,
 
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
@@ -1506,18 +1779,29 @@ app.post('/api/save-school-resources', async (req, res) => {
       data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
       data.res_blackboards_good, data.res_blackboards_defective,
       data.res_desktops_instructional, data.res_desktops_admin, data.res_laptops_teachers, data.res_tablets_learners,
-      data.res_printers_working, data.res_projectors_working, data.res_internet_type,
-      data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, data.res_water_source,
+      data.res_printers_working, data.res_projectors_working, valueOrNull(data.res_internet_type),
+      data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, valueOrNull(data.res_water_source),
       data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops,
 
-      data.res_ownership_type, data.res_electricity_source, data.res_buildable_space,
+      valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space),
 
       data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
       data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
       data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
       data.seats_grade_11, data.seats_grade_12,
-      data.schoolId, // $39 (Wait, counting vars...)
-      data.res_toilets_common // $40
+
+      data.res_toilets_common, // $39
+      valueOrNull(data.sha_category), // $40
+
+      // New Inventory Values
+      data.res_ecart_func || 0, data.res_ecart_nonfunc || 0, // 41, 42
+      data.res_laptop_func || 0, data.res_laptop_nonfunc || 0, // 43, 44
+      data.res_tv_func || 0, data.res_tv_nonfunc || 0, // 45, 46
+      data.res_printer_func || 0, data.res_printer_nonfunc || 0, // 47, 48
+      data.res_desk_func || 0, data.res_desk_nonfunc || 0, // 49, 50
+      data.res_armchair_func || 0, data.res_armchair_nonfunc || 0, // 51, 52
+      data.res_toilet_func || 0, data.res_toilet_nonfunc || 0, // 53, 54
+      data.res_handwash_func || 0, data.res_handwash_nonfunc || 0 // 55, 56
     ]);
     if (result.rowCount === 0) {
       console.warn(`[Resources] ID ${data.schoolId} not found.`);
@@ -2158,12 +2442,24 @@ app.use((err, req, res, next) => {
 
 
 // Robust path comparison for Windows
+// Robust path comparison for Windows
 const currentFile = fileURLToPath(import.meta.url);
 const executedFile = process.argv[1];
 
 console.log("Startup Check:");
 console.log("  Executed:", executedFile);
 console.log("  Current: ", currentFile);
+
+/* 
+   ON WINDOWS:
+   Executed: E:\InsightEd-Mobile-PWA\api\index.js
+   Current:  e:\InsightEd-Mobile-PWA\api\index.js
+   
+   Note the case difference (E: vs e:). 
+   path.resolve() adjusts slashes but DOES NOT fix drive letter case on all Node versions.
+   We will normalize to lowercase for comparison.
+*/
+const isMainModule = path.resolve(executedFile).toLowerCase() === path.resolve(currentFile).toLowerCase();
 
 // --- 1. GLOBAL ERROR HANDLERS TO PREVENT SILENT CRASHES ---
 process.on('uncaughtException', (err) => {
@@ -2174,9 +2470,8 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ UNHANDLED REJECTION:', reason);
 });
 
-// ... existing code ...
-
-if (executedFile && path.resolve(executedFile) === path.resolve(currentFile)) {
+// Always start if strictly detected as main, OR if explicitly forced by env (fallback)
+if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
   const server = app.listen(PORT, () => {
     console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);

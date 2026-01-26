@@ -96,6 +96,10 @@ const Register = () => {
     // Map Marker Ref
     const markerRef = useRef(null);
 
+    // --- REGISTRATION SUCCESS STATE ---
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [registeredIern, setRegisteredIern] = useState('');
+
     // --- OTP TIMER EFFECT ---
     useEffect(() => {
         let interval;
@@ -403,6 +407,8 @@ const Register = () => {
         setLoading(true);
 
         try {
+            let regData = null;
+
             // STEP A: Pre-Checks for School Head
             if (formData.role === 'School Head') {
                 if (!selectedSchool) throw new Error("Please select a school.");
@@ -497,7 +503,7 @@ const Register = () => {
                     })
                 });
 
-                const regData = await regRes.json();
+                regData = await regRes.json();
                 if (!regData.success) {
                     throw new Error(regData.error || "Server Registration Failed.");
                 }
@@ -558,7 +564,12 @@ const Register = () => {
             }
 
             // STEP D: Success
-            navigate(getDashboardPath(formData.role));
+            if (formData.role === 'School Head' && regData?.iern) {
+                setRegisteredIern(regData.iern);
+                setShowSuccessModal(true);
+            } else {
+                navigate(getDashboardPath(formData.role));
+            }
 
         } catch (error) {
             console.error("Registration Error:", error);
@@ -917,7 +928,7 @@ const Register = () => {
 
                             {/* === 3. EMAIL VERIFICATION & SECURITY === */}
                             <div className="pt-2 border-t border-slate-100 animate-in fade-in">
-                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3 hidden">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
                                         {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
                                     </span>
@@ -932,7 +943,7 @@ const Register = () => {
                                     {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email */}
 
                                     {/* OTP CONTROLS */}
-                                    <div className="flex flex-col gap-3">
+                                    <div className="flex flex-col gap-3 hidden">
                                         <p className="text-xs text-slate-500">
                                             Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
                                         </p>
@@ -993,7 +1004,7 @@ const Register = () => {
                             {/* SUBMIT BUTTON */}
                             <button
                                 type="submit"
-                                disabled={loading || !isOtpVerified}
+                                disabled={loading}
                                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 rounded-xl shadow-xl shadow-blue-500/30 transform transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                             >
                                 {loading ? 'Processing...' : 'Complete Registration'}
@@ -1007,6 +1018,35 @@ const Register = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* SUCCESS MODAL */}
+                {showSuccessModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
+
+                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600 text-3xl">
+                                ✅
+                            </div>
+
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Registration Successful!</h2>
+                            <p className="text-slate-500 mb-6">Welcome to InsightEd. Your account has been created.</p>
+
+                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl mb-6">
+                                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Your School IERN</p>
+                                <h3 className="text-3xl font-black text-blue-900 tracking-tight font-mono">{registeredIern}</h3>
+                                <p className="text-[10px] text-blue-400 mt-2">Please save this reference number.</p>
+                            </div>
+
+                            <button
+                                onClick={() => navigate(getDashboardPath(formData.role))}
+                                className="w-full py-4 rounded-xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
+                            >
+                                Continue to Dashboard
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </PageTransition>
     );

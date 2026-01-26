@@ -1,11 +1,12 @@
 // src/forms/SchoolResources.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { FiArrowLeft, FiPackage, FiMapPin, FiLayout, FiCheckCircle, FiXCircle, FiMonitor, FiTool, FiDroplet, FiZap } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
-import { addToOutbox } from '../db';
+import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -51,6 +52,7 @@ const SchoolResources = () => {
         res_toilets_pwd: 0,
         res_water_source: '',
         res_tvl_workshops: 0,
+        res_faucets: 0,
         res_ownership_type: '',
         res_electricity_source: '',
         res_buildable_space: '',
@@ -125,52 +127,103 @@ const SchoolResources = () => {
                     }
                 }
 
-                // 2. Fetch RESOURCES
+                // 2. FETCH RESOURCES (With Outbox Priority)
                 try {
-                    let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
-                    if (viewOnly && schoolIdParam) {
-                        resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                    }
-                    const res = await fetch(resourcesFetchUrl);
-                    const json = await res.json();
+                    let restored = false;
 
-                    if (json.exists || (viewOnly && schoolIdParam)) {
-                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-                        setSchoolId(dbData.school_id || dbData.schoolId || cachedId);
+                    // A. CHECK OUTBOX FIRST (Inverted Logic)
+                    if (!viewOnly) {
+                        try {
+                            const cachedId = localStorage.getItem('schoolId') || (viewOnly && schoolIdParam ? schoolIdParam : null);
+                            const drafts = await getOutbox();
+                            const draft = drafts.find(d => d.type === 'SCHOOL_RESOURCES' && (cachedId ? d.payload.schoolId === cachedId : true));
 
-                        // Map database columns to state
-                        const loaded = {};
-                        Object.keys(initialFields).forEach(key => {
-                            loaded[key] = dbData[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
-                        });
-
-                        setFormData(loaded);
-                        setOriginalData(loaded);
-
-                        // Lock if data is already present or viewOnly
-                        if (dbData.res_armchairs_good > 0 || dbData.res_toilets_male > 0 || viewOnly) {
-                            setIsLocked(true);
+                            if (draft) {
+                                console.log("Restored draft from Outbox (Instant Load)");
+                                const p = draft.payload;
+                                setFormData(prev => ({ ...prev, ...p }));
+                                setIsLocked(false);
+                                restored = true;
+                                setLoading(false);
+                                // We don't return here because we still want Step 1 (Enrollment) to have finished or run, 
+                                // but typically Step 1 runs before this block anyway.
+                                // If we return, we skip the API fetch below, which is correct.
+                            }
+                        } catch (e) {
+                            console.error("Outbox check failed:", e);
                         }
-                    } else {
-                        setFormData(initialFields);
+                    }
+
+                    // B. FETCH FROM API (If not restored)
+                    if (!restored) {
+                        let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
+                        if (viewOnly && schoolIdParam) {
+                            resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
+                        const res = await fetch(resourcesFetchUrl);
+                        const json = await res.json();
+
+                        if (json.exists || (viewOnly && schoolIdParam)) {
+                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                            setSchoolId(dbData.school_id || dbData.schoolId || cachedId);
+
+                            // Map database columns to state
+                            const loaded = {};
+                            Object.keys(initialFields).forEach(key => {
+                                loaded[key] = dbData[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
+                            });
+
+                            setFormData(loaded);
+                            setOriginalData(loaded);
+
+                            if (loaded.res_internet_type || loaded.res_toilets_male) { // Simple check if data exists
+                                setIsLocked(true);
+                            }
+
+                            // CACHE DATA
+                            localStorage.setItem(`CACHE_RESOURCES_${dbData.school_id || cachedId}`, JSON.stringify(loaded));
+                        }
                     }
                 } catch (e) {
-                    console.error("Fetch failed:", e);
-                    setFormData(initialFields);
+                    console.error("Fetch Resources Error:", e);
+                    // OFFLINE CACHE RECOVERY
+                    const cachedId = localStorage.getItem('schoolId');
+                    const cached = localStorage.getItem(`CACHE_RESOURCES_${cachedId || 'default'}`);
+                    if (cached) {
+                        console.log("Loaded cached data for Resources (Offline Mode)");
+                        const data = JSON.parse(cached);
+                        setFormData(data);
+                        setOriginalData(data);
+                        setIsLocked(true);
+                    }
                 }
+                setLoading(false);
             }
-            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
+
     const handleChange = (e) => {
         const { name, value, type } = e.target;
+        let finalValue = value;
+
+        if (type === 'number') {
+            // Limit to 5 digits
+            const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 5);
+            finalValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        }
+
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'number' ? (parseInt(value) || 0) : value
+            [name]: finalValue
         }));
     };
+
+    useEffect(() => {
+        // Debugging: Log formData to check if res_buildable_space is populated
+        console.log("FormData Snapshot:", formData);
+    }, [formData]);
 
     // --- SAVE LOGIC ---
     const confirmSave = async () => {
@@ -224,22 +277,23 @@ const SchoolResources = () => {
 
     // --- COMPONENTS ---
     const InputField = ({ label, name, type = "number" }) => (
-        <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-900/50 p-4 rounded-xl border border-gray-100 dark:border-slate-700">
-            <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest w-2/3">{label}</label>
+        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-2/3 group-hover:text-blue-600 transition-colors">{label}</label>
             <input
                 type={type} name={name} value={formData[name] ?? (type === 'number' ? 0 : '')}
                 onChange={handleChange} disabled={isLocked || viewOnly}
-                className="w-24 text-center font-bold text-blue-900 dark:text-blue-200 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent dark:disabled:bg-transparent"
+                onWheel={(e) => e.target.blur()}
+                className="w-24 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2.5 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent text-lg shadow-sm"
             />
         </div>
     );
 
     const SelectField = ({ label, name, options }) => (
-        <div className="flex flex-col gap-2 bg-gray-50 p-4 rounded-xl border border-gray-100">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+        <div className="flex flex-col gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
+            {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">{label}</label>}
             <select
                 name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked || viewOnly}
-                className="w-full font-bold text-blue-900 bg-white border border-gray-200 rounded-lg py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                className="w-full font-bold text-slate-700 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-800 disabled:border-transparent shadow-sm text-sm"
             >
                 <option value="">-- Select --</option>
                 {options.map(opt => (
@@ -255,31 +309,34 @@ const SchoolResources = () => {
         const isShortage = shortage > 0;
 
         return (
-            <tr className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-                <td className="py-3 px-4 text-xs font-bold text-gray-600">{label}</td>
-                <td className="py-3 px-4 text-center">
-                    <span className="bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded-md font-bold border border-blue-100">
+            <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
+                <td className="py-4 px-4 text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">{label}</td>
+                <td className="py-4 px-4 text-center">
+                    <span className="bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-lg font-bold">
                         {enrollment}
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <input
-                        type="number"
-                        name={seatKey}
-                        value={seats}
-                        onChange={handleChange}
-                        disabled={isLocked || viewOnly}
-                        className="w-full text-center font-bold text-gray-800 bg-white border border-gray-200 rounded-lg py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent"
-                    />
+                <td className="py-4 px-4">
+                    <div className="flex justify-center">
+                        <input
+                            type="number"
+                            name={seatKey}
+                            value={seats}
+                            onChange={handleChange}
+                            disabled={isLocked || viewOnly}
+                            onWheel={(e) => e.target.blur()}
+                            className="w-20 text-center font-bold text-slate-800 bg-white border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                        />
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-center">
+                <td className="py-4 px-4 text-center">
                     {isShortage ? (
-                        <span className="text-red-600 bg-red-50 px-2 py-1 rounded-md text-[10px] font-extrabold border border-red-100">
-                            -{shortage}
+                        <span className="text-red-600 bg-red-50 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border border-red-100 inline-flex items-center gap-1">
+                            <FiXCircle className="inline" /> -{shortage}
                         </span>
                     ) : (
-                        <span className="text-green-600 bg-green-50 px-2 py-1 rounded-md text-[10px] font-bold border border-green-100">
-                            OK
+                        <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg text-[10px] font-bold border border-emerald-100 inline-flex items-center gap-1">
+                            <FiCheckCircle className="inline" /> OK
                         </span>
                     )}
                 </td>
@@ -288,43 +345,50 @@ const SchoolResources = () => {
     };
 
     const ResourceAuditRow = ({ label, funcName, nonFuncName }) => (
-        <tr className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
-            <td className="py-3 px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">{label}</td>
-            <td className="py-2 px-2">
-                <input
-                    type="number"
-                    name={funcName}
-                    value={formData[funcName] || 0}
-                    onChange={handleChange}
-                    disabled={isLocked || viewOnly}
-                    className="w-full text-center font-bold text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-lg py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-transparent disabled:border-transparent"
-                    placeholder="0"
-                />
+        <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
+            <td className="py-4 px-4 text-xs font-bold text-slate-600 uppercase tracking-wide group-hover:text-blue-600 transition-colors">{label}</td>
+            <td className="py-3 px-2">
+                <div className="relative">
+                    <input
+                        type="number"
+                        name={funcName}
+                        value={formData[funcName] || 0}
+                        onChange={handleChange}
+                        disabled={isLocked || viewOnly}
+                        onWheel={(e) => e.target.blur()}
+                        className="w-full text-center font-bold text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                        placeholder="0"
+                    />
+                </div>
             </td>
-            <td className="py-2 px-2">
-                <input
-                    type="number"
-                    name={nonFuncName}
-                    value={formData[nonFuncName] || 0}
-                    onChange={handleChange}
-                    disabled={isLocked || viewOnly}
-                    className="w-full text-center font-bold text-rose-500 bg-rose-50/50 border border-rose-100 rounded-lg py-2 text-sm focus:ring-2 focus:ring-rose-500 outline-none disabled:bg-transparent disabled:border-transparent"
-                    placeholder="0"
-                />
+            <td className="py-3 px-2">
+                <div className="relative">
+                    <input
+                        type="number"
+                        name={nonFuncName}
+                        value={formData[nonFuncName] || 0}
+                        onChange={handleChange}
+                        disabled={isLocked || viewOnly}
+                        onWheel={(e) => e.target.blur()}
+                        className="w-full text-center font-bold text-rose-500 bg-rose-50/50 border border-rose-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                        placeholder="0"
+                    />
+                </div>
             </td>
         </tr>
     );
 
     const LabRow = ({ label, name }) => (
-        <div className="flex justify-between items-center p-3 border-b border-gray-50 last:border-0 bg-slate-50/50 rounded-lg">
-            <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">{label}</label>
+        <div className="flex justify-between items-center p-4 border-b border-slate-50 last:border-0 bg-slate-50/50 rounded-2xl mb-2 hover:bg-white hover:shadow-sm hover:border-slate-100 transition-all">
+            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{label}</label>
             <input
                 type="number"
                 name={name}
                 value={formData[name] || 0}
                 onChange={handleChange}
                 disabled={isLocked || viewOnly}
-                className="w-20 text-center font-bold text-blue-900 bg-white border border-gray-200 rounded-lg py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent"
+                onWheel={(e) => e.target.blur()}
+                className="w-20 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent shadow-sm"
             />
         </div>
     );
@@ -337,37 +401,51 @@ const SchoolResources = () => {
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 font-sans pb-40">
-            <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+            {/* Header */}
+            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white text-2xl">←</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiArrowLeft size={24} />
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
-                        <p className="text-blue-100 text-[10px] uppercase font-bold tracking-widest opacity-80">{viewOnly ? "Monitor View (Read-Only)" : "Neon Inventory System"}</p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
+                        </div>
+                        <p className="text-blue-100 text-xs font-medium mt-1">
+                            {viewOnly ? "Monitor View (Read-Only)" : "NEON Inventory System"}
+                        </p>
                     </div>
                 </div>
             </div>
 
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
 
-
-
-
                 {/* EQUIPMENT & INVENTORY */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">📦 Equipment & Inventory</h2>
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                            <FiPackage size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-slate-800 font-bold text-lg">Equipment & Inventory</h2>
+                            <p className="text-xs text-slate-400 font-medium">Assets status audit</p>
+                        </div>
+                    </div>
 
                     {/* Functional / Non-Functional Table */}
-                    <div className="overflow-hidden rounded-xl border border-gray-100 mb-6">
+                    <div className="overflow-hidden rounded-2xl border border-slate-100 mb-6 shadow-sm">
                         <table className="w-full">
-                            <thead className="bg-gray-50 border-b border-gray-100">
+                            <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
-                                    <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider w-1/2">Item</th>
-                                    <th className="py-3 px-2 text-center text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Functional</th>
-                                    <th className="py-3 px-2 text-center text-[10px] font-bold text-rose-500 uppercase tracking-wider">Non-Functional</th>
+                                    <th className="py-4 px-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-1/3">Item</th>
+                                    <th className="py-4 px-2 text-center text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Functional</th>
+                                    <th className="py-4 px-2 text-center text-[10px] font-bold text-rose-500 uppercase tracking-wider">Non-Functional</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-slate-50 bg-white">
                                 <ResourceAuditRow label="E-Cart" funcName="res_ecart_func" nonFuncName="res_ecart_nonfunc" />
                                 <ResourceAuditRow label="Laptop" funcName="res_laptop_func" nonFuncName="res_laptop_nonfunc" />
                                 <ResourceAuditRow label="TV / Smart TV" funcName="res_tv_func" nonFuncName="res_tv_nonfunc" />
@@ -381,32 +459,46 @@ const SchoolResources = () => {
                     </div>
 
                     {/* Labs Section */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 pt-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Specialized Rooms</p>
                         <LabRow label="Science Laboratory" name="res_sci_labs" />
                         <LabRow label="Computer Laboratory" name="res_com_labs" />
                         <LabRow label="TVL/TLE Workshop Lab" name="res_tvl_workshops" />
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🏞️ Site & Utilities</h2>
-                    <div className="grid gap-3">
+                {/* SITE & UTILITIES */}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+                            <FiMapPin size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-slate-800 font-bold text-lg">Site & Utilities</h2>
+                            <p className="text-xs text-slate-400 font-medium">Property and basics</p>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-4">
                         <SelectField
                             label="Ownership Type"
                             name="res_ownership_type"
                             options={["DOS", "DOD", "For Verification", "PP", "SP", "Tax Dec", "TCT/OCT", "Usucfruct agreement", "With Adverse Claims"]}
                         />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <SelectField
+                                label="Electricity Source"
+                                name="res_electricity_source"
+                                options={["For Verification", "GRID AND OFF-GRID SUPPLY", "GRID SUPPLY", "OFF-GRID SUPPLY", "NO ELECTRICITY"]}
+                            />
+                            <SelectField
+                                label="Water Source"
+                                name="res_water_source"
+                                options={["For Verification", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
+                            />
+                        </div>
                         <SelectField
-                            label="Electricity Source"
-                            name="res_electricity_source"
-                            options={["For Verification", "GRID AND OFF-GRID SUPPLY", "GRID SUPPLY", "OFF-GRID SUPPLY", "NO ELECTRICITY"]}
-                        />
-                        <SelectField
-                            label="Water Source"
-                            name="res_water_source"
-                            options={["For Verification", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
-                        />
-                        <SelectField
+                            label="Is there Buildable Space?"
                             name="res_buildable_space"
                             options={["Yes", "No"]}
                         />
@@ -424,21 +516,29 @@ const SchoolResources = () => {
                 </div>
 
                 {/* SEAT ANALYSIS */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🪑 Furniture & Seat Analysis</h2>
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                            <FiLayout size={20} />
+                        </div>
+                        <div>
+                            <h2 className="text-slate-800 font-bold text-lg">Furniture Analysis</h2>
+                            <p className="text-xs text-slate-400 font-medium">Seat availability vs enrollment</p>
+                        </div>
+                    </div>
 
                     {/* Seat Shortage Table */}
-                    <div className="overflow-hidden rounded-xl border border-gray-100">
+                    <div className="overflow-hidden rounded-2xl border border-slate-100 shadow-sm">
                         <table className="w-full">
-                            <thead className="bg-gray-50 border-b border-gray-100">
+                            <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
-                                    <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grade</th>
-                                    <th className="py-3 px-4 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">Enrollment</th>
-                                    <th className="py-3 px-4 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">Seats</th>
-                                    <th className="py-3 px-4 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shortage</th>
+                                    <th className="py-4 px-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Grade</th>
+                                    <th className="py-4 px-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Enrollment</th>
+                                    <th className="py-4 px-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Seats</th>
+                                    <th className="py-4 px-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">Shortage</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-slate-50 bg-white">
                                 {showElem() && (
                                     <>
                                         <SeatRow label="Kinder" enrollment={enrollmentData.gradeKinder || 0} seatKey="seats_kinder" />
@@ -469,31 +569,40 @@ const SchoolResources = () => {
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-gray-800 font-bold flex items-center gap-2">🚰 Comfort Rooms</h2>
-                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-50">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
+                                <FiDroplet size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-slate-800 font-bold text-lg">Comfort Rooms</h2>
+                                <p className="text-xs text-slate-400 font-medium">Sanitation facilities</p>
+                            </div>
+                        </div>
+
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
                             <button
                                 onClick={() => !viewOnly && !isLocked && setCrType('Segmented')}
-                                className={`px-3 py-1 text-[10px] font-bold rounded-md transition ${crType === 'Segmented' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}
+                                className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${crType === 'Segmented' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                             >
                                 Male/Female
                             </button>
                             <button
                                 onClick={() => !viewOnly && !isLocked && setCrType('Shared')}
-                                className={`px-3 py-1 text-[10px] font-bold rounded-md transition ${crType === 'Shared' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}
+                                className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${crType === 'Shared' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                             >
                                 Common/Shared
                             </button>
                         </div>
                     </div>
 
-                    <div className="grid gap-3">
+                    <div className="grid gap-4">
                         {crType === 'Segmented' ? (
-                            <>
+                            <div className="grid grid-cols-2 gap-4">
                                 <InputField label="Male Toilets" name="res_toilets_male" />
                                 <InputField label="Female Toilets" name="res_toilets_female" />
-                            </>
+                            </div>
                         ) : (
                             <InputField label="Common/Shared Toilets" name="res_toilets_common" />
                         )}
@@ -502,46 +611,59 @@ const SchoolResources = () => {
                 </div>
             </div>
 
-            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
-                {viewOnly ? (
-                    <button
-                        onClick={() => navigate('/jurisdiction-schools')}
-                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
-                    >
-                        Back to Schools List
-                    </button>
-                ) : isLocked ? (
-                    <button onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg transition">✏️ Unlock to Edit</button>
-                ) : (
-                    <>
-                        {originalData && <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400 font-bold py-4 rounded-xl">Cancel</button>}
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg">
-                            {isSaving ? "Updating..." : "Save to Neon"}
+            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-4xl mx-auto flex gap-3">
+                    {viewOnly ? (
+                        <button
+                            onClick={() => navigate('/jurisdiction-schools')}
+                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-transform"
+                        >
+                            Back to Schools List
                         </button>
-                    </>
-                )}
+                    ) : isLocked ? (
+                        <button
+                            onClick={() => setShowEditModal(true)}
+                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        >
+                            <span>Enable Editing</span>
+                        </button>
+                    ) : (
+                        <>
+                            {originalData && <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>}
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all">
+                                {isSaving ? "Saving..." : "Save Changes"}
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Modals for Edit/Save */}
             {showEditModal && (
-                <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
-                        <h3 className="font-bold text-lg text-center dark:text-slate-200">Unlock for Editing?</h3>
-                        <div className="mt-6 flex gap-2">
-                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl dark:text-slate-300">Cancel</button>
-                            <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                        <h3 className="font-bold text-xl text-slate-800 mb-2">Enable Editing?</h3>
+                        <p className="text-slate-500 text-sm mb-6">This allows you to modify the school resources data.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Confirm</button>
                         </div>
                     </div>
                 </div>
             )}
 
             {showSaveModal && (
-                <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
-                        <h3 className="font-bold text-lg text-center dark:text-slate-200">Confirm Update?</h3>
-                        <div className="mt-6 flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl dark:text-slate-300">Cancel</button>
-                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Submit</button>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto">
+                            <FiCheckCircle size={24} />
+                        </div>
+                        <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Save Changes?</h3>
+                        <p className="text-slate-500 text-center text-sm mb-6">You are about to update the school resources record.</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
                         </div>
                     </div>
                 </div>
