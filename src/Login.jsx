@@ -459,75 +459,43 @@ const Login = () => {
                     </div>
                 )}
 
-                {/* --- INSTALLATION GATE MODAL --- */}
+                {/* --- TOP INSTALL BANNER (Replaces Modal) --- */}
                 {showInstallModal && !isInstalled && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-500">
-                        <div className="bg-white rounded-[3rem] p-0 w-full max-w-md shadow-2xl overflow-hidden relative">
-
-                            {/* Header */}
-                            <div className="bg-[#004A99] p-8 text-center relative overflow-hidden">
-                                <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
-                                <div className="relative z-10">
-                                    <div className="w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl mx-auto mb-4 flex items-center justify-center border border-white/20 shadow-lg">
-                                        <img src={logo} alt="Install" className="w-14 h-14 object-contain drop-shadow-md" />
-                                    </div>
-                                    <h2 className="text-2xl font-black text-white tracking-tight">Install InsightEd</h2>
-                                    <p className="text-blue-200 text-xs font-medium uppercase tracking-widest mt-1">Official Mobile App</p>
-                                </div>
+                    <div className="fixed top-0 left-0 right-0 z-50 bg-[#004A99] text-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-top duration-500 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white/10 p-1.5 rounded-lg backdrop-blur-sm">
+                                <img src={logo} alt="App Check" className="w-6 h-6 object-contain" />
                             </div>
-
-                            {/* Body */}
-                            <div className="p-8 pb-10">
-                                <p className="text-slate-600 text-center mb-8 leading-relaxed font-medium">
-                                    For the best offline experience, data safety, and performance, please install this application to your device.
-                                </p>
-
-                                {isIOS ? (
-                                    /* iOS Instructions */
-                                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-center mb-6">
-                                        <p className="text-sm font-bold text-slate-700 mb-2">How to Install on iOS:</p>
-                                        <p className="text-xs text-slate-500">
-                                            1. Tap the <span className="font-bold text-blue-600">Share</span> icon (box with arrow) below.<br />
-                                            2. Scroll down and select <br /> <span className="font-bold text-slate-800">"Add to Home Screen"</span>.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    /* Android/Desktop */
-                                    <>
-                                        {deferredPrompt ? (
-                                            /* Automatic Prompt */
-                                            <button
-                                                onClick={handleInstallClick}
-                                                className="w-full bg-gradient-to-r from-blue-600 to-[#004A99] text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-500/20 hover:scale-[1.02] transform transition-all active:scale-[0.98] flex items-center justify-center gap-3 mb-6"
-                                            >
-                                                <span className="text-xl">📲</span>
-                                                <span>Install App Now</span>
-                                            </button>
-                                        ) : (
-                                            /* Manual Instructions (Fallback) */
-                                            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 text-center mb-6">
-                                                <p className="text-sm font-bold text-amber-800 mb-2">Install from Browser Menu:</p>
-                                                <p className="text-xs text-amber-700/80 mb-2">The automatic prompt is unavailable.</p>
-                                                <div className="text-xs text-slate-600 text-left space-y-2 inline-block mx-auto">
-                                                    <p>1. Tap the <span className="font-bold">Browser Menu (⋮)</span> or <span className="font-bold">Share</span> icon.</p>
-                                                    <p>2. Select <span className="font-bold">"Install App"</span> or <span className="font-bold">"Add to Home Screen"</span>.</p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-
-                                {/* Bypass Link */}
-                                <div className="text-center">
-                                    <button
-                                        onClick={() => setShowInstallModal(false)}
-                                        className="text-[10px] uppercase font-bold text-slate-400 hover:text-slate-600 transition-colors"
-                                    >
-                                        Continue in Browser (Not Recommended)
-                                    </button>
-                                </div>
+                            <div>
+                                <p className="text-xs font-bold text-blue-100 uppercase tracking-wider">Official App</p>
+                                <p className="text-sm font-bold">Install InsightEd</p>
                             </div>
+                        </div>
 
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowInstallModal(false)}
+                                className="text-blue-200 hover:text-white text-xs font-bold px-2 py-2"
+                            >
+                                Dismiss
+                            </button>
+
+                            {isIOS ? (
+                                <button
+                                    onClick={() => alert("To install on iOS:\n1. Tap the Share button below\n2. Select 'Add to Home Screen'")}
+                                    className="bg-white text-[#004A99] px-4 py-1.5 rounded-full text-xs font-black hover:bg-blue-50 transition-colors shadow-lg shadow-black/10"
+                                >
+                                    Install
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleInstallClick}
+                                    className="bg-white text-[#004A99] px-4 py-1.5 rounded-full text-xs font-black hover:bg-blue-50 transition-colors shadow-lg shadow-black/10 flex items-center gap-1"
+                                >
+                                    <span>GET</span>
+                                    {deferredPrompt ? '' : <span className="opacity-50 text-[10px]">(Manual)</span>}
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
