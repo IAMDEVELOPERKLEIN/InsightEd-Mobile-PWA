@@ -1,7 +1,7 @@
 // src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiBook, FiAward, FiBriefcase, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import { FiArrowLeft, FiBook, FiAward, FiBriefcase, FiCheckCircle, FiAlertCircle, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
@@ -34,6 +34,7 @@ const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) =
                 <span className="font-bold text-slate-700 text-sm block group-hover:text-blue-700 transition-colors">{label}</span>
             </div>
             <div className="w-24 px-1">
+                <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
                 <input
                     type="number"
                     min="0"
@@ -48,6 +49,7 @@ const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) =
                 />
             </div>
             <div className="w-24 px-1">
+                <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
                 <input
                     type="number"
                     min="0"
@@ -79,6 +81,7 @@ const TeacherSpecialization = () => {
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
 
     const [schoolId, setSchoolId] = useState(null);
@@ -287,18 +290,23 @@ const TeacherSpecialization = () => {
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Teacher Specialization</h1>
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-white tracking-tight">Teacher Specialization</h1>
+                            </div>
+                            <p className="text-blue-100 text-xs font-medium mt-1">
+                                Q: How many teachers specialized in (Majored) a subject versus how many are actually teaching it?
+                            </p>
                         </div>
-                        <p className="text-blue-100 text-xs font-medium mt-1">
-                            {viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Teaching Load"}
-                        </p>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
@@ -398,6 +406,19 @@ const TeacherSpecialization = () => {
                     </div>
                 )
             }
+
+            {showInfoModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                            <FiInfo />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'How many teachers specialized in (Majored) a subject versus how many are actually teaching it?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
+                    </div>
+                </div>
+            )}
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Specialization saved successfully!" />

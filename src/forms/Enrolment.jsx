@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { addToOutbox, getOutbox } from '../db';
-import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
+import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 import SuccessModal from '../components/SuccessModal';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
@@ -48,6 +48,7 @@ const Enrolment = () => {
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
 
     // Core Data
     const [schoolId, setSchoolId] = useState(null);
@@ -285,14 +286,19 @@ const Enrolment = () => {
             {/* Standard Blue Header */}
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white tracking-tight">Enrolment</h1>
-                        <p className="text-blue-100 text-xs font-medium mt-1">Learner Statistics & Profile</p>
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Enrolment</h1>
+                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the total number of officially enrolled learners per grade level?</p>
+                        </div>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
@@ -318,6 +324,7 @@ const Enrolment = () => {
                             ].map((item) => (
                                 <div key={item.k} className="text-center group">
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
+                                    <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
                                         type="number" value={formData[item.k] === 0 ? '' : formData[item.k]}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
@@ -341,6 +348,7 @@ const Enrolment = () => {
                             ].map((item) => (
                                 <div key={item.k} className="text-center group">
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
+                                    <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
                                         type="number" value={formData[item.k] === 0 ? '' : formData[item.k]}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
@@ -381,8 +389,14 @@ const Enrolment = () => {
                                     ].map(row => (
                                         <tr key={row.l} className="group hover:bg-slate-50/50">
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">{row.l}</td>
-                                            <td className="p-1"><input type="number" value={formData[row.k11] === 0 ? '' : formData[row.k11]} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" /></td>
-                                            <td className="p-1"><input type="number" value={formData[row.k12] === 0 ? '' : formData[row.k12]} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" /></td>
+                                            <td className="p-1 align-top">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
+                                                <input type="number" value={formData[row.k11] === 0 ? '' : formData[row.k11]} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                            </td>
+                                            <td className="p-1 align-top">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
+                                                <input type="number" value={formData[row.k12] === 0 ? '' : formData[row.k12]} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -408,9 +422,18 @@ const Enrolment = () => {
                                     {[1, 2, 3, 4, 5, 6].map(g => (
                                         <tr key={g} className="group hover:bg-slate-50/50">
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">Grade {g}</td>
-                                            <td className="p-1"><input type="number" value={formData[`aral_math_g${g}`] === 0 ? '' : formData[`aral_math_g${g}`]} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" /></td>
-                                            <td className="p-1"><input type="number" value={formData[`aral_read_g${g}`] === 0 ? '' : formData[`aral_read_g${g}`]} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" /></td>
-                                            <td className="p-1"><input type="number" value={formData[`aral_sci_g${g}`] === 0 ? '' : formData[`aral_sci_g${g}`]} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" /></td>
+                                            <td className="p-1 align-top">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
+                                                <input type="number" value={formData[`aral_math_g${g}`] === 0 ? '' : formData[`aral_math_g${g}`]} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" />
+                                            </td>
+                                            <td className="p-1 align-top">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
+                                                <input type="number" value={formData[`aral_read_g${g}`] === 0 ? '' : formData[`aral_read_g${g}`]} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" />
+                                            </td>
+                                            <td className="p-1 align-top">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
+                                                <input type="number" value={formData[`aral_sci_g${g}`] === 0 ? '' : formData[`aral_sci_g${g}`]} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" />
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -449,6 +472,17 @@ const Enrolment = () => {
                             <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-colors">Cancel</button>
                             <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Confirm</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showInfoModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-in fade-in zoom-in duration-200">
+                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4"><FiInfo size={24} /></div>
+                        <h3 className="text-lg font-bold text-center text-slate-800 mb-2">Form Guide</h3>
+                        <p className="text-center text-slate-500 text-sm mb-6">This form is answering the question: <b>'What is the total number of officially enrolled learners per grade level?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>
             )}

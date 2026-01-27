@@ -1,7 +1,7 @@
 // src/forms/TeachingPersonnel.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiUser, FiBriefcase, FiAward, FiBookOpen, FiUserCheck, FiUsers } from 'react-icons/fi';
+import { FiArrowLeft, FiUser, FiBriefcase, FiAward, FiBookOpen, FiUserCheck, FiUsers, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
@@ -15,6 +15,7 @@ import SuccessModal from '../components/SuccessModal';
 const TeacherInput = ({ label, name, value, onChange, disabled }) => (
     <div className="flex flex-col">
         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 text-center h-6 flex items-end justify-center">{label}</label>
+        <p className="text-[9px] text-slate-400 font-medium mb-1.5 text-center block">Total Teachers</p>
         <div className="relative group">
             <input
                 type="number"
@@ -47,6 +48,7 @@ const TeachingPersonnel = () => {
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
 
     // Data
@@ -335,23 +337,28 @@ const TeachingPersonnel = () => {
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Teaching Personnel</h1>
-                            {offering && (
-                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                                    {offering}
-                                </span>
-                            )}
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-white tracking-tight">Teaching Personnel</h1>
+                                {offering && (
+                                    <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                        {offering}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-blue-100 text-xs font-medium mt-1">
+                                Q: What is the total number of teachers assigned to each grade level and their experience profile?
+                            </p>
                         </div>
-                        <p className="text-blue-100 text-xs font-medium mt-1">
-                            {viewOnly ? "Monitor View (Read-Only)" : "Manage faculty distribution"}
-                        </p>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
@@ -576,6 +583,19 @@ const TeachingPersonnel = () => {
                             <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
                             <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showInfoModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                            <FiInfo />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the total number of teachers assigned to each grade level and their experience profile?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>
             )}

@@ -37,7 +37,7 @@ const SchoolInformation = () => {
     const [formData, setFormData] = useState({
         lastName: '', firstName: '', middleName: '',
         itemNumber: '', positionTitle: '', dateHired: '',
-        sex: '', region: '', division: ''
+        region: '', division: ''
     });
 
     const [originalData, setOriginalData] = useState(null);
@@ -64,36 +64,40 @@ const SchoolInformation = () => {
     };
 
     // --- 1. CSV LOOKUP LOGIC ---
-    // This function matches PSI_CD from Oct2025-GMIS-Filled RAW.csv
+    // --- 1. CSV LOOKUP LOGIC ---
+    // This function matches PSI_CD from Oct2025-GMIS-Filled_RAW.csv
     const handlePsiLookup = (psiCd) => {
         const cleanPsi = String(psiCd).trim();
+        console.log("Lookup triggered for:", cleanPsi); // DEBUG
         if (cleanPsi.length < 5) return;
 
         setIsSearching(true);
-        Papa.parse("/Oct2025-GMIS-Filled_Minified.csv", {
+        console.log("Starting CSV parse..."); // DEBUG
+        Papa.parse("/Oct2025-GMIS-Filled_RAW.csv", {
             download: true,
             header: true,
             skipEmptyLines: true,
-            complete: (results) => {
-                // Find match based on PSI_CD column
-                const match = results.data.find(row =>
-                    String(row.PSI_CD).trim() === cleanPsi
-                );
-
-                if (match) {
+            step: (row, parser) => {
+                // Streaming: Checked row by row
+                // console.log("Checking row:", row.data.PSI_CD); // Too verbose, uncomment if desperate
+                if (row.data.PSI_CD && String(row.data.PSI_CD).trim() === cleanPsi) {
+                    console.log("Match found!", row.data); // DEBUG
+                    const match = row.data;
                     setFormData(prev => ({
                         ...prev,
                         lastName: match.LAST_NAME || '',
                         firstName: match.FIRST_NAME || '',
                         middleName: match.MID_NAME || '',
                         positionTitle: match.POS_DSC || '',
-                        sex: match.SEX || '',
                         region: match.UACS_REG_DSC || '',
                         division: match.UACS_DIV_DSC || ''
                     }));
-                } else {
-                    console.warn("No match found for PSI_CD:", cleanPsi);
+                    parser.abort(); // Stop parsing once found
+                    setIsSearching(false);
                 }
+            },
+            complete: () => {
+                console.log("CSV Parse Complete (or Aborted)"); // DEBUG
                 setIsSearching(false);
             },
             error: (err) => {
@@ -144,7 +148,6 @@ const SchoolInformation = () => {
                                     itemNumber: draftData.itemNumber || '',
                                     positionTitle: draftData.positionTitle || '',
                                     dateHired: draftData.dateHired || '',
-                                    sex: draftData.sex || '',
                                     region: draftData.region || '',
                                     division: draftData.division || ''
                                 };
@@ -179,7 +182,6 @@ const SchoolInformation = () => {
                                     itemNumber: data.head_item_number || data.item_number || '',
                                     positionTitle: data.head_position_title || data.position_title || '',
                                     dateHired: (data.date_hired || data.head_date_hired) ? (data.date_hired || data.head_date_hired).split('T')[0] : '',
-                                    sex: data.head_sex || '',
                                     region: data.head_region || '',
                                     division: data.head_division || ''
                                 };
@@ -358,6 +360,7 @@ const SchoolInformation = () => {
 
                     <div className="relative">
                         <label className={labelClass}>PSI_CD / Item No.</label>
+                        <p className="text-[10px] text-slate-400 font-medium mb-1.5">Enter your unique Plantilla Item Number to auto-fill details.</p>
                         <input
                             type="text"
                             name="itemNumber"
@@ -397,45 +400,23 @@ const SchoolInformation = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="space-y-1">
                             <label className={labelClass}>First Name</label>
+                            <p className="text-[10px] text-slate-400 font-medium mb-1.5">Given name as it appears on your appointment.</p>
                             <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
                         <div className="space-y-1">
                             <label className={labelClass}>Middle Name</label>
+                            <p className="text-[10px] text-slate-400 font-medium mb-1.5">Mother's maiden name (Full, not initial).</p>
                             <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
                         <div className="space-y-1">
                             <label className={labelClass}>Last Name</label>
+                            <p className="text-[10px] text-slate-400 font-medium mb-1.5">Family name / Surname.</p>
                             <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
-                        </div>
-                        <div className="md:col-span-3 space-y-1">
-                            <label className={labelClass}>Sex</label>
-                            <input type="text" name="sex" value={formData.sex} readOnly className={`${inputClass} !bg-slate-100 !text-slate-500`} disabled={true} />
                         </div>
                     </div>
                 </div>
 
-                {/* --- STATION DETAILS --- */}
-                <div className={sectionClass}>
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                        <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl">
-                            <FiMapPin />
-                        </div>
-                        <div>
-                            <h2 className="text-base font-bold text-slate-800">Station Details</h2>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Location Assignment</p>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <label className={labelClass}>Region</label>
-                            <input type="text" value={formData.region} readOnly className={`${inputClass} !bg-slate-100 !text-slate-500`} disabled={true} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className={labelClass}>Division</label>
-                            <input type="text" value={formData.division} readOnly className={`${inputClass} !bg-slate-100 !text-slate-500`} disabled={true} />
-                        </div>
-                    </div>
-                </div>
+
 
                 {/* --- APPOINTMENT DATA --- */}
                 <div className={sectionClass}>
@@ -451,6 +432,7 @@ const SchoolInformation = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-1">
                             <label className={labelClass}>Position Title</label>
+                            <p className="text-[10px] text-slate-400 font-medium mb-1.5">Select your official designation per appointment.</p>
                             <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy}>
                                 <option value="">Select Position...</option>
                                 {positionOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
@@ -458,6 +440,7 @@ const SchoolInformation = () => {
                         </div>
                         <div className="space-y-1">
                             <label className={labelClass}>Date of Appointment</label>
+                            <p className="text-[10px] text-slate-400 font-medium mb-1.5">Date of latest appointment issuance.</p>
                             <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
                         </div>
                     </div>

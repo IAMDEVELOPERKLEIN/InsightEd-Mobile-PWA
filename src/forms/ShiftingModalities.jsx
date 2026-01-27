@@ -7,7 +7,7 @@ import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
-import { FiArrowLeft, FiCalendar, FiClock, FiWifi, FiCheckCircle, FiSave, FiAlertCircle, FiBookOpen } from 'react-icons/fi';
+import { FiArrowLeft, FiCalendar, FiClock, FiWifi, FiCheckCircle, FiSave, FiAlertCircle, FiBookOpen, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 
 // --- SUB-COMPONENT (Moved Outside) ---
@@ -18,6 +18,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
         </div>
         <div>
             <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Shifting Strategy</label>
+            <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Select Dominant Mode</p>
             <div className="relative">
                 <select
                     value={shifts[`shift_${lvl}`] || ''}
@@ -37,6 +38,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
         </div>
         <div>
             <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Learning Delivery</label>
+            <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Select Dominant Mode</p>
             <div className="relative">
                 <select
                     value={modes[`mode_${lvl}`] || ''}
@@ -75,6 +77,7 @@ const ShiftingModalities = () => {
     const [hasSavedData, setHasSavedData] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -361,21 +364,26 @@ const ShiftingModalities = () => {
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Shifting & Modality</h1>
-                            {offering && (
-                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                                    {offering}
-                                </span>
-                            )}
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-white tracking-tight">Shifting & Modality</h1>
+                                {offering && (
+                                    <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                        {offering}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the shifting schedule and learning delivery mode adopted by each grade level?</p>
                         </div>
-                        <p className="text-blue-100 text-xs font-medium mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Manage schedules and delivery modes"}</p>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
@@ -533,6 +541,19 @@ const ShiftingModalities = () => {
                     </div>
                 )
             }
+
+            {showInfoModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                            <FiInfo />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the shifting schedule and learning delivery mode adopted by each grade level?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
+                    </div>
+                </div>
+            )}
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message={hasSavedData ? 'Settings Updated!' : 'Settings Saved!'} />
