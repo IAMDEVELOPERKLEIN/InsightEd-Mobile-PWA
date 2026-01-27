@@ -492,14 +492,29 @@ const Login = () => {
                                         </p>
                                     </div>
                                 ) : (
-                                    /* Android/Desktop Button */
-                                    <button
-                                        onClick={handleInstallClick}
-                                        className="w-full bg-gradient-to-r from-blue-600 to-[#004A99] text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-500/20 hover:scale-[1.02] transform transition-all active:scale-[0.98] flex items-center justify-center gap-3 mb-6"
-                                    >
-                                        <span className="text-xl">📲</span>
-                                        <span>Install App Now</span>
-                                    </button>
+                                    /* Android/Desktop */
+                                    <>
+                                        {deferredPrompt ? (
+                                            /* Automatic Prompt */
+                                            <button
+                                                onClick={handleInstallClick}
+                                                className="w-full bg-gradient-to-r from-blue-600 to-[#004A99] text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-500/20 hover:scale-[1.02] transform transition-all active:scale-[0.98] flex items-center justify-center gap-3 mb-6"
+                                            >
+                                                <span className="text-xl">📲</span>
+                                                <span>Install App Now</span>
+                                            </button>
+                                        ) : (
+                                            /* Manual Instructions (Fallback) */
+                                            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 text-center mb-6">
+                                                <p className="text-sm font-bold text-amber-800 mb-2">Install from Browser Menu:</p>
+                                                <p className="text-xs text-amber-700/80 mb-2">The automatic prompt is unavailable.</p>
+                                                <div className="text-xs text-slate-600 text-left space-y-2 inline-block mx-auto">
+                                                    <p>1. Tap the <span className="font-bold">Browser Menu (⋮)</span> or <span className="font-bold">Share</span> icon.</p>
+                                                    <p>2. Select <span className="font-bold">"Install App"</span> or <span className="font-bold">"Add to Home Screen"</span>.</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
 
                                 {/* Bypass Link */}
