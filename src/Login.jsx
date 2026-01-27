@@ -397,6 +397,21 @@ const Login = () => {
 
                     </div>
 
+                    {/* INSTALLATION TRIGGER BUTTON */}
+                    {!isInstalled && (
+                        <div className="mt-4 flex justify-center">
+                            <button
+                                onClick={() => setShowInstallModal(true)}
+                                className="flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-sm font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                <span>Install App</span>
+                            </button>
+                        </div>
+                    )}
+
                     {/* FOOTER NOTE */}
                     <div className="text-center mt-6">
                         <p className="text-slate-200/80 text-xs font-medium">© 2026 InsightEd. Secure & Encrypted.</p>
@@ -459,43 +474,71 @@ const Login = () => {
                     </div>
                 )}
 
-                {/* --- TOP INSTALL BANNER (Replaces Modal) --- */}
+                {/* --- INSTALLATION TUTORIAL MODAL (New Approach) --- */}
                 {showInstallModal && !isInstalled && (
-                    <div className="fixed top-0 left-0 right-0 z-50 bg-[#004A99] text-white px-4 py-3 shadow-xl animate-in fade-in slide-in-from-top duration-500 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-white/10 p-1.5 rounded-lg backdrop-blur-sm">
-                                <img src={logo} alt="App Check" className="w-6 h-6 object-contain" />
-                            </div>
-                            <div>
-                                <p className="text-xs font-bold text-blue-100 uppercase tracking-wider">Official App</p>
-                                <p className="text-sm font-bold">Install InsightEd</p>
-                            </div>
-                        </div>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative">
 
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => setShowInstallModal(false)}
-                                className="text-blue-200 hover:text-white text-xs font-bold px-2 py-2"
-                            >
-                                Dismiss
-                            </button>
+                            {/* Modal Header */}
+                            <div className="bg-slate-50 p-6 border-b border-slate-100 flex items-center justify-between">
+                                <h3 className="font-bold text-slate-800 text-lg">How to Install</h3>
+                                <button
+                                    onClick={() => setShowInstallModal(false)}
+                                    className="p-2 bg-slate-200 rounded-full hover:bg-slate-300 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-600" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
 
-                            {isIOS ? (
-                                <button
-                                    onClick={() => alert("To install on iOS:\n1. Tap the Share button below\n2. Select 'Add to Home Screen'")}
-                                    className="bg-white text-[#004A99] px-4 py-1.5 rounded-full text-xs font-black hover:bg-blue-50 transition-colors shadow-lg shadow-black/10"
-                                >
-                                    Install
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={handleInstallClick}
-                                    className="bg-white text-[#004A99] px-4 py-1.5 rounded-full text-xs font-black hover:bg-blue-50 transition-colors shadow-lg shadow-black/10 flex items-center gap-1"
-                                >
-                                    <span>GET</span>
-                                    {deferredPrompt ? '' : <span className="opacity-50 text-[10px]">(Manual)</span>}
-                                </button>
-                            )}
+                            {/* Modal Body: Platform Specific Instructions */}
+                            <div className="p-6">
+                                {isIOS ? (
+                                    <div className="space-y-4">
+                                        <div className="flex items-start gap-4 p-3 bg-blue-50 rounded-xl">
+                                            <div className="bg-white p-2 rounded-lg shadow-sm text-blue-600 font-bold shrink-0">1</div>
+                                            <p className="text-sm text-slate-600">Tap the <span className="font-bold text-blue-700">Share Icon</span> at the bottom of your screen.</p>
+                                        </div>
+                                        <div className="flex items-start gap-4 p-3 bg-blue-50 rounded-xl">
+                                            <div className="bg-white p-2 rounded-lg shadow-sm text-blue-600 font-bold shrink-0">2</div>
+                                            <p className="text-sm text-slate-600">Scroll down and tap <span className="font-bold text-slate-800">"Add to Home Screen"</span>.</p>
+                                        </div>
+                                        <div className="flex items-start gap-4 p-3 bg-blue-50 rounded-xl">
+                                            <div className="bg-white p-2 rounded-lg shadow-sm text-blue-600 font-bold shrink-0">3</div>
+                                            <p className="text-sm text-slate-600">Tap <span className="font-bold text-slate-800">Add</span> in the top right corner.</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {/* Attempt Auto-Install Button First */}
+                                        {deferredPrompt && (
+                                            <button
+                                                onClick={handleInstallClick}
+                                                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 mb-4 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <span>Tap to Install App</span>
+                                            </button>
+                                        )}
+
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center mb-2">Manual Installation</p>
+
+                                        <div className="flex items-start gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                            <div className="bg-white p-2 rounded-lg shadow-sm text-slate-700 font-bold shrink-0">1</div>
+                                            <p className="text-sm text-slate-600">Tap the <span className="font-bold text-slate-900">Three Dots (⋮)</span> icon in the top right browser menu.</p>
+                                        </div>
+                                        <div className="flex items-start gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                            <div className="bg-white p-2 rounded-lg shadow-sm text-slate-700 font-bold shrink-0">2</div>
+                                            <p className="text-sm text-slate-600">Select <span className="font-bold text-slate-900">"Install App"</span> or <span className="font-bold text-slate-900">"Add to Home Screen"</span>.</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="bg-slate-50 p-4 text-center">
+                                <p className="text-xs text-slate-400">Installing ensures InsightEd works offline.</p>
+                            </div>
                         </div>
                     </div>
                 )}
