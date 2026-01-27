@@ -13,6 +13,12 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
 
+      // Enable PWA in development mode
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
+
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'schools.csv', 'InsightEd1.png'], // Added InsightEd1.png
 
       manifest: {
