@@ -64,6 +64,7 @@ const initOtpTable = async () => {
     const client = await pool.connect();
     isDbConnected = true;
     console.log('✅ Connected to Neon Database successfully!');
+    await initOtpTable();
 
     try {
       // --- INIT NOTIFICATIONS TABLE ---
@@ -140,14 +141,13 @@ const initOtpTable = async () => {
             ADD COLUMN IF NOT EXISTS office TEXT,
             ADD COLUMN IF NOT EXISTS position TEXT;
         `);
-        console.log('✅ Checked/Extended users table schema');
-      } catch (migErr) {
-        console.error('❌ Failed to migrate users table:', migErr.message);
-      }
-
-      // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
-      try {
-        await client.query(`
+      console.log('✅ Checked/Extended users table schema');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate users table:', migErr.message);
+    }
+    // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
+    try {
+      await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS sha_category TEXT,
