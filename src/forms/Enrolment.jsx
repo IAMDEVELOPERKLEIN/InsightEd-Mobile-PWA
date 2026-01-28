@@ -233,6 +233,7 @@ const Enrolment = () => {
     };
 
     const confirmSave = async () => {
+        console.log("Saving Enrolment...");
         setShowSaveModal(false);
         setIsSaving(true);
 
@@ -256,26 +257,44 @@ const Enrolment = () => {
         payload.shsTotal = formData.shs_enrollment;
         payload.grandTotal = formData.total_enrollment;
 
+        console.log("Payload:", payload);
+
         try {
-            if (!navigator.onLine) throw new Error("Offline");
+            if (!navigator.onLine) {
+                console.log("Offline detected");
+                throw new Error("Offline");
+            }
             const res = await fetch('/api/save-enrolment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+            console.log("Fetch response:", res.status, res.statusText);
             if (res.ok) {
+                console.log("Save success!");
                 setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
                 localStorage.setItem(`CACHE_ENROLMENT_${auth.currentUser.uid}`, JSON.stringify(formData));
-            } else { throw new Error("Save failed"); }
+            } else {
+                const txt = await res.text();
+                console.error("Save failed response:", txt);
+                throw new Error("Save failed");
+            }
         } catch (e) {
-            await addToOutbox({
-                type: 'ENROLMENT', label: 'Enrolment Data', url: '/api/save-enrolment', payload
-            });
-            setShowOfflineModal(true);
-            setIsLocked(true);
-            localStorage.setItem(`CACHE_ENROLMENT_${auth.currentUser.uid}`, JSON.stringify(formData));
+            console.error("Save error caught:", e);
+            try {
+                await addToOutbox({
+                    type: 'ENROLMENT', label: 'Enrolment Data', url: '/api/save-enrolment', payload
+                });
+                console.log("Added to outbox");
+                setShowOfflineModal(true);
+                setIsLocked(true);
+                localStorage.setItem(`CACHE_ENROLMENT_${auth.currentUser.uid}`, JSON.stringify(formData));
+            } catch (outboxErr) {
+                console.error("Outbox failed:", outboxErr);
+                alert("Critical Error: Could not save to outbox. " + outboxErr.message);
+            }
         } finally { setIsSaving(false); }
     };
 
@@ -326,7 +345,7 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                        type="number" value={formData[item.k] || ''}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
                                         placeholder="0"
@@ -350,7 +369,7 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                        type="number" value={formData[item.k] || ''}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
                                         placeholder="0"
@@ -391,11 +410,11 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">{row.l}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[row.k11] === 0 ? '' : formData[row.k11]} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={formData[row.k11] || ''} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[row.k12] === 0 ? '' : formData[row.k12]} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={formData[row.k12] || ''} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                         </tr>
                                     ))}
@@ -424,15 +443,15 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">Grade {g}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[`aral_math_g${g}`] === 0 ? '' : formData[`aral_math_g${g}`]} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={formData[`aral_math_g${g}`] || ''} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[`aral_read_g${g}`] === 0 ? '' : formData[`aral_read_g${g}`]} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={formData[`aral_read_g${g}`] || ''} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[`aral_sci_g${g}`] === 0 ? '' : formData[`aral_sci_g${g}`]} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={formData[`aral_sci_g${g}`] || ''} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                         </tr>
                                     ))}

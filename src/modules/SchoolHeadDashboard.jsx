@@ -198,14 +198,16 @@ const SchoolHeadDashboard = () => {
                                 <div className="inline-flex items-center gap-2 bg-blue-800/50 px-3 py-1 rounded-full border border-blue-400/20 backdrop-blur-sm mb-3">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
                                     <p className="text-blue-100 text-[10px] font-bold tracking-wider uppercase">
-                                        {userName}
+                                        {(headProfile?.head_first_name || headProfile?.first_name) ? 'School Head' : userName}
                                     </p>
                                 </div>
                                 <h1 className="text-3xl font-bold text-white tracking-tight">
-                                    {schoolProfile ? schoolProfile.school_id : '---'}
+                                    {(headProfile?.head_first_name || headProfile?.first_name) || (schoolProfile ? schoolProfile.school_id : '---')}
                                 </h1>
                                 <p className="text-blue-200 text-sm mt-1 opacity-90">
-                                    {schoolProfile ? schoolProfile.school_name : 'School Principal'}
+                                    {(headProfile?.head_first_name || headProfile?.first_name) && schoolProfile
+                                        ? `${schoolProfile.school_id} • ${schoolProfile.school_name}`
+                                        : (schoolProfile ? schoolProfile.school_name : 'School Principal')}
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
