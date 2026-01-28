@@ -986,6 +986,13 @@ const Register = () => {
                                 </h3>
 
                                 <div className="mb-6 space-y-3">
+                                    {/* If School Head, email is readonly. If Generic, it's editable above. */}
+                                    {/* We display email here again or just the OTP controls? The generic flow has email field above. The School Head flow has auto-email. */}
+                                    {/* Let's show the email input here ONLY if School Head (since it was hidden/auto in their block) OR if we want to confirm it. */}
+                                    {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email */}
+
+                                    {/* OTP CONTROLS */}
+                                    {/* 
                                     <div className="flex flex-col gap-3">
                                         <p className="text-xs text-slate-500">
                                             Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
@@ -1033,7 +1040,8 @@ const Register = () => {
                                                 Email Verified Successfully
                                             </div>
                                         )}
-                                    </div>
+                                    </div> 
+                                    */}
 
                                 </div>
 
