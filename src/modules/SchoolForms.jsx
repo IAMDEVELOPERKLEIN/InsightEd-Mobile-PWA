@@ -28,6 +28,7 @@ const SchoolForms = () => {
     const [isOfferingLocked, setIsOfferingLocked] = useState(false);
     const [showLimitModal, setShowLimitModal] = useState(false);
     const [showUnlockWarning, setShowUnlockWarning] = useState(false);
+    const [deadlineDate, setDeadlineDate] = useState(null);
 
     // --- 1. DATA CONTENT (Categorized) ---
     const formsData = [
@@ -145,6 +146,14 @@ const SchoolForms = () => {
                     } catch (e) { console.error("Cache parse error", e); }
                 }
 
+                // Fetch Deadline (Parallel with other fetches)
+                fetch('/api/settings/enrolment_deadline')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.value) setDeadlineDate(new Date(data.value));
+                    })
+                    .catch(err => console.error("Failed to fetch deadline:", err));
+
                 try {
                     // STEP 2: BACKGROUND FETCH
                     // Only show loading if we didn't load from cache
@@ -230,7 +239,28 @@ const SchoolForms = () => {
         const processedForms = formsData.map(f => {
             const status = getStatus(f.id);
             if (status === 'completed') completed++;
-            return { ...f, status };
+
+            // CHECK DEADLINE LOCK
+            let isLocked = false;
+            let lockReason = '';
+            if (f.id === 'enrolment' && deadlineDate) {
+                // If now is past deadline (end of day)
+                const now = new Date();
+                // Compare timestamps directly? Or just dates?
+                // Usually "deadline" means "until End of that Day" or "before that day".
+                // Let's assume deadline is inclusive (until 23:59:59 of that date).
+                // API saves basic YYYY-MM-DD usually. Let's assume strict check for now.
+                // If deadlineDate is 2026-01-31, effectively it expires on 2026-02-01 00:00.
+                const deadlineEffect = new Date(deadlineDate);
+                deadlineEffect.setHours(23, 59, 59, 999);
+
+                if (now > deadlineEffect) {
+                    isLocked = true;
+                    lockReason = 'Deadline Passed';
+                }
+            }
+
+            return { ...f, status, isLocked, lockReason };
         });
 
         // Group by Category
@@ -247,7 +277,7 @@ const SchoolForms = () => {
             progress: Math.round((completed / formsData.length) * 100),
             categorizedForms: grouped
         };
-    }, [schoolProfile, headProfile, filter]);
+    }, [schoolProfile, headProfile, filter, deadlineDate]); // Added deadlineDate dependency
 
     // --- 5. HANDLE OFFERING CHANGE ---
     const handleOfferingChange = (e) => {
@@ -317,43 +347,64 @@ const SchoolForms = () => {
 
     const FormCard = ({ item }) => {
         const isDone = item.status === 'completed';
+        const isLocked = item.isLocked;
         const Icon = item.icon;
 
         return (
             <div
-                onClick={() => navigate(item.route)}
-                className={`group relative p-4 mb-3 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center gap-4
-                    ${isDone
-                        ? 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-700 opacity-80 hover:opacity-100'
-                        : 'bg-white dark:bg-slate-800 border-orange-100 dark:border-orange-900/30 shadow-[0_4px_20px_rgba(249,115,22,0.08)] hover:-translate-y-1 hover:shadow-lg'
+                onClick={() => {
+                    if (isLocked) {
+                        alert("Memorandum: Submission for this form has closed.");
+                        return;
+                    }
+                    navigate(item.route);
+                }}
+                className={`group relative p-4 mb-3 rounded-2xl border transition-all duration-300 flex items-center gap-4
+                    ${isLocked
+                        ? 'bg-slate-100 dark:bg-slate-900 border-slate-200 opacity-60 cursor-not-allowed'
+                        : isDone
+                            ? 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-700 opacity-80 hover:opacity-100 cursor-pointer'
+                            : 'bg-white dark:bg-slate-800 border-orange-100 dark:border-orange-900/30 shadow-[0_4px_20px_rgba(249,115,22,0.08)] hover:-translate-y-1 hover:shadow-lg cursor-pointer'
                     }
                 `}
             >
                 {/* Status Indicator Strip */}
-                <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${isDone ? 'bg-green-400' : 'bg-orange-400'}`} />
+                {!isLocked && (
+                    <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${isDone ? 'bg-green-400' : 'bg-orange-400'}`} />
+                )}
 
                 {/* Icon Box */}
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 transition-colors
-                    ${isDone ? 'bg-green-100 text-green-600' : 'bg-orange-50 text-orange-500'}
+                    ${isLocked
+                        ? 'bg-slate-200 text-slate-400'
+                        : isDone ? 'bg-green-100 text-green-600' : 'bg-orange-50 text-orange-500'
+                    }
                 `}>
-                    {isDone ? <FiCheckCircle /> : <Icon />}
+                    {isLocked ? <FiAlertCircle /> : (isDone ? <FiCheckCircle /> : <Icon />)}
                 </div>
 
                 {/* Text Content */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                        <h3 className={`font-bold text-sm truncate ${isDone ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                        <h3 className={`font-bold text-sm truncate ${isDone || isLocked ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
                             {item.name}
                         </h3>
-                        {!isDone && <FiAlertCircle className="text-orange-400 text-xs animate-pulse" />}
+                        {!isDone && !isLocked && <FiAlertCircle className="text-orange-400 text-xs animate-pulse" />}
+                        {isLocked && (
+                            <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full border border-red-200">
+                                CLOSED
+                            </span>
+                        )}
                     </div>
                     <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 truncate">
-                        {item.description}
+                        {isLocked ? item.lockReason : item.description}
                     </p>
                 </div>
 
                 {/* Arrow Action */}
-                <FiChevronRight className={`text-slate-300 transition-transform group-hover:translate-x-1 ${isDone ? 'opacity-0' : 'opacity-100'}`} />
+                {!isLocked && (
+                    <FiChevronRight className={`text-slate-300 transition-transform group-hover:translate-x-1 ${isDone ? 'opacity-0' : 'opacity-100'}`} />
+                )}
             </div>
         );
     };

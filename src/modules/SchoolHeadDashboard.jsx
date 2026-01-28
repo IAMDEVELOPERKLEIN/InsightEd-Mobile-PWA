@@ -9,7 +9,7 @@ import "swiper/css/pagination";
 // Icons (Using the libraries you already have installed)
 import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell, TbTrophy, TbReportAnalytics } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
-import { FiUser, FiBox, FiLayers } from "react-icons/fi";
+import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle } from "react-icons/fi";
 
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -44,6 +44,11 @@ const SchoolHeadDashboard = () => {
     const [showOfferingModal, setShowOfferingModal] = useState(false);
     const [offering, setOffering] = useState('');
     const [isSavingOffering, setIsSavingOffering] = useState(false);
+
+    // --- DEADLINE STATE ---
+    const [deadlineDate, setDeadlineDate] = useState(null);
+    const [showBanner, setShowBanner] = useState(true);
+    const [showDeadlineAlert, setShowDeadlineAlert] = useState(false);
 
     // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
     const SEARCHABLE_ITEMS = [
@@ -138,6 +143,66 @@ const SchoolHeadDashboard = () => {
     const impersonatedUid = searchParams.get('uid');
 
     useEffect(() => {
+        // Fetch Deadline
+        fetch('/api/settings/enrolment_deadline')
+            .then(res => res.json())
+            .then(data => {
+                if (data.value) {
+                    const dDate = new Date(data.value);
+                    setDeadlineDate(dDate);
+
+                    // --- PUSH NOTIFICATION LOGIC ---
+                    const now = new Date();
+                    const diffTime = dDate - now;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (diffDays <= 3) {
+                        // TRIGGER MODAL if 0-3 days (inclusive)
+                        if (diffDays >= 0) {
+                            setShowDeadlineAlert(true);
+                        }
+
+                        // Request permission and show notification
+                        if (Notification.permission === "granted") {
+                            sendDeadlineNotification(diffDays, dDate);
+                        } else if (Notification.permission !== "denied") {
+                            Notification.requestPermission().then(permission => {
+                                if (permission === "granted") {
+                                    sendDeadlineNotification(diffDays, dDate);
+                                }
+                            });
+                        }
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to fetch deadline:", err));
+
+        const sendDeadlineNotification = (daysLeft, dateObj) => {
+            let title = "";
+            let body = "";
+
+            if (daysLeft < 0) {
+                title = "Submission Overdue!";
+                body = `The enrolment deadline was ${dateObj.toLocaleDateString()}. Submissions may be closed.`;
+            } else if (daysLeft === 0) {
+                title = "Deadline is Today!";
+                body = "Please complete your enrolment forms by the end of the day.";
+            } else {
+                title = `Deadline Approaching: ${daysLeft} Days Left`;
+                body = `Don't forget to submit your reports by ${dateObj.toLocaleDateString()}.`;
+            }
+
+            try {
+                new Notification(title, {
+                    body: body,
+                    icon: '/pwa-192x192.png', // Fallback to standard pwa icon
+                    tag: 'deadline-alert' // Prevent duplicate notifications stacking
+                });
+            } catch (e) {
+                console.warn("Notification trigger failed", e);
+            }
+        };
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 try {
@@ -284,6 +349,50 @@ const SchoolHeadDashboard = () => {
                     {/* --- DASHBOARD CONTENT --- */}
                     <div className="px-6 -mt-12 relative z-10 space-y-8">
 
+                        {/* --- DEADLINE BANNER (THE WAGAYWAY) --- */}
+                        {deadlineDate && showBanner && (() => {
+                            const now = new Date();
+                            const diffTime = deadlineDate - now;
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                            let bannerStyle = "bg-blue-100 border-blue-200 text-blue-800";
+                            let icon = <TbActivity className="animate-pulse" />;
+                            let title = "Submission Deadline";
+                            let message = `Enrolment submission is due on ${deadlineDate.toLocaleDateString()}.`;
+
+                            if (diffDays < 0) {
+                                // OVERDUE
+                                bannerStyle = "bg-red-100 border-red-200 text-red-800";
+                                icon = <FiAlertCircle className="text-red-600 animate-bounce" />;
+                                title = "Submission Overdue";
+                                message = `The deadline was ${deadlineDate.toLocaleDateString()}. Submissions may be locked.`;
+                            } else if (diffDays <= 3) {
+                                // CRITICAL
+                                bannerStyle = "bg-amber-100 border-amber-200 text-amber-800";
+                                icon = <FiAlertCircle className="text-amber-600 animate-pulse" />;
+                                title = `Action Required: ${diffDays === 0 ? 'Due Today' : `${diffDays} Days Left`}`;
+                                message = `Please complete your forms before ${deadlineDate.toLocaleDateString()}.`;
+                            }
+
+                            return (
+                                <div className={`relative w-full p-4 rounded-2xl border flex items-start gap-3 shadow-lg ${bannerStyle} animate-in fade-in slide-in-from-top-4`}>
+                                    <div className="p-2 bg-white/50 rounded-full shrink-0">
+                                        {icon}
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-sm">{title}</h4>
+                                        <p className="text-xs opacity-90 leading-relaxed mt-0.5">{message}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowBanner(false)}
+                                        className="p-1 hover:bg-black/5 rounded-full transition"
+                                    >
+                                        <TbX size={16} />
+                                    </button>
+                                </div>
+                            );
+                        })()}
+
                         {/* 1. Quick Stats Row */}
                         <div className="grid grid-cols-3 gap-3">
                             {/* Progress Card */}
@@ -407,6 +516,38 @@ const SchoolHeadDashboard = () => {
 
                 </div>
             </PageTransition>
+
+            {/* --- DEADLINE POPUP MODAL --- */}
+            {showDeadlineAlert && deadlineDate && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-amber-200 dark:border-amber-900/40">
+                        {/* Glowing Background Effect */}
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-red-500"></div>
+                        <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
+
+                        <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto text-amber-500 mb-2 shadow-sm animate-pulse">
+                            <FiAlertTriangle size={36} />
+                        </div>
+
+                        <div className="text-center space-y-2">
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
+                                ⚠️ Action Required:<br />Deadline Approaching
+                            </h2>
+                            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                The submission deadline for Enrolment Forms is in <strong className="text-amber-600 dark:text-amber-400">{Math.ceil((deadlineDate - new Date()) / (1000 * 60 * 60 * 24))} days</strong> ({deadlineDate.toLocaleDateString()}). <br />Please finalize your data.
+                            </p>
+                        </div>
+
+                        <button
+                            onClick={() => setShowDeadlineAlert(false)}
+                            className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/30 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
+                        >
+                            I Understand
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <BottomNav userRole="School Head" />
 
             {/* --- COMPLETION GATE MODAL --- */}
