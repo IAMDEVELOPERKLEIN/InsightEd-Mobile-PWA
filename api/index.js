@@ -2374,6 +2374,16 @@ app.get('/api/leaderboard', async (req, res) => {
         GROUP BY region
         ORDER BY avg_completion DESC
       `;
+    } else if (scope === 'national_divisions') {
+      // Aggregate by Division (National)
+      query = `
+        SELECT division as name, region,
+        CAST(AVG(${calculation}) AS DECIMAL(10,1)) as avg_completion
+        FROM school_profiles
+        WHERE division IS NOT NULL
+        GROUP BY division, region
+        ORDER BY avg_completion DESC
+      `;
     } else {
       // School Level List (Division or Region Scope)
       query = `
@@ -2393,6 +2403,8 @@ app.get('/api/leaderboard', async (req, res) => {
 
     if (scope === 'national') {
       responseData = { regions: result.rows };
+    } else if (scope === 'national_divisions') {
+      responseData = { divisions: result.rows };
     } else {
       responseData = { schools: result.rows };
       // Calculate Division Averages if requesting Regional View
