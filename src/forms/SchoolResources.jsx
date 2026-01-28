@@ -128,7 +128,8 @@ const SchoolResources = () => {
                         setFormData({ ...defaultFormData, ...parsed });
                         setOriginalData({ ...defaultFormData, ...parsed });
 
-                        setIsLocked(true);
+                        const hasCachedData = Object.keys(initialFields).some(k => parsed[k]);
+                        setIsLocked(hasCachedData);
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached Resources (Instant Load)");
@@ -211,7 +212,8 @@ const SchoolResources = () => {
                             setFormData(loaded);
                             setOriginalData(loaded);
 
-                            setIsLocked(true);
+                            const hasOnlineData = Object.keys(initialFields).some(k => loaded[k]);
+                            setIsLocked(hasOnlineData);
 
                             // Update Cache
                             localStorage.setItem(CACHE_KEY_RES, JSON.stringify(loaded));
@@ -228,7 +230,8 @@ const SchoolResources = () => {
                                 const data = JSON.parse(cached);
                                 setFormData(data);
                                 setOriginalData(data);
-                                setIsLocked(true);
+                                const hasOfflineData = Object.keys(initialFields).some(k => data[k]);
+                                setIsLocked(hasOfflineData);
                             } catch (e) { }
                         }
                     }

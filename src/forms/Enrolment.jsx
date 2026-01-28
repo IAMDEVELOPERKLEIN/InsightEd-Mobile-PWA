@@ -122,7 +122,7 @@ const Enrolment = () => {
                         setOriginalData(merged);
                         if (parsed.curricular_offering) setCurricularOffering(parsed.curricular_offering);
 
-                        setIsLocked(true);
+                        setIsLocked((merged.total_enrollment || 0) > 0);
                         setLoading(false); // CRITICAL: Instant Load
                         console.log("Loaded cached Enrolment (Instant Load)");
                     } catch (e) { console.error("Cache error", e); }
@@ -175,7 +175,7 @@ const Enrolment = () => {
 
                                     setFormData(loaded);
                                     setOriginalData(loaded);
-                                    setIsLocked(true);
+                                    setIsLocked((loaded.total_enrollment || 0) > 0);
                                     localStorage.setItem(CACHE_KEY, JSON.stringify(data));
                                 }
                             }

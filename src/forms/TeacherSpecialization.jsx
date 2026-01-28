@@ -119,7 +119,7 @@ const TeacherSpecialization = () => {
                         setFormData({ ...defaultFormData, ...parsed }); // Merge
                         setOriginalData({ ...defaultFormData, ...parsed });
 
-                        setIsLocked(true);
+                        setIsLocked(Object.values(parsed).some(v => Number(v) > 0));
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached Teacher Specialization (Instant Load)");
@@ -195,7 +195,7 @@ const TeacherSpecialization = () => {
                                 setFormData(loaded);
                                 setOriginalData(loaded);
 
-                                setIsLocked(true);
+                                setIsLocked(Object.values(loaded).some(v => Number(v) > 0));
 
                                 // UPDATE CACHE
                                 const cachePayload = { ...dbData, curricular_offering: newOffering, schoolId: json.school_id };

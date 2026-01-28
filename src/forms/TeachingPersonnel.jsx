@@ -120,7 +120,9 @@ const TeachingPersonnel = () => {
                             setOffering(parsed.curricular_offering || parsed.offering);
                         }
 
-                        setIsLocked(true);
+                        // Check for meaningful data (any field starting with 'teach_' > 0)
+                        const hasCachedData = Object.entries(parsed).some(([k, v]) => k.startsWith('teach_') && Number(v) > 0);
+                        setIsLocked(hasCachedData);
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached Teaching Personnel (Instant Load)");
@@ -211,7 +213,7 @@ const TeachingPersonnel = () => {
 
                                 setFormData(initialData);
                                 setOriginalData(initialData);
-                                setIsLocked(true);
+                                setIsLocked(Object.values(initialData).some(v => Number(v) > 0));
 
                                 // UPDATE CACHE
                                 const cachePayload = { ...initialData, curricular_offering: newOffering, schoolId: json.school_id };

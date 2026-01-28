@@ -140,7 +140,8 @@ const ShiftingModalities = () => {
 
                         if (parsed.curricular_offering) setOffering(parsed.curricular_offering);
 
-                        setIsLocked(true);
+                        const hasData = Object.values(parsed.shifts || {}).some(v => v) || Object.values(parsed.modes || {}).some(v => v) || (parsed.adms && (parsed.adms.adm_mdl || parsed.adms.adm_odl || parsed.adms.adm_tvi || parsed.adms.adm_blended));
+                        setIsLocked(hasData);
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached Shifting Modalities (Instant Load)");
@@ -242,7 +243,8 @@ const ShiftingModalities = () => {
                                     }
                                 });
 
-                                setIsLocked(true);
+                                const hasData = Object.values(loadedShifts).some(v => v) || Object.values(loadedModes).some(v => v) || (data.adm_mdl || data.adm_odl || data.adm_tvi || data.adm_blended);
+                                setIsLocked(hasData);
 
                                 // Cache It
                                 const cachePayload = {

@@ -189,7 +189,8 @@ const LearnerStatistics = () => {
                     // Check logic: setFormData(parsed);
                     setFormData(prev => ({ ...prev, ...parsed }));
 
-                    setIsLocked(true);
+                    const hasCachedData = Object.entries(parsed).some(([k, v]) => k.startsWith('stat_') && Number(v) > 0);
+                    setIsLocked(hasCachedData);
                     setLoading(false); // CRITICAL: Instant Load
                     console.log("Loaded cached Learner Stats data (Instant Load)");
                 } catch (e) { console.error("Cache parse error", e); }
@@ -267,7 +268,8 @@ const LearnerStatistics = () => {
                         };
 
                         setFormData(prev => ({ ...prev, ...loadedData }));
-                        setIsLocked(true);
+                        const hasLoadedData = Object.entries(loadedData).some(([k, v]) => k.startsWith('stat_') && Number(v) > 0);
+                        setIsLocked(hasLoadedData);
 
                         // CACHE DATA
                         const CACHE_KEY = `CACHE_LEARNER_STATS_${user.uid}`;
@@ -306,7 +308,8 @@ const LearnerStatistics = () => {
                         curricular_offering: fallbackOffering,
                         learner_stats_grids: dbData.learner_stats_grids || {}
                     }));
-                    setIsLocked(true); // Read-Only
+                    const hasOfflineData = Object.entries(dbData).some(([k, v]) => k.startsWith('stat_') && Number(v) > 0);
+                    setIsLocked(hasOfflineData); // Read-Only if data exists
                 } else if (storedOffering) {
                     setFormData(prev => ({ ...prev, curricular_offering: storedOffering }));
                 }

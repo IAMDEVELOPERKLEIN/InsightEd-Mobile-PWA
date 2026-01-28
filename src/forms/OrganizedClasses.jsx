@@ -161,7 +161,7 @@ const OrganizedClasses = () => {
                         const cacheOff = parsed.curricular_offering || parsed.offering || (parsed.formData ? parsed.formData.offering : '') || storedOffering;
                         if (cacheOff) setOffering(cacheOff);
 
-                        setIsLocked(true);
+                        setIsLocked(Object.values(restoredForm).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached Organized Classes data (Instant Load)");
@@ -263,7 +263,7 @@ const OrganizedClasses = () => {
                             };
                             localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
                             setOriginalData(cachePayload);
-                            setIsLocked(true);
+                            setIsLocked(Object.values(newFormData).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
                         }
                     }
                 } catch (error) {
