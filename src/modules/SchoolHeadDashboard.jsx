@@ -9,7 +9,7 @@ import "swiper/css/pagination";
 // Icons (Using the libraries you already have installed)
 import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell, TbTrophy, TbReportAnalytics } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
-import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle } from "react-icons/fi";
+import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle, FiCheckSquare } from "react-icons/fi";
 
 import { auth, db, app } from '../firebase'; // Import app
 import { doc, getDoc } from 'firebase/firestore';
@@ -344,6 +344,12 @@ const SchoolHeadDashboard = () => {
                                         ? `${schoolProfile.school_id} • ${schoolProfile.school_name}`
                                         : (schoolProfile ? schoolProfile.school_name : 'School Principal')}
                                 </p>
+                                {schoolProfile?.iern && (
+                                    <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 rounded-md px-2 py-0.5">
+                                        <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest">IERN</span>
+                                        <span className="text-xs font-bold text-white tracking-wide">{schoolProfile.iern}</span>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
                                 <NotificationCenter />
@@ -511,6 +517,22 @@ const SchoolHeadDashboard = () => {
                                         </p>
                                     </div>
                                 </SwiperSlide>
+                                <SwiperSlide>
+                                    <div
+                                        onClick={() => navigate('/project-validation')}
+                                        className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border-l-4 border-green-500 min-h-[140px] flex flex-col justify-center relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all hover:shadow-md"
+                                    >
+                                        <div className="absolute right-[-10px] top-[-10px] opacity-5 dark:opacity-10">
+                                            <FiCheckSquare size={100} className="text-green-500 dark:text-green-400" />
+                                        </div>
+                                        <h3 className="text-green-600 dark:text-green-400 font-bold text-lg flex items-center mb-2 z-10">
+                                            Project Validation
+                                        </h3>
+                                        <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed max-w-[85%] z-10">
+                                            Validate completed projects and infrastructure reports. Tap to start validation.
+                                        </p>
+                                    </div>
+                                </SwiperSlide>
                                 {/* Add more slides if needed */}
                             </Swiper>
                         </div>
@@ -574,111 +596,115 @@ const SchoolHeadDashboard = () => {
                     </div>
 
                 </div>
-            </PageTransition>
+            </PageTransition >
 
             {/* --- DEADLINE POPUP MODAL --- */}
-            {showDeadlineAlert && deadlineDate && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-amber-200 dark:border-amber-900/40">
-                        {/* Glowing Background Effect */}
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-red-500"></div>
-                        <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
+            {
+                showDeadlineAlert && deadlineDate && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-amber-200 dark:border-amber-900/40">
+                            {/* Glowing Background Effect */}
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-red-500"></div>
+                            <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
 
-                        <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto text-amber-500 mb-2 shadow-sm animate-pulse">
-                            <FiAlertTriangle size={36} />
+                            <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto text-amber-500 mb-2 shadow-sm animate-pulse">
+                                <FiAlertTriangle size={36} />
+                            </div>
+
+                            <div className="text-center space-y-2">
+                                <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
+                                    ⚠️ Action Required:<br />Deadline Approaching
+                                </h2>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                    The submission deadline for Enrolment Forms is in <strong className="text-amber-600 dark:text-amber-400">{Math.ceil((deadlineDate - new Date()) / (1000 * 60 * 60 * 24))} days</strong> ({deadlineDate.toLocaleDateString()}). <br />Please finalize your data.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={() => setShowDeadlineAlert(false)}
+                                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/30 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
+                            >
+                                I Understand
+                            </button>
                         </div>
-
-                        <div className="text-center space-y-2">
-                            <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
-                                ⚠️ Action Required:<br />Deadline Approaching
-                            </h2>
-                            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                                The submission deadline for Enrolment Forms is in <strong className="text-amber-600 dark:text-amber-400">{Math.ceil((deadlineDate - new Date()) / (1000 * 60 * 60 * 24))} days</strong> ({deadlineDate.toLocaleDateString()}). <br />Please finalize your data.
-                            </p>
-                        </div>
-
-                        <button
-                            onClick={() => setShowDeadlineAlert(false)}
-                            className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/30 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
-                        >
-                            I Understand
-                        </button>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <BottomNav userRole="School Head" />
 
             {/* --- COMPLETION GATE MODAL --- */}
-            {showOfferingModal && (
-                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
-                    <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-3xl p-8 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
-                        {/* Header Bar */}
-                        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
+            {
+                showOfferingModal && (
+                    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-3xl p-8 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
+                            {/* Header Bar */}
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
 
-                        <div className="text-center mb-6">
-                            <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-600 dark:text-orange-400">
-                                <span className="text-3xl">⚠️</span>
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-600 dark:text-orange-400">
+                                    <span className="text-3xl">⚠️</span>
+                                </div>
+                                <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Action Required</h2>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm">
+                                    Please select your school's curricular offering to unlock your dashboard.
+                                </p>
                             </div>
-                            <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Action Required</h2>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm">
-                                Please select your school's curricular offering to unlock your dashboard.
-                            </p>
-                        </div>
 
-                        <div className="space-y-4">
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Curricular Offering</label>
-                            <select
-                                value={offering}
-                                onChange={(e) => setOffering(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 font-bold outline-none focus:ring-2 focus:ring-orange-500 transition-all appearance-none"
-                            >
-                                <option value="">Select Offering...</option>
-                                <option value="Purely Elementary">Purely Elementary</option>
-                                <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
-                                <option value="All Offering (K-12)">All Offering (K-12)</option>
-                                <option value="Junior and Senior High">Junior and Senior High</option>
-                                <option value="Purely Junior High School">Purely Junior High School</option>
-                                <option value="Purely Senior High School">Purely Senior High School</option>
-                            </select>
+                            <div className="space-y-4">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Curricular Offering</label>
+                                <select
+                                    value={offering}
+                                    onChange={(e) => setOffering(e.target.value)}
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 font-bold outline-none focus:ring-2 focus:ring-orange-500 transition-all appearance-none"
+                                >
+                                    <option value="">Select Offering...</option>
+                                    <option value="Purely Elementary">Purely Elementary</option>
+                                    <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
+                                    <option value="All Offering (K-12)">All Offering (K-12)</option>
+                                    <option value="Junior and Senior High">Junior and Senior High</option>
+                                    <option value="Purely Junior High School">Purely Junior High School</option>
+                                    <option value="Purely Senior High School">Purely Senior High School</option>
+                                </select>
 
-                            <button
-                                onClick={async () => {
-                                    if (!offering) return;
-                                    setIsSavingOffering(true);
-                                    try {
-                                        const res = await fetch('/api/update-offering', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                                uid: auth.currentUser.uid,
-                                                schoolId: schoolProfile.school_id,
-                                                offering
-                                            })
-                                        });
-                                        const data = await res.json();
-                                        if (data.success) {
-                                            setSchoolProfile(prev => ({ ...prev, curricular_offering: offering }));
-                                            setShowOfferingModal(false);
-                                        } else {
-                                            alert(data.message || "Failed to save.");
+                                <button
+                                    onClick={async () => {
+                                        if (!offering) return;
+                                        setIsSavingOffering(true);
+                                        try {
+                                            const res = await fetch('/api/update-offering', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    uid: auth.currentUser.uid,
+                                                    schoolId: schoolProfile.school_id,
+                                                    offering
+                                                })
+                                            });
+                                            const data = await res.json();
+                                            if (data.success) {
+                                                setSchoolProfile(prev => ({ ...prev, curricular_offering: offering }));
+                                                setShowOfferingModal(false);
+                                            } else {
+                                                alert(data.message || "Failed to save.");
+                                            }
+                                        } catch (err) {
+                                            console.error(err);
+                                            alert("Network error.");
+                                        } finally {
+                                            setIsSavingOffering(false);
                                         }
-                                    } catch (err) {
-                                        console.error(err);
-                                        alert("Network error.");
-                                    } finally {
-                                        setIsSavingOffering(false);
-                                    }
-                                }}
-                                disabled={!offering || isSavingOffering}
-                                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-orange-500/30 transform transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mt-4"
-                            >
-                                {isSavingOffering ? 'Saving...' : 'Save & Continue'}
-                            </button>
+                                    }}
+                                    disabled={!offering || isSavingOffering}
+                                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-orange-500/30 transform transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                                >
+                                    {isSavingOffering ? 'Saving...' : 'Save & Continue'}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </>
     );
 };

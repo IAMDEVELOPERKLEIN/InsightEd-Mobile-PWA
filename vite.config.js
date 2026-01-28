@@ -25,13 +25,13 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: '/InsightEd1.png',
+            src: '/InsightED app.png',
             sizes: '192x192', // Ensure your file is high res enough
             type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: '/InsightEd1.png',
+            src: '/InsightED app.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
