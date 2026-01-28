@@ -21,11 +21,7 @@ let isDbConnected = false;
 
 const app = express();
 
-// --- DEBUG LOGGER (TEMPORARY) ---
-app.use((req, res, next) => {
-  console.log(`[REQUEST] ${req.method} ${req.url}`);
-  next();
-});
+
 
 // --- MIDDLEWARE ---
 app.use(cors({
@@ -45,6 +41,53 @@ app.use(express.json({ limit: '50mb' }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
+});
+
+// --- VERCEL CRON ENDPOINT (MOVED TO TOP) ---
+// Support both /api/cron... (Local) and /cron... (Vercel)
+app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) => {
+  // 1. Security Check
+  const authHeader = req.headers.authorization;
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('⏰ Running Deadline Reminder (Vercel Cron)...');
+  try {
+    const settingRes = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'enrolment_deadline'");
+    if (settingRes.rows.length === 0 || !settingRes.rows[0].setting_value) {
+      return res.json({ message: 'No deadline set.' });
+    }
+    const deadlineVal = settingRes.rows[0].setting_value;
+    const deadlineDate = new Date(deadlineVal);
+    const now = new Date();
+    const diffDays = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
+
+    console.log(`📅 Deadline: ${deadlineVal}, Days Left: ${diffDays}`);
+
+    if (diffDays <= 3 && diffDays >= 1) {
+      const tokenRes = await pool.query("SELECT fcm_token FROM user_device_tokens WHERE fcm_token IS NOT NULL");
+      const tokens = tokenRes.rows.map(r => r.fcm_token);
+      if (tokens.length > 0) {
+        const message = {
+          notification: {
+            title: "Deadline Reminder",
+            body: `Submission is due in ${diffDays} day${diffDays > 1 ? 's' : ''}! Please finalize your forms.`
+          },
+          tokens: tokens
+        };
+        const response = await admin.messaging().sendMulticast(message);
+        return res.json({ success: true, sent: response.successCount, failed: response.failureCount });
+      } else {
+        return res.json({ message: 'No device tokens found.' });
+      }
+    } else {
+      return res.json({ message: 'Not within reminder window (1-3 days).' });
+    }
+  } catch (error) {
+    console.error('❌ Cron Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // --- FIREBASE ADMIN INIT ---
@@ -2882,65 +2925,7 @@ process.on('unhandledRejection', (reason, promise) => {
 if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
 
-  // --- SCHEDULER: DEADLINE REMINDERS ---
-  // Runs every day at 6:00 AM
-  // --- VERCEL CRON ENDPOINT ---
-  // Support both /api/cron... (Local) and /cron... (Vercel sometimes strips /api on rewrite)
-  app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) => {
-    // 1. Security Check
-    const authHeader = req.headers.authorization;
-    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      // Allow unauthorized in local dev if strict mode isn't enforced, but better to be safe.
-      // For local testing, you can pass the header manually or temporarily comment this out.
-      return res.status(401).json({ error: 'Unauthorized' });
-      console.log("ℹ️ Cron accessed without valid secret (Pass CRON_SECRET env var to secure)");
-    }
 
-    console.log('⏰ Running Deadline Reminder (Vercel Cron)...');
-
-    try {
-      // 1. Get Deadline
-      const settingRes = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'enrolment_deadline'");
-      if (settingRes.rows.length === 0 || !settingRes.rows[0].setting_value) {
-        return res.json({ message: 'No deadline set.' });
-      }
-
-      const deadlineVal = settingRes.rows[0].setting_value;
-      const deadlineDate = new Date(deadlineVal);
-      const now = new Date();
-      const diffTime = deadlineDate - now;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      console.log(`📅 Deadline: ${deadlineVal}, Days Left: ${diffDays}`);
-
-      // 2. Check Criteria
-      if (diffDays <= 3 && diffDays >= 1) {
-        const tokenRes = await pool.query("SELECT fcm_token FROM user_device_tokens WHERE fcm_token IS NOT NULL");
-        const tokens = tokenRes.rows.map(r => r.fcm_token);
-
-        if (tokens.length > 0) {
-          const message = {
-            notification: {
-              title: "Deadline Reminder",
-              body: `Submission is due in ${diffDays} day${diffDays > 1 ? 's' : ''}! Please finalize your forms.`
-            },
-            tokens: tokens
-          };
-
-          const response = await admin.messaging().sendMulticast(message);
-          return res.json({ success: true, sent: response.successCount, failed: response.failureCount });
-        } else {
-          return res.json({ message: 'No device tokens found.' });
-        }
-      } else {
-        return res.json({ message: 'Not within reminder window (1-3 days).' });
-      }
-
-    } catch (error) {
-      console.error('❌ Cron Error:', error);
-      return res.status(500).json({ error: error.message });
-    }
-  });
 
 
   const server = app.listen(PORT, () => {
