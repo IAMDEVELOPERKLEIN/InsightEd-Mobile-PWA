@@ -65,24 +65,42 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
 
     console.log(`📅 Deadline: ${deadlineVal}, Days Left: ${diffDays}`);
 
-    if (diffDays <= 3 && diffDays >= 1) {
+    // Check Criteria (0 to 3 days left)
+    if (diffDays <= 3 && diffDays >= 0) {
       const tokenRes = await pool.query("SELECT fcm_token FROM user_device_tokens WHERE fcm_token IS NOT NULL");
       const tokens = tokenRes.rows.map(r => r.fcm_token);
+
+      console.log(`Found ${tokens.length} device tokens.`);
+
       if (tokens.length > 0) {
         const message = {
           notification: {
-            title: "Deadline Reminder",
-            body: `Submission is due in ${diffDays} day${diffDays > 1 ? 's' : ''}! Please finalize your forms.`
+            title: diffDays === 0 ? "Deadline is TODAY!" : "Deadline Reminder",
+            body: diffDays === 0
+              ? "Submission closes today. Please finalize your reports."
+              : `Submission is due in ${diffDays} day${diffDays > 1 ? 's' : ''}! Please finalize your forms.`
           },
           tokens: tokens
         };
-        const response = await admin.messaging().sendMulticast(message);
-        return res.json({ success: true, sent: response.successCount, failed: response.failureCount });
+
+        try {
+          const response = await admin.messaging().sendMulticast(message);
+          console.log(`🚀 Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
+          if (response.failureCount > 0) {
+            console.log("Failed details:", JSON.stringify(response.responses));
+          }
+          return res.json({ success: true, sent: response.successCount, failed: response.failureCount });
+        } catch (sendErr) {
+          console.error("Firebase Send Error:", sendErr);
+          throw sendErr;
+        }
       } else {
+        console.log("ℹ️ No tokens found in DB.");
         return res.json({ message: 'No device tokens found.' });
       }
     } else {
-      return res.json({ message: 'Not within reminder window (1-3 days).' });
+      console.log(`ℹ️ Skipping: ${diffDays} days remaining (Not within 0-3 range).`);
+      return res.json({ message: `Not within reminder window (0-3 days). Days: ${diffDays}` });
     }
   } catch (error) {
     console.error('❌ Cron Error:', error);
