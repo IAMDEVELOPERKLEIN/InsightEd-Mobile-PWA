@@ -26,6 +26,8 @@ const SchoolForms = () => {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingOffering, setPendingOffering] = useState('');
     const [isOfferingLocked, setIsOfferingLocked] = useState(false);
+    const [showLimitModal, setShowLimitModal] = useState(false);
+    const [showUnlockWarning, setShowUnlockWarning] = useState(false);
 
     // --- 1. DATA CONTENT (Categorized) ---
     const formsData = [
@@ -269,40 +271,31 @@ const SchoolForms = () => {
 
         setIsSavingOffering(true);
         try {
-            // Map snake_case DB profile to camelCase payload expected by save-school
-            const payload = {
-                schoolId: schoolProfile.school_id,
-                schoolName: schoolProfile.school_name,
-                region: schoolProfile.region,
-                province: schoolProfile.province,
-                division: schoolProfile.division,
-                district: schoolProfile.district,
-                municipality: schoolProfile.municipality,
-                legDistrict: schoolProfile.leg_district,
-                barangay: schoolProfile.barangay,
-                motherSchoolId: schoolProfile.mother_school_id,
-                latitude: schoolProfile.latitude,
-                longitude: schoolProfile.longitude,
-                submittedBy: schoolProfile.submitted_by, // Or auth.currentUser.uid
-                curricularOffering: newValue
-            };
-
-            const res = await fetch('/api/save-school', {
+            // USE NEW LIGHTWEIGHT ENDPOINT (Consistent with Completion Gate)
+            const res = await fetch('/api/update-offering', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    uid: auth.currentUser.uid,
+                    schoolId: schoolProfile.school_id,
+                    offering: newValue
+                })
             });
 
-            if (res.ok) {
+            const data = await res.json();
+
+            if (data.success) {
                 console.log("✅ Curricular offering updated via API");
                 // Update local profile state to reflect change
                 setSchoolProfile(prev => ({ ...prev, curricular_offering: newValue }));
                 setIsOfferingLocked(true);
             } else {
-                console.warn("⚠️ Failed to update offering on server");
+                console.warn("⚠️ Failed to update offering on server:", data.message);
+                alert("Failed to save offering: " + (data.message || "Unknown error"));
             }
         } catch (error) {
             console.error("Error auto-saving offering:", error);
+            alert("Network error saving offering.");
         } finally {
             setIsSavingOffering(false);
         }
@@ -459,6 +452,79 @@ const SchoolForms = () => {
                 </div>
             )}
 
+            {/* LIMIT REACHED MODAL */}
+            {showLimitModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 relative overflow-hidden border border-red-100 dark:border-red-900/30">
+                        <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto text-red-500 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        </div>
+                        <div className="text-center">
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Action Restricted</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                                You have already used your functionality unlock.
+                            </p>
+                            <div className="mt-3 bg-red-50 dark:bg-red-900/10 p-3 rounded-xl border border-red-100 dark:border-red-900/20">
+                                <p className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wide">
+                                    Limit: 1 Time Only
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setShowLimitModal(false)}
+                            className="w-full py-3.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl transition-colors"
+                        >
+                            Understood
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* UNLOCK WARNING MODAL (PRE-UNLOCK) */}
+            {showUnlockWarning && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 relative overflow-hidden border border-amber-100 dark:border-amber-900/30">
+                        <div className="w-14 h-14 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto text-amber-500 mb-2">
+                            <FiAlertCircle size={28} />
+                        </div>
+                        <div className="text-center">
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Unlock to Edit?</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+                                You are about to unlock the Curricular Offering for editing.
+                            </p>
+                            <div className="mt-3 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-xl border border-amber-100 dark:border-amber-900/20">
+                                <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                                    Warning: One-Time Action
+                                </p>
+                                <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 leading-tight mt-1">
+                                    You will not be able to unlock this again after saving.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowUnlockWarning(false)}
+                                className="flex-1 py-3 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const currentCount = parseInt(localStorage.getItem('offeringUnlockCount') || '0');
+                                    localStorage.setItem('offeringUnlockCount', (currentCount + 1).toString());
+                                    setIsOfferingLocked(false);
+                                    setShowUnlockWarning(false);
+                                }}
+                                className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-lg shadow-amber-500/30 hover:bg-amber-600 transition"
+                            >
+                                Yes, Unlock
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )
+            }
+
             {/* --- HEADER --- */}
             <div className="bg-[#004A99] pt-8 pb-20 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
                 {/* Background Decor */}
@@ -518,9 +584,18 @@ const SchoolForms = () => {
 
                                 {isOfferingLocked ? (
                                     <button
-                                        onClick={() => setIsOfferingLocked(false)}
+                                        onClick={() => {
+                                            // CHECK UNLOCK LIMIT
+                                            const currentCount = parseInt(localStorage.getItem('offeringUnlockCount') || '0');
+                                            if (currentCount >= 1) {
+                                                setShowLimitModal(true);
+                                                return;
+                                            }
+                                            // SHOW CUSTOM WARNING MODAL
+                                            setShowUnlockWarning(true);
+                                        }}
                                         className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-200 hover:text-white transition"
-                                        title="Unlock to Edit"
+                                        title="Unlock to Edit (Limited)"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                                     </button>

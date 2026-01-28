@@ -1282,6 +1282,42 @@ app.post('/api/save-enrolment', async (req, res) => {
   }
 });
 
+// --- 7b. POST: Update Curricular Offering (Completion Gate) ---
+app.post('/api/update-offering', async (req, res) => {
+  const { uid, schoolId, offering } = req.body;
+
+  if (!uid || !schoolId || !offering) {
+    return res.status(400).json({ message: "Missing required fields." });
+  }
+
+  try {
+    const query = `
+      UPDATE school_profiles
+      SET curricular_offering = $1
+      WHERE school_id = $2
+      RETURNING school_id;
+    `;
+
+    const result = await pool.query(query, [offering, schoolId]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "School Profile not found." });
+    }
+
+    await logActivity(
+      uid, 'School Head', 'School Head', 'UPDATE',
+      `Curricular Offering: ${schoolId}`,
+      `Set curricular offering to ${offering}`
+    );
+
+    res.json({ success: true, message: "Curricular offering updated." });
+
+  } catch (err) {
+    console.error("❌ Update Offering Error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 // --- 8. POST: Save New Project (Updated for Images & Transactions) ---
 app.post('/api/save-project', async (req, res) => {
