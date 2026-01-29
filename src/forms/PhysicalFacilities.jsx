@@ -52,6 +52,7 @@ const PhysicalFacilities = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+    const [saveTimer, setSaveTimer] = useState(0);
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -203,6 +204,20 @@ const PhysicalFacilities = () => {
         return () => unsubscribe();
     }, []);
 
+    // --- SAVE TIMER EFFECTS ---
+    useEffect(() => {
+        if (!isLocked && !viewOnly) {
+            setSaveTimer(120);
+        }
+    }, [isLocked, viewOnly]);
+
+    useEffect(() => {
+        if (saveTimer > 0) {
+            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
+            return () => clearInterval(timer);
+        }
+    }, [saveTimer]);
+
     // --- AUTOMATIC TALLYING ---
     useEffect(() => {
         if (!formData) return;
@@ -232,13 +247,14 @@ const PhysicalFacilities = () => {
 
     // --- VALIDATION ---
     const isFormValid = () => {
+        const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
         const fields = [
             'build_classrooms_new', 'build_classrooms_good',
             'build_classrooms_repair', 'build_classrooms_demolition'
         ];
 
         for (const f of fields) {
-            if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            if (!isValidEntry(formData[f])) return false;
         }
         return true;
     };
@@ -319,7 +335,7 @@ const PhysicalFacilities = () => {
                     <input
                         type="text" inputMode="numeric" pattern="[0-9]*"
                         name="build_classrooms_total"
-                        value={formData.build_classrooms_total || ''}
+                        value={formData.build_classrooms_total ?? ''}
                         onChange={handleChange} // Allows manual override if needed, though useEffect will overwrite on dependent change
                         disabled={true}
                         className="w-full text-center text-7xl font-black text-[#004A99] bg-transparent outline-none placeholder-slate-200 tracking-tighter"
@@ -328,10 +344,10 @@ const PhysicalFacilities = () => {
                     <p className="text-[10px] text-slate-400 mt-2 font-medium">Overall count in the school</p>
                 </div>
 
-                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
 
             </div>
 
@@ -345,8 +361,16 @@ const PhysicalFacilities = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : saveTimer > 0 ? (
+                                <span className="font-mono">
+                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
+                                </span>
+                            ) : (
+                                <><FiSave /> Save Changes</>
+                            )}
                         </button>
                     )}
                 </div>

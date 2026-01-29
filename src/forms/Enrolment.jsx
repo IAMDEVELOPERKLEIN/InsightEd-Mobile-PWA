@@ -49,6 +49,7 @@ const Enrolment = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+    const [saveTimer, setSaveTimer] = useState(0);
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -58,6 +59,20 @@ const Enrolment = () => {
             localStorage.setItem('hasSeenEnrolmentInfo', 'true');
         }
     }, []);
+
+    // --- SAVE TIMER EFFECTS ---
+    useEffect(() => {
+        if (!isLocked && !viewOnly) {
+            setSaveTimer(120);
+        }
+    }, [isLocked, viewOnly]);
+
+    useEffect(() => {
+        if (saveTimer > 0) {
+            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
+            return () => clearInterval(timer);
+        }
+    }, [saveTimer]);
 
     // Core Data
     const [schoolId, setSchoolId] = useState(null);
@@ -243,6 +258,7 @@ const Enrolment = () => {
 
     // --- VALIDATION ---
     const isFormValid = () => {
+        const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
         // Elementary
         if (showElem()) {
             const elemFields = ['grade_kinder', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6'];
@@ -253,7 +269,7 @@ const Enrolment = () => {
             });
 
             for (const f of [...elemFields, ...aralFields]) {
-                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+                if (!isValidEntry(formData[f])) return false;
             }
         }
 
@@ -261,7 +277,7 @@ const Enrolment = () => {
         if (showJHS()) {
             const jhsFields = ['grade_7', 'grade_8', 'grade_9', 'grade_10'];
             for (const f of jhsFields) {
-                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+                if (!isValidEntry(formData[f])) return false;
             }
         }
 
@@ -272,7 +288,7 @@ const Enrolment = () => {
                 'abm_12', 'stem_12', 'humss_12', 'gas_12', 'tvl_ict_12', 'tvl_he_12', 'tvl_ia_12', 'tvl_afa_12', 'arts_12', 'sports_12'
             ];
             for (const f of shsFields) {
-                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+                if (!isValidEntry(formData[f])) return false;
             }
         }
         return true;
@@ -391,7 +407,7 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={+formData[item.k] || ''}
+                                        type="number" value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
@@ -414,7 +430,7 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={+formData[item.k] || ''}
+                                        type="number" value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
@@ -454,11 +470,11 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">{row.l}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={+formData[row.k11] || ''} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={formData[row.k11] !== '' && formData[row.k11] != null ? +formData[row.k11] : ''} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={+formData[row.k12] || ''} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={formData[row.k12] !== '' && formData[row.k12] != null ? +formData[row.k12] : ''} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                         </tr>
                                     ))}
@@ -517,8 +533,16 @@ const Enrolment = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : saveTimer > 0 ? (
+                                <span className="font-mono">
+                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
+                                </span>
+                            ) : (
+                                <><FiSave /> Save Changes</>
+                            )}
                         </button>
                     )}
                 </div>

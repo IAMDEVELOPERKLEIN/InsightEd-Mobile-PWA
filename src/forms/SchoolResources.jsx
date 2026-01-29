@@ -17,7 +17,7 @@ const InputField = ({ label, name, type = "number", formData, handleChange, isLo
     <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-2/3 group-hover:text-blue-600 transition-colors">{label}</label>
         <input
-            type={type} name={name} value={+formData[name] || ''}
+            type={type} name={name} value={formData[name] !== '' && formData[name] != null ? +formData[name] : ''}
             onChange={handleChange} disabled={isLocked || viewOnly}
             onWheel={(e) => e.target.blur()}
             className="w-24 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2.5 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent text-lg shadow-sm"
@@ -63,7 +63,7 @@ const SeatRow = ({ label, enrollment, seatKey, formData, handleChange, isLocked,
                         disabled={isLocked || viewOnly}
                         onWheel={(e) => e.target.blur()}
                         className="w-20 text-center font-bold text-slate-800 bg-white border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
-                        value={+seats || ''}
+                        value={seats !== '' && seats != null ? +seats : ''}
                     />
                 </div>
             </td>
@@ -91,7 +91,7 @@ const ResourceAuditRow = ({ label, funcName, nonFuncName, formData, handleChange
                 <input
                     type="number"
                     name={funcName}
-                    value={+formData[funcName] || ''}
+                    value={formData[funcName] !== '' && formData[funcName] != null ? +formData[funcName] : ''}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
                     onWheel={(e) => e.target.blur()}
@@ -105,7 +105,7 @@ const ResourceAuditRow = ({ label, funcName, nonFuncName, formData, handleChange
                 <input
                     type="number"
                     name={nonFuncName}
-                    value={+formData[nonFuncName] || ''}
+                    value={+formData[nonFuncName] ?? ''}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
                     onWheel={(e) => e.target.blur()}
@@ -122,7 +122,7 @@ const LabRow = ({ label, name, formData, handleChange, isLocked, viewOnly }) => 
         <input
             type="number"
             name={name}
-            value={+formData[name] || ''}
+            value={+formData[name] ?? ''}
             onChange={handleChange}
             disabled={isLocked || viewOnly}
             onWheel={(e) => e.target.blur()}
@@ -148,6 +148,7 @@ const SchoolResources = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+    const [saveTimer, setSaveTimer] = useState(0);
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -157,6 +158,20 @@ const SchoolResources = () => {
             localStorage.setItem('hasSeenResourcesInfo', 'true');
         }
     }, []);
+
+    // --- SAVE TIMER EFFECTS ---
+    useEffect(() => {
+        if (!isLocked && !viewOnly) {
+            setSaveTimer(120);
+        }
+    }, [isLocked, viewOnly]);
+
+    useEffect(() => {
+        if (saveTimer > 0) {
+            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
+            return () => clearInterval(timer);
+        }
+    }, [saveTimer]);
     const [userRole, setUserRole] = useState("School Head");
     const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
 
@@ -396,6 +411,7 @@ const SchoolResources = () => {
     // --- SAVE LOGIC ---
     // --- VALIDATION ---
     const isFormValid = () => {
+        const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
         // 1. Check Generic Inputs (Labs, Internet, etc.)
         const genericFields = [
             'res_laboratories', 'res_internet_rooms', 'res_clinic',
@@ -404,7 +420,7 @@ const SchoolResources = () => {
         ];
 
         for (const f of genericFields) {
-            if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            if (!isValidEntry(formData[f])) return false;
         }
 
         // 2. Check Toilets
@@ -417,25 +433,28 @@ const SchoolResources = () => {
                 'res_toilet_communal_func', 'res_toilet_communal_nonfunc'
             ];
             for (const f of toiletFields) {
-                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+                if (!isValidEntry(formData[f])) return false;
             }
         } else {
             // Shared
             const sharedFields = ['res_toilet_shared_func', 'res_toilet_shared_nonfunc'];
             for (const f of sharedFields) {
-                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+                if (!isValidEntry(formData[f])) return false;
             }
         }
 
         // 3. Check Seats (Conditional)
         if (showElem()) {
-            if (seatsData.seats_kinder === '' || seatsData.seats_g1_g3 === '' || seatsData.seats_g4_g6 === '') return false;
+            if (!isValidEntry(formData.seats_kinder) || !isValidEntry(formData.seats_grade_1) || !isValidEntry(formData.seats_grade_2) ||
+                !isValidEntry(formData.seats_grade_3) || !isValidEntry(formData.seats_grade_4) || !isValidEntry(formData.seats_grade_5) ||
+                !isValidEntry(formData.seats_grade_6)) return false;
         }
         if (showJHS()) {
-            if (seatsData.seats_jhs === '') return false;
+            if (!isValidEntry(formData.seats_grade_7) || !isValidEntry(formData.seats_grade_8) || !isValidEntry(formData.seats_grade_9) ||
+                !isValidEntry(formData.seats_grade_10)) return false;
         }
         if (showSHS()) {
-            if (seatsData.seats_shs === '') return false;
+            if (!isValidEntry(formData.seats_grade_11) || !isValidEntry(formData.seats_grade_12)) return false;
         }
 
         return true;
@@ -760,8 +779,16 @@ const SchoolResources = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : saveTimer > 0 ? (
+                                <span className="font-mono">
+                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
+                                </span>
+                            ) : (
+                                <><FiSave /> Save Changes</>
+                            )}
                         </button>
                     )}
                 </div>

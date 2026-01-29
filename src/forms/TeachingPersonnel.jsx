@@ -49,6 +49,7 @@ const TeachingPersonnel = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+    const [saveTimer, setSaveTimer] = useState(0);
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -58,6 +59,20 @@ const TeachingPersonnel = () => {
             localStorage.setItem('hasSeenTeachingInfo', 'true');
         }
     }, []);
+
+    // --- SAVE TIMER EFFECTS ---
+    useEffect(() => {
+        if (!isLocked && !viewOnly) {
+            setSaveTimer(120);
+        }
+    }, [isLocked, viewOnly]);
+
+    useEffect(() => {
+        if (saveTimer > 0) {
+            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
+            return () => clearInterval(timer);
+        }
+    }, [saveTimer]);
     const [userRole, setUserRole] = useState("School Head");
 
     // Data
@@ -275,6 +290,7 @@ const TeachingPersonnel = () => {
 
     // --- VALIDATION ---
     const isFormValid = () => {
+        const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
         // Experience fields are always visible? Not really, but they are generic.
         // Let's assume validation matches section visibility
 
@@ -283,10 +299,10 @@ const TeachingPersonnel = () => {
             const elemFields = ['teach_kinder', 'teach_g1', 'teach_g2', 'teach_g3', 'teach_g4', 'teach_g5', 'teach_g6'];
             const multiFields = ['teach_multi_1_2', 'teach_multi_3_4', 'teach_multi_5_6'];
             for (const f of [...elemFields, ...multiFields]) {
-                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+                if (!isValidEntry(formData[f])) return false;
             }
             if (formData.teach_multi_3plus_flag) {
-                if (formData.teach_multi_3plus_count === '' || formData.teach_multi_3plus_count === null) return false;
+                if (!isValidEntry(formData.teach_multi_3plus_count)) return false;
             }
         }
 
@@ -294,13 +310,13 @@ const TeachingPersonnel = () => {
         if (showJHS()) {
             const jhsFields = ['teach_g7', 'teach_g8', 'teach_g9', 'teach_g10'];
             for (const f of jhsFields) {
-                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+                if (!isValidEntry(formData[f])) return false;
             }
         }
 
         // 3. SHS
         if (showSHS()) {
-            if (formData.teach_g11 === '' || formData.teach_g12 === '') return false;
+            if (!isValidEntry(formData.teach_g11) || !isValidEntry(formData.teach_g12)) return false;
         }
 
         // 4. Experience (Always validated as it's general school info?)
@@ -311,7 +327,7 @@ const TeachingPersonnel = () => {
             'teach_exp_31_35', 'teach_exp_36_40', 'teach_exp_40_45'
         ];
         for (const f of expFields) {
-            if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            if (!isValidEntry(formData[f])) return false;
         }
 
         return true;
@@ -455,13 +471,13 @@ const TeachingPersonnel = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <TeacherInput label="Kinder" name="teach_kinder" value={formData.teach_kinder || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 1" name="teach_g1" value={formData.teach_g1 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 2" name="teach_g2" value={formData.teach_g2 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 3" name="teach_g3" value={formData.teach_g3 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 4" name="teach_g4" value={formData.teach_g4 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 5" name="teach_g5" value={formData.teach_g5 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 6" name="teach_g6" value={formData.teach_g6 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Kinder" name="teach_kinder" value={formData.teach_kinder ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 1" name="teach_g1" value={formData.teach_g1 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 2" name="teach_g2" value={formData.teach_g2 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 3" name="teach_g3" value={formData.teach_g3 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 4" name="teach_g4" value={formData.teach_g4 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 5" name="teach_g5" value={formData.teach_g5 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 6" name="teach_g6" value={formData.teach_g6 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
                         </div>
                     )}
@@ -478,10 +494,10 @@ const TeachingPersonnel = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <TeacherInput label="Grade 7" name="teach_g7" value={formData.teach_g7 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 8" name="teach_g8" value={formData.teach_g8 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 9" name="teach_g9" value={formData.teach_g9 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 10" name="teach_g10" value={formData.teach_g10 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 7" name="teach_g7" value={formData.teach_g7 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 8" name="teach_g8" value={formData.teach_g8 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 9" name="teach_g9" value={formData.teach_g9 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 10" name="teach_g10" value={formData.teach_g10 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
                         </div>
                     )}
@@ -498,8 +514,8 @@ const TeachingPersonnel = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <TeacherInput label="Grade 11" name="teach_g11" value={formData.teach_g11 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 12" name="teach_g12" value={formData.teach_g12 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 11" name="teach_g11" value={formData.teach_g11 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 12" name="teach_g12" value={formData.teach_g12 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
                         </div>
                     )}
@@ -517,9 +533,9 @@ const TeachingPersonnel = () => {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mb-8">
-                                <TeacherInput label="Grade 1 & 2" name="teach_multi_1_2" value={formData.teach_multi_1_2 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 3 & 4" name="teach_multi_3_4" value={formData.teach_multi_3_4 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 5 & 6" name="teach_multi_5_6" value={formData.teach_multi_5_6 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 1 & 2" name="teach_multi_1_2" value={formData.teach_multi_1_2 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 3 & 4" name="teach_multi_3_4" value={formData.teach_multi_3_4 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 5 & 6" name="teach_multi_5_6" value={formData.teach_multi_5_6 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
 
                             <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
@@ -553,7 +569,7 @@ const TeachingPersonnel = () => {
 
                                 {formData.teach_multi_3plus_flag && (
                                     <div className="mt-6 animate-in slide-in-from-top-2 fade-in duration-300">
-                                        <TeacherInput label="How many teachers?" name="teach_multi_3plus_count" value={formData.teach_multi_3plus_count || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                        <TeacherInput label="How many teachers?" name="teach_multi_3plus_count" value={formData.teach_multi_3plus_count ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
                                     </div>
                                 )}
                             </div>
@@ -571,16 +587,16 @@ const TeachingPersonnel = () => {
                             </div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            <TeacherInput label="0-1 Years" name="teach_exp_0_1" value={formData.teach_exp_0_1 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="2-5 Years" name="teach_exp_2_5" value={formData.teach_exp_2_5 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="6-10 Years" name="teach_exp_6_10" value={formData.teach_exp_6_10 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="11-15 Years" name="teach_exp_11_15" value={formData.teach_exp_11_15 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="16-20 Years" name="teach_exp_16_20" value={formData.teach_exp_16_20 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="21-25 Years" name="teach_exp_21_25" value={formData.teach_exp_21_25 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="26-30 Years" name="teach_exp_26_30" value={formData.teach_exp_26_30 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="31-35 Years" name="teach_exp_31_35" value={formData.teach_exp_31_35 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="36-40 Years" name="teach_exp_36_40" value={formData.teach_exp_36_40 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="40-45 Years" name="teach_exp_40_45" value={formData.teach_exp_40_45 || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="0-1 Years" name="teach_exp_0_1" value={formData.teach_exp_0_1 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="2-5 Years" name="teach_exp_2_5" value={formData.teach_exp_2_5 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="6-10 Years" name="teach_exp_6_10" value={formData.teach_exp_6_10 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="11-15 Years" name="teach_exp_11_15" value={formData.teach_exp_11_15 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="16-20 Years" name="teach_exp_16_20" value={formData.teach_exp_16_20 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="21-25 Years" name="teach_exp_21_25" value={formData.teach_exp_21_25 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="26-30 Years" name="teach_exp_26_30" value={formData.teach_exp_26_30 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="31-35 Years" name="teach_exp_31_35" value={formData.teach_exp_31_35 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="36-40 Years" name="teach_exp_36_40" value={formData.teach_exp_36_40 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="40-45 Years" name="teach_exp_40_45" value={formData.teach_exp_40_45 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
                         </div>
                     </div>
                 </form>
@@ -596,8 +612,16 @@ const TeachingPersonnel = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : saveTimer > 0 ? (
+                                <span className="font-mono">
+                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
+                                </span>
+                            ) : (
+                                <><FiSave /> Save Changes</>
+                            )}
                         </button>
                     )}
                 </div>

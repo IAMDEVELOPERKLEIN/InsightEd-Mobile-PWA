@@ -57,6 +57,7 @@ const OrganizedClasses = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
+    const [saveTimer, setSaveTimer] = useState(0);
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -298,6 +299,20 @@ const OrganizedClasses = () => {
         }
     }, []);
 
+    // --- SAVE TIMER EFFECTS ---
+    useEffect(() => {
+        if (!isLocked && !viewOnly) {
+            setSaveTimer(120);
+        }
+    }, [isLocked, viewOnly]);
+
+    useEffect(() => {
+        if (saveTimer > 0) {
+            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
+            return () => clearInterval(timer);
+        }
+    }, [saveTimer]);
+
     // --- HELPERS ---
     const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
     const showJHS = () => offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
@@ -330,6 +345,7 @@ const OrganizedClasses = () => {
 
     // --- VALIDATION ---
     const isFormValid = () => {
+        const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
         const grades = [];
         if (showElem()) grades.push('kinder', '1', '2', '3', '4', '5', '6');
         if (showJHS()) grades.push('7', '8', '9', '10');
@@ -337,8 +353,8 @@ const OrganizedClasses = () => {
 
         // Check Grade Enrolment Inputs
         for (const g of grades) {
-            const key = g === 'kinder' ? 'grade_kinder' : `grade_${g}`;
-            if (formData[key] === '' || formData[key] === null || formData[key] === undefined) return false;
+            const key = g === 'kinder' ? 'kinder' : `g${g}`;
+            if (!isValidEntry(formData[key])) return false;
         }
 
         // Check Class Size Inputs
@@ -348,7 +364,9 @@ const OrganizedClasses = () => {
         if (showSHS()) sizeGrades.push('11', '12');
 
         for (const g of sizeGrades) {
-            if (classSizeData[`cntLessG${g}`] === '' || classSizeData[`cntWithinG${g}`] === '' || classSizeData[`cntAboveG${g}`] === '') return false;
+            if (!isValidEntry(classSizeData[`cntLessG${g}`]) ||
+                !isValidEntry(classSizeData[`cntWithinG${g}`]) ||
+                !isValidEntry(classSizeData[`cntAboveG${g}`])) return false;
         }
 
         return true;
@@ -449,7 +467,7 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="number"
-                                            value={+formData[item.k] || ''}
+                                            value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
                                             className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
@@ -473,7 +491,7 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="number"
-                                            value={+formData[item.k] || ''}
+                                            value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
                                             className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
@@ -496,7 +514,7 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="number"
-                                            value={+formData[item.k] || ''}
+                                            value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
                                             className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
@@ -552,7 +570,7 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric"
                                                     name={`cntLessG${g}`}
-                                                    value={+classSizeData[`cntLessG${g}`] || ''}
+                                                    value={classSizeData[`cntLessG${g}`] !== '' && classSizeData[`cntLessG${g}`] != null ? +classSizeData[`cntLessG${g}`] : ''}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -564,7 +582,7 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric"
                                                     name={`cntWithinG${g}`}
-                                                    value={+classSizeData[`cntWithinG${g}`] || ''}
+                                                    value={classSizeData[`cntWithinG${g}`] !== '' && classSizeData[`cntWithinG${g}`] != null ? +classSizeData[`cntWithinG${g}`] : ''}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -576,7 +594,7 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric"
                                                     name={`cntAboveG${g}`}
-                                                    value={+classSizeData[`cntAboveG${g}`] || ''}
+                                                    value={classSizeData[`cntAboveG${g}`] !== '' && classSizeData[`cntAboveG${g}`] != null ? +classSizeData[`cntAboveG${g}`] : ''}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -602,8 +620,16 @@ const OrganizedClasses = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : saveTimer > 0 ? (
+                                <span className="font-mono">
+                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
+                                </span>
+                            ) : (
+                                <><FiSave /> Save Changes</>
+                            )}
                         </button>
                     )}
                 </div>
