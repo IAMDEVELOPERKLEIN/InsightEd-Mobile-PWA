@@ -122,7 +122,28 @@ const Register = () => {
             skipEmptyLines: true,
             complete: (results) => {
                 if (results.data && results.data.length > 0) {
-                    setCsvData(results.data);
+                    // Standardize Curricular Offering
+                    const standardizedData = results.data.map(item => {
+                        let offering = item.curricular_offering;
+                        if (offering) {
+                            const map = {
+                                "Purely es": "Purely Elementary",
+                                "ES and JHS (K to 10)": "Elementary School and Junior High School (K-10)",
+                                "All offering (K to 12)": "All Offering (K-12)",
+                                "JHS with SHS": "Junior and Senior High",
+                                "Purely JHS": "Purely Junior High School",
+                                "Purely SHS": "Purely Senior High School"
+                            };
+                            // Normalize check (case insensitive or direct map)
+                            const key = Object.keys(map).find(k => k.toLowerCase() === offering.toLowerCase()) || offering;
+                            if (map[key] || map[offering]) {
+                                item.curricular_offering = map[key] || map[offering];
+                            }
+                        }
+                        return item;
+                    });
+
+                    setCsvData(standardizedData);
                     setIsCsvLoaded(true);
                 }
             },
@@ -499,8 +520,10 @@ const Register = () => {
                 // selectedSchool now contains the updated latitude/longitude from the map drag
                 // Explicitly construct payload to avoid shadowing
                 const finalSchoolData = {
-                    ...selectedSchool
-                    // curricularOffering removed by user request
+                    ...selectedSchool,
+                    // Explicitly map keys if needed, though spread usually handles it
+                    // ensuring curricular offering is included
+                    curricularOffering: selectedSchool.curricular_offering
                 };
 
                 console.log("SENDING FINAL REGISTRATION DATA:", finalSchoolData);

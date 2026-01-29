@@ -670,6 +670,26 @@ const SchoolProfile = () => {
                                             )}
                                         </div>
 
+                                        <div>
+                                            <label className={labelClass}>Curricular Offering</label>
+                                            <select
+                                                name="curricularOffering"
+                                                value={formData.curricularOffering}
+                                                onChange={handleChange}
+                                                className={inputClass}
+                                                disabled={isDummy}
+                                                required
+                                            >
+                                                <option value="">Select Offering...</option>
+                                                <option value="Purely Elementary">Purely Elementary</option>
+                                                <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
+                                                <option value="All Offering (K-12)">All Offering (K-12)</option>
+                                                <option value="Junior and Senior High">Junior and Senior High</option>
+                                                <option value="Purely Junior High School">Purely Junior High School</option>
+                                                <option value="Purely Senior High School">Purely Senior High School</option>
+                                            </select>
+                                        </div>
+
                                         {/* ANNEX SCHOOL TOGGLE */}
                                         <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
                                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Is this an Annex School?</label>

@@ -41,10 +41,7 @@ const SchoolHeadDashboard = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
 
-    // --- COMPLETION GATE STATE ---
-    const [showOfferingModal, setShowOfferingModal] = useState(false);
-    const [offering, setOffering] = useState('');
-    const [isSavingOffering, setIsSavingOffering] = useState(false);
+
 
     // --- DEADLINE STATE ---
     const [deadlineDate, setDeadlineDate] = useState(null);
@@ -233,10 +230,7 @@ const SchoolHeadDashboard = () => {
                         const profileJson = await profileRes.json();
                         if (profileJson.exists) {
                             setSchoolProfile(profileJson.data);
-                            // CHECK COMPLETION GATE
-                            if (!profileJson.data.curricular_offering) {
-                                setShowOfferingModal(true);
-                            }
+
                         }
 
                         const headRes = await fetch(`/api/school-head/${targetUid}`);
@@ -633,78 +627,7 @@ const SchoolHeadDashboard = () => {
 
             <BottomNav userRole="School Head" />
 
-            {/* --- COMPLETION GATE MODAL --- */}
-            {
-                showOfferingModal && (
-                    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
-                        <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-3xl p-8 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
-                            {/* Header Bar */}
-                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
 
-                            <div className="text-center mb-6">
-                                <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-600 dark:text-orange-400">
-                                    <span className="text-3xl">⚠️</span>
-                                </div>
-                                <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Action Required</h2>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm">
-                                    Please select your school's curricular offering to unlock your dashboard.
-                                </p>
-                            </div>
-
-                            <div className="space-y-4">
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Curricular Offering</label>
-                                <select
-                                    value={offering}
-                                    onChange={(e) => setOffering(e.target.value)}
-                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 font-bold outline-none focus:ring-2 focus:ring-orange-500 transition-all appearance-none"
-                                >
-                                    <option value="">Select Offering...</option>
-                                    <option value="Purely Elementary">Purely Elementary</option>
-                                    <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
-                                    <option value="All Offering (K-12)">All Offering (K-12)</option>
-                                    <option value="Junior and Senior High">Junior and Senior High</option>
-                                    <option value="Purely Junior High School">Purely Junior High School</option>
-                                    <option value="Purely Senior High School">Purely Senior High School</option>
-                                </select>
-
-                                <button
-                                    onClick={async () => {
-                                        if (!offering) return;
-                                        setIsSavingOffering(true);
-                                        try {
-                                            const res = await fetch('/api/update-offering', {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({
-                                                    uid: auth.currentUser.uid,
-                                                    schoolId: schoolProfile.school_id,
-                                                    offering
-                                                })
-                                            });
-                                            const data = await res.json();
-                                            if (data.success) {
-                                                setSchoolProfile(prev => ({ ...prev, curricular_offering: offering }));
-                                                setShowOfferingModal(false);
-                                            } else {
-                                                alert(data.message || "Failed to save.");
-                                            }
-                                        } catch (err) {
-                                            console.error(err);
-                                            alert("Network error.");
-                                        } finally {
-                                            setIsSavingOffering(false);
-                                        }
-                                    }}
-                                    disabled={!offering || isSavingOffering}
-                                    className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-orange-500/30 transform transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mt-4"
-                                >
-                                    {isSavingOffering ? 'Saving...' : 'Save & Continue'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
         </>
     );
 };

@@ -922,9 +922,9 @@ app.post('/api/register-school', async (req, res) => {
             school_id, school_name, region, province, division, district, 
             municipality, leg_district, barangay, mother_school_id, 
             latitude, longitude, 
-            submitted_by, iern, email, submitted_at
+            submitted_by, iern, email, curricular_offering, submitted_at
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP
         )
     `;
 
@@ -943,7 +943,8 @@ app.post('/api/register-school', async (req, res) => {
       schoolData.longitude,
       uid,
       newIern,
-      email
+      email,
+      schoolData.curricular_offering
     ];
 
     await client.query(insertQuery, values);
