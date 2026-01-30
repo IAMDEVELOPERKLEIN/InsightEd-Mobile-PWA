@@ -17,7 +17,7 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
     // Helper to get value specifically for this component instance
     const getGridValue = (cat, grade) => {
         const key = `stat_${cat}_${grade}`;
-        return formData[key] ?? '';
+        return formData[key] ?? 0;
     };
 
     // Calculate totals locally based on the passed formData
@@ -96,7 +96,8 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
                                 onChange={(e) => onGridChange(category, g, e.target.value)}
                                 disabled={isLocked}
                                 className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
-                                onFocus={(e) => e.target.select()}
+                                onFocus={() => getGridValue(category, g) === 0 && onGridChange(category, g, '')}
+                                onBlur={() => (getGridValue(category, g) === '' || getGridValue(category, g) === null) && onGridChange(category, g, 0)}
                             />
                         </div>
                     );
@@ -143,8 +144,10 @@ const LearnerStatistics = () => {
 
     const handleGridChange = (category, grade, value) => {
         const key = `stat_${category}_${grade}`;
-        // Limit to 3 digits
-        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
+        // 1. Strip non-numeric characters
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // Allow empty string '' temporarily, otherwise parse Int
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
 
         setFormData(prev => ({

@@ -13,14 +13,14 @@ import SuccessModal from '../components/SuccessModal';
 // Helper: Define initial state structure
 const getInitialFields = () => ({
     // Core Subjects (Major & Teaching Load)
-    spec_english_major: '', spec_english_teaching: '',
-    spec_filipino_major: '', spec_filipino_teaching: '',
-    spec_math_major: '', spec_math_teaching: '',
-    spec_science_major: '', spec_science_teaching: '',
-    spec_ap_major: '', spec_ap_teaching: '',
-    spec_mapeh_major: '', spec_mapeh_teaching: '',
-    spec_esp_major: '', spec_esp_teaching: '',
-    spec_tle_major: '', spec_tle_teaching: ''
+    spec_english_major: 0, spec_english_teaching: 0,
+    spec_filipino_major: 0, spec_filipino_teaching: 0,
+    spec_math_major: 0, spec_math_teaching: 0,
+    spec_science_major: 0, spec_science_teaching: 0,
+    spec_ap_major: 0, spec_ap_teaching: 0,
+    spec_mapeh_major: 0, spec_mapeh_teaching: 0,
+    spec_esp_major: 0, spec_esp_teaching: 0,
+    spec_tle_major: 0, spec_tle_teaching: 0
 });
 
 // --- SUB-COMPONENT (Moved Outside) ---
@@ -36,31 +36,31 @@ const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) =
             <div className="w-24 px-1">
                 <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
                 <input
-                    type="number"
-                    min="0"
+                    type="text" inputMode="numeric" pattern="[0-9]*"
                     placeholder=""
                     name={`spec_${id}_major`}
-                    value={major ?? ''}
-                    onChange={handleChange}
+                    value={major ?? 0}
+                    onChange={(e) => handleChange(e.target.name, e.target.value)}
                     disabled={isLocked || viewOnly}
                     onWheel={(e) => e.target.blur()}
                     className="w-full text-center border border-slate-200 rounded-xl py-2.5 bg-blue-50/50 text-blue-700 font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:opacity-50 text-base shadow-sm"
-                    onFocus={(e) => e.target.select()}
+                    onFocus={(e) => major === 0 && handleChange(e.target.name, '')}
+                    onBlur={(e) => (major === '' || major === null) && handleChange(e.target.name, 0)}
                 />
             </div>
             <div className="w-24 px-1">
                 <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
                 <input
-                    type="number"
-                    min="0"
+                    type="text" inputMode="numeric" pattern="[0-9]*"
                     placeholder=""
                     name={`spec_${id}_teaching`}
-                    value={teaching ?? ''}
-                    onChange={handleChange}
+                    value={teaching ?? 0}
+                    onChange={(e) => handleChange(e.target.name, e.target.value)}
                     disabled={isLocked || viewOnly}
                     onWheel={(e) => e.target.blur()}
                     className="w-full text-center border border-slate-200 rounded-xl py-2.5 bg-orange-50/50 text-orange-700 font-bold focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all disabled:opacity-50 text-base shadow-sm"
-                    onFocus={(e) => e.target.select()}
+                    onFocus={(e) => teaching === 0 && handleChange(e.target.name, '')}
+                    onBlur={(e) => (teaching === '' || teaching === null) && handleChange(e.target.name, 0)}
                 />
             </div>
         </div>
@@ -229,11 +229,13 @@ const TeacherSpecialization = () => {
         return () => unsubscribe();
     }, [viewOnly, schoolIdParam]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        // Limit to 3 digits
-        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
+    const handleChange = (name, value) => {
+        // 1. Strip non-numeric characters
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // Allow empty string '' temporarily, otherwise parse Int
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
+
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 

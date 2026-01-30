@@ -17,9 +17,11 @@ const InputField = ({ label, name, type = "number", formData, handleChange, isLo
     <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-2/3 group-hover:text-blue-600 transition-colors">{label}</label>
         <input
-            type="text" inputMode="numeric" pattern="[0-9]*" name={name} value={formData[name] ?? ''}
+            type="text" inputMode="numeric" pattern="[0-9]*" name={name} value={formData[name] ?? 0}
             onChange={handleChange} disabled={isLocked || viewOnly}
             className="w-24 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2.5 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent text-lg shadow-sm"
+            onFocus={() => formData[name] === 0 && handleChange({ target: { name, value: '' } })}
+            onBlur={() => (formData[name] === '' || formData[name] === null) && handleChange({ target: { name, value: 0 } })}
         />
     </div>
 );
@@ -61,7 +63,9 @@ const SeatRow = ({ label, enrollment, seatKey, formData, handleChange, isLocked,
                         onChange={handleChange}
                         disabled={isLocked || viewOnly}
                         className="w-20 text-center font-bold text-slate-900 bg-white border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
-                        value={seats ?? ''}
+                        value={seats ?? 0}
+                        onFocus={() => seats === 0 && handleChange({ target: { name: seatKey, value: '' } })}
+                        onBlur={() => (seats === '' || seats === null) && handleChange({ target: { name: seatKey, value: 0 } })}
                     />
                 </div>
             </td>
@@ -89,10 +93,12 @@ const ResourceAuditRow = ({ label, funcName, nonFuncName, formData, handleChange
                 <input
                     type="text" inputMode="numeric" pattern="[0-9]*"
                     name={funcName}
-                    value={formData[funcName] ?? ''}
+                    value={formData[funcName] ?? 0}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
                     className="w-full text-center font-bold text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                    onFocus={() => formData[funcName] === 0 && handleChange({ target: { name: funcName, value: '' } })}
+                    onBlur={() => (formData[funcName] === '' || formData[funcName] === null) && handleChange({ target: { name: funcName, value: 0 } })}
                 />
             </div>
         </td>
@@ -102,10 +108,12 @@ const ResourceAuditRow = ({ label, funcName, nonFuncName, formData, handleChange
                 <input
                     type="text" inputMode="numeric" pattern="[0-9]*"
                     name={nonFuncName}
-                    value={formData[nonFuncName] ?? ''}
+                    value={formData[nonFuncName] ?? 0}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
                     className="w-full text-center font-bold text-rose-500 bg-rose-50/50 border border-rose-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                    onFocus={() => formData[nonFuncName] === 0 && handleChange({ target: { name: nonFuncName, value: '' } })}
+                    onBlur={() => (formData[nonFuncName] === '' || formData[nonFuncName] === null) && handleChange({ target: { name: nonFuncName, value: 0 } })}
                 />
             </div>
         </td>
@@ -118,10 +126,12 @@ const LabRow = ({ label, name, formData, handleChange, isLocked, viewOnly }) => 
         <input
             type="text" inputMode="numeric" pattern="[0-9]*"
             name={name}
-            value={formData[name] ?? ''}
+            value={formData[name] ?? 0}
             onChange={handleChange}
             disabled={isLocked || viewOnly}
             className="w-20 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent shadow-sm"
+            onFocus={() => formData[name] === 0 && handleChange({ target: { name, value: '' } })}
+            onBlur={() => (formData[name] === '' || formData[name] === null) && handleChange({ target: { name, value: 0 } })}
         />
     </div>
 );
@@ -175,35 +185,35 @@ const SchoolResources = () => {
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
         res_internet_type: '',
-        res_toilets_male: '',
-        res_toilets_female: '',
-        res_toilets_common: '', // [NEW] Common CR
-        res_toilets_pwd: '',
+        res_toilets_male: 0,
+        res_toilets_female: 0,
+        res_toilets_common: 0, // [NEW] Common CR
+        res_toilets_pwd: 0,
         res_water_source: '',
-        res_tvl_workshops: '',
-        res_faucets: '',
+        res_tvl_workshops: 0,
+        res_faucets: 0,
         res_electricity_source: '',
         res_buildable_space: '',
         sha_category: '', // [NEW] SHA Category
 
         // LABS
-        res_sci_labs: '', res_com_labs: '',
+        res_sci_labs: 0, res_com_labs: 0,
 
         // FUNCTIONAL / NON-FUNCTIONAL
-        res_ecart_func: '', res_ecart_nonfunc: '',
-        res_laptop_func: '', res_laptop_nonfunc: '',
-        res_tv_func: '', res_tv_nonfunc: '',
-        res_printer_func: '', res_printer_nonfunc: '',
-        res_desk_func: '', res_desk_nonfunc: '',
-        res_armchair_func: '', res_armchair_nonfunc: '',
-        res_toilet_func: '', res_toilet_nonfunc: '',
-        res_handwash_func: '', res_handwash_nonfunc: '',
+        res_ecart_func: 0, res_ecart_nonfunc: 0,
+        res_laptop_func: 0, res_laptop_nonfunc: 0,
+        res_tv_func: 0, res_tv_nonfunc: 0,
+        res_printer_func: 0, res_printer_nonfunc: 0,
+        res_desk_func: 0, res_desk_nonfunc: 0,
+        res_armchair_func: 0, res_armchair_nonfunc: 0,
+        res_toilet_func: 0, res_toilet_nonfunc: 0,
+        res_handwash_func: 0, res_handwash_nonfunc: 0,
 
         // SEATS
-        seats_kinder: '', seats_grade_1: '', seats_grade_2: '', seats_grade_3: '',
-        seats_grade_4: '', seats_grade_5: '', seats_grade_6: '',
-        seats_grade_7: '', seats_grade_8: '', seats_grade_9: '', seats_grade_10: '',
-        seats_grade_11: '', seats_grade_12: ''
+        seats_kinder: 0, seats_grade_1: 0, seats_grade_2: 0, seats_grade_3: 0,
+        seats_grade_4: 0, seats_grade_5: 0, seats_grade_6: 0,
+        seats_grade_7: 0, seats_grade_8: 0, seats_grade_9: 0, seats_grade_10: 0,
+        seats_grade_11: 0, seats_grade_12: 0
     };
 
     // --- FETCH DATA (Strict Sync Cache Strategy) ---
@@ -372,22 +382,23 @@ const SchoolResources = () => {
 
     const handleChange = (e) => {
         const { name, value, type } = e.target;
-        let finalValue = value;
 
         // Check if one of the known non-numeric fields
         const isStringField = ['res_internet_type', 'res_water_source', 'res_electricity_source', 'res_ownership_type', 'res_buildable_space', 'sha_category'].includes(name);
 
-        if (!isStringField) {
-            // Numeric handling
-            const limit = name.startsWith('seats_') ? 4 : 5;
-            const cleanValue = value.replace(/[^0-9]/g, '').slice(0, limit);
-            finalValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
+        if (isStringField) {
+            setFormData(prev => ({ ...prev, [name]: value }));
+            return;
         }
 
-        setFormData(prev => ({
-            ...prev,
-            [name]: finalValue
-        }));
+        // 1. Strip non-numeric characters
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // Allow empty string '' temporarily, otherwise parse Int
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
+
+        setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
     useEffect(() => {

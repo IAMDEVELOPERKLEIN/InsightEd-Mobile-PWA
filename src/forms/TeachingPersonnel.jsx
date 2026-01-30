@@ -18,14 +18,14 @@ const TeacherInput = ({ label, name, value, onChange, disabled }) => (
         <p className="text-[9px] text-slate-400 font-medium mb-1.5 text-center block">Total Teachers</p>
         <div className="relative group">
             <input
-                type="number"
-                min="0"
+                type="text" inputMode="numeric" pattern="[0-9]*"
                 name={name}
-                value={value}
-                onChange={onChange}
+                value={value ?? 0}
+                onChange={(e) => onChange(name, e.target.value)}
                 disabled={disabled}
                 onWheel={(e) => e.target.blur()}
-                onFocus={(e) => e.target.select()}
+                onFocus={() => value === 0 && onChange(name, '')}
+                onBlur={() => (value === '' || value === null) && onChange(name, 0)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center font-bold text-slate-700 text-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed group-hover:border-blue-300"
             />
         </div>
@@ -70,18 +70,18 @@ const TeachingPersonnel = () => {
 
     // --- KEY FIX: Using teach_ prefix to match Neon Schema ---
     const [formData, setFormData] = useState({
-        teach_kinder: '', teach_g1: '', teach_g2: '', teach_g3: '', teach_g4: '', teach_g5: '', teach_g6: '',
-        teach_g7: '', teach_g8: '', teach_g9: '', teach_g10: '',
-        teach_g11: '', teach_g12: '',
-        teach_multi_1_2: '', teach_multi_3_4: '', teach_multi_5_6: '',
+        teach_kinder: 0, teach_g1: 0, teach_g2: 0, teach_g3: 0, teach_g4: 0, teach_g5: 0, teach_g6: 0,
+        teach_g7: 0, teach_g8: 0, teach_g9: 0, teach_g10: 0,
+        teach_g11: 0, teach_g12: 0,
+        teach_multi_1_2: 0, teach_multi_3_4: 0, teach_multi_5_6: 0,
         teach_multi_3plus_flag: false,
-        teach_multi_3plus_count: '',
+        teach_multi_3plus_count: 0,
 
         // TEACHING EXPERIENCE
-        teach_exp_0_1: '', teach_exp_2_5: '', teach_exp_6_10: '',
-        teach_exp_11_15: '', teach_exp_16_20: '', teach_exp_21_25: '',
-        teach_exp_26_30: '', teach_exp_31_35: '', teach_exp_36_40: '',
-        teach_exp_40_45: '',
+        teach_exp_0_1: 0, teach_exp_2_5: 0, teach_exp_6_10: 0,
+        teach_exp_11_15: 0, teach_exp_16_20: 0, teach_exp_21_25: 0,
+        teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
+        teach_exp_40_45: 0,
     });
     const isDummy = location.state?.isDummy || false;
     const [originalData, setOriginalData] = useState(null);
@@ -105,16 +105,16 @@ const TeachingPersonnel = () => {
 
                 // STEP 1: PREPARE DEFAULTS
                 const defaultFormData = {
-                    teach_kinder: '', teach_g1: '', teach_g2: '', teach_g3: '', teach_g4: '', teach_g5: '', teach_g6: '',
-                    teach_g7: '', teach_g8: '', teach_g9: '', teach_g10: '',
-                    teach_g11: '', teach_g12: '',
-                    teach_multi_1_2: '', teach_multi_3_4: '', teach_multi_5_6: '',
+                    teach_kinder: 0, teach_g1: 0, teach_g2: 0, teach_g3: 0, teach_g4: 0, teach_g5: 0, teach_g6: 0,
+                    teach_g7: 0, teach_g8: 0, teach_g9: 0, teach_g10: 0,
+                    teach_g11: 0, teach_g12: 0,
+                    teach_multi_1_2: 0, teach_multi_3_4: 0, teach_multi_5_6: 0,
                     teach_multi_3plus_flag: false,
-                    teach_multi_3plus_count: '',
-                    teach_exp_0_1: '', teach_exp_2_5: '', teach_exp_6_10: '',
-                    teach_exp_11_15: '', teach_exp_16_20: '', teach_exp_21_25: '',
-                    teach_exp_26_30: '', teach_exp_31_35: '', teach_exp_36_40: '',
-                    teach_exp_40_45: '',
+                    teach_multi_3plus_count: 0,
+                    teach_exp_0_1: 0, teach_exp_2_5: 0, teach_exp_6_10: 0,
+                    teach_exp_11_15: 0, teach_exp_16_20: 0, teach_exp_21_25: 0,
+                    teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
+                    teach_exp_40_45: 0,
                 };
 
                 // STEP 2: IMMEDIATE CACHE LOAD
@@ -253,14 +253,14 @@ const TeachingPersonnel = () => {
 
     const getTotal = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0);
 
-    const handleChange = (e) => {
-        let val = e.target.value;
-        // Limit to 3 digits
-        if (typeof val === 'string') {
-            val = val.replace(/[^0-9]/g, '').slice(0, 3);
-        }
-        const intVal = val === '' ? '' : parseInt(val);
-        setFormData({ ...formData, [e.target.name]: intVal });
+    const handleChange = (name, value) => {
+        // 1. Strip non-numeric characters
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // Allow empty string '' temporarily, otherwise parse Int
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
+
+        setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
     const handleUpdateClick = () => setShowEditModal(true);

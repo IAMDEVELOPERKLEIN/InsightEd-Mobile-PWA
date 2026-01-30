@@ -65,24 +65,24 @@ const OrganizedClasses = () => {
 
     // Default values set to 0
     const [formData, setFormData] = useState({
-        kinder: '', g1: '', g2: '', g3: '', g4: '', g5: '', g6: '',
-        g7: '', g8: '', g9: '', g10: '',
-        g11: '', g12: ''
+        kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
+        g7: 0, g8: 0, g9: 0, g10: 0,
+        g11: 0, g12: 0
     });
 
     const [classSizeData, setClassSizeData] = useState({
-        cntLessG1: '', cntWithinG1: '', cntAboveG1: '',
-        cntLessG2: '', cntWithinG2: '', cntAboveG2: '',
-        cntLessG3: '', cntWithinG3: '', cntAboveG3: '',
-        cntLessG4: '', cntWithinG4: '', cntAboveG4: '',
-        cntLessG5: '', cntWithinG5: '', cntAboveG5: '',
-        cntLessG6: '', cntWithinG6: '', cntAboveG6: '',
-        cntLessG7: '', cntWithinG7: '', cntAboveG7: '',
-        cntLessG8: '', cntWithinG8: '', cntAboveG8: '',
-        cntLessG9: '', cntWithinG9: '', cntAboveG9: '',
-        cntLessG10: '', cntWithinG10: '', cntAboveG10: '',
-        cntLessG11: '', cntWithinG11: '', cntAboveG11: '',
-        cntLessG12: '', cntWithinG12: '', cntAboveG12: ''
+        cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
+        cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
+        cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
+        cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
+        cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
+        cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
+        cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
+        cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
+        cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
+        cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
+        cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
+        cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
     });
     const [originalData, setOriginalData] = useState(null);
 
@@ -100,23 +100,23 @@ const OrganizedClasses = () => {
             if (user) {
                 // DEFAULT STATE (Prevents Uncontrolled Input Errors)
                 const defaultFormData = {
-                    kinder: '', g1: '', g2: '', g3: '', g4: '', g5: '', g6: '',
-                    g7: '', g8: '', g9: '', g10: '',
-                    g11: '', g12: ''
+                    kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
+                    g7: 0, g8: 0, g9: 0, g10: 0,
+                    g11: 0, g12: 0
                 };
                 const defaultClassSize = {
-                    cntLessG1: '', cntWithinG1: '', cntAboveG1: '',
-                    cntLessG2: '', cntWithinG2: '', cntAboveG2: '',
-                    cntLessG3: '', cntWithinG3: '', cntAboveG3: '',
-                    cntLessG4: '', cntWithinG4: '', cntAboveG4: '',
-                    cntLessG5: '', cntWithinG5: '', cntAboveG5: '',
-                    cntLessG6: '', cntWithinG6: '', cntAboveG6: '',
-                    cntLessG7: '', cntWithinG7: '', cntAboveG7: '',
-                    cntLessG8: '', cntWithinG8: '', cntAboveG8: '',
-                    cntLessG9: '', cntWithinG9: '', cntAboveG9: '',
-                    cntLessG10: '', cntWithinG10: '', cntAboveG10: '',
-                    cntLessG11: '', cntWithinG11: '', cntAboveG11: '',
-                    cntLessG12: '', cntWithinG12: '', cntAboveG12: ''
+                    cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
+                    cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
+                    cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
+                    cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
+                    cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
+                    cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
+                    cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
+                    cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
+                    cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
+                    cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
+                    cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
+                    cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
                 };
 
                 const storedSchoolId = localStorage.getItem('schoolId');
@@ -313,15 +313,23 @@ const OrganizedClasses = () => {
 
     // --- HANDLER FIXES ---
     const handleChange = (name, value) => {
-        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
+        // 1. Strip non-numeric characters
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // Allow empty string '' temporarily, otherwise parse Int
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
+
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
     const handleClassSizeChange = (e) => {
         const { name, value } = e.target;
-        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
+        // 1. Strip non-numeric characters
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // Allow empty string '' temporarily, otherwise parse Int
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
+
         setClassSizeData(prev => ({ ...prev, [name]: intValue }));
     };
 
@@ -456,10 +464,12 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="text" inputMode="numeric" pattern="[0-9]*"
-                                            value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
+                                            value={formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
                                             className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                            onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
+                                            onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
                                         />
                                     </div>
                                 ))}
@@ -480,10 +490,12 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="text" inputMode="numeric" pattern="[0-9]*"
-                                            value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
+                                            value={formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
                                             className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                            onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
+                                            onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
                                         />
                                     </div>
                                 ))}
@@ -503,10 +515,12 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="text" inputMode="numeric" pattern="[0-9]*"
-                                            value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
+                                            value={formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
                                             className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                            onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
+                                            onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
                                         />
                                     </div>
                                 ))}
@@ -559,10 +573,11 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric" pattern="[0-9]*"
                                                     name={`cntLessG${g}`}
-                                                    value={classSizeData[`cntLessG${g}`] === '' || classSizeData[`cntLessG${g}`] === null ? '' : classSizeData[`cntLessG${g}`]}
+                                                    value={classSizeData[`cntLessG${g}`]}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
-                                                    onFocus={e => e.target.select()}
+                                                    onFocus={() => classSizeData[`cntLessG${g}`] === 0 && handleClassSizeChange({ target: { name: `cntLessG${g}`, value: '' } })}
+                                                    onBlur={() => (classSizeData[`cntLessG${g}`] === '' || classSizeData[`cntLessG${g}`] === null) && handleClassSizeChange({ target: { name: `cntLessG${g}`, value: 0 } })}
                                                     className="w-full h-10 text-center font-bold text-emerald-700 bg-emerald-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-xs transition-all hover:border-emerald-200"
                                                 />
                                             </td>
@@ -571,10 +586,11 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric" pattern="[0-9]*"
                                                     name={`cntWithinG${g}`}
-                                                    value={classSizeData[`cntWithinG${g}`] === '' || classSizeData[`cntWithinG${g}`] === null ? '' : classSizeData[`cntWithinG${g}`]}
+                                                    value={classSizeData[`cntWithinG${g}`]}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
-                                                    onFocus={e => e.target.select()}
+                                                    onFocus={() => classSizeData[`cntWithinG${g}`] === 0 && handleClassSizeChange({ target: { name: `cntWithinG${g}`, value: '' } })}
+                                                    onBlur={() => (classSizeData[`cntWithinG${g}`] === '' || classSizeData[`cntWithinG${g}`] === null) && handleClassSizeChange({ target: { name: `cntWithinG${g}`, value: 0 } })}
                                                     className="w-full h-10 text-center font-bold text-blue-700 bg-blue-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-xs transition-all hover:border-blue-200"
                                                 />
                                             </td>
@@ -583,10 +599,11 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric" pattern="[0-9]*"
                                                     name={`cntAboveG${g}`}
-                                                    value={classSizeData[`cntAboveG${g}`] === '' || classSizeData[`cntAboveG${g}`] === null ? '' : classSizeData[`cntAboveG${g}`]}
+                                                    value={classSizeData[`cntAboveG${g}`]}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
-                                                    onFocus={e => e.target.select()}
+                                                    onFocus={() => classSizeData[`cntAboveG${g}`] === 0 && handleClassSizeChange({ target: { name: `cntAboveG${g}`, value: '' } })}
+                                                    onBlur={() => (classSizeData[`cntAboveG${g}`] === '' || classSizeData[`cntAboveG${g}`] === null) && handleClassSizeChange({ target: { name: `cntAboveG${g}`, value: 0 } })}
                                                     className="w-full h-10 text-center font-bold text-red-700 bg-red-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-xs transition-all hover:border-red-200"
                                                 />
                                             </td>

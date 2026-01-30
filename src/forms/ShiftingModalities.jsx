@@ -26,7 +26,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
                     disabled={isLocked || viewOnly}
                     className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
                 >
-                    <option value="">Select Strategy...</option>
+                    <option value="" disabled hidden>Select Strategy...</option>
                     <option value="Single Shift">Single Shift</option>
                     <option value="Double Shift">Double Shift</option>
                     <option value="Triple Shift">Triple Shift</option>
@@ -46,7 +46,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
                     disabled={isLocked || viewOnly}
                     className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
                 >
-                    <option value="">Select Mode...</option>
+                    <option value="" disabled hidden>Select Mode...</option>
                     <option value="In-Person Classes">In-Person Classes</option>
                     <option value="Blended Learning (3-2)">Blended (3-2)</option>
                     <option value="Blended Learning (4-1)">Blended (4-1)</option>
@@ -147,9 +147,23 @@ const ShiftingModalities = () => {
                     try {
                         const parsed = JSON.parse(cachedData);
 
-                        // Merge with defaults for safety
-                        setShifts({ ...defaultShifts, ...(parsed.shifts || {}) });
-                        setModes({ ...defaultModes, ...(parsed.modes || {}) });
+                        // Merge with defaults for safety (handling empty strings from old cache)
+                        const loadedShifts = parsed.shifts || {};
+                        const loadedModes = parsed.modes || {};
+
+                        const safeShifts = { ...defaultShifts };
+                        const safeModes = { ...defaultModes };
+
+                        // Only override default if value is valid (not empty)
+                        Object.keys(loadedShifts).forEach(k => {
+                            if (loadedShifts[k] !== undefined) safeShifts[k] = loadedShifts[k];
+                        });
+                        Object.keys(loadedModes).forEach(k => {
+                            if (loadedModes[k] !== undefined) safeModes[k] = loadedModes[k];
+                        });
+
+                        setShifts(safeShifts);
+                        setModes(safeModes);
                         setAdms({ ...defaultAdms, ...(parsed.adms || {}) });
 
                         if (parsed.curricular_offering) setOffering(parsed.curricular_offering);
@@ -321,8 +335,8 @@ const ShiftingModalities = () => {
         const checkLevel = (lvl) => {
             const shift = shifts[`shift_${lvl}`];
             const mode = modes[`mode_${lvl}`];
-            // Both must be selected (non-empty string)
-            return isValidEntry(shift) && shift !== 'Select Strategy...' && isValidEntry(mode) && mode !== 'Select Mode...';
+            // INVALID if empty. Valid ONLY if a real option is selected.
+            return shift !== '' && mode !== '';
         };
 
         if (showElem()) {
@@ -526,7 +540,7 @@ const ShiftingModalities = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             ) : (

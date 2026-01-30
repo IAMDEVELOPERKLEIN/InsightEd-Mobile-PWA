@@ -24,14 +24,15 @@ const InputCard = ({ label, name, icon, color, value, onChange, disabled }) => (
         <div>
             <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
             <input
-                type="number" inputMode="numeric" pattern="[0-9]*"
+                type="text" inputMode="numeric" pattern="[0-9]*"
                 name={name}
                 value={value}
-                onChange={onChange}
+                onChange={(e) => onChange(name, e.target.value)}
                 disabled={disabled}
                 onWheel={(e) => e.target.blur()}
                 className="w-24 text-center font-black text-xl bg-slate-50 border border-slate-200 rounded-xl py-3 focus:ring-4 focus:ring-blue-100 outline-none disabled:bg-transparent disabled:border-transparent text-slate-800"
-                onFocus={(e) => e.target.select()}
+                onFocus={() => value === 0 && onChange(name, '')}
+                onBlur={() => (value === '' || value === null) && onChange(name, 0)}
             />
         </div>
     </div>
@@ -67,11 +68,11 @@ const PhysicalFacilities = () => {
     const [originalData, setOriginalData] = useState(null);
 
     const initialFields = {
-        build_classrooms_total: '',
-        build_classrooms_new: '',
-        build_classrooms_good: '',
-        build_classrooms_repair: '',
-        build_classrooms_demolition: ''
+        build_classrooms_total: 0,
+        build_classrooms_new: 0,
+        build_classrooms_good: 0,
+        build_classrooms_repair: 0,
+        build_classrooms_demolition: 0
     };
 
     const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
@@ -226,11 +227,13 @@ const PhysicalFacilities = () => {
         formData.build_classrooms_demolition
     ]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        // Robust numeric input handling with 5-digit limit
-        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 5);
+    const handleChange = (name, value) => {
+        // 1. Strip non-numeric characters
+        const cleanValue = value.replace(/[^0-9]/g, '');
+        // 2. Parse integer to remove leading zeros (or default to 0 if empty)
+        // Allow empty string '' temporarily, otherwise parse Int
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
+
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
@@ -324,8 +327,8 @@ const PhysicalFacilities = () => {
                     <input
                         type="text" inputMode="numeric" pattern="[0-9]*"
                         name="build_classrooms_total"
-                        value={formData.build_classrooms_total ?? ''}
-                        onChange={handleChange} // Allows manual override if needed, though useEffect will overwrite on dependent change
+                        value={formData.build_classrooms_total ?? 0}
+                        onChange={(e) => handleChange(e.target.name, e.target.value)} // Allows manual override if needed, though useEffect will overwrite on dependent change
                         disabled={true}
                         className="w-full text-center text-7xl font-black text-[#004A99] bg-transparent outline-none placeholder-slate-200 tracking-tighter"
                         placeholder="0"
@@ -333,10 +336,10 @@ const PhysicalFacilities = () => {
                     <p className="text-[10px] text-slate-400 mt-2 font-medium">Overall count in the school</p>
                 </div>
 
-                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
 
             </div>
 
