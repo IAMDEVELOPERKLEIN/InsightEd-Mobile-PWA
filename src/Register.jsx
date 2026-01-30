@@ -122,7 +122,28 @@ const Register = () => {
             skipEmptyLines: true,
             complete: (results) => {
                 if (results.data && results.data.length > 0) {
-                    setCsvData(results.data);
+                    // Standardize Curricular Offering
+                    const standardizedData = results.data.map(item => {
+                        let offering = item.curricular_offering;
+                        if (offering) {
+                            const map = {
+                                "Purely es": "Purely Elementary",
+                                "ES and JHS (K to 10)": "Elementary School and Junior High School (K-10)",
+                                "All offering (K to 12)": "All Offering (K-12)",
+                                "JHS with SHS": "Junior and Senior High",
+                                "Purely JHS": "Purely Junior High School",
+                                "Purely SHS": "Purely Senior High School"
+                            };
+                            // Normalize check (case insensitive or direct map)
+                            const key = Object.keys(map).find(k => k.toLowerCase() === offering.toLowerCase()) || offering;
+                            if (map[key] || map[offering]) {
+                                item.curricular_offering = map[key] || map[offering];
+                            }
+                        }
+                        return item;
+                    });
+
+                    setCsvData(standardizedData);
                     setIsCsvLoaded(true);
                 }
             },
@@ -496,8 +517,10 @@ const Register = () => {
                 // selectedSchool now contains the updated latitude/longitude from the map drag
                 // Explicitly construct payload to avoid shadowing
                 const finalSchoolData = {
-                    ...selectedSchool
-                    // curricularOffering removed by user request
+                    ...selectedSchool,
+                    // Explicitly map keys if needed, though spread usually handles it
+                    // ensuring curricular offering is included
+                    curricularOffering: selectedSchool.curricular_offering
                 };
 
                 console.log("SENDING FINAL REGISTRATION DATA:", finalSchoolData);
@@ -623,7 +646,7 @@ const Register = () => {
                                         <option value="School Division Office">School Division Office</option>
                                         <option value="School Head">School Head</option>
                                         <option value="Engineer">Engineer</option>
-                                        {/* <option value="Admin">Admin</option> */}
+                                        {/* {<option value="Admin">Admin</option>} */}
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-blue-500">
                                         <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
@@ -986,10 +1009,6 @@ const Register = () => {
                                 </h3>
 
                                 <div className="mb-6 space-y-3">
-                                    {/* If School Head, email is readonly. If Generic, it's editable above. */}
-                                    {/* We display email here again or just the OTP controls? The generic flow has email field above. The School Head flow has auto-email. */}
-                                    {/* Let's show the email input here ONLY if School Head (since it was hidden/auto in their block) OR if we want to confirm it. */}
-                                    {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email */}
 
                                     {/* OTP CONTROLS */}
                                     

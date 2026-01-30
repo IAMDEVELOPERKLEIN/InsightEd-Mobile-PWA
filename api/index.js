@@ -2,8 +2,13 @@ import dotenv from 'dotenv';
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
+// import cron from 'node-cron'; // REMOVED for Vercel
+import admin from 'firebase-admin'; // --- FIREBASE ADMIN ---
+
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { createRequire } from "module"; // Added for JSON import
+const require = createRequire(import.meta.url);
 
 // Load environment variables
 dotenv.config();
@@ -15,6 +20,8 @@ const { Pool } = pg;
 let isDbConnected = false;
 
 const app = express();
+
+
 
 // --- MIDDLEWARE ---
 app.use(cors({
@@ -35,6 +42,121 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
+
+// --- VERCEL CRON ENDPOINT (MOVED TO TOP) ---
+// Support both /api/cron... (Local) and /cron... (Vercel)
+app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) => {
+  // 1. Security Check
+  const authHeader = req.headers.authorization;
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('⏰ Running Deadline Reminder (Vercel Cron)...');
+  try {
+    const settingRes = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'enrolment_deadline'");
+    if (settingRes.rows.length === 0 || !settingRes.rows[0].setting_value) {
+      return res.json({ message: 'No deadline set.' });
+    }
+    const deadlineVal = settingRes.rows[0].setting_value;
+    const deadlineDate = new Date(deadlineVal);
+    const now = new Date();
+    const diffDays = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
+
+    console.log(`📅 Deadline: ${deadlineVal}, Days Left: ${diffDays}`);
+
+    // Check Criteria (0 to 3 days left)
+    if (diffDays <= 3 && diffDays >= 0) {
+      const tokenRes = await pool.query("SELECT fcm_token FROM user_device_tokens WHERE fcm_token IS NOT NULL");
+      const tokens = tokenRes.rows.map(r => r.fcm_token);
+
+      console.log(`Found ${tokens.length} device tokens.`);
+
+      if (tokens.length > 0) {
+        const message = {
+          notification: {
+            title: diffDays === 0 ? "Deadline is TODAY!" : "Deadline Reminder",
+            body: diffDays === 0
+              ? "Submission closes today. Please finalize your reports."
+              : `Submission is due in ${diffDays} day${diffDays > 1 ? 's' : ''}! Please finalize your forms.`
+          },
+          tokens: tokens
+        };
+
+        try {
+          const response = await admin.messaging().sendEachForMulticast(message);
+          console.log(`🚀 Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
+          if (response.failureCount > 0) {
+            console.log("Failed details:", JSON.stringify(response.responses));
+          }
+          return res.json({ success: true, sent: response.successCount, failed: response.failureCount });
+        } catch (sendErr) {
+          console.error("Firebase Send Error:", sendErr);
+          throw sendErr;
+        }
+      } else {
+        console.log("ℹ️ No tokens found in DB.");
+        return res.json({ message: 'No device tokens found.' });
+      }
+    } else {
+      console.log(`ℹ️ Skipping: ${diffDays} days remaining (Not within 0-3 range).`);
+      return res.json({ message: `Not within reminder window (0-3 days). Days: ${diffDays}` });
+    }
+  } catch (error) {
+    console.error('❌ Cron Error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// --- POST: Save Device Token ---
+app.post('/api/save-token', async (req, res) => {
+  const { uid, token } = req.body;
+  if (!uid || !token) return res.status(400).json({ error: "Missing uid or token" });
+
+  try {
+    await pool.query(`
+            INSERT INTO user_device_tokens (uid, fcm_token, updated_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (uid)
+            DO UPDATE SET fcm_token = $2, updated_at = CURRENT_TIMESTAMP
+        `, [uid, token]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Save Token Error:", err);
+    res.status(500).json({ error: "Failed to save token" });
+  }
+});
+
+// --- FIREBASE ADMIN INIT ---
+if (!admin.apps.length) {
+  try {
+    let credential;
+    // 1. Try Environment Variable (Vercel Production)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      credential = admin.credential.cert(serviceAccount);
+      console.log("✅ Firebase Admin Initialized from ENV");
+    }
+    // 2. Try Local File (Local Dev)
+    else {
+      try {
+        const serviceAccount = require("./service-account.json");
+        credential = admin.credential.cert(serviceAccount);
+        console.log("✅ Firebase Admin Initialized from Local File");
+      } catch (fileErr) {
+        console.warn("⚠️ No local service-account.json found.");
+      }
+    }
+
+    if (credential) {
+      admin.initializeApp({ credential });
+    } else {
+      console.warn("⚠️ Firebase Admin NOT initialized (Missing Credentials)");
+    }
+  } catch (e) {
+    console.warn("⚠️ Firebase Admin Init Failed:", e.message);
+  }
+}
 
 // Initialize OTP Table
 const initOtpTable = async () => {
@@ -97,6 +219,22 @@ const initOtpTable = async () => {
       } catch (migErr) {
         console.error('❌ Failed to migrate school_profiles:', migErr.message);
       }
+
+      // --- MIGRATION: USER DEVICE TOKENS ---
+      try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS user_device_tokens (
+                uid TEXT PRIMARY KEY,
+                fcm_token TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log('✅ Checked/Created user_device_tokens table');
+      } catch (tokenErr) {
+        console.error('❌ Failed to init user_device_tokens:', tokenErr.message);
+      }
+
+    } catch (err) {
 
       // --- MIGRATION: ADD CURRICULAR OFFERING ---
       try {
@@ -451,6 +589,21 @@ const initOtpTable = async () => {
         console.log('ℹ️  res_buildable_space type check skipped/validated');
       }
 
+      // --- MIGRATION: SYSTEM SETTINGS TABLE ---
+      try {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS system_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_by TEXT
+          );
+        `);
+        console.log('✅ Checked/Created system_settings table');
+      } catch (tableErr) {
+        console.error('❌ Failed to init system_settings table:', tableErr.message);
+      }
+
     } finally {
       client.release();
     }
@@ -555,6 +708,51 @@ app.post('/api/log-activity', async (req, res) => {
   } catch (err) {
     console.error("Log Error:", err);
     res.status(500).json({ error: "Failed to log" });
+  }
+});
+
+// --- 1c. SYSTEM SETTINGS ENDPOINTS ---
+
+// GET Setting
+app.get('/api/settings/:key', async (req, res) => {
+  const { key } = req.params;
+  try {
+    const result = await pool.query('SELECT setting_value FROM system_settings WHERE setting_key = $1', [key]);
+    if (result.rows.length > 0) {
+      res.json({ value: result.rows[0].setting_value });
+    } else {
+      res.json({ value: null });
+    }
+  } catch (err) {
+    console.error("Get Setting Error:", err);
+    res.status(500).json({ error: "Failed to fetch setting" });
+  }
+});
+
+// SAVE Setting (Upsert)
+app.post('/api/settings/save', async (req, res) => {
+  const { key, value, userUid } = req.body;
+
+  if (!key) return res.status(400).json({ error: "Key is required" });
+
+  try {
+    // Upsert setting
+    await pool.query(`
+            INSERT INTO system_settings (setting_key, setting_value, updated_at, updated_by)
+            VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
+            ON CONFLICT (setting_key) 
+            DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP, updated_by = $3
+        `, [key, value, userUid]);
+
+    // Log functionality
+    if (userUid) {
+      await logActivity(userUid, 'Admin', 'Admin', 'UPDATE SETTING', key, `Updated ${key} to ${value}`);
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Save Setting Error:", err);
+    res.status(500).json({ error: "Failed to save setting" });
   }
 });
 
@@ -764,7 +962,7 @@ app.post('/api/register-school', async (req, res) => {
       return res.status(400).json({ error: "This school is already registered." });
     }
 
-    // 2. GENERATE IERN (Sequential: YYYY-XXXXXX)
+    // 2. GENERATE IERN (Sequential: YYYY-XXXXX)
     const year = new Date().getFullYear();
     const iernResult = await client.query(
       "SELECT iern FROM school_profiles WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
@@ -774,14 +972,13 @@ app.post('/api/register-school', async (req, res) => {
     let nextSeq = 1;
     if (iernResult.rows.length > 0) {
       const lastIern = iernResult.rows[0].iern;
-      // Extract sequence part (assuming format YYYY-XXXXXX)
       const parts = lastIern.split('-');
       if (parts.length === 2 && !isNaN(parts[1])) {
-        const lastSeq = parseInt(parts[1]);
+        const lastSeq = parseInt(parts[1], 10);
         nextSeq = lastSeq + 1;
       }
     }
-    const newIern = `${year}-${String(nextSeq).padStart(6, '0')}`;
+    const newIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 3. CREATE USER (Optional)
     try {
@@ -802,9 +999,9 @@ app.post('/api/register-school', async (req, res) => {
             school_id, school_name, region, province, division, district, 
             municipality, leg_district, barangay, mother_school_id, 
             latitude, longitude, 
-            submitted_by, iern, email, submitted_at
+            submitted_by, iern, email, curricular_offering, submitted_at
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP
         )
     `;
 
@@ -823,7 +1020,8 @@ app.post('/api/register-school', async (req, res) => {
       schoolData.longitude,
       uid,
       newIern,
-      email
+      email,
+      schoolData.curricular_offering
     ];
 
     await client.query(insertQuery, values);
@@ -977,10 +1175,13 @@ app.post('/api/save-school', async (req, res) => {
       let nextSeq = 1;
       if (iernResult.rows.length > 0) {
         const lastIern = iernResult.rows[0].iern;
-        const lastSeq = parseInt(lastIern.split('-')[1]);
-        nextSeq = lastSeq + 1;
+        const parts = lastIern.split('-');
+        if (parts.length === 2 && !isNaN(parts[1])) {
+          const lastSeq = parseInt(parts[1], 10);
+          nextSeq = lastSeq + 1;
+        }
       }
-      finalIern = `${year}-${String(nextSeq).padStart(6, '0')}`;
+      finalIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
     }
 
     // 5. PERFORM INSERT OR UPDATE
@@ -1357,6 +1558,42 @@ app.post('/api/save-enrolment', async (req, res) => {
   } catch (err) {
     console.error("❌ Enrolment Save Error:", err);
     res.status(500).json({ message: "Database error", error: err.message });
+  }
+});
+
+// --- 7b. POST: Update Curricular Offering (Completion Gate) ---
+app.post('/api/update-offering', async (req, res) => {
+  const { uid, schoolId, offering } = req.body;
+
+  if (!uid || !schoolId || !offering) {
+    return res.status(400).json({ message: "Missing required fields." });
+  }
+
+  try {
+    const query = `
+      UPDATE school_profiles
+      SET curricular_offering = $1
+      WHERE school_id = $2
+      RETURNING school_id;
+    `;
+
+    const result = await pool.query(query, [offering, schoolId]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "School Profile not found." });
+    }
+
+    await logActivity(
+      uid, 'School Head', 'School Head', 'UPDATE',
+      `Curricular Offering: ${schoolId}`,
+      `Set curricular offering to ${offering}`
+    );
+
+    res.json({ success: true, message: "Curricular offering updated." });
+
+  } catch (err) {
+    console.error("❌ Update Offering Error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
@@ -2940,6 +3177,10 @@ process.on('unhandledRejection', (reason, promise) => {
 // Always start if strictly detected as main, OR if explicitly forced by env (fallback)
 if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
+
+
+
+
   const server = app.listen(PORT, () => {
     console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
     console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);

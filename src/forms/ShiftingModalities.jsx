@@ -24,9 +24,9 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
                     value={shifts[`shift_${lvl}`] || ''}
                     onChange={(e) => onShiftChange(e, lvl)}
                     disabled={isLocked || viewOnly}
-                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
                 >
-                    <option value="">Select Strategy...</option>
+                    <option value="" disabled hidden>Select Strategy...</option>
                     <option value="Single Shift">Single Shift</option>
                     <option value="Double Shift">Double Shift</option>
                     <option value="Triple Shift">Triple Shift</option>
@@ -44,9 +44,9 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
                     value={modes[`mode_${lvl}`] || ''}
                     onChange={(e) => onModeChange(e, lvl)}
                     disabled={isLocked || viewOnly}
-                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
+                    className="w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none appearance-none disabled:bg-slate-100 disabled:text-slate-400"
                 >
-                    <option value="">Select Mode...</option>
+                    <option value="" disabled hidden>Select Mode...</option>
                     <option value="In-Person Classes">In-Person Classes</option>
                     <option value="Blended Learning (3-2)">Blended (3-2)</option>
                     <option value="Blended Learning (4-1)">Blended (4-1)</option>
@@ -77,7 +77,21 @@ const ShiftingModalities = () => {
     const [hasSavedData, setHasSavedData] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+
     const [showInfoModal, setShowInfoModal] = useState(false);
+
+
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = localStorage.getItem('hasSeenShiftingInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            localStorage.setItem('hasSeenShiftingInfo', 'true');
+        }
+    }, []);
+
+    // --- SAVE TIMER EFFECTS ---
+
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -133,9 +147,23 @@ const ShiftingModalities = () => {
                     try {
                         const parsed = JSON.parse(cachedData);
 
-                        // Merge with defaults for safety
-                        setShifts({ ...defaultShifts, ...(parsed.shifts || {}) });
-                        setModes({ ...defaultModes, ...(parsed.modes || {}) });
+                        // Merge with defaults for safety (handling empty strings from old cache)
+                        const loadedShifts = parsed.shifts || {};
+                        const loadedModes = parsed.modes || {};
+
+                        const safeShifts = { ...defaultShifts };
+                        const safeModes = { ...defaultModes };
+
+                        // Only override default if value is valid (not empty)
+                        Object.keys(loadedShifts).forEach(k => {
+                            if (loadedShifts[k] !== undefined) safeShifts[k] = loadedShifts[k];
+                        });
+                        Object.keys(loadedModes).forEach(k => {
+                            if (loadedModes[k] !== undefined) safeModes[k] = loadedModes[k];
+                        });
+
+                        setShifts(safeShifts);
+                        setModes(safeModes);
                         setAdms({ ...defaultAdms, ...(parsed.adms || {}) });
 
                         if (parsed.curricular_offering) setOffering(parsed.curricular_offering);
@@ -301,6 +329,28 @@ const ShiftingModalities = () => {
     };
 
     // --- SAVE ---
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
+        const checkLevel = (lvl) => {
+            const shift = shifts[`shift_${lvl}`];
+            const mode = modes[`mode_${lvl}`];
+            // INVALID if empty. Valid ONLY if a real option is selected.
+            return shift !== '' && mode !== '';
+        };
+
+        if (showElem()) {
+            if (!['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'].every(checkLevel)) return false;
+        }
+        if (showJHS()) {
+            if (!['g7', 'g8', 'g9', 'g10'].every(checkLevel)) return false;
+        }
+        if (showSHS()) {
+            if (!['g11', 'g12'].every(checkLevel)) return false;
+        }
+        return true;
+    };
+
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
@@ -480,29 +530,23 @@ const ShiftingModalities = () => {
                 </div>
             </div>
 
-            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
-                <div className="max-w-4xl mx-auto flex gap-3">
+            {/* --- STANDARDIZED FOOTER            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-lg mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                            Back to List
-                        </button>
+                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
-                        <button
-                            onClick={() => setIsLocked(false)}
-                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                        >
+                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <>
-                            <button onClick={() => { setIsLocked(true); setShifts(originalData?.shifts || shifts); setModes(originalData?.modes || modes); setAdms(originalData?.adms || adms); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
-                                Cancel
-                            </button>
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <><FiSave /> Save Changes</>
+                            )}
+                        </button>
                     )}
                 </div>
             </div>

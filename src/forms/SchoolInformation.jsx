@@ -34,6 +34,7 @@ const SchoolInformation = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+
     const [formData, setFormData] = useState({
         lastName: '', firstName: '', middleName: '',
         itemNumber: '', positionTitle: '', dateHired: '',
@@ -216,6 +217,40 @@ const SchoolInformation = () => {
         return () => unsubscribe();
     }, []);
 
+
+
+    // --- DATE PICKER HELPERS ---
+    const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    const days = Array.from({ length: 31 }, (_, i) => i + 1);
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: currentYear - 1960 + 1 }, (_, i) => currentYear - i);
+
+    const handleDateChange = (part, val) => {
+        let y, m, d;
+        if (formData.dateHired) {
+            const parts = formData.dateHired.split('-');
+            y = parseInt(parts[0]);
+            m = parseInt(parts[1]) - 1; // 0-indexed for month logic
+            d = parseInt(parts[2]);
+        } else {
+            const now = new Date();
+            y = now.getFullYear();
+            m = now.getMonth();
+            d = now.getDate();
+        }
+
+        if (part === 'year') y = parseInt(val);
+        if (part === 'month') m = parseInt(val);
+        if (part === 'day') d = parseInt(val);
+
+        // Construct YYYY-MM-DD string
+        const isoDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        setFormData(prev => ({ ...prev, dateHired: isoDate }));
+    };
+
     const handleChange = (e) => {
         const { name, value } = e.target;
 
@@ -247,6 +282,12 @@ const SchoolInformation = () => {
     // Trigger lookup when user finishes typing the Item Number
     const handleItemNumberBlur = () => {
         handlePsiLookup(formData.itemNumber);
+    };
+
+    const isFormValid = () => {
+        const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
+        const required = ['firstName', 'lastName', 'positionTitle', 'dateHired', 'itemNumber'];
+        return required.every(f => isValidEntry(formData[f]));
     };
 
     // --- 3. SAVE LOGIC ---
@@ -441,35 +482,62 @@ const SchoolInformation = () => {
                         <div className="space-y-1">
                             <label className={labelClass}>Date of Appointment</label>
                             <p className="text-[10px] text-slate-400 font-medium mb-1.5">Date of latest appointment issuance.</p>
-                            <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
+                            <div className="flex gap-2">
+                                {/* Month */}
+                                <select
+                                    value={formData.dateHired ? parseInt(formData.dateHired.split('-')[1]) - 1 : ''}
+                                    onChange={(e) => handleDateChange('month', e.target.value)}
+                                    className={`${inputClass} flex-[2] min-w-0`}
+                                    disabled={isLocked || viewOnly || isDummy}
+                                >
+                                    <option value="" disabled>Month</option>
+                                    {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                </select>
+
+                                {/* Day */}
+                                <select
+                                    value={formData.dateHired ? parseInt(formData.dateHired.split('-')[2]) : ''}
+                                    onChange={(e) => handleDateChange('day', e.target.value)}
+                                    className={`${inputClass} flex-1 min-w-[70px]`}
+                                    disabled={isLocked || viewOnly || isDummy}
+                                >
+                                    <option value="" disabled>Day</option>
+                                    {days.map((d) => <option key={d} value={d}>{d}</option>)}
+                                </select>
+
+                                {/* Year */}
+                                <select
+                                    value={formData.dateHired ? parseInt(formData.dateHired.split('-')[0]) : ''}
+                                    onChange={(e) => handleDateChange('year', e.target.value)}
+                                    className={`${inputClass} flex-[1.5] min-w-[80px]`}
+                                    disabled={isLocked || viewOnly || isDummy}
+                                >
+                                    <option value="" disabled>Year</option>
+                                    {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
-                <div className="max-w-4xl mx-auto flex gap-3">
+            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-lg mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                            Back to List
-                        </button>
+                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
-                        <button
-                            onClick={() => setShowEditModal(true)}
-                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                        >
+                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <>
-                            <button onClick={() => { setIsLocked(true); setFormData(originalData || formData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
-                                Cancel
-                            </button>
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <><FiSave /> Save Changes</>
+                            )}
+                        </button>
                     )}
                 </div>
             </div>

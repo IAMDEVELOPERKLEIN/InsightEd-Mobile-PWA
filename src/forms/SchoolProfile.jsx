@@ -243,7 +243,14 @@ const SchoolProfile = () => {
 
             if (cachedProfile) {
                 try {
-                    const localData = JSON.parse(cachedProfile);
+                    let localData = JSON.parse(cachedProfile);
+
+                    // NEW: Detect snake_case from SchoolForms cache and convert
+                    if (localData.school_id && !localData.schoolId) {
+                        console.log("Converting cached snake_case data to camelCase");
+                        localData = mapDbToForm(localData);
+                    }
+
                     // Critical: Restore Offering
                     if (!localData.curricularOffering) {
                         localData.curricularOffering = cachedOffering || '';
@@ -668,6 +675,26 @@ const SchoolProfile = () => {
                                                     <span>⚠️</span> {schoolNameWarning}
                                                 </p>
                                             )}
+                                        </div>
+
+                                        <div>
+                                            <label className={labelClass}>Curricular Offering</label>
+                                            <select
+                                                name="curricularOffering"
+                                                value={formData.curricularOffering}
+                                                onChange={handleChange}
+                                                className={inputClass}
+                                                disabled={isDummy}
+                                                required
+                                            >
+                                                <option value="">Select Offering...</option>
+                                                <option value="Purely Elementary">Purely Elementary</option>
+                                                <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
+                                                <option value="All Offering (K-12)">All Offering (K-12)</option>
+                                                <option value="Junior and Senior High">Junior and Senior High</option>
+                                                <option value="Purely Junior High School">Purely Junior High School</option>
+                                                <option value="Purely Senior High School">Purely Senior High School</option>
+                                            </select>
                                         </div>
 
                                         {/* ANNEX SCHOOL TOGGLE */}

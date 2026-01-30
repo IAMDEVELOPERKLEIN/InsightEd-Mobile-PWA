@@ -9,11 +9,12 @@ import "swiper/css/pagination";
 // Icons (Using the libraries you already have installed)
 import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell, TbTrophy, TbReportAnalytics } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
-import { FiUser, FiBox, FiLayers } from "react-icons/fi";
+import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle, FiCheckSquare } from "react-icons/fi";
 
-import { auth, db } from '../firebase';
+import { auth, db, app } from '../firebase'; // Import app
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
+import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Import Messaging
 
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
@@ -39,6 +40,13 @@ const SchoolHeadDashboard = () => {
     // --- SEARCH STATE ---
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
+
+
+
+    // --- DEADLINE STATE ---
+    const [deadlineDate, setDeadlineDate] = useState(null);
+    const [showBanner, setShowBanner] = useState(true);
+    const [showDeadlineAlert, setShowDeadlineAlert] = useState(false);
 
     // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
     const SEARCHABLE_ITEMS = [
@@ -80,9 +88,13 @@ const SchoolHeadDashboard = () => {
     };
 
     // ... [Keep your useEffects for Stats/Auth exactly as they were] ...
+    const [completedItems, setCompletedItems] = useState([]);
+
     useEffect(() => {
         if (!schoolProfile) return;
-        let completed = 0;
+
+        const completedList = [];
+
         // Helper to check if any field with prefix has value > 0
         const hasData = (prefix, type = 'number') => {
             return Object.keys(schoolProfile).some(key => {
@@ -93,46 +105,112 @@ const SchoolHeadDashboard = () => {
             });
         };
 
-        if (schoolProfile.school_id) completed++; // 1. Profile
-        if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completed++; // 2. Head Info
-        if (schoolProfile.total_enrollment > 0) completed++; // 3. Enrollment
+        if (schoolProfile.school_id) completedList.push("School Profile"); // 1. Profile
+        if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completedList.push("School Head Info"); // 2. Head Info
+        if (schoolProfile.total_enrollment > 0) completedList.push("Enrollment"); // 3. Enrollment
 
         // 4. Classes
         const totalClasses = (schoolProfile.classes_kinder || 0) + (schoolProfile.classes_grade_1 || 0) + (schoolProfile.classes_grade_6 || 0) + (schoolProfile.classes_grade_10 || 0) + (schoolProfile.classes_grade_12 || 0);
-        if (totalClasses > 0) completed++;
+        if (totalClasses > 0) completedList.push("Organized Classes");
 
         // 5. Learner Stats
-        if (hasData('stat_', 'number')) completed++;
+        if (hasData('stat_', 'number')) completedList.push("Learner Statistics");
 
         // 6. Shifting
         const hasShift = (schoolProfile.shift_kinder || schoolProfile.shift_g1) || (schoolProfile.adm_mdl || schoolProfile.adm_odl);
-        if (hasShift) completed++;
+        if (hasShift) completedList.push("Shifting & Modality");
 
         // 7. Teaching Personnel
         const totalTeachers = (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g6 || 0) + (schoolProfile.teach_g10 || 0) + (schoolProfile.teach_g12 || 0);
-        if (totalTeachers > 0) completed++;
+        if (totalTeachers > 0) completedList.push("Teaching Personnel");
 
         // 8. Specialization
-        if (hasData('spec_', 'number')) completed++;
+        if (hasData('spec_', 'number')) completedList.push("Specialization");
 
         // 9. Resources
         const hasResources = hasData('res_', 'number') || (schoolProfile.res_water_source && schoolProfile.res_water_source !== '');
-        if (hasResources) completed++;
+        if (hasResources) completedList.push("School Resources");
 
         // 10. Physical Facilities
-        if (hasData('build_', 'number') || hasData('pf_', 'number')) completed++;
+        if (hasData('build_', 'number') || hasData('pf_', 'number')) completedList.push("Physical Facilities");
 
         setStats(prev => ({
             ...prev,
-            completedForms: completed,
+            completedForms: completedList.length,
             enrollment: schoolProfile.total_enrollment || 0
         }));
+        setCompletedItems(completedList);
     }, [schoolProfile]);
 
     const [searchParams] = useSearchParams(); // Get query params
     const impersonatedUid = searchParams.get('uid');
 
     useEffect(() => {
+        // Fetch Deadline
+        fetch('/api/settings/enrolment_deadline')
+            .then(res => res.json())
+            .then(data => {
+                if (data.value) {
+                    const dDate = new Date(data.value);
+                    setDeadlineDate(dDate);
+
+                    // --- PUSH NOTIFICATION LOGIC ---
+                    const now = new Date();
+                    const diffTime = dDate - now;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (diffDays <= 3) {
+                        // TRIGGER MODAL if 0-3 days (inclusive)
+                        if (diffDays >= 0) {
+                            // Check previous session flag
+                            const hasShown = sessionStorage.getItem('deadlineAlertShown');
+                            if (!hasShown) {
+                                setShowDeadlineAlert(true);
+                                sessionStorage.setItem('deadlineAlertShown', 'true');
+                            }
+                        }
+
+                        // Request permission and show notification
+                        if (Notification.permission === "granted") {
+                            sendDeadlineNotification(diffDays, dDate);
+                        } else if (Notification.permission !== "denied") {
+                            Notification.requestPermission().then(permission => {
+                                if (permission === "granted") {
+                                    sendDeadlineNotification(diffDays, dDate);
+                                }
+                            });
+                        }
+                    }
+                }
+            })
+            .catch(err => console.error("Failed to fetch deadline:", err));
+
+        const sendDeadlineNotification = (daysLeft, dateObj) => {
+            let title = "";
+            let body = "";
+
+            if (daysLeft < 0) {
+                title = "Submission Overdue!";
+                body = `The enrolment deadline was ${dateObj.toLocaleDateString()}. Submissions may be closed.`;
+            } else if (daysLeft === 0) {
+                title = "Deadline is Today!";
+                body = "Please complete your enrolment forms by the end of the day.";
+            } else {
+                title = `Deadline Approaching: ${daysLeft} Days Left`;
+                body = `Don't forget to submit your reports by ${dateObj.toLocaleDateString()}.`;
+            }
+
+            try {
+                new Notification(title, {
+                    body: body,
+                    icon: '/pwa-192x192.png', // Fallback to standard pwa icon
+                    tag: 'deadline-alert' // Prevent duplicate notifications stacking
+                });
+            } catch (e) {
+                console.warn("Notification trigger failed", e);
+            }
+        };
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 try {
@@ -150,11 +228,62 @@ const SchoolHeadDashboard = () => {
 
                         const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
                         const profileJson = await profileRes.json();
-                        if (profileJson.exists) setSchoolProfile(profileJson.data);
+                        if (profileJson.exists) {
+                            setSchoolProfile(profileJson.data);
+
+                        }
 
                         const headRes = await fetch(`/api/school-head/${targetUid}`);
                         const headJson = await headRes.json();
                         if (headJson.exists) setHeadProfile(headJson.data);
+
+                        // --- FCM TOKEN REGISTRATION (ROBUST) ---
+                        try {
+                            const messaging = getMessaging(app);
+                            const permission = await Notification.requestPermission();
+
+                            if (permission === 'granted') {
+                                // Ensure Service Worker is ready (Required for Mobile PWA)
+                                let swRegistration = await navigator.serviceWorker.getRegistration();
+                                if (!swRegistration) {
+                                    swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                                }
+
+                                const currentToken = await getToken(messaging, {
+                                    vapidKey: 'BDuZsrGgFnp6Iwm6dVXxVGeppwi40LyNw48VdVOizotxUZ45BGlGHogswLUq82Q3G8UjhnUit-yW8z3dYISorcQ',
+                                    serviceWorkerRegistration: swRegistration
+                                });
+
+                                if (currentToken) {
+                                    console.log("📲 FCM Token Generated:", currentToken.slice(0, 10) + "...");
+                                    // SAVE TO SERVER
+                                    await fetch('/api/save-token', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ uid: user.uid, token: currentToken })
+                                    });
+                                    console.log("✅ FCM Token Sent to Server");
+                                    // Debug removed for production clarity
+                                } else {
+                                    console.warn("⚠️ No registration token available. Request permission to generate one.");
+                                }
+                            } else {
+                                // Permission not granted, do nothing or log
+                            }
+                        } catch (msgErr) {
+                            console.log("ℹ️ FCM Token Logic Error:", msgErr);
+                        }
+
+                        // --- FOREGROUND LISTENER ---
+                        // Triggers if notification arrives while app is OPEN
+                        onMessage(messaging, (payload) => {
+                            console.log('🔔 Foreground Message:', payload);
+                            const { title, body } = payload.notification;
+
+                            // You can replace this with a nice custom toast/modal
+                            // For now, simpler is better to prove it works
+                            new Notification(title, { body, icon: '/pwa-192x192.png' });
+                        });
                     }
 
                 } catch (error) {
@@ -209,6 +338,12 @@ const SchoolHeadDashboard = () => {
                                         ? `${schoolProfile.school_id} • ${schoolProfile.school_name}`
                                         : (schoolProfile ? schoolProfile.school_name : 'School Principal')}
                                 </p>
+                                {schoolProfile?.iern && (
+                                    <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 rounded-md px-2 py-0.5">
+                                        <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest">IERN</span>
+                                        <span className="text-xs font-bold text-white tracking-wide">{schoolProfile.iern}</span>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
                                 <NotificationCenter />
@@ -273,6 +408,50 @@ const SchoolHeadDashboard = () => {
                     {/* --- DASHBOARD CONTENT --- */}
                     <div className="px-6 -mt-12 relative z-10 space-y-8">
 
+                        {/* --- DEADLINE BANNER (THE WAGAYWAY) --- */}
+                        {deadlineDate && showBanner && (() => {
+                            const now = new Date();
+                            const diffTime = deadlineDate - now;
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                            let bannerStyle = "bg-blue-100 border-blue-200 text-blue-800";
+                            let icon = <TbActivity className="animate-pulse" />;
+                            let title = "Submission Deadline";
+                            let message = `Enrolment submission is due on ${deadlineDate.toLocaleDateString()}.`;
+
+                            if (diffDays < 0) {
+                                // OVERDUE
+                                bannerStyle = "bg-red-100 border-red-200 text-red-800";
+                                icon = <FiAlertCircle className="text-red-600 animate-bounce" />;
+                                title = "Submission Overdue";
+                                message = `The deadline was ${deadlineDate.toLocaleDateString()}. Submissions may be locked.`;
+                            } else if (diffDays <= 3) {
+                                // CRITICAL
+                                bannerStyle = "bg-amber-100 border-amber-200 text-amber-800";
+                                icon = <FiAlertCircle className="text-amber-600 animate-pulse" />;
+                                title = `Action Required: ${diffDays === 0 ? 'Due Today' : `${diffDays} Days Left`}`;
+                                message = `Please complete your forms before ${deadlineDate.toLocaleDateString()}.`;
+                            }
+
+                            return (
+                                <div className={`relative w-full p-4 rounded-2xl border flex items-start gap-3 shadow-lg ${bannerStyle} animate-in fade-in slide-in-from-top-4`}>
+                                    <div className="p-2 bg-white/50 rounded-full shrink-0">
+                                        {icon}
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-sm">{title}</h4>
+                                        <p className="text-xs opacity-90 leading-relaxed mt-0.5">{message}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowBanner(false)}
+                                        className="p-1 hover:bg-black/5 rounded-full transition"
+                                    >
+                                        <TbX size={16} />
+                                    </button>
+                                </div>
+                            );
+                        })()}
+
                         {/* 1. Quick Stats Row */}
                         <div className="grid grid-cols-3 gap-3">
                             {/* Progress Card */}
@@ -332,6 +511,22 @@ const SchoolHeadDashboard = () => {
                                         </p>
                                     </div>
                                 </SwiperSlide>
+                                <SwiperSlide>
+                                    <div
+                                        onClick={() => navigate('/project-validation')}
+                                        className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border-l-4 border-green-500 min-h-[140px] flex flex-col justify-center relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all hover:shadow-md"
+                                    >
+                                        <div className="absolute right-[-10px] top-[-10px] opacity-5 dark:opacity-10">
+                                            <FiCheckSquare size={100} className="text-green-500 dark:text-green-400" />
+                                        </div>
+                                        <h3 className="text-green-600 dark:text-green-400 font-bold text-lg flex items-center mb-2 z-10">
+                                            Project Validation
+                                        </h3>
+                                        <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed max-w-[85%] z-10">
+                                            Validate completed projects and infrastructure reports. Tap to start validation.
+                                        </p>
+                                    </div>
+                                </SwiperSlide>
                                 {/* Add more slides if needed */}
                             </Swiper>
                         </div>
@@ -339,11 +534,11 @@ const SchoolHeadDashboard = () => {
                         {/* 3. Quick Actions Grid (NEW) */}
                         <div>
                             <div className="flex justify-between items-end mb-4 px-1">
-                                <h3 className="text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider">Quick Actions</h3>
+                                <h3 className="text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider">Pending Forms</h3>
                                 <button onClick={() => navigate('/school-forms')} className="text-[#004A99] dark:text-blue-400 text-xs font-semibold">View All</button>
                             </div>
                             <div className="grid grid-cols-4 gap-3">
-                                {SEARCHABLE_ITEMS.map((item, index) => (
+                                {SEARCHABLE_ITEMS.filter(item => !completedItems.includes(item.name)).map((item, index) => (
                                     <button
                                         key={index}
                                         onClick={() => navigate(item.route)}
@@ -395,8 +590,44 @@ const SchoolHeadDashboard = () => {
                     </div>
 
                 </div>
-            </PageTransition>
+            </PageTransition >
+
+            {/* --- DEADLINE POPUP MODAL --- */}
+            {
+                showDeadlineAlert && deadlineDate && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-amber-200 dark:border-amber-900/40">
+                            {/* Glowing Background Effect */}
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-red-500"></div>
+                            <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
+
+                            <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto text-amber-500 mb-2 shadow-sm animate-pulse">
+                                <FiAlertTriangle size={36} />
+                            </div>
+
+                            <div className="text-center space-y-2">
+                                <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
+                                    ⚠️ Action Required:<br />Deadline Approaching
+                                </h2>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                    The submission deadline for Enrolment Forms is in <strong className="text-amber-600 dark:text-amber-400">{Math.ceil((deadlineDate - new Date()) / (1000 * 60 * 60 * 24))} days</strong> ({deadlineDate.toLocaleDateString()}). <br />Please finalize your data.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={() => setShowDeadlineAlert(false)}
+                                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/30 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
+                            >
+                                I Understand
+                            </button>
+                        </div>
+                    </div>
+                )
+            }
+
             <BottomNav userRole="School Head" />
+
+
         </>
     );
 };

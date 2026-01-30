@@ -24,7 +24,7 @@ const BottomNav = ({ userRole }) => {
         ],
         'School Head': [
             { label: 'Home', path: '/schoolhead-dashboard', icon: TbHomeEdit },
-            { label: 'Validation', path: '/project-validation', icon: TbClipboardList },
+            { label: 'Forms', path: '/school-forms', icon: TbClipboardList },
             { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
@@ -52,24 +52,24 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
-             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
-             { label: 'Infra Projects', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
-             { label: 'Settings', path: '/profile', icon: FiSettings },
+            { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
+            { label: 'Infra Projects', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
         ]
     };
 
     const currentNavItems = navConfigs[userRole];
 
     // If role exists but not in config (unexpected), don't show anything or show safe fallback
-    if (!currentNavItems) return null; 
+    if (!currentNavItems) return null;
 
     return createPortal(
         <div style={styles.wrapper}>
             <div style={styles.navContainer}>
                 {currentNavItems.map((item) => {
-                    const isActive = location.pathname === item.path && 
+                    const isActive = location.pathname === item.path &&
                         (!item.state || location.state?.activeTab === item.state.activeTab || (!location.state?.activeTab && item.state.activeTab === 'all'));
-                    
+
                     const Icon = item.icon;
 
                     return (

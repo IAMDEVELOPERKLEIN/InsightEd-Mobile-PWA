@@ -21,11 +21,7 @@ const SchoolForms = () => {
     const [filter, setFilter] = useState('all'); // 'all', 'pending', 'completed'
     const [schoolProfile, setSchoolProfile] = useState(null);
     const [headProfile, setHeadProfile] = useState(null);
-    const [curricularOffering, setCurricularOffering] = useState('');
-    const [isSavingOffering, setIsSavingOffering] = useState(false);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [pendingOffering, setPendingOffering] = useState('');
-    const [isOfferingLocked, setIsOfferingLocked] = useState(false);
+    const [deadlineDate, setDeadlineDate] = useState(null);
 
     // --- 1. DATA CONTENT (Categorized) ---
     const formsData = [
@@ -123,25 +119,24 @@ const SchoolForms = () => {
                 // STEP 1: IMMEDIATE CACHE LOAD
                 let loadedFromCache = false;
                 const cachedProfile = localStorage.getItem('fullSchoolProfile');
-                const cachedOffering = localStorage.getItem('schoolOffering');
 
                 if (cachedProfile) {
                     try {
                         const parsedProfile = JSON.parse(cachedProfile);
                         setSchoolProfile(parsedProfile);
-                        if (cachedOffering) {
-                            setCurricularOffering(cachedOffering);
-                            setIsOfferingLocked(true);
-                        } else if (parsedProfile.curricular_offering) {
-                            setCurricularOffering(parsedProfile.curricular_offering);
-                            setIsOfferingLocked(true);
-                        }
-
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached school profile (Instant Load)");
                     } catch (e) { console.error("Cache parse error", e); }
                 }
+
+                // Fetch Deadline (Parallel with other fetches)
+                fetch('/api/settings/enrolment_deadline')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.value) setDeadlineDate(new Date(data.value));
+                    })
+                    .catch(err => console.error("Failed to fetch deadline:", err));
 
                 try {
                     // STEP 2: BACKGROUND FETCH
@@ -159,16 +154,8 @@ const SchoolForms = () => {
                         const profileJson = await profileRes.json();
                         if (profileJson.exists) {
                             setSchoolProfile(profileJson.data);
-                            if (profileJson.data.curricular_offering) {
-                                setCurricularOffering(profileJson.data.curricular_offering);
-                                setIsOfferingLocked(true);
-                            } else {
-                                setCurricularOffering('');
-                                setIsOfferingLocked(false);
-                            }
                             // Cache for offline usage
                             localStorage.setItem('fullSchoolProfile', JSON.stringify(profileJson.data));
-                            localStorage.setItem('schoolOffering', profileJson.data.curricular_offering || '');
                         }
                     }
 
@@ -228,7 +215,28 @@ const SchoolForms = () => {
         const processedForms = formsData.map(f => {
             const status = getStatus(f.id);
             if (status === 'completed') completed++;
-            return { ...f, status };
+
+            // CHECK DEADLINE LOCK
+            let isLocked = false;
+            let lockReason = '';
+            if (f.id === 'enrolment' && deadlineDate) {
+                // If now is past deadline (end of day)
+                const now = new Date();
+                // Compare timestamps directly? Or just dates?
+                // Usually "deadline" means "until End of that Day" or "before that day".
+                // Let's assume deadline is inclusive (until 23:59:59 of that date).
+                // API saves basic YYYY-MM-DD usually. Let's assume strict check for now.
+                // If deadlineDate is 2026-01-31, effectively it expires on 2026-02-01 00:00.
+                const deadlineEffect = new Date(deadlineDate);
+                deadlineEffect.setHours(23, 59, 59, 999);
+
+                if (now > deadlineEffect) {
+                    isLocked = true;
+                    lockReason = 'Deadline Passed';
+                }
+            }
+
+            return { ...f, status, isLocked, lockReason };
         });
 
         // Group by Category
@@ -245,68 +253,9 @@ const SchoolForms = () => {
             progress: Math.round((completed / formsData.length) * 100),
             categorizedForms: grouped
         };
-    }, [schoolProfile, headProfile, filter]);
+    }, [schoolProfile, headProfile, filter, deadlineDate]); // Added deadlineDate dependency
 
-    // --- 5. HANDLE OFFERING CHANGE ---
-    const handleOfferingChange = (e) => {
-        setPendingOffering(e.target.value);
-        setShowConfirmModal(true);
-    };
-
-    const cancelOfferingChange = () => {
-        setShowConfirmModal(false);
-        setPendingOffering('');
-    };
-
-    const confirmOfferingChange = async () => {
-        setShowConfirmModal(false);
-        const newValue = pendingOffering;
-
-        setCurricularOffering(newValue);
-        localStorage.setItem('schoolOffering', newValue); // Immediate local update
-
-        if (!schoolProfile) return;
-
-        setIsSavingOffering(true);
-        try {
-            // Map snake_case DB profile to camelCase payload expected by save-school
-            const payload = {
-                schoolId: schoolProfile.school_id,
-                schoolName: schoolProfile.school_name,
-                region: schoolProfile.region,
-                province: schoolProfile.province,
-                division: schoolProfile.division,
-                district: schoolProfile.district,
-                municipality: schoolProfile.municipality,
-                legDistrict: schoolProfile.leg_district,
-                barangay: schoolProfile.barangay,
-                motherSchoolId: schoolProfile.mother_school_id,
-                latitude: schoolProfile.latitude,
-                longitude: schoolProfile.longitude,
-                submittedBy: schoolProfile.submitted_by, // Or auth.currentUser.uid
-                curricularOffering: newValue
-            };
-
-            const res = await fetch('/api/save-school', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (res.ok) {
-                console.log("✅ Curricular offering updated via API");
-                // Update local profile state to reflect change
-                setSchoolProfile(prev => ({ ...prev, curricular_offering: newValue }));
-                setIsOfferingLocked(true);
-            } else {
-                console.warn("⚠️ Failed to update offering on server");
-            }
-        } catch (error) {
-            console.error("Error auto-saving offering:", error);
-        } finally {
-            setIsSavingOffering(false);
-        }
-    };
+    // --- 5. HANDLE OFFERING CHANGE REMOVED ---
 
     // --- COMPONENTS ---
 
@@ -324,43 +273,64 @@ const SchoolForms = () => {
 
     const FormCard = ({ item }) => {
         const isDone = item.status === 'completed';
+        const isLocked = item.isLocked;
         const Icon = item.icon;
 
         return (
             <div
-                onClick={() => navigate(item.route)}
-                className={`group relative p-4 mb-3 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center gap-4
-                    ${isDone
-                        ? 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-700 opacity-80 hover:opacity-100'
-                        : 'bg-white dark:bg-slate-800 border-orange-100 dark:border-orange-900/30 shadow-[0_4px_20px_rgba(249,115,22,0.08)] hover:-translate-y-1 hover:shadow-lg'
+                onClick={() => {
+                    if (isLocked) {
+                        alert("Memorandum: Submission for this form has closed.");
+                        return;
+                    }
+                    navigate(item.route);
+                }}
+                className={`group relative p-4 mb-3 rounded-2xl border transition-all duration-300 flex items-center gap-4
+                    ${isLocked
+                        ? 'bg-slate-100 dark:bg-slate-900 border-slate-200 opacity-60 cursor-not-allowed'
+                        : isDone
+                            ? 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-700 opacity-80 hover:opacity-100 cursor-pointer'
+                            : 'bg-white dark:bg-slate-800 border-orange-100 dark:border-orange-900/30 shadow-[0_4px_20px_rgba(249,115,22,0.08)] hover:-translate-y-1 hover:shadow-lg cursor-pointer'
                     }
                 `}
             >
                 {/* Status Indicator Strip */}
-                <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${isDone ? 'bg-green-400' : 'bg-orange-400'}`} />
+                {!isLocked && (
+                    <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${isDone ? 'bg-green-400' : 'bg-orange-400'}`} />
+                )}
 
                 {/* Icon Box */}
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl shrink-0 transition-colors
-                    ${isDone ? 'bg-green-100 text-green-600' : 'bg-orange-50 text-orange-500'}
+                    ${isLocked
+                        ? 'bg-slate-200 text-slate-400'
+                        : isDone ? 'bg-green-100 text-green-600' : 'bg-orange-50 text-orange-500'
+                    }
                 `}>
-                    {isDone ? <FiCheckCircle /> : <Icon />}
+                    {isLocked ? <FiAlertCircle /> : (isDone ? <FiCheckCircle /> : <Icon />)}
                 </div>
 
                 {/* Text Content */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                        <h3 className={`font-bold text-sm truncate ${isDone ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                        <h3 className={`font-bold text-sm truncate ${isDone || isLocked ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
                             {item.name}
                         </h3>
-                        {!isDone && <FiAlertCircle className="text-orange-400 text-xs animate-pulse" />}
+                        {!isDone && !isLocked && <FiAlertCircle className="text-orange-400 text-xs animate-pulse" />}
+                        {isLocked && (
+                            <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full border border-red-200">
+                                CLOSED
+                            </span>
+                        )}
                     </div>
                     <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 truncate">
-                        {item.description}
+                        {isLocked ? item.lockReason : item.description}
                     </p>
                 </div>
 
                 {/* Arrow Action */}
-                <FiChevronRight className={`text-slate-300 transition-transform group-hover:translate-x-1 ${isDone ? 'opacity-0' : 'opacity-100'}`} />
+                {!isLocked && (
+                    <FiChevronRight className={`text-slate-300 transition-transform group-hover:translate-x-1 ${isDone ? 'opacity-0' : 'opacity-100'}`} />
+                )}
             </div>
         );
     };
@@ -423,41 +393,7 @@ const SchoolForms = () => {
                 </div>
             )}
 
-            {/* CONFIRMATION MODAL */}
-            {showConfirmModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 relative overflow-hidden">
-                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl mx-auto">
-                            <FiAlertCircle />
-                        </div>
-                        <div className="text-center">
-                            <h2 className="text-lg font-bold text-slate-800">Confirm Change?</h2>
-                            <p className="text-sm text-slate-500 mt-2">
-                                You are about to change the Curricular Offering to <br />
-                                <span className="font-bold text-slate-800">"{pendingOffering}"</span>.
-                            </p>
-                            <p className="text-xs text-amber-600 mt-2 font-bold bg-amber-50 p-2 rounded-lg border border-amber-100">
-                                Note: This may affect which forms are visible.
-                            </p>
-                        </div>
 
-                        <div className="flex gap-3 mt-4">
-                            <button
-                                onClick={cancelOfferingChange}
-                                className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmOfferingChange}
-                                className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition"
-                            >
-                                Confirm
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* --- HEADER --- */}
             <div className="bg-[#004A99] pt-8 pb-20 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
@@ -485,54 +421,8 @@ const SchoolForms = () => {
 
                 </div>
 
-                {/* Curricular Offering Selection */}
-                <div className="mt-6 bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 flex items-center justify-between">
-                    <div className="flex items-center gap-3 w-full">
-                        <div className="p-2 bg-white/20 rounded-lg shrink-0">
-                            <TbSchool className="text-white text-lg" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-[10px] text-blue-200 uppercase tracking-wider font-semibold">Curricular Offering</p>
-                            <div className="relative flex items-center gap-2">
-                                <div className="relative flex-1">
-                                    <select
-                                        value={curricularOffering}
-                                        onChange={handleOfferingChange}
-                                        disabled={isSavingOffering || isOfferingLocked}
-                                        className={`w-full bg-transparent font-bold text-sm focus:outline-none appearance-none truncate pr-6 transition-colors
-                                            ${isOfferingLocked ? 'text-white/70 cursor-not-allowed' : 'text-white cursor-pointer'}
-                                        `}
-                                    >
-                                        <option value="" className="text-slate-800">Select Offering...</option>
-                                        <option value="Purely Elementary" className="text-slate-800">Purely Elementary</option>
-                                        <option value="Elementary School and Junior High School (K-10)" className="text-slate-800">Elementary School and Junior High School (K-10)</option>
-                                        <option value="All Offering (K-12)" className="text-slate-800">All Offering (K-12)</option>
-                                        <option value="Junior and Senior High" className="text-slate-800">Junior and Senior High</option>
-                                        <option value="Purely Junior High School" className="text-slate-800">Purely Junior High School</option>
-                                        <option value="Purely Senior High School" className="text-slate-800">Purely Senior High School</option>
-                                    </select>
-                                    {!isOfferingLocked && (
-                                        <FiChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
-                                    )}
-                                </div>
 
-                                {isOfferingLocked ? (
-                                    <button
-                                        onClick={() => setIsOfferingLocked(false)}
-                                        className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-blue-200 hover:text-white transition"
-                                        title="Unlock to Edit"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                                    </button>
-                                ) : (
-                                    <div className="p-1.5 text-white/40">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+
             </div>
 
             {/* --- MAIN CONTENT --- */}
