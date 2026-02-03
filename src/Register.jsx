@@ -66,12 +66,7 @@ const Register = () => {
     });
 
     // --- OTP STATE ---
-    const [otp, setOtp] = useState(['', '', '', '', '', '']);
-    const [isOtpSent, setIsOtpSent] = useState(false);
-    const [isOtpVerified, setIsOtpVerified] = useState(false);
-    const [otpLoading, setOtpLoading] = useState(false);
-    const [timer, setTimer] = useState(0);
-    const [canResend, setCanResend] = useState(true);
+
 
     // --- LOCATION DROPDOWN STATE (Generic Roles) ---
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -101,17 +96,7 @@ const Register = () => {
     const [registeredIern, setRegisteredIern] = useState('');
 
     // --- OTP TIMER EFFECT ---
-    useEffect(() => {
-        let interval;
-        if (timer > 0) {
-            interval = setInterval(() => {
-                setTimer((prev) => prev - 1);
-            }, 1000);
-        } else {
-            setCanResend(true);
-        }
-        return () => clearInterval(interval);
-    }, [timer]);
+
 
     // --- 1. LOAD CSV DATA ---
     useEffect(() => {
@@ -243,7 +228,6 @@ const Register = () => {
         });
         // Reset school selection if moving away
         setSelectedSchool(null);
-        // Reset OTP state on role change? Maybe keep it if email is same.
     };
 
     const handleSchoolSelect = (e) => {
@@ -270,84 +254,7 @@ const Register = () => {
     };
 
     // --- OTP HANDLERS ---
-    const handleSendOtp = async () => {
-        if (!formData.email) {
-            alert("Please enter your email first.");
-            return;
-        }
 
-        // STRICT EMAIL VALIDATION
-        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
-            alert("Registration is restricted to official DepEd accounts.");
-            return;
-        }
-
-        if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
-            alert("Passwords do not match!");
-            return;
-        }
-
-        setOtpLoading(true);
-        try {
-            const res = await fetch('/api/send-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: formData.email })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setIsOtpSent(true);
-                // setCanResend(false);
-                // setTimer(90);
-                alert(data.message); // Show actual message from server (might contain fallback info)
-            } else {
-                alert(data.message || "Failed to send OTP");
-            }
-        } catch (error) {
-            console.error(error);
-            alert("Network error sending OTP");
-        } finally {
-            setOtpLoading(false);
-        }
-    };
-
-    const handleVerifyOtp = async () => {
-        const code = otp.join("");
-        if (code.length < 6) return;
-
-        setOtpLoading(true);
-        try {
-            const res = await fetch('/api/verify-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: formData.email, code })
-            });
-            const data = await res.json();
-            if (data.success) {
-                setIsOtpVerified(true);
-                alert("Verified successfully!");
-            } else {
-                alert(data.message || "Invalid Code");
-                setIsOtpVerified(false);
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setOtpLoading(false);
-        }
-    };
-
-    const handleOtpChange = (element, index) => {
-        if (isNaN(element.value)) return;
-        const newOtp = [...otp];
-        newOtp[index] = element.value;
-        setOtp(newOtp);
-
-        // Auto-focus next input
-        if (element.nextSibling && element.value) {
-            element.nextSibling.focus();
-        }
-    };
 
     // --- LOCATION HANDLERS (Generic Roles) ---
     const handleRegionChange = (e) => {
@@ -829,7 +736,7 @@ const Register = () => {
                                     </div>
 
 
-                                    <input name="email" type="email" placeholder="DepEd Email Address" onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required readOnly={isOtpVerified} />
+                                    <input name="email" type="email" placeholder="DepEd Email Address" onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
 
                                     {/* CENTRAL OFFICE FIELDS */}
                                     {formData.role === 'Central Office' && (
