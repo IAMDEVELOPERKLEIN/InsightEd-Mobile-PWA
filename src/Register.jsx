@@ -428,11 +428,18 @@ const Register = () => {
         }
 
 
-        // STRICT OTP ENFORCEMENT
-        if (!isOtpVerified) {
-            alert("Please verify your email via OTP before registering.");
+
+        // STRICT EMAIL VALIDATION (Added for Bypass)
+        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
+            alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
         }
+
+        // STRICT OTP ENFORCEMENT (COMMENTED OUT FOR TESTING)
+        // if (!isOtpVerified) {
+        //     alert("Please verify your email via OTP before registering.");
+        //     return;
+        // }
 
         setLoading(true);
 
@@ -1000,7 +1007,7 @@ const Register = () => {
                             )}
 
                             {/* === 3. EMAIL VERIFICATION & SECURITY (COMMENTED OUT FOR TESTING) === */}
-                            <div className="pt-2 border-t border-slate-100 animate-in fade-in">
+                            {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
                                         {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
@@ -1010,7 +1017,7 @@ const Register = () => {
 
                                 <div className="mb-6 space-y-3">
 
-                                    {/* OTP CONTROLS */}
+                                    
                                     
                                     <div className="flex flex-col gap-3">
                                         <p className="text-xs text-slate-500">
@@ -1062,7 +1069,7 @@ const Register = () => {
                                     </div> 
                                     
                                 </div>
-                            </div>
+                            </div> */}
 
 
 
