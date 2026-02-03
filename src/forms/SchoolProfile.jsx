@@ -178,7 +178,7 @@ const SchoolProfile = () => {
         // A. CSV Fetch - Independent
         const loadDirectory = async () => {
             try {
-                const csvResponse = await fetch('/schools.csv');
+                const csvResponse = await fetch(`${import.meta.env.BASE_URL}schools.csv`);
                 if (csvResponse.ok) {
                     const contentType = csvResponse.headers.get("content-type");
                     if (contentType && contentType.includes("html")) throw new Error("CSV file not found (HTML returned)");

@@ -4,6 +4,7 @@ import pg from 'pg';
 import cors from 'cors';
 // import cron from 'node-cron'; // REMOVED for Vercel
 import admin from 'firebase-admin'; // --- FIREBASE ADMIN ---
+import nodemailer from 'nodemailer'; // --- NODEMAILER ---
 
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -12,6 +13,15 @@ const require = createRequire(import.meta.url);
 
 // Load environment variables
 dotenv.config();
+
+// --- EMAIL TRANSPORTER ---
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 // Destructure Pool from pg
 const { Pool } = pg;
@@ -267,6 +277,8 @@ const initOtpTable = async () => {
                 disabled BOOLEAN DEFAULT FALSE
             );
         `);
+        // --- 1e. FORGOT PASSWORD (CUSTOM) ---
+
         // If table exists, ensure columns exist
         await client.query(`
             ALTER TABLE users 
@@ -614,7 +626,92 @@ const initOtpTable = async () => {
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
   }
-})();
+})(); // End of DB Init IIFE
+
+// --- 1f. MASKED EMAIL LOOKUP (FORGOT PASSWORD) ---
+app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1", [schoolId]);
+    if (result.rows.length === 0 || !result.rows[0].email) {
+      return res.status(404).json({ error: "School ID not found" });
+    }
+
+    const email = result.rows[0].email;
+    const [username, domain] = email.split('@');
+
+    // Masking Logic: "c***@gmail.com"
+    const maskedUsername = username.length > 2
+      ? username[0] + '*'.repeat(username.length - 1)
+      : username[0] + '*'; // Fallback for short names
+
+    const maskedEmail = `${maskedUsername}@${domain}`;
+    res.json({ found: true, maskedEmail });
+  } catch (err) {
+    console.error("Lookup Error:", err);
+    res.status(500).json({ error: "Server Error" });
+  }
+});
+
+// --- 1e. FORGOT PASSWORD (CUSTOM) ---
+app.post('/api/forgot-password', async (req, res) => {
+  // verificationEmail is OPTIONAL now (legacy/fallback support)
+  const { schoolId } = req.body;
+
+  if (!schoolId) {
+    return res.status(400).json({ error: "School ID is required." });
+  }
+
+  try {
+    // 1. Lookup User by School ID 
+    const profileRes = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1", [schoolId]);
+
+    if (profileRes.rows.length === 0) {
+      return res.status(404).json({ error: "School ID not found." });
+    }
+
+    const realEmail = profileRes.rows[0].email;
+    if (!realEmail) {
+      return res.status(400).json({ error: "No contact email found for this School ID." });
+    }
+
+    console.log(`Reset requested for School ID: ${schoolId}, sending to: ${realEmail}`);
+
+    // 3. Generate Reset Link for the FAKE Auth Email
+    const fakeAuthEmail = `${schoolId}@insighted.app`;
+    const actionCodeSettings = {
+      url: 'https://insight-ed-mobile-pwa.vercel.app', // OR your local URL if dev
+      handleCodeInApp: false,
+    };
+
+    const link = await admin.auth().generatePasswordResetLink(fakeAuthEmail, actionCodeSettings);
+
+    // 4. Send Email via Nodemailer
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: realEmail,
+      subject: 'InsightEd Password Reset',
+      html: `
+                <h3>Password Reset Request</h3>
+                <p>We received a request to reset the password for School ID: <b>${schoolId}</b>.</p>
+                <p>Click the link below to verify your email and invoke the reset logic:</p>
+                <a href="${link}">Reset Password</a>
+                <p>If you did not request this, please ignore this email.</p>
+            `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log("Password reset email sent successfully.");
+    res.json({ success: true, message: `Reset link sent to ${realEmail}` });
+
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+    if (error.code === 'auth/user-not-found') {
+      return res.status(404).json({ error: "Account not setup in Authentication system yet." });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ==================================================================
 //                        HELPER FUNCTIONS
@@ -938,6 +1035,51 @@ app.post('/api/verify-otp', async (req, res) => {
   } catch (err) {
     console.error("Verify Error:", err);
     return res.status(500).json({ success: false, message: "Server Verification Error" });
+  }
+});
+
+// --- 2a. GET: Check User by School ID ---
+app.get('/api/user-by-school/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+
+  try {
+    // Check if school exists and get user ID
+    const schoolRes = await pool.query(
+      "SELECT submitted_by FROM school_profiles WHERE school_id = $1",
+      [schoolId]
+    );
+
+    if (schoolRes.rows.length === 0) {
+      return res.status(404).json({ error: "School not found" });
+    }
+
+    const uid = schoolRes.rows[0].submitted_by;
+
+    // Get user details from users table
+    const userRes = await pool.query(
+      "SELECT * FROM users WHERE uid = $1",
+      [uid]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = userRes.rows[0];
+    res.json({
+      success: true,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
+        first_name: user.first_name,
+        last_name: user.last_name
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching user by school ID:", error);
+    res.status(500).json({ error: "Failed to fetch user" });
   }
 });
 
