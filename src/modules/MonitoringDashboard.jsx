@@ -4,7 +4,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2 } from 'react-icons/fi';
+import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw } from 'react-icons/fi';
 import { TbTrophy, TbSchool } from 'react-icons/tb';
 
 import Papa from 'papaparse';
@@ -185,7 +185,7 @@ const MonitoringDashboard = () => {
         }).catch(err => console.error("Failed to load locations", err));
 
         // Load Schools Data for Division filtering
-        Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
+        Papa.parse('/schools.csv', {
             download: true,
             header: true,
             skipEmptyLines: true,
@@ -257,10 +257,30 @@ const MonitoringDashboard = () => {
         fetchData(region, '');
     };
 
-    const handleDivisionChange = (division) => {
+    const handleDivisionChange = async (division) => {
         setCoDivision(division);
         setCoDistrict(''); // Reset district
-        fetchData(coRegion, division);
+
+        // NEW: For Regional Office, fetch schools immediately (Skip District)
+        if (userData?.role === 'Regional Office') {
+            setLoadingDistrict(true);
+            try {
+                // Fetch ALL schools in this division
+                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(userData.region)}&division=${encodeURIComponent(division)}`);
+                if (res.ok) {
+                    setDistrictSchools(await res.json());
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoadingDistrict(false);
+            }
+            // We don't necessarily update global stats if fetchData ignores params for RO, 
+            // but we call it to ensure sync if logic changes.
+            fetchData(userData.region, division);
+        } else {
+            fetchData(coRegion, division);
+        }
     };
 
     const handleDistrictChange = async (district) => {
@@ -614,8 +634,8 @@ const MonitoringDashboard = () => {
                                                 </div>
                                                 <div className="text-right">
                                                     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase mb-1 ${p.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' :
-                                                            p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
-                                                                'bg-blue-100 text-blue-600'
+                                                        p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
+                                                            'bg-blue-100 text-blue-600'
                                                         }`}>
                                                         {p.status}
                                                     </span>
@@ -696,7 +716,19 @@ const MonitoringDashboard = () => {
                                 <p className="text-blue-100/70 text-sm mt-1">Status of schools & infrastructure.</p>
                             </>
                         )}
+
+                        {/* MANUAL REFRESH BUTTON (For RO/SDO/CO) */}
+                        <div className="absolute bottom-1 right-0">
+                            <button
+                                onClick={() => { setLoading(true); fetchData(); }}
+                                className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all hover:rotate-180 active:scale-95"
+                                title="Refresh Data"
+                            >
+                                <FiRefreshCw size={18} />
+                            </button>
+                        </div>
                     </div>
+
 
                     {/* Tabs - Hidden for SDO AND RO as they use Bottom Nav. Also hidden for Central Office when drilling down to a region. */}
                     {userData?.role !== 'School Division Office' && userData?.role !== 'Regional Office' && !(userData?.role === 'Central Office' && coRegion) && (
@@ -775,7 +807,8 @@ const MonitoringDashboard = () => {
                             {/* Accomplishment Rate per School Division (Regional Office Only OR Central Office Regional View) */}
                             {/* ONLY SHOW FOR INSIGHTED ACCOMPLISHMENT TAB */}
                             {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') &&
-                                (userData?.role === 'Regional Office' || (userData?.role === 'Central Office' && coRegion && !coDivision)) && (
+                                !coDivision &&
+                                (userData?.role === 'Regional Office' || (userData?.role === 'Central Office' && coRegion)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
                                         {(() => {
@@ -816,7 +849,10 @@ const MonitoringDashboard = () => {
                                                         return (
                                                             <div
                                                                 key={divName}
-                                                                onClick={() => handleDivisionChange(divName)}
+                                                                onClick={() => {
+                                                                    // UNIFIED HANDLER: Both RO and CO use handleDivisionChange
+                                                                    handleDivisionChange(divName);
+                                                                }}
                                                                 className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group"
                                                             >
                                                                 <div className="flex justify-between items-center mb-2">
@@ -846,15 +882,17 @@ const MonitoringDashboard = () => {
                             {/* NEW: District Accomplishment Rate for SDO OR Central Office Division View */}
                             {/* SHOW FOR INSIGHTED ACCOMPLISHMENT TAB */}
                             {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') &&
-                                (userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision)) && (
+                                (userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision) || (userData?.role === 'Regional Office' && coDivision)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
-                                        <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per District</h2>
+                                        <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
+                                            {(coDistrict || (userData?.role === 'Regional Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
+                                        </h2>
                                         {(() => {
                                             const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
                                             const targetDivision = userData.role === 'Central Office' ? coDivision : userData.division;
 
-                                            // IF DISTRICT SELECTED: SHOW DRILL-DOWN
-                                            if (coDistrict) {
+                                            // IF DISTRICT SELECTED OR REGIONAL OFFICE DRILL-DOWN: SHOW SCHOOLS
+                                            if (coDistrict || (userData?.role === 'Regional Office' && coDivision)) {
                                                 if (loadingDistrict) {
                                                     return <div className="p-8 text-center text-slate-400 animate-pulse">Loading schools...</div>;
                                                 }
@@ -911,13 +949,21 @@ const MonitoringDashboard = () => {
                                                         <div className="flex items-center justify-between">
                                                             <div className="flex items-center gap-3">
                                                                 <button
-                                                                    onClick={() => handleDistrictChange('')}
+                                                                    onClick={() => {
+                                                                        if (userData?.role === 'Regional Office') {
+                                                                            handleDivisionChange(''); // Back to Division List
+                                                                        } else {
+                                                                            handleDistrictChange(''); // Back to District List
+                                                                        }
+                                                                    }}
                                                                     className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition"
                                                                 >
                                                                     <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
                                                                 </button>
                                                                 <div>
-                                                                    <h3 className="font-black text-xl text-slate-800 dark:text-white">{coDistrict}</h3>
+                                                                    <h3 className="font-black text-xl text-slate-800 dark:text-white">
+                                                                        {userData?.role === 'Regional Office' ? coDivision : coDistrict}
+                                                                    </h3>
                                                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">School List</p>
                                                                 </div>
                                                             </div>
@@ -962,8 +1008,8 @@ const MonitoringDashboard = () => {
                                                                         <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                                                                             <div
                                                                                 className={`h-full rounded-full transition-all duration-500 ${s.percentage === 100 ? 'bg-emerald-500' :
-                                                                                        s.percentage >= 50 ? 'bg-blue-500' :
-                                                                                            s.percentage > 0 ? 'bg-amber-500' : 'bg-slate-300'
+                                                                                    s.percentage >= 50 ? 'bg-blue-500' :
+                                                                                        s.percentage > 0 ? 'bg-amber-500' : 'bg-slate-300'
                                                                                     }`}
                                                                                 style={{ width: `${s.percentage}%` }}
                                                                             ></div>
@@ -978,8 +1024,8 @@ const MonitoringDashboard = () => {
 
                                                                     <div className="text-right shrink-0">
                                                                         <span className={`text-xl font-black ${s.percentage === 100 ? 'text-emerald-500' :
-                                                                                s.percentage >= 50 ? 'text-blue-500' :
-                                                                                    s.percentage > 0 ? 'text-amber-500' : 'text-slate-300'
+                                                                            s.percentage >= 50 ? 'text-blue-500' :
+                                                                                s.percentage > 0 ? 'text-amber-500' : 'text-slate-300'
                                                                             }`}>
                                                                             {s.percentage}%
                                                                         </span>
@@ -1270,8 +1316,8 @@ const MonitoringDashboard = () => {
                                             </div>
                                             <div className="text-right">
                                                 <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase mb-1 ${p.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' :
-                                                        p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
-                                                            'bg-blue-100 text-blue-600'
+                                                    p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
+                                                        'bg-blue-100 text-blue-600'
                                                     }`}>
                                                     {p.status}
                                                 </span>
