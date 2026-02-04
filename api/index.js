@@ -444,7 +444,23 @@ const initOtpTable = async () => {
         ADD COLUMN IF NOT EXISTS spec_guidance INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_librarian INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_ict_coord INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0,
+        -- General Education for Elementary
+        ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
+        -- New Elementary Field
+        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0,
+        -- New Secondary Fields
+        ADD COLUMN IF NOT EXISTS spec_bio_sci_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_bio_sci_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_phys_sci_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_phys_sci_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_agri_fishery_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_agri_fishery_teaching INTEGER DEFAULT 0,
+        -- New Others Field
+        ADD COLUMN IF NOT EXISTS spec_others_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_others_teaching INTEGER DEFAULT 0;
       `);
         console.log('✅ Checked/Added Teacher Specialization columns');
       } catch (migErr) {
@@ -2773,6 +2789,12 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 spec_tle_major=$16, spec_tle_teaching=$17,
                 spec_guidance=$18, spec_librarian=$19,
                 spec_ict_coord=$20, spec_drrm_coord=$21,
+                spec_general_major=$22, spec_general_teaching=$23,
+                spec_ece_major=$24, spec_ece_teaching=$25,
+                spec_bio_sci_major=$26, spec_bio_sci_teaching=$27,
+                spec_phys_sci_major=$28, spec_phys_sci_teaching=$29,
+                spec_agri_fishery_major=$30, spec_agri_fishery_teaching=$31,
+                spec_others_major=$32, spec_others_teaching=$33,
                 updated_at = CURRENT_TIMESTAMP
             WHERE submitted_by = $1;
         `;
@@ -2787,7 +2809,13 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
       d.spec_esp_major || 0, d.spec_esp_teaching || 0,
       d.spec_tle_major || 0, d.spec_tle_teaching || 0,
       d.spec_guidance || 0, d.spec_librarian || 0,
-      d.spec_ict_coord || 0, d.spec_drrm_coord || 0
+      d.spec_ict_coord || 0, d.spec_drrm_coord || 0,
+      d.spec_general_major || 0, d.spec_general_teaching || 0,
+      d.spec_ece_major || 0, d.spec_ece_teaching || 0,
+      d.spec_bio_sci_major || 0, d.spec_bio_sci_teaching || 0,
+      d.spec_phys_sci_major || 0, d.spec_phys_sci_teaching || 0,
+      d.spec_agri_fishery_major || 0, d.spec_agri_fishery_teaching || 0,
+      d.spec_others_major || 0, d.spec_others_teaching || 0
     ];
     const result = await pool.query(query, values);
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
@@ -3461,6 +3489,14 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Always start if strictly detected as main, OR if explicitly forced by env (fallback)
+// Debugging Startup Logic
+console.log('--- Startup Debug Info ---');
+console.log('Executed File:', process.argv[1]);
+console.log('Current File:', fileURLToPath(import.meta.url));
+console.log('Is Main Module?', isMainModule);
+console.log('Force Start Env?', process.env.START_SERVER);
+console.log('--------------------------');
+
 if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
 

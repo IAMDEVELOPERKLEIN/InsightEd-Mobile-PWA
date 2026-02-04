@@ -45,6 +45,7 @@ const OrganizedClasses = () => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -99,6 +100,14 @@ const OrganizedClasses = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // Check Role for Read-Only
+                try {
+                    const role = localStorage.getItem('userRole');
+                    if (role === 'Central Office' || isDummy) {
+                        setIsReadOnly(true);
+                    }
+                } catch (e) { }
+
                 // DEFAULT STATE (Prevents Uncontrolled Input Errors)
                 const defaultFormData = {
                     kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
@@ -201,7 +210,8 @@ const OrganizedClasses = () => {
                     if (!restored) {
                         const docRef = doc(db, "users", user.uid);
                         let fetchUrl = `/api/organized-classes/${user.uid}`;
-                        if (viewOnly && schoolIdParam) {
+                        const role = localStorage.getItem('userRole');
+                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -470,7 +480,7 @@ const OrganizedClasses = () => {
                                             type="text" inputMode="numeric" pattern="[0-9]*"
                                             value={formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
-                                            disabled={isLocked || viewOnly}
+                                            disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                             className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                             onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
                                             onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
@@ -496,7 +506,7 @@ const OrganizedClasses = () => {
                                             type="text" inputMode="numeric" pattern="[0-9]*"
                                             value={formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
-                                            disabled={isLocked || viewOnly}
+                                            disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                             className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                             onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
                                             onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
@@ -521,7 +531,7 @@ const OrganizedClasses = () => {
                                             type="text" inputMode="numeric" pattern="[0-9]*"
                                             value={formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
-                                            disabled={isLocked || viewOnly}
+                                            disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                             className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                             onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
                                             onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
@@ -579,7 +589,7 @@ const OrganizedClasses = () => {
                                                             name={`cnt${type}Kinder`}
                                                             value={classSizeData[`cnt${type}Kinder`]}
                                                             onChange={handleClassSizeChange}
-                                                            disabled={isLocked || viewOnly}
+                                                            disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                                             onFocus={() => classSizeData[`cnt${type}Kinder`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}Kinder`, value: '' } })}
                                                             onBlur={() => (classSizeData[`cnt${type}Kinder`] === '' || classSizeData[`cnt${type}Kinder`] === null) && handleClassSizeChange({ target: { name: `cnt${type}Kinder`, value: 0 } })}
                                                             className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
@@ -619,7 +629,7 @@ const OrganizedClasses = () => {
                                                                 name={`cnt${type}G${g}`}
                                                                 value={classSizeData[`cnt${type}G${g}`]}
                                                                 onChange={handleClassSizeChange}
-                                                                disabled={isLocked || viewOnly}
+                                                                disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                                                 onFocus={() => classSizeData[`cnt${type}G${g}`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: '' } })}
                                                                 onBlur={() => (classSizeData[`cnt${type}G${g}`] === '' || classSizeData[`cnt${type}G${g}`] === null) && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: 0 } })}
                                                                 className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
@@ -660,7 +670,7 @@ const OrganizedClasses = () => {
                                                                 name={`cnt${type}G${g}`}
                                                                 value={classSizeData[`cnt${type}G${g}`]}
                                                                 onChange={handleClassSizeChange}
-                                                                disabled={isLocked || viewOnly}
+                                                                disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                                                 onFocus={() => classSizeData[`cnt${type}G${g}`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: '' } })}
                                                                 onBlur={() => (classSizeData[`cnt${type}G${g}`] === '' || classSizeData[`cnt${type}G${g}`] === null) && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: 0 } })}
                                                                 className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
@@ -704,7 +714,7 @@ const OrganizedClasses = () => {
                                                                 name={`cnt${type}G${g}`}
                                                                 value={classSizeData[`cnt${type}G${g}`]}
                                                                 onChange={handleClassSizeChange}
-                                                                disabled={isLocked || viewOnly}
+                                                                disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                                                 onFocus={() => classSizeData[`cnt${type}G${g}`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: '' } })}
                                                                 onBlur={() => (classSizeData[`cnt${type}G${g}`] === '' || classSizeData[`cnt${type}G${g}`] === null) && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: 0 } })}
                                                                 className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
@@ -725,7 +735,7 @@ const OrganizedClasses = () => {
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {viewOnly ? (
+                    {(viewOnly || isReadOnly) ? (
                         <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
