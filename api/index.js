@@ -68,13 +68,8 @@ const initDB = async () => {
     `);
     console.log("✅ DB Init: project_documents table verified.");
 
-    // Ensure Specialization Columns Exist
-    await pool.query(`
-        ALTER TABLE school_profiles 
-        ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0;
-    `);
-    console.log("✅ DB Init: Specialization columns verified.");
+    // Redundant block removed - handled in main migration IIFE
+
 
   } catch (err) {
     console.error("❌ DB Init Error:", err);
@@ -2902,6 +2897,11 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
       d.spec_agri_fishery_major || 0, d.spec_agri_fishery_teaching || 0,
       d.spec_others_major || 0, d.spec_others_teaching || 0
     ];
+
+    // DEBUG LOGGING
+    console.log(`[Specialization Save] UID: ${d.uid}`);
+    console.log(`[Specialization Save] General Major: ${d.spec_general_major}, ECE Major: ${d.spec_ece_major}`);
+
     const result = await pool.query(query, values);
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
 
