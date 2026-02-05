@@ -216,7 +216,7 @@ const UserProfile = () => {
                 ratings: feedbackRatings,
                 comment: feedbackComment,
                 timestamp: serverTimestamp(),
-                appVersion: '1.0.0'
+                appVersion: '1.0.1'
             });
 
             alert("Thank you for your feedback! We appreciate your input.");
@@ -476,13 +476,12 @@ const UserProfile = () => {
                                             onClick={() => setFeedbackRatings(prev => ({ ...prev, [cat.id]: star }))}
                                             className="bg-transparent border-0 cursor-pointer focus:outline-none transition-transform active:scale-90 hover:scale-110"
                                         >
-                                            <FiStar 
-                                                size={28} 
-                                                className={`transition-colors duration-200 ${
-                                                    star <= feedbackRatings[cat.id] 
-                                                        ? 'fill-amber-400 text-amber-400' 
-                                                        : 'text-slate-200 dark:text-slate-600'
-                                                }`} 
+                                            <FiStar
+                                                size={28}
+                                                className={`transition-colors duration-200 ${star <= feedbackRatings[cat.id]
+                                                    ? 'fill-amber-400 text-amber-400'
+                                                    : 'text-slate-200 dark:text-slate-600'
+                                                    }`}
                                             />
                                         </button>
                                     ))}
@@ -502,7 +501,7 @@ const UserProfile = () => {
                         />
                     </div>
 
-                    <button 
+                    <button
                         onClick={handleSubmitFeedback}
                         disabled={loading}
                         className="w-full py-3 bg-[#004A99] hover:bg-blue-800 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-all disabled:opacity-70 flex justify-center items-center gap-2"

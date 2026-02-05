@@ -2205,7 +2205,10 @@ app.get('/api/projects', async (req, res) => {
 
     let sql = `
       WITH LatestProjects AS (
-          SELECT DISTINCT ON (ipc) *
+          SELECT DISTINCT ON (ipc) 
+            project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name,
+            accomplishment_percentage, project_allocation, batch_of_funds, contractor_name, other_remarks,
+            status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude
           FROM engineer_form
           ORDER BY ipc, project_id DESC
       )
@@ -2357,11 +2360,12 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
-// --- 21. GET: Fetch All Images for a Project ---
+// --- 21. GET: Fetch Project Images (METADATA ONLY) ---
 app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {
-    const query = `SELECT id, image_data, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
+    // OPTIMIZATION: Removed image_data from selection
+    const query = `SELECT id, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
     const result = await pool.query(query, [projectId]);
     res.json(result.rows);
   } catch (err) {
@@ -2370,12 +2374,31 @@ app.get('/api/project-images/:projectId', async (req, res) => {
   }
 });
 
-// --- 22. GET: Fetch All Images for an Engineer ---
+// --- 21b. GET: Fetch Single Image Content (BLOB) ---
+app.get('/api/image/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const query = `SELECT image_data FROM engineer_image WHERE id = $1`;
+    const result = await pool.query(query, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+
+    res.json({ id, image_data: result.rows[0].image_data });
+  } catch (err) {
+    console.error("❌ Error fetching image blob:", err.message);
+    res.status(500).json({ error: "Failed to fetch image" });
+  }
+});
+
+// --- 22. GET: Fetch All Images for an Engineer (METADATA ONLY) ---
 app.get('/api/engineer-images/:engineerId', async (req, res) => {
   const { engineerId } = req.params;
   try {
+    // OPTIMIZATION: Removed image_data, added id for on-demand fetch
     const query = `
-      SELECT ei.id, ei.image_data, ei.created_at, ef.school_name 
+      SELECT ei.id, ei.created_at, ef.school_name 
       FROM engineer_image ei
       LEFT JOIN engineer_form ef ON ei.project_id = ef.project_id
       WHERE ei.uploaded_by = $1 
@@ -2798,6 +2821,24 @@ app.post('/api/save-school-resources', async (req, res) => {
   }
 });
 
+// --- DEBUG: Manual Schema Fix Endpoint ---
+app.get('/api/debug/fix-specialization-schema', async (req, res) => {
+  try {
+    const query = `
+      ALTER TABLE school_profiles 
+      ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0;
+    `;
+    await pool.query(query);
+    res.json({
+      success: true,
+      message: "Manual schema fix executed. Columns 'spec_general_major' and 'spec_ece_major' ensured."
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Fix failed: " + err.message });
+  }
+});
+
 // --- 23. GET: Teacher Specialization Data ---
 app.get('/api/teacher-specialization/:uid', async (req, res) => {
   const { uid } = req.params;
@@ -3037,44 +3078,78 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
   }
 });
 
-// --- 26. GET: List Schools in Jurisdiction ---
+// --- 26. GET: List Schools in Jurisdiction (Paginated) ---
 app.get('/api/monitoring/schools', async (req, res) => {
-  const { region, division } = req.query;
+  const { region, division, page, limit, search } = req.query;
   try {
-    let query = `
-    SELECT
-    sp.school_name,
-      sp.school_id,
-      sp.total_enrollment,
-      (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
-  (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
-    (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
-      (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
-        (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
-          (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
-            (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-              (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
-              (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
-              (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
-                sp.submitted_by
-      FROM school_profiles sp
-      WHERE TRIM(sp.region) = TRIM($1)
-  `;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    // Base WHERE
+    let whereClauses = [`TRIM(sp.region) = TRIM($1)`];
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(sp.division) = TRIM($2)`;
+      whereClauses.push(`TRIM(sp.division) = TRIM($${params.length + 1})`);
       params.push(division);
     }
 
     if (req.query.district) {
-      query += ` AND TRIM(sp.district) = TRIM($${params.length + 1})`;
+      whereClauses.push(`TRIM(sp.district) = TRIM($${params.length + 1})`);
       params.push(req.query.district);
     }
 
-    query += ` ORDER BY school_name ASC`;
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    if (search) {
+      whereClauses.push(`(sp.school_name ILIKE $${params.length + 1} OR sp.school_id ILIKE $${params.length + 1})`);
+      params.push(`%${search}%`);
+    }
+
+    // common SELECT fields
+    const selectFields = `
+      sp.school_name,
+      sp.school_id,
+      sp.total_enrollment,
+      (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
+      (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
+      (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
+      (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
+      (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
+      (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
+      (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
+      (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+      (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
+      (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
+      sp.submitted_by
+    `;
+
+    // COUNT Query
+    const countQuery = `SELECT COUNT(*) as total FROM school_profiles sp WHERE ${whereClauses.join(' AND ')}`;
+    const countRes = await pool.query(countQuery, params); // Use same params (including search)
+    const totalItems = parseInt(countRes.rows[0].total);
+
+    // DATA Query
+    const dataQuery = `
+      SELECT ${selectFields}
+      FROM school_profiles sp
+      WHERE ${whereClauses.join(' AND ')}
+      ORDER BY sp.school_name ASC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    // Add pagination params
+    const queryParams = [...params, limitNum, offset];
+
+    const result = await pool.query(dataQuery, queryParams);
+
+    // Return structured response
+    res.json({
+      data: result.rows,
+      total: totalItems,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalItems / limitNum)
+    });
   } catch (err) {
     console.error("Jurisdiction Schools Error:", err);
     res.status(500).json({ error: "Failed to fetch schools", details: err.message });
