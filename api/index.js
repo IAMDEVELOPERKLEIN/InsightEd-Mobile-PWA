@@ -2987,11 +2987,6 @@ app.get('/api/monitoring/stats', async (req, res) => {
            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-<<<<<<< kleinbranch
-           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
-=======
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN 
              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
@@ -3004,8 +2999,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
              res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
-           THEN 1 ELSE 0 END) + 
->>>>>>> main
+           THEN 1 ELSE 0 END) +
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
       FROM school_profiles
@@ -3048,11 +3042,6 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-<<<<<<< kleinbranch
-           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
-=======
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN 
              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
@@ -3065,8 +3054,7 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
              res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
-           THEN 1 ELSE 0 END) + 
->>>>>>> main
+           THEN 1 ELSE 0 END) +
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
