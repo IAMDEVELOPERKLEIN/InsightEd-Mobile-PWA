@@ -2983,10 +2983,15 @@ app.get('/api/monitoring/stats', async (req, res) => {
         SUM(CASE WHEN (
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
+           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN 
              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
@@ -3000,6 +3005,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
            THEN 1 ELSE 0 END) + 
+>>>>>>> main
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
       FROM school_profiles
@@ -3038,10 +3044,15 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         SUM(CASE WHEN (
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
+           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN 
              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
@@ -3055,6 +3066,7 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
            THEN 1 ELSE 0 END) + 
+>>>>>>> main
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
@@ -3084,11 +3096,11 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         SUM(CASE WHEN (
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
@@ -3311,10 +3323,15 @@ app.get('/api/leaderboard', async (req, res) => {
     (
       (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + --Basic Profile
         (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + --Enrollment
-          (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + --School Head
-            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Classes
+          (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + --School Head
+            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + --Classes
               (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + --Learner Stats
                 (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Shifting
+<<<<<<< kleinbranch
+                  (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + --Personnel
+                    (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + --Specialization
+                      (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + --Resources
+=======
                   (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
                     (CASE WHEN 
                       spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
@@ -3328,6 +3345,7 @@ app.get('/api/leaderboard', async (req, res) => {
                         res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
                         res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
                       THEN 1 ELSE 0 END) + --Resources
+>>>>>>> main
                         (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END) --Physical Facilities
                 ) * 100.0 / 10.0`;
 
@@ -3412,10 +3430,15 @@ app.get('/api/monitoring/regions', async (req, res) => {
           SUM(CASE WHEN (
             (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
             (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
+            (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
             (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN 
               spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
@@ -3429,6 +3452,7 @@ app.get('/api/monitoring/regions', async (req, res) => {
               res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
               res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
             THEN 1 ELSE 0 END) + 
+>>>>>>> main
             (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
           ) = 10 THEN 1 ELSE 0 END) as completed_schools
         FROM school_profiles
