@@ -2968,8 +2968,18 @@ app.get('/api/monitoring/stats', async (req, res) => {
         COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as organizedclasses,
         COUNT(CASE WHEN shift_kinder IS NOT NULL THEN 1 END) as shifting,
         COUNT(CASE WHEN teach_kinder > 0 THEN 1 END) as personnel,
-        COUNT(CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 END) as specialization,
-        COUNT(CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN 1 END) as resources,
+        COUNT(CASE WHEN 
+          spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+          spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+          spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+          spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+          spec_agri_fishery_major > 0 OR spec_others_major > 0 
+        THEN 1 END) as specialization,
+        COUNT(CASE WHEN 
+          res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+          res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+          res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+        THEN 1 END) as resources,
         SUM(CASE WHEN (
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
@@ -2978,8 +2988,18 @@ app.get('/api/monitoring/stats', async (req, res) => {
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+             spec_agri_fishery_major > 0 OR spec_others_major > 0 
+           THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+           THEN 1 ELSE 0 END) + 
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
       FROM school_profiles
@@ -3023,8 +3043,18 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+             spec_agri_fishery_major > 0 OR spec_others_major > 0 
+           THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+           THEN 1 ELSE 0 END) + 
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
@@ -3116,8 +3146,18 @@ app.get('/api/monitoring/schools', async (req, res) => {
       (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
       (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
       (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
-      (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-      (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+      (CASE WHEN 
+        sp.spec_general_major > 0 OR sp.spec_ece_major > 0 OR sp.spec_english_major > 0 OR 
+        sp.spec_filipino_major > 0 OR sp.spec_math_major > 0 OR sp.spec_science_major > 0 OR 
+        sp.spec_ap_major > 0 OR sp.spec_mapeh_major > 0 OR sp.spec_esp_major > 0 OR 
+        sp.spec_tle_major > 0 OR sp.spec_bio_sci_major > 0 OR sp.spec_phys_sci_major > 0 OR 
+        sp.spec_agri_fishery_major > 0 OR sp.spec_others_major > 0 
+      THEN true ELSE false END) as specialization_status,
+      (CASE WHEN 
+        sp.res_electricity_source IS NOT NULL OR sp.res_water_source IS NOT NULL OR 
+        sp.res_buildable_space IS NOT NULL OR sp.sha_category IS NOT NULL OR 
+        sp.res_armchair_func > 0 OR sp.res_armchairs_good > 0 OR sp.res_toilets_male > 0 
+      THEN true ELSE false END) as resources_status,
       (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
       (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
       sp.submitted_by
@@ -3276,8 +3316,18 @@ app.get('/api/leaderboard', async (req, res) => {
               (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + --Learner Stats
                 (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Shifting
                   (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
-                    (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + --Specialization
-                      (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + --Resources
+                    (CASE WHEN 
+                      spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+                      spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+                      spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+                      spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+                      spec_agri_fishery_major > 0 OR spec_others_major > 0  
+                    THEN 1 ELSE 0 END) + --Specialization
+                      (CASE WHEN 
+                        res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+                        res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+                        res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+                      THEN 1 ELSE 0 END) + --Resources
                         (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END) --Physical Facilities
                 ) * 100.0 / 10.0`;
 
@@ -3367,8 +3417,18 @@ app.get('/api/monitoring/regions', async (req, res) => {
             (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN 
+              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+              spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+              spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+              spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+              spec_agri_fishery_major > 0 OR spec_others_major > 0 
+            THEN 1 ELSE 0 END) + 
+            (CASE WHEN 
+              res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+            THEN 1 ELSE 0 END) + 
             (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
           ) = 10 THEN 1 ELSE 0 END) as completed_schools
         FROM school_profiles

@@ -101,9 +101,33 @@ export const ServiceWorkerProvider = ({ children }) => {
         }
     };
 
+    const checkForUpdates = async () => {
+        if (!registration) {
+            console.log('No SW registration found, cannot check for updates.');
+            return false;
+        }
+        try {
+            console.log('Manual update check triggered...');
+            await registration.update();
+
+            // Check immediately after update() if there's a new worker installing or waiting
+            if (registration.installing || registration.waiting) {
+                console.log('Update found!');
+                return true;
+            }
+
+            console.log('No update found.');
+            return false;
+        } catch (error) {
+            console.error('Error checking for updates:', error);
+            return false;
+        }
+    };
+
     const value = {
         isUpdateAvailable,
         updateApp,
+        checkForUpdates,
         registration
     };
 
