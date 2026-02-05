@@ -3122,6 +3122,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
     let statsQuery = `
       SELECT 
         COUNT(*) as total_schools,
+<<<<<<< HEAD
         SUM(f1_profile) as profile,
         SUM(f2_head) as head,
         SUM(f3_enrollment) as enrollment,
@@ -3135,6 +3136,54 @@ app.get('/api/monitoring/stats', async (req, res) => {
         
         -- Count only fully completed schools (100%)
         COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools_count
+=======
+        COUNT(CASE WHEN school_name IS NOT NULL THEN 1 END) as profile,
+        COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as head,
+        COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as enrollment,
+        COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as organizedclasses,
+        COUNT(CASE WHEN shift_kinder IS NOT NULL THEN 1 END) as shifting,
+        COUNT(CASE WHEN teach_kinder > 0 THEN 1 END) as personnel,
+        COUNT(CASE WHEN 
+          spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+          spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+          spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+          spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+          spec_agri_fishery_major > 0 OR spec_others_major > 0 
+        THEN 1 END) as specialization,
+        COUNT(CASE WHEN 
+          res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+          res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+          res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+        THEN 1 END) as resources,
+        SUM(CASE WHEN (
+           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
+           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
+           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+             spec_agri_fishery_major > 0 OR spec_others_major > 0 
+           THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+           THEN 1 ELSE 0 END) + 
+>>>>>>> main
+           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+        ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
+>>>>>>> 31a3c0e86f5db243baf340da277527c648b45b62
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
     `;
@@ -3182,9 +3231,42 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
   try {
     const query = `
       SELECT 
+<<<<<<< HEAD
         division, 
         COUNT(*) as total_schools, 
         COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools
+=======
+        division,
+        COUNT(*) as total_schools,
+        SUM(CASE WHEN (
+           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
+           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
+           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+             spec_agri_fishery_major > 0 OR spec_others_major > 0 
+           THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+           THEN 1 ELSE 0 END) + 
+>>>>>>> main
+           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+        ) = 10 THEN 1 ELSE 0 END) as completed_schools
+>>>>>>> 31a3c0e86f5db243baf340da277527c648b45b62
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
       GROUP BY division
@@ -3209,7 +3291,22 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       SELECT 
         district,
         COUNT(*) as total_schools,
+<<<<<<< HEAD
         COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools
+=======
+        SUM(CASE WHEN (
+           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+        ) = 10 THEN 1 ELSE 0 END) as completed_schools
+>>>>>>> 31a3c0e86f5db243baf340da277527c648b45b62
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1) AND TRIM(division) = TRIM($2)
       GROUP BY district
@@ -3419,10 +3516,15 @@ app.get('/api/leaderboard', async (req, res) => {
     (
       (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + --Basic Profile
         (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + --Enrollment
-          (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + --School Head
-            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Classes
+          (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + --School Head
+            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + --Classes
               (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + --Learner Stats
                 (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Shifting
+<<<<<<< kleinbranch
+                  (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + --Personnel
+                    (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + --Specialization
+                      (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + --Resources
+=======
                   (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
                     (CASE WHEN 
                       spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
@@ -3436,6 +3538,7 @@ app.get('/api/leaderboard', async (req, res) => {
                         res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
                         res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
                       THEN 1 ELSE 0 END) + --Resources
+>>>>>>> main
                         (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END) --Physical Facilities
                 ) * 100.0 / 10.0`;
 
@@ -3510,6 +3613,61 @@ app.get('/api/leaderboard', async (req, res) => {
 app.get('/api/monitoring/regions', async (req, res) => {
   try {
     const query = `
+<<<<<<< HEAD
+=======
+      WITH school_stats AS (
+        SELECT 
+          region,
+          COUNT(*) as total_schools,
+          COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as with_enrollment,
+          COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as with_head,
+          SUM(CASE WHEN (
+            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
+            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
+            (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
+            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN 
+              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+              spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+              spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+              spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+              spec_agri_fishery_major > 0 OR spec_others_major > 0 
+            THEN 1 ELSE 0 END) + 
+            (CASE WHEN 
+              res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+            THEN 1 ELSE 0 END) + 
+>>>>>>> main
+            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+          ) = 10 THEN 1 ELSE 0 END) as completed_schools
+        FROM school_profiles
+        GROUP BY region
+      ),
+      project_stats AS (
+        SELECT 
+          region,
+          COUNT(*) as total_projects,
+          COALESCE(SUM(project_allocation), 0) as total_allocation,
+          AVG(accomplishment_percentage) as avg_accomplishment,
+          -- Distinct Counts for New Logic (Robust Matching)
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Ongoing' THEN 1 END) as ongoing_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Not Yet Started' THEN 1 END) as not_yet_started_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE '%Under Procurement%' THEN 1 END) as under_procurement_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Completed' THEN 1 END) as completed_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Delayed' THEN 1 END) as delayed_projects
+        FROM engineer_form
+        GROUP BY region
+      )
+>>>>>>> 31a3c0e86f5db243baf340da277527c648b45b62
       SELECT 
           region as name,
           CAST(AVG(completion_percentage) AS DECIMAL(10,1)) as avg_completion,
