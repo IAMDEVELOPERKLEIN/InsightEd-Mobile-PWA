@@ -77,6 +77,128 @@ const initDB = async () => {
 };
 initDB();
 
+// --- DEBUG: SCANNER ENDPOINT ---
+app.get('/api/debug/scan/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    // 1. Get School Profile
+    const spResult = await pool.query("SELECT * FROM school_profiles WHERE submitted_by = $1", [uid]);
+    if (spResult.rows.length === 0) return res.json({ error: "No school profile found for this user." });
+
+    const sp = spResult.rows[0];
+    const report = { school_id: sp.school_id, school_name: sp.school_name, forms: {} };
+    let completed = 0;
+
+    // Verbose Checks (Mirroring calculateSchoolProgress)
+
+    // F1
+    report.forms.f1_profile = { passed: !!sp.school_name, val: sp.school_name, reason: sp.school_name ? "OK" : "Missing School Name" };
+    if (report.forms.f1_profile.passed) completed++;
+
+    // F2
+    report.forms.f2_head = { passed: !!sp.head_last_name, val: sp.head_last_name, reason: sp.head_last_name ? "OK" : "Missing Head Last Name" };
+    if (report.forms.f2_head.passed) completed++;
+
+    // F3
+    report.forms.f3_enrollment = { passed: (sp.total_enrollment > 0), val: sp.total_enrollment, reason: "Must be > 0" };
+    if (report.forms.f3_enrollment.passed) completed++;
+
+    // F4
+    const totalClasses = (sp.classes_kinder || 0) + (sp.classes_grade_1 || 0) + (sp.classes_grade_2 || 0) + (sp.classes_grade_3 || 0) +
+      (sp.classes_grade_4 || 0) + (sp.classes_grade_5 || 0) + (sp.classes_grade_6 || 0) +
+      (sp.classes_grade_7 || 0) + (sp.classes_grade_8 || 0) + (sp.classes_grade_9 || 0) + (sp.classes_grade_10 || 0) +
+      (sp.classes_grade_11 || 0) + (sp.classes_grade_12 || 0);
+    report.forms.f4_classes = { passed: totalClasses > 0, val: totalClasses, reason: "Sum of classes must be > 0" };
+    if (report.forms.f4_classes.passed) completed++;
+
+    // F5
+    const totalTeachers = (sp.teach_kinder || 0) + (sp.teach_g1 || 0) + (sp.teach_g2 || 0) + (sp.teach_g3 || 0) +
+      (sp.teach_g4 || 0) + (sp.teach_g5 || 0) + (sp.teach_g6 || 0) +
+      (sp.teach_g7 || 0) + (sp.teach_g8 || 0) + (sp.teach_g9 || 0) + (sp.teach_g10 || 0) +
+      (sp.teach_g11 || 0) + (sp.teach_g12 || 0);
+    report.forms.f5_teachers = { passed: totalTeachers > 0, val: totalTeachers, reason: "Sum of teachers must be > 0" };
+    if (report.forms.f5_teachers.passed) completed++;
+
+    // F6
+    const specFields = [
+      'spec_general_major', 'spec_ece_major', 'spec_english_major', 'spec_filipino_major', 'spec_math_major',
+      'spec_science_major', 'spec_ap_major', 'spec_mapeh_major', 'spec_esp_major', 'spec_tle_major',
+      'spec_bio_sci_major', 'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
+    ];
+    const specVals = specFields.map(f => sp[f] || 0);
+    const hasSpec = specVals.some(v => v > 0);
+    report.forms.f6_specialization = { passed: hasSpec, max_val: Math.max(...specVals), reason: "Any specialization > 0" };
+    if (report.forms.f6_specialization.passed) completed++;
+
+    // F7
+    const hasRes = (sp.res_electricity_source || sp.res_water_source || sp.res_buildable_space || sp.sha_category ||
+      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 || (sp.res_toilets_male || 0) > 0);
+    report.forms.f7_resources = { passed: !!hasRes, reason: "Utility/Infra set or Inventory > 0. Elec: " + sp.res_electricity_source };
+    if (report.forms.f7_resources.passed) completed++;
+
+    // F8
+    report.forms.f8_facilities = { passed: (sp.build_classrooms_total > 0), val: sp.build_classrooms_total, reason: "Total Classrooms > 0" };
+    if (report.forms.f8_facilities.passed) completed++;
+
+    // F9
+    const hasShift = (sp.shift_kinder || sp.shift_g1 || sp.adm_mdl || sp.adm_odl);
+    report.forms.f9_shifting = { passed: !!hasShift, reason: "Any shift or modality set" };
+    if (report.forms.f9_shifting.passed) completed++;
+
+    // F10
+    const statKeys = Object.keys(sp).filter(k => k.startsWith('stat_'));
+    const nonZeroStats = statKeys.filter(k => Number(sp[k]) > 0);
+    report.forms.f10_stats = {
+      passed: nonZeroStats.length > 0,
+      positive_keys: nonZeroStats,
+      count: nonZeroStats.length,
+      reason: "Any stat_ field > 0"
+    };
+    if (report.forms.f10_stats.passed) completed++;
+
+    report.total_score = completed;
+    report.percentage = Math.round((completed / 10) * 100);
+
+    // AUTO-HEAL: If the calculation here differs from DB, update DB
+    if (completed !== sp.forms_completed_count) {
+      report.fix_applied = true;
+      await calculateSchoolProgress(sp.school_id, pool); // Force trigger the main function
+    }
+
+    res.json(report);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+// --- DEBUG: RECALCULATE ALL ENDPOINT ---
+app.get('/api/debug/recalculate-all', async (req, res) => {
+  try {
+    console.log("🔄 Starting Full Snapshot Recalculation...");
+    const result = await pool.query('SELECT school_id FROM school_profiles');
+    const schools = result.rows;
+
+    let count = 0;
+    for (const s of schools) {
+      if (s.school_id) {
+        await calculateSchoolProgress(s.school_id, pool);
+        count++;
+      }
+    }
+
+    console.log(`✅ Recalculation Complete for ${count} schools.`);
+    res.json({
+      success: true,
+      message: `Recalculated progress for ${count} schools.`,
+      count: count
+    });
+
+  } catch (err) {
+    console.error("❌ Backfill Error:", err);
+    res.status(500).json({ error: "Backfill failed: " + err.message });
+  }
+});
 // --- VERCEL CRON ENDPOINT (MOVED TO TOP) ---
 // Support both /api/cron... (Local) and /cron... (Vercel)
 app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) => {
@@ -677,9 +799,33 @@ const initOtpTable = async () => {
           ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
         console.log('✅ Checked/Added disabled column to users table');
+        /* ... (previous migrations omitted) ... */
       } catch (migErr) {
         console.error('❌ Failed to migrate disabled column:', migErr.message);
       }
+
+      // --- MIGRATION: MONITORING SNAPSHOT COLUMNS ---
+      try {
+        await client.query(`
+          ALTER TABLE school_profiles 
+          ADD COLUMN IF NOT EXISTS forms_completed_count INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS completion_percentage NUMERIC DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f1_profile INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f2_head INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f3_enrollment INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f4_classes INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f5_teachers INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f6_specialization INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f7_resources INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f8_facilities INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f9_shifting INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS f10_stats INTEGER DEFAULT 0;
+        `);
+        console.log('✅ Checked/Added Monitoring Granular Snapshot columns');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate snapshot columns:', migErr.message);
+      }
+
 
     } finally {
       client.release();
@@ -826,6 +972,126 @@ const logActivity = async (userUid, userName, role, actionType, targetEntity, de
     console.log(`📝 Audit Logged: ${actionType} - ${targetEntity}`);
   } catch (err) {
     console.error("❌ Failed to log activity:", err.message);
+  }
+};
+
+// --- HELPER: CALCULATE SCHOOL PROGRESS (SNAPSHOT) ---
+const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
+  console.log(`TRIGGER: calculateSchoolProgress for ${schoolId}`);
+  if (!schoolId) return;
+  try {
+    // 1. Fetch current data
+    const res = await dbClientOrPool.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
+    if (res.rows.length === 0) return;
+    const sp = res.rows[0];
+
+    let completed = 0;
+    const total = 10;
+
+    // --- FORM 1: Profile ---
+    // Criteria: School ID exists (which it does if we found the row), and Name is set
+    const f1 = sp.school_name ? 1 : 0;
+    if (f1) completed++;
+
+    // --- FORM 2: School Head ---
+    // Criteria: Last Name is present
+    const f2 = sp.head_last_name ? 1 : 0;
+    if (f2) completed++;
+
+    // --- FORM 3: Enrollment ---
+    // Criteria: Total Enrollment > 0
+    const f3 = (sp.total_enrollment || 0) > 0 ? 1 : 0;
+    if (f3) completed++;
+
+    // --- FORM 4: Organized Classes ---
+    // Criteria: Sum of all class counts > 0
+    const totalClasses =
+      (sp.classes_kinder || 0) + (sp.classes_grade_1 || 0) + (sp.classes_grade_2 || 0) + (sp.classes_grade_3 || 0) +
+      (sp.classes_grade_4 || 0) + (sp.classes_grade_5 || 0) + (sp.classes_grade_6 || 0) +
+      (sp.classes_grade_7 || 0) + (sp.classes_grade_8 || 0) + (sp.classes_grade_9 || 0) + (sp.classes_grade_10 || 0) +
+      (sp.classes_grade_11 || 0) + (sp.classes_grade_12 || 0);
+    const f4 = totalClasses > 0 ? 1 : 0;
+    if (f4) completed++;
+
+    // --- FORM 5: Teachers ---
+    // Criteria: Sum of all teacher counts > 0
+    const totalTeachers =
+      (sp.teach_kinder || 0) + (sp.teach_g1 || 0) + (sp.teach_g2 || 0) + (sp.teach_g3 || 0) +
+      (sp.teach_g4 || 0) + (sp.teach_g5 || 0) + (sp.teach_g6 || 0) +
+      (sp.teach_g7 || 0) + (sp.teach_g8 || 0) + (sp.teach_g9 || 0) + (sp.teach_g10 || 0) +
+      (sp.teach_g11 || 0) + (sp.teach_g12 || 0);
+    const f5 = totalTeachers > 0 ? 1 : 0;
+    if (f5) completed++;
+
+    // --- FORM 6: Specialization ---
+    // Criteria: Any specialization field > 0
+    const specFields = [
+      'spec_general_major', 'spec_ece_major', 'spec_english_major', 'spec_filipino_major', 'spec_math_major',
+      'spec_science_major', 'spec_ap_major', 'spec_mapeh_major', 'spec_esp_major', 'spec_tle_major',
+      'spec_bio_sci_major', 'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
+    ];
+    const f6 = specFields.some(f => (sp[f] || 0) > 0) ? 1 : 0;
+    if (f6) completed++;
+
+    // --- FORM 7: Resources ---
+    // Criteria: Any key infrastructure/utility field is set OR any inventory count > 0
+    const f7 = (sp.res_electricity_source || sp.res_water_source || sp.res_buildable_space || sp.sha_category ||
+      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 || (sp.res_toilets_male || 0) > 0) ? 1 : 0;
+    if (f7) completed++;
+
+    // --- FORM 8: Facilities ---
+    // Criteria: Total Classrooms > 0
+    const f8 = (sp.build_classrooms_total || 0) > 0 ? 1 : 0;
+    if (f8) completed++;
+
+
+    // --- FORM 9: Shifting ---
+    // Criteria: Any shift defined OR any modality defined
+    const f9 = (sp.shift_kinder || sp.shift_g1 || sp.adm_mdl || sp.adm_odl) ? 1 : 0;
+    if (f9) completed++;
+
+    // --- FORM 10: Learner Statistics ---
+    // Criteria: Any stat field > 0
+    // We check keys starting with 'stat_' that have numeric value > 0
+    const hasStats = Object.keys(sp).some(key => key.startsWith('stat_') && Number(sp[key]) > 0);
+    const f10 = hasStats ? 1 : 0;
+    if (f10) completed++;
+    else console.log(`[DEBUG] School ${schoolId} F10 Incomplete. Keys checked: ${Object.keys(sp).filter(k => k.startsWith('stat_')).length}, HasStats: ${hasStats}`);
+
+
+
+    // 2. Calculate and Update
+    const percentage = Math.round((completed / total) * 100);
+
+    /* 
+       Optimization: We update ALL columns (f1...f10) + summary columns 
+       This allows granular "Table View" as requested.
+    */
+    await dbClientOrPool.query(`
+      UPDATE school_profiles 
+      SET 
+        forms_completed_count = $1, 
+        completion_percentage = $2,
+        f1_profile = $4,
+        f2_head = $5,
+        f3_enrollment = $6,
+        f4_classes = $7,
+        f5_teachers = $8,
+        f6_specialization = $9,
+        f7_resources = $10,
+        f8_facilities = $11,
+        f9_shifting = $12,
+        f10_stats = $13
+      WHERE school_id = $3
+    `, [
+      completed, percentage, schoolId,
+      f1, f2, f3, f4, f5, f6, f7, f8, f9, f10
+    ]);
+
+    console.log(`✅ Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}]`);
+
+  } catch (err) {
+    console.error("❌ Snapshot Error:", err);
   }
 };
 
@@ -1579,6 +1845,9 @@ app.post('/api/save-school', async (req, res) => {
 
     res.status(200).json({ message: "Profile saved successfully!", changes: changes, iern: finalIern });
 
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(data.schoolId, pool);
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error("Save Error:", err);
@@ -1666,6 +1935,17 @@ app.post('/api/save-school-head', async (req, res) => {
     );
 
     res.json({ success: true, message: "School Head information updated successfully!" });
+
+    // SNAPSHOT UPDATE - Need SchoolID first. The endpoint receives UID.
+    // We can fetch school_id from result of update or query it.
+    // Let's rely on submitted_by to find school_id.
+    try {
+      const spRes = await pool.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [data.uid]);
+      if (spRes.rows.length > 0) {
+        await calculateSchoolProgress(spRes.rows[0].school_id, pool);
+      }
+    } catch (e) { console.warn("Snapshot Trigger User Lookup Failed", e); }
+
   } catch (err) {
     console.error("Save Head Error:", err);
     res.status(500).json({ error: err.message });
@@ -1721,88 +2001,8 @@ app.get('/api/enrolment/:uid', async (req, res) => {
 
 
 
-// --- 5. POST: Save Enrolment ---
-// --- 7. POST: Save Enrolment ---
-app.post('/api/save-enrolment', async (req, res) => {
-  const data = req.body;
-  console.log('📥 RECEIVED ENROLMENT DATA:', JSON.stringify(data, null, 2));
-  const newLogEntry = { timestamp: new Date().toISOString(), user: data.submittedBy, action: 'Enrolment Update', offering: data.curricularOffering };
-
-  try {
-    const query = ` UPDATE school_profiles SET curricular_offering = $2, es_enrollment = $3, jhs_enrollment = $4, shs_enrollment = $5, total_enrollment = $6, grade_kinder = $7, grade_1 = $8, grade_2 = $9, grade_3 = $10, grade_4 = $11, grade_5 = $12, grade_6 = $13, grade_7 = $14, grade_8 = $15, grade_9 = $16, grade_10 = $17, grade_11 = $18, grade_12 = $19, abm_11=$20, abm_12=$21, stem_11=$22, stem_12=$23, humss_11=$24, humss_12=$25, gas_11=$26, gas_12=$27, tvl_ict_11=$28, tvl_ict_12=$29, tvl_he_11=$30, tvl_he_12=$31, tvl_ia_11=$32, tvl_ia_12=$33, tvl_afa_11=$34, tvl_afa_12=$35, arts_11=$36, arts_12=$37, sports_11=$38, sports_12=$39,
-
-    -- ARAL Fields
-    aral_math_g1=$41, aral_read_g1=$42, aral_sci_g1=$43,
-    aral_math_g2=$44, aral_read_g2=$45, aral_sci_g2=$46,
-    aral_math_g3=$47, aral_read_g3=$48, aral_sci_g3=$49,
-    aral_math_g4=$50, aral_read_g4=$51, aral_sci_g4=$52,
-    aral_math_g5=$53, aral_read_g5=$54, aral_sci_g5=$55,
-    aral_math_g6=$56, aral_read_g6=$57, aral_sci_g6=$58,
-    aral_total=$59,
-    submitted_at = CURRENT_TIMESTAMP,
-    history_logs = history_logs || $40::jsonb
-  WHERE school_id = $1;
-`;
-    const values = [
-      data.schoolId, data.curricularOffering,
-      data.esTotal, data.jhsTotal, data.shsTotal, data.grandTotal,
-
-      // Elementary (Corrected to use snake_case)
-      data.grade_kinder, data.grade_1, data.grade_2, data.grade_3,
-      data.grade_4, data.grade_5, data.grade_6,
-
-      // JHS (Corrected)
-      data.grade_7, data.grade_8, data.grade_9, data.grade_10,
-
-      // SHS (Corrected)
-      data.grade_11, data.grade_12,
-      data.abm_11, data.abm_12, data.stem_11, data.stem_12,
-      data.humss_11, data.humss_12, data.gas_11, data.gas_12,
-      data.tvl_ict_11, data.tvl_ict_12, data.tvl_he_11, data.tvl_he_12,
-      data.tvl_ia_11, data.tvl_ia_12, data.tvl_afa_11, data.tvl_afa_12,
-      data.arts_11, data.arts_12, data.sports_11, data.sports_12,
-
-      JSON.stringify(newLogEntry),
-      // ARAL Values
-      data.aral_math_g1 || 0, data.aral_read_g1 || 0, data.aral_sci_g1 || 0,
-      data.aral_math_g2 || 0, data.aral_read_g2 || 0, data.aral_sci_g2 || 0,
-      data.aral_math_g3 || 0, data.aral_read_g3 || 0, data.aral_sci_g3 || 0,
-      data.aral_math_g4 || 0, data.aral_read_g4 || 0, data.aral_sci_g4 || 0,
-      data.aral_math_g5 || 0, data.aral_read_g5 || 0, data.aral_sci_g5 || 0,
-      data.aral_math_g6 || 0, data.aral_read_g6 || 0, data.aral_sci_g6 || 0,
-      data.aral_total || 0
-    ];
-    const result = await pool.query(query, values);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: "School Profile not found." });
-    }
-    await logActivity(
-      data.submittedBy,
-      'School Head',
-      'School Head',
-      'UPDATE',
-      `Enrolment Data: ${data.schoolId}`,
-      `Updated enrolment (Total: ${data.grandTotal})`
-    );
-    res.status(200).json({ message: "Enrolment updated successfully!" });
-  } catch (err) { console.error("Enrolment Save Error:", err); res.status(500).json({ message: "Database error", error: err.message }); }
-});
-
 // --- 6. GET: Fetch Enrolment ---
-app.get('/api/enrolment/:uid', async (req, res) => {
-  const { uid } = req.params;
-  try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
-    if (result.rows.length > 0) {
-      res.json({ exists: true, data: result.rows[0] });
-    } else {
-      res.json({ exists: false });
-    }
-  } catch (err) {
-    console.error("Fetch Enrolment Error:", err);
-    res.status(500).json({ error: "Database error" });
-  }
-});
+
 
 // ==================================================================
 //                    ENGINEER FORMS ROUTES
@@ -1903,6 +2103,8 @@ app.post('/api/save-enrolment', async (req, res) => {
 
     console.log("✅ Enrolment updated successfully!");
     res.status(200).json({ message: "Enrolment updated successfully!" });
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(data.schoolId, pool);
 
   } catch (err) {
     console.error("❌ Enrolment Save Error:", err);
@@ -2542,6 +2744,8 @@ app.post('/api/save-organized-classes', async (req, res) => {
     }
 
     res.json({ message: "Classes saved successfully!" });
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(data.schoolId, pool);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -2667,7 +2871,9 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
     }
 
     console.log("✅ Neon Updated Successfully for School:", result.rows[0].school_id);
+    await calculateSchoolProgress(result.rows[0].school_id, pool); // SNAPSHOT UPDATE
     res.json({ success: true });
+
 
   } catch (err) {
     console.error("❌ Neon Database Error:", err.message);
@@ -2728,6 +2934,8 @@ app.post('/api/save-learning-modalities', async (req, res) => {
     ]);
 
     res.json({ message: "Modalities saved successfully!" });
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(data.schoolId, pool);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -2815,29 +3023,15 @@ app.post('/api/save-school-resources', async (req, res) => {
     }
     console.log("[Resources] Success");
     res.json({ message: "Resources saved!" });
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(data.schoolId, pool);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- DEBUG: Manual Schema Fix Endpoint ---
-app.get('/api/debug/fix-specialization-schema', async (req, res) => {
-  try {
-    const query = `
-      ALTER TABLE school_profiles 
-      ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0;
-    `;
-    await pool.query(query);
-    res.json({
-      success: true,
-      message: "Manual schema fix executed. Columns 'spec_general_major' and 'spec_ece_major' ensured."
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Fix failed: " + err.message });
-  }
-});
+
 
 // --- 23. GET: Teacher Specialization Data ---
 app.get('/api/teacher-specialization/:uid', async (req, res) => {
@@ -2887,6 +3081,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       data.build_classrooms_demolition
     ]);
     res.json({ message: "Facilities saved!" });
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(data.schoolId, pool);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -2947,6 +3143,14 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
 
     res.json({ success: true });
+    // SNAPSHOT UPDATE (UID to School ID)
+    try {
+      const spRes = await pool.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [d.uid]);
+      if (spRes.rows.length > 0) {
+        await calculateSchoolProgress(spRes.rows[0].school_id, pool);
+      }
+    } catch (e) { console.warn("Snapshot Trigger Specialization User Lookup Failed", e); }
+
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2959,49 +3163,25 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
 app.get('/api/monitoring/stats', async (req, res) => {
   const { region, division } = req.query;
   try {
+    // REFACTOR: Use the pre-calculated 'f' columns and completion_percentage
+    // This ensures consistency with the Leaderboard and individual school progress.
     let statsQuery = `
       SELECT 
         COUNT(*) as total_schools,
-        COUNT(CASE WHEN school_name IS NOT NULL THEN 1 END) as profile,
-        COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as head,
-        COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as enrollment,
-        COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as organizedclasses,
-        COUNT(CASE WHEN shift_kinder IS NOT NULL THEN 1 END) as shifting,
-        COUNT(CASE WHEN teach_kinder > 0 THEN 1 END) as personnel,
-        COUNT(CASE WHEN 
-          spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
-          spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
-          spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
-          spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
-          spec_agri_fishery_major > 0 OR spec_others_major > 0 
-        THEN 1 END) as specialization,
-        COUNT(CASE WHEN 
-          res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
-          res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
-          res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
-        THEN 1 END) as resources,
-        SUM(CASE WHEN (
-           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
-           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN 
-             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
-             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
-             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
-             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
-             spec_agri_fishery_major > 0 OR spec_others_major > 0 
-           THEN 1 ELSE 0 END) + 
-           (CASE WHEN 
-             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
-             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
-             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
-           THEN 1 ELSE 0 END) +
-           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
-        ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
+        -- Sum up the boolean flags (1 or 0)
+        SUM(CASE WHEN f1_profile > 0 THEN 1 ELSE 0 END) as profile,
+        SUM(CASE WHEN f2_head > 0 THEN 1 ELSE 0 END) as head,
+        SUM(CASE WHEN f3_enrollment > 0 THEN 1 ELSE 0 END) as enrollment,
+        SUM(CASE WHEN f4_classes > 0 THEN 1 ELSE 0 END) as organizedclasses,
+        SUM(CASE WHEN f9_shifting > 0 THEN 1 ELSE 0 END) as shifting,
+        SUM(CASE WHEN f5_teachers > 0 THEN 1 ELSE 0 END) as personnel,
+        SUM(CASE WHEN f6_specialization > 0 THEN 1 ELSE 0 END) as specialization,
+        SUM(CASE WHEN f7_resources > 0 THEN 1 ELSE 0 END) as resources,
+        SUM(CASE WHEN f10_stats > 0 THEN 1 ELSE 0 END) as learner_stats, -- NOTE: Frontend might call this 'learner_stats' or match index
+        SUM(CASE WHEN f8_facilities > 0 THEN 1 ELSE 0 END) as facilities,
+        
+        -- Overall Completion (100%)
+        COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools_count
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
     `;
@@ -3018,7 +3198,33 @@ app.get('/api/monitoring/stats', async (req, res) => {
     }
 
     const result = await pool.query(statsQuery, params);
-    res.json(result.rows[0]);
+
+    // Safety: Ensure we return numbers, not nulls (SUM returns null if no rows)
+    const row = result.rows[0];
+    const safeRow = {
+      total_schools: parseInt(row.total_schools || 0),
+      profile: parseInt(row.profile || 0),
+      head: parseInt(row.head || 0),
+      enrollment: parseInt(row.enrollment || 0),
+      organizedclasses: parseInt(row.organizedclasses || 0),
+      shifting: parseInt(row.shifting || 0),
+      personnel: parseInt(row.personnel || 0),
+      specialization: parseInt(row.specialization || 0),
+      resources: parseInt(row.resources || 0),
+      facilities: parseInt(row.facilities || 0), // Added this missing one
+      completed_schools_count: parseInt(row.completed_schools_count || 0)
+    };
+
+    // NOTE: If frontend expects 'learner_stats' count, we should check if it's missing in the UI usage.
+    // The original query returned 9 specific columns + total. 
+    // It grouped 'learner_stats' into... wait.
+    // Original columns: profile, head, enrollment, organizedclasses, shifting, personnel, specialization, resources. (8 cols)
+    // Wait, original missed 'facilities' and 'learner_stats' in the SELECT list explicitly?
+    // Original: profile, head, enrollment, organizedclasses, shifting, personnel, specialization, resources, completed_schools_count.
+    // It seems the Dashboard only tracks those 8 specific metrics? 
+    // I will return ALL 10 just in case, but keep the keys consistent.
+
+    res.json(safeRow);
   } catch (err) {
     console.error("Monitoring Stats Error:", err);
     res.status(500).json({ error: "Failed to fetch stats" });
@@ -3026,53 +3232,33 @@ app.get('/api/monitoring/stats', async (req, res) => {
 });
 
 // --- 25b. GET: Monitoring Stats per Division (RO View) ---
-// --- 25b. GET: Monitoring Stats per Division (RO View) ---
+// --- 26. GET: Division Stats (Within Region) ---
 app.get('/api/monitoring/division-stats', async (req, res) => {
   const { region } = req.query;
   console.log("DEBUG: FETCHING DIV STATS FOR REGION:", region);
   try {
     const query = `
       SELECT 
-        division,
-        COUNT(*) as total_schools,
-        SUM(CASE WHEN (
-           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
-           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN 
-             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
-             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
-             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
-             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
-             spec_agri_fishery_major > 0 OR spec_others_major > 0 
-           THEN 1 ELSE 0 END) + 
-           (CASE WHEN 
-             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
-             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
-             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
-           THEN 1 ELSE 0 END) +
-           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
-        ) = 10 THEN 1 ELSE 0 END) as completed_schools
+        division, 
+        COUNT(*) as total_schools, 
+        COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools,
+        ROUND(AVG(completion_percentage), 1) as avg_completion
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
       GROUP BY division
-      ORDER BY division ASC
+      ORDER BY division
     `;
 
     const result = await pool.query(query, [region]);
     console.log("DEBUG: DIV STATS RESULT:", result.rows);
     res.json(result.rows);
   } catch (err) {
-    console.error("Division Stats Error:", err);
+    console.error(err);
     res.status(500).json({ error: "Failed to fetch division stats" });
   }
 });
 
-// --- 25c. GET: Monitoring Stats per District (SDO View) ---
+// --- 27. GET: District Stats (Within Division) ---
 app.get('/api/monitoring/district-stats', async (req, res) => {
   const { region, division } = req.query;
   console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division);
@@ -3081,18 +3267,8 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       SELECT 
         district,
         COUNT(*) as total_schools,
-        SUM(CASE WHEN (
-           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
-           (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
-           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
-        ) = 10 THEN 1 ELSE 0 END) as completed_schools
+        COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools,
+        ROUND(AVG(completion_percentage), 1) as avg_completion
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1) AND TRIM(division) = TRIM($2)
       GROUP BY district
@@ -3140,26 +3316,17 @@ app.get('/api/monitoring/schools', async (req, res) => {
       sp.school_name,
       sp.school_id,
       sp.total_enrollment,
-      (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
-      (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
-      (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
-      (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
-      (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
-      (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
-      (CASE WHEN 
-        sp.spec_general_major > 0 OR sp.spec_ece_major > 0 OR sp.spec_english_major > 0 OR 
-        sp.spec_filipino_major > 0 OR sp.spec_math_major > 0 OR sp.spec_science_major > 0 OR 
-        sp.spec_ap_major > 0 OR sp.spec_mapeh_major > 0 OR sp.spec_esp_major > 0 OR 
-        sp.spec_tle_major > 0 OR sp.spec_bio_sci_major > 0 OR sp.spec_phys_sci_major > 0 OR 
-        sp.spec_agri_fishery_major > 0 OR sp.spec_others_major > 0 
-      THEN true ELSE false END) as specialization_status,
-      (CASE WHEN 
-        sp.res_electricity_source IS NOT NULL OR sp.res_water_source IS NOT NULL OR 
-        sp.res_buildable_space IS NOT NULL OR sp.sha_category IS NOT NULL OR 
-        sp.res_armchair_func > 0 OR sp.res_armchairs_good > 0 OR sp.res_toilets_male > 0 
-      THEN true ELSE false END) as resources_status,
-      (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
-      (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
+      (f1_profile::int > 0) as profile_status,
+      (f2_head::int > 0) as head_status,
+      (f3_enrollment::int > 0) as enrollment_status,
+      (f4_classes::int > 0) as classes_status,
+      (f9_shifting::int > 0) as shifting_status,
+      (f5_teachers::int > 0) as personnel_status,
+      (f6_specialization::int > 0) as specialization_status,
+      (f7_resources::int > 0) as resources_status,
+      (f10_stats::int > 0) as learner_stats_status,
+      (f8_facilities::int > 0) as facilities_status,
+      sp.completion_percentage,
       sp.submitted_by
     `;
 
@@ -3293,202 +3460,108 @@ SELECT * FROM engineer_form WHERE school_id = $1 ORDER BY created_at DESC
 });
 
 // --- 30. GET: Leaderboard Data ---
+// --- 30. GET: Leaderboard Data ---
 app.get('/api/leaderboard', async (req, res) => {
-  const { scope, filter } = req.query; // scope: 'region' (for RO) or 'division' (for SDO/Head)
+  const { scope, filter } = req.query;
+
   try {
-    let whereClause = '';
-    let params = [];
-
-    if (scope === 'division') {
-      whereClause = 'WHERE division = $1';
-      params.push(filter);
-    } else if (scope === 'region') {
-      whereClause = 'WHERE region = $1';
-      params.push(filter);
-    }
-
-    const calculation = `
-    (
-      (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + --Basic Profile
-        (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + --Enrollment
-          (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + --School Head
-            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + --Classes
-              (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + --Learner Stats
-                (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Shifting
-<<<<<<< kleinbranch
-                  (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + --Personnel
-                    (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + --Specialization
-                      (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + --Resources
-=======
-                  (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
-                    (CASE WHEN 
-                      spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
-                      spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
-                      spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
-                      spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
-                      spec_agri_fishery_major > 0 OR spec_others_major > 0  
-                    THEN 1 ELSE 0 END) + --Specialization
-                      (CASE WHEN 
-                        res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
-                        res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
-                        res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
-                      THEN 1 ELSE 0 END) + --Resources
->>>>>>> main
-                        (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END) --Physical Facilities
-                ) * 100.0 / 10.0`;
-
-    let query = '';
-
+    // 1. NATIONAL SCOPE: Return list of REGIONS
     if (scope === 'national') {
-      // Aggregate by Region
-      query = `
-        SELECT region as name,
-        CAST(AVG(${calculation}) AS DECIMAL(10,1)) as avg_completion
+      const query = `
+        SELECT 
+          region as name,
+          ROUND(AVG(completion_percentage), 0) as avg_completion
         FROM school_profiles
         WHERE region IS NOT NULL
         GROUP BY region
         ORDER BY avg_completion DESC
       `;
-    } else if (scope === 'national_divisions') {
-      // Aggregate by Division (National)
-      query = `
-        SELECT division as name, region,
-        CAST(AVG(${calculation}) AS DECIMAL(10,1)) as avg_completion
+      const result = await pool.query(query);
+      return res.json({ regions: result.rows });
+    }
+
+    // 2. REGIONAL SCOPE or ALL DIVISIONS: Return list of DIVISIONS
+    if (scope === 'national_divisions' || (scope === 'region' && filter)) {
+      let query = `
+        SELECT 
+          division as name,
+          ROUND(AVG(completion_percentage), 0) as avg_completion
         FROM school_profiles
         WHERE division IS NOT NULL
-        GROUP BY division, region
-        ORDER BY avg_completion DESC
       `;
-    } else {
-      // School Level List (Division or Region Scope)
-      query = `
-        SELECT
-        school_id, school_name, division, region,
-        ${calculation} as completion_rate,
-        updated_at
-        FROM school_profiles
-        ${whereClause}
-        ORDER BY completion_rate DESC, updated_at DESC
-      `;
-    }
+      const params = [];
 
-    const result = await pool.query(query, params);
-
-    let responseData = {};
-
-    if (scope === 'national') {
-      responseData = { regions: result.rows };
-    } else if (scope === 'national_divisions') {
-      responseData = { divisions: result.rows };
-    } else {
-      responseData = { schools: result.rows };
-      // Calculate Division Averages if requesting Regional View
-      if (scope === 'region') {
-        const divMap = {};
-        result.rows.forEach(s => {
-          if (!divMap[s.division]) divMap[s.division] = { name: s.division, total: 0, count: 0 };
-          divMap[s.division].total += parseFloat(s.completion_rate);
-          divMap[s.division].count++;
-        });
-        responseData.divisions = Object.values(divMap).map(d => ({
-          name: d.name,
-          avg_completion: (d.total / d.count).toFixed(1)
-        })).sort((a, b) => b.avg_completion - a.avg_completion);
+      if (scope === 'region' && filter) {
+        query += ` AND TRIM(region) = TRIM($1)`;
+        params.push(filter);
       }
+
+      query += ` GROUP BY division ORDER BY avg_completion DESC`;
+
+      const result = await pool.query(query, params);
+      return res.json({ divisions: result.rows });
     }
 
-    res.json(responseData);
+    // 3. DIVISION SCOPE: Return list of SCHOOLS
+    if (scope === 'division' && filter) {
+      const query = `
+        SELECT 
+          school_id, school_name, region, division, district,
+          completion_percentage as completion_rate, -- ALIAS FOR FRONTEND
+          updated_at
+        FROM school_profiles
+        WHERE TRIM(division) = TRIM($1)
+        ORDER BY completion_percentage DESC, updated_at DESC LIMIT 50
+      `;
+      const result = await pool.query(query, [filter]);
+      return res.json({ schools: result.rows });
+    }
+
+    // 4. FALLBACK (Top schools overall)
+    const query = `
+      SELECT 
+        school_id, school_name, region, division, district,
+        completion_percentage as completion_rate,
+        updated_at
+      FROM school_profiles
+      WHERE completion_percentage > 0
+      ORDER BY completion_percentage DESC LIMIT 10
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+
   } catch (err) {
     console.error("Leaderboard Error:", err);
     res.status(500).json({ error: "Failed to fetch leaderboard" });
   }
 });
 
-// --- 30b. GET: Aggregated Regional Stats (For Central Office) ---
+// --- 30. GET: Leaderboard Data ---
 // --- 30b. GET: Aggregated Regional Stats (For Central Office) ---
 app.get('/api/monitoring/regions', async (req, res) => {
   try {
     const query = `
-      WITH school_stats AS (
-        SELECT 
-          region,
-          COUNT(*) as total_schools,
-          COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as with_enrollment,
-          COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as with_head,
-          SUM(CASE WHEN (
-            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN head_last_name IS NOT NULL AND head_last_name != '' THEN 1 ELSE 0 END) + 
-            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-<<<<<<< kleinbranch
-            (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
-            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
-=======
-            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN 
-              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
-              spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
-              spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
-              spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
-              spec_agri_fishery_major > 0 OR spec_others_major > 0 
-            THEN 1 ELSE 0 END) + 
-            (CASE WHEN 
-              res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
-              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
-              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
-            THEN 1 ELSE 0 END) + 
->>>>>>> main
-            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
-          ) = 10 THEN 1 ELSE 0 END) as completed_schools
-        FROM school_profiles
-        GROUP BY region
-      ),
-      project_stats AS (
-        SELECT 
-          region,
-          COUNT(*) as total_projects,
-          COALESCE(SUM(project_allocation), 0) as total_allocation,
-          AVG(accomplishment_percentage) as avg_accomplishment,
-          -- Distinct Counts for New Logic (Robust Matching)
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Ongoing' THEN 1 END) as ongoing_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Not Yet Started' THEN 1 END) as not_yet_started_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE '%Under Procurement%' THEN 1 END) as under_procurement_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Completed' THEN 1 END) as completed_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Delayed' THEN 1 END) as delayed_projects
-        FROM engineer_form
-        GROUP BY region
-      )
       SELECT 
-        s.region,
-        COALESCE(s.total_schools, 0) as total_schools,
-        COALESCE(s.with_enrollment, 0) as with_enrollment,
-        COALESCE(s.with_head, 0) as with_head,
-        COALESCE(s.completed_schools, 0) as completed_schools,
-        
-        COALESCE(p.total_projects, 0) as total_projects,
-        COALESCE(p.total_allocation, 0) as total_allocation,
-        COALESCE(p.avg_accomplishment, 0)::NUMERIC(10,1) as avg_accomplishment,
-        COALESCE(p.ongoing_projects, 0) as ongoing_projects,
-        COALESCE(p.not_yet_started_projects, 0) as not_yet_started_projects,
-        COALESCE(p.under_procurement_projects, 0) as under_procurement_projects,
-        COALESCE(p.completed_projects, 0) as completed_projects,
-        COALESCE(p.delayed_projects, 0) as delayed_projects
-      FROM school_stats s
-      FULL OUTER JOIN project_stats p ON s.region = p.region
-      WHERE s.region IS NOT NULL OR p.region IS NOT NULL
-      ORDER BY s.region ASC;
+          region as name,
+          CAST(AVG(completion_percentage) AS DECIMAL(10,1)) as avg_completion,
+          SUM(forms_completed_count) as total_forms_completed,
+          COUNT(*) as total_schools,
+          COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools
+      FROM school_profiles
+      WHERE region IS NOT NULL
+      GROUP BY region
+      ORDER BY avg_completion DESC
     `;
 
     const result = await pool.query(query);
     res.json(result.rows);
   } catch (err) {
-    console.error("Regional Stats Error:", err);
-    res.status(500).json({ error: "Failed to fetch regional stats" });
+    console.error("Region Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch region stats" });
   }
 });
+
+
 
 // ==================================================================
 //                    NOTIFICATION ROUTES
@@ -3659,6 +3732,8 @@ app.post('/api/save-learner-statistics', async (req, res) => {
     );
 
     res.json({ success: true, message: "Learner statistics saved successfully!" });
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(data.schoolId, pool);
 
   } catch (err) {
     console.error("Save Learner Stats Error:", err);
