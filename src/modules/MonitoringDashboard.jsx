@@ -20,9 +20,15 @@ const normalizeLocationName = (name) => {
         .trim() || '';
 };
 
+
+import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import Context
+
 const MonitoringDashboard = () => {
     const navigate = useNavigate();
     const location = useLocation();
+
+    // Service Worker Update Context
+    const { isUpdateAvailable, updateApp } = useServiceWorker();
     const [userData, setUserData] = useState(null);
     const [stats, setStats] = useState(null);
     const [engStats, setEngStats] = useState(null);
@@ -270,25 +276,25 @@ const MonitoringDashboard = () => {
             setLoadingDistrict(true);
             try {
                 // Fetch ALL schools in this division (API Data)
-                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(userData.region)}&division=${encodeURIComponent(division)}`);
+                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(userData.region)}&division=${encodeURIComponent(division)}&limit=1000`);
                 let apiSchools = [];
                 if (res.ok) {
                     const data = await res.json();
-                    setDistrictSchools(Array.isArray(data) ? data : (data.data || []));
+                    apiSchools = Array.isArray(data) ? data : (data.data || []);
                 }
 
                 // MERGE: Combine CSV Master List with API Data
                 // Filter CSV for this region/division
-                const masterList = schoolData.filter(s => 
+                const masterList = schoolData.filter(s =>
                     normalizeLocationName(s.region) === normalizeLocationName(userData.region) &&
                     normalizeLocationName(s.division) === normalizeLocationName(division)
                 );
 
-                // Map to unified format
-                const mergedSchools = masterList.map(csvSchool => {
+                // 1. Map CSV Schools (Existing Logic)
+                const csvMapped = masterList.map(csvSchool => {
                     // Find matching API record (by School ID preferred, or Name)
-                    const apiMatch = apiSchools.find(api => 
-                        api.school_id === csvSchool.school_id || 
+                    const apiMatch = apiSchools.find(api =>
+                        api.school_id === csvSchool.school_id ||
                         normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
                     );
 
@@ -310,11 +316,26 @@ const MonitoringDashboard = () => {
                             specialization_status: false,
                             resources_status: false,
                             learner_stats_status: false,
-                            facilities_status: false, 
+                            facilities_status: false,
                             submitted_by: null
                         };
                     }
                 });
+
+                // 2. Add API Schools that were NOT in CSV (Fix for "27 vs 20" issue)
+                const csvIds = new Set(masterList.map(s => s.school_id));
+                const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
+
+                const extraApiSchools = apiSchools.filter(api =>
+                    !csvIds.has(api.school_id) &&
+                    !csvNames.has(normalizeLocationName(api.school_name))
+                ).map(api => ({
+                    ...api,
+                    // Ensure missing fields are handled if API returns incomplete shape (though it returns full shape usually)
+                    district: api.district || 'Unassigned District' // Fallback
+                }));
+
+                const mergedSchools = [...csvMapped, ...extraApiSchools];
 
                 // Sort by name
                 mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
@@ -347,34 +368,30 @@ const MonitoringDashboard = () => {
                 const region = userData.role === 'Central Office' ? coRegion : userData.region;
                 const division = userData.role === 'Central Office' ? coDivision : userData.division;
 
-                const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}`);
+                const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}&limit=1000`);
                 let apiSchools = [];
                 if (res.ok) {
-<<<<<<< kleinbranch
-                    apiSchools = await res.json();
-=======
                     const data = await res.json();
-                    setDistrictSchools(Array.isArray(data) ? data : (data.data || []));
->>>>>>> main
+                    apiSchools = Array.isArray(data) ? data : (data.data || []);
                 }
 
                 // MERGE: Combine CSV Master List with API Data
-                const masterList = schoolData.filter(s => 
+                const masterList = schoolData.filter(s =>
                     normalizeLocationName(s.region) === normalizeLocationName(region) &&
                     normalizeLocationName(s.division) === normalizeLocationName(division) &&
                     normalizeLocationName(s.district) === normalizeLocationName(district)
                 );
 
                 const mergedSchools = masterList.map(csvSchool => {
-                    const apiMatch = apiSchools.find(api => 
-                        api.school_id === csvSchool.school_id || 
+                    const apiMatch = apiSchools.find(api =>
+                        api.school_id === csvSchool.school_id ||
                         normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
                     );
 
                     if (apiMatch) {
                         return apiMatch;
                     } else {
-                         return {
+                        return {
                             school_name: csvSchool.school_name,
                             school_id: csvSchool.school_id,
                             district: csvSchool.district,
@@ -387,12 +404,12 @@ const MonitoringDashboard = () => {
                             specialization_status: false,
                             resources_status: false,
                             learner_stats_status: false,
-                            facilities_status: false, 
+                            facilities_status: false,
                             submitted_by: null
                         };
                     }
                 });
-                
+
                 mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
                 setDistrictSchools(mergedSchools);
 
@@ -471,6 +488,36 @@ const MonitoringDashboard = () => {
         return (
             <PageTransition>
                 <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 font-sans">
+                    {/* --- NEW UPDATE MODAL --- */}
+                    {isUpdateAvailable && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-emerald-200 dark:border-emerald-900/40">
+                                {/* Glowing Background Effect */}
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+                                <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
+
+                                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 mb-2 shadow-sm animate-pulse">
+                                    <FiRefreshCw size={36} />
+                                </div>
+
+                                <div className="text-center space-y-2">
+                                    <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
+                                        Update Available
+                                    </h2>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                        A new version of InsightEd is ready. <br />Please reload to apply the latest changes.
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={() => updateApp()}
+                                    className="w-full py-3.5 bg-[#004A99] hover:bg-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
+                                >
+                                    Reload Now
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {/* Header */}
                     <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-8 pb-32 rounded-b-[3rem] shadow-2xl text-white relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-8 opacity-5">
@@ -561,8 +608,12 @@ const MonitoringDashboard = () => {
                                         </h2>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {regionalStats.map((reg, idx) => {
-                                                // Ensure we use the CSV Total if available
-                                                const totalSchools = csvRegionalTotals[reg.region] || reg.total_schools || 0;
+                                                // REFACTOR: Use API total (DB) if available, otherwise fallback to CSV.
+                                                // This ensures newly registered schools (not in CSV) are counted.
+                                                const apiTotal = parseInt(reg.total_schools || 0);
+                                                const csvTotal = csvRegionalTotals[reg.region] || 0;
+                                                const totalSchools = apiTotal > 0 ? apiTotal : csvTotal;
+
                                                 const completedCount = reg.completed_schools || 0;
 
                                                 // Handle edge case where backend total is 0 but we want to show 0/CSV_Total
@@ -579,7 +630,7 @@ const MonitoringDashboard = () => {
                                                         <div className="relative z-10">
                                                             <div className="flex justify-between items-start mb-6">
                                                                 <div>
-                                                                    <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 group-hover:text-blue-600 transition-colors">{reg.region}</h2>
+                                                                    <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 group-hover:text-blue-600 transition-colors">{reg.name || reg.region}</h2>
                                                                     {/* REMOVED: Total Schools sub-label if desired, but user said remove "Total Schools" metric. 
                                                                         Does that mean remove it from cards too? 
                                                                         "InsightED Accomplishment page should only feature (1) National Accomplishment Rate (2) Regional and division breakdown".
@@ -769,6 +820,36 @@ const MonitoringDashboard = () => {
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 font-sans">
+                {/* --- NEW UPDATE MODAL --- */}
+                {isUpdateAvailable && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-emerald-200 dark:border-emerald-900/40">
+                            {/* Glowing Background Effect */}
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+                            <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
+
+                            <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 mb-2 shadow-sm animate-pulse">
+                                <FiRefreshCw size={36} />
+                            </div>
+
+                            <div className="text-center space-y-2">
+                                <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
+                                    Update Available
+                                </h2>
+                                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                    A new version of InsightEd is ready. <br />Please reload to apply the latest changes.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={() => updateApp()}
+                                className="w-full py-3.5 bg-[#004A99] hover:bg-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
+                            >
+                                Reload Now
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {/* Header */}
                 <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-6 pb-20 rounded-b-[3rem] shadow-xl text-white relative overflow-hidden">
                     {/* REMOVED BACKGROUND ICON as per user request */}
@@ -934,33 +1015,39 @@ const MonitoringDashboard = () => {
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
                                         {(() => {
                                             // 1. Get List of Divisions for Current Region from CSV Data
-                                            // Use userData.region or coRegion depending on role
                                             const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
 
-                                            // Filter unique divisions from CSV
-                                            const regionDivisions = [...new Set(schoolData
+                                            // MERGE Divisions: Use both CSV and API to find all divisions
+                                            const csvDivisions = [...new Set(schoolData
                                                 .filter(s => s.region === targetRegion)
-                                                .map(s => s.division))]
-                                                .sort();
+                                                .map(s => s.division))];
+
+                                            const apiDivisions = divisionStats.map(d => d.division);
+                                            const regionDivisions = [...new Set([...csvDivisions, ...apiDivisions])].sort();
 
                                             if (regionDivisions.length === 0) {
-                                                return <p className="text-sm text-slate-400 italic">No division data available in Master List (CSV).</p>;
+                                                return <p className="text-sm text-slate-400 italic">No division data available / No schools found.</p>;
                                             }
 
                                             return (
                                                 <div className="space-y-4">
                                                     {regionDivisions.map((divName, idx) => {
-                                                        // 2. Calculate Total Schools from CSV for this Division
-                                                        const totalSchools = schoolData.filter(s =>
+                                                        // 3. Get Completed Count from Backend Stats
+                                                        const startStat = divisionStats.find(d => normalizeLocationName(d.division) === normalizeLocationName(divName));
+                                                        const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0; // Use API 'completed_schools' (newly added in backend logic if using monitoring/division-stats) 
+                                                        // Note: monitoring/division-stats uses completion_percentage=100 so it returns 'completed_schools' column correctly.
+
+                                                        // 2. Calculate Total Schools
+                                                        // Use API Total if available and higher than CSV (to include new schools)
+                                                        const apiTotal = startStat ? parseInt(startStat.total_schools || 0) : 0;
+
+                                                        const csvTotal = schoolData.filter(s =>
                                                             s.region === targetRegion && s.division === divName
                                                         ).length;
 
-                                                        // 3. Get Completed Count from Backend Stats
-                                                        // Find the matching entry in divisionStats array (Robust Matching)
-                                                        const startStat = divisionStats.find(d => normalizeLocationName(d.division) === normalizeLocationName(divName));
-                                                        const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+                                                        const totalSchools = apiTotal > 0 ? apiTotal : csvTotal;
 
-                                                        // 4. Calculate Percentage
+                                                        // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
                                                         const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
 
                                                         // Define colors for progress bars (cycling)
@@ -1026,9 +1113,17 @@ const MonitoringDashboard = () => {
                                                         s.resources_status, s.shifting_status, s.learner_stats_status,
                                                         s.facilities_status
                                                     ];
-                                                    const completedCount = checks.filter(Boolean).length;
-                                                    const totalChecks = 10;
-                                                    const percentage = Math.round((completedCount / totalChecks) * 100);
+
+                                                    // REFACTOR: Use backend 'completion_percentage' if available to match Leaderboard logic
+                                                    // Otherwise fallback to calculating from flags (legacy/csv merged checks)
+                                                    let percentage = 0;
+                                                    if (s.completion_percentage !== undefined && s.completion_percentage !== null) {
+                                                        percentage = parseInt(s.completion_percentage);
+                                                    } else {
+                                                        const completedCount = checks.filter(Boolean).length;
+                                                        const totalChecks = 10;
+                                                        percentage = Math.round((completedCount / totalChecks) * 100);
+                                                    }
 
                                                     // Identify missing for tooltip/subtitle if needed
                                                     const missing = [];
@@ -1057,8 +1152,8 @@ const MonitoringDashboard = () => {
                                                 // I will use a ref or just hardcode a default for this step and then add the state variable in `MonitoringDashboard` top level.
 
                                                 // FILTER & SORT
-                                                const filteredSchools = schoolsWithStats.filter(s => 
-                                                    s.school_name?.toLowerCase().includes(schoolSearch.toLowerCase()) || 
+                                                const filteredSchools = schoolsWithStats.filter(s =>
+                                                    s.school_name?.toLowerCase().includes(schoolSearch.toLowerCase()) ||
                                                     s.school_id?.includes(schoolSearch)
                                                 );
 
@@ -1126,13 +1221,13 @@ const MonitoringDashboard = () => {
                                                                     </button>
                                                                 </div>
                                                             </div>
-                                                            
+
                                                             {/* Search Box */}
                                                             <div className="relative">
                                                                 <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                                <input 
-                                                                    type="text" 
-                                                                    placeholder="Search school name or ID..." 
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Search school name or ID..."
                                                                     value={schoolSearch}
                                                                     onChange={(e) => {
                                                                         setSchoolSearch(e.target.value);
@@ -1181,7 +1276,7 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                 </div>
                                                             ))}
-                                                            
+
                                                             {paginatedSchools.length === 0 && (
                                                                 <div className="text-center py-10 text-slate-400 italic">
                                                                     No schools found.
@@ -1208,6 +1303,14 @@ const MonitoringDashboard = () => {
                                                                     className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors text-slate-600 dark:text-slate-300"
                                                                 >
                                                                     Next
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setSchoolPage(totalPages)}
+                                                                    disabled={schoolPage === totalPages}
+                                                                    title="Go to Last Page"
+                                                                    className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors text-slate-600 dark:text-slate-300"
+                                                                >
+                                                                    &gt;&gt;
                                                                 </button>
                                                             </div>
                                                         )}
@@ -1252,6 +1355,7 @@ const MonitoringDashboard = () => {
 
                                                         const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
 
+                                                        // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
                                                         const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
 
                                                         // Colors
