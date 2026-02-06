@@ -649,30 +649,31 @@ const UserProfile = () => {
                     >
                         <div className={`w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all duration-300 shadow-sm ${isDarkMode ? 'left-[23px]' : 'left-[3px]'}`} />
                     </div>
-                    {/* Troubleshoot / Hard Reset */}
-                    <button
-                        onClick={() => {
-                            if (window.confirm("Troubleshoot: This will clear the app cache and refresh the latest version. Continue?")) {
-                                hardReset();
-                            }
-                        }}
-                        className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300">
-                                <FiTool size={20} />
-                            </div>
-                            <div className="text-left">
-                                <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">
-                                    Troubleshoot
-                                </span>
-                                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">
-                                    Clear Cache & Restart
-                                </span>
-                            </div>
-                        </div>
-                    </button>
                 </div>
+
+                {/* Troubleshoot / Hard Reset */}
+                <button
+                    onClick={() => {
+                        if (window.confirm("Troubleshoot: This will clear the app cache and refresh the latest version. Continue?")) {
+                            hardReset();
+                        }
+                    }}
+                    className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                >
+                    <div className="flex items-center gap-4">
+                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300">
+                            <FiTool size={20} />
+                        </div>
+                        <div className="text-left">
+                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">
+                                Troubleshoot
+                            </span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">
+                                Clear Cache & Restart
+                            </span>
+                        </div>
+                    </div>
+                </button>
 
                 {/* Check for Updates */}
                 <button
@@ -751,7 +752,7 @@ const UserProfile = () => {
                 </button>
             </div>
 
-            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.9</p>
+            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.10</p>
         </div>
     );
 
