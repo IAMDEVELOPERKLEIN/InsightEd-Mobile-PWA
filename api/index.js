@@ -12,7 +12,7 @@ import path from 'path';
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 
-// Load environment variables
+// Load environment variables11111111111111
 dotenv.config();
 
 // --- EMAIL TRANSPORTER ---

@@ -1,5 +1,5 @@
 
-// --- DATABASE INITIALIZATION & MIGRATIONS ---
+// --- DATABASE INITIALIZATION & MIGRATIONS ---1111111111
 
 const initOtpTable = async (pool) => {
     try {
