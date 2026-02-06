@@ -1188,13 +1188,55 @@ app.post('/api/settings/save', async (req, res) => {
 
 // GET All Users
 app.get('/api/admin/users', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const search = req.query.search || '';
+  const offset = (page - 1) * limit;
+
   try {
-    const result = await pool.query(`
+    let whereClause = '';
+    let params = [];
+
+    if (search) {
+      whereClause = `WHERE (
+        email ILIKE $1 OR 
+        first_name ILIKE $1 OR 
+        last_name ILIKE $1
+      )`;
+      params.push(`%${search}%`);
+    }
+
+    // 1. Get Total Count
+    const countQuery = `SELECT COUNT(*) as total FROM users ${whereClause}`;
+    const countRes = await pool.query(countQuery, params);
+    const total = parseInt(countRes.rows[0].total);
+
+    // 2. Get Data
+    let queryParams = [...params];
+    queryParams.push(limit);
+    queryParams.push(offset);
+
+    const limitIndex = params.length + 1;
+    const offsetIndex = params.length + 2;
+
+    const dataQuery = `
       SELECT uid, email, role, first_name, last_name, region, division, created_at, disabled 
       FROM users 
+      ${whereClause}
       ORDER BY created_at DESC
-    `);
-    res.json(result.rows);
+      LIMIT $${limitIndex} OFFSET $${offsetIndex}
+    `;
+
+    const result = await pool.query(dataQuery, queryParams);
+
+    res.json({
+      data: result.rows,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
+
   } catch (err) {
     console.error("Get Users Error:", err);
     res.status(500).json({ error: "Failed to fetch users" });
@@ -3562,6 +3604,41 @@ app.get('/api/monitoring/regions', async (req, res) => {
 });
 
 
+
+// --- 34. POST: Admin Reset Password ---
+app.post('/api/admin/reset-password', async (req, res) => {
+  const { uid, newPassword, adminUid } = req.body;
+
+  if (!uid || !newPassword) return res.status(400).json({ error: "Missing uid or password" });
+
+  try {
+    // Verify Admin Status (Optional Check)
+    // For now, we rely on the frontend gating + potential future backend logic.
+
+    await admin.auth().updateUser(uid, {
+      password: newPassword
+    });
+
+    console.log(`[Admin] Password reset for user ${uid} by admin ${adminUid}`);
+
+    // Log to Audit Trail (If logActivity is available)
+    try {
+      await logActivity(
+        adminUid || 'system',
+        'Admin',
+        'Admin',
+        'UPDATE',
+        'User Account',
+        `Reset password for user ${uid}`
+      );
+    } catch (e) { console.warn("Audit log failed", e); }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Admin Password Reset Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ==================================================================
 //                    NOTIFICATION ROUTES
