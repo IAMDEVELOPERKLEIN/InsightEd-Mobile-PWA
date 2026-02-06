@@ -3680,43 +3680,44 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
 app.get('/api/monitoring/stats', async (req, res) => {
   const { region, division } = req.query;
   try {
-    // REFACTOR: Use the pre-calculated 'f' columns and completion_percentage
-    // This ensures consistency with the Leaderboard and individual school progress.
+    // REFACTOR: Use 'schools' table as the base to get accurate TOTAL SCHOOLS count.
+    // LEFT JOIN 'school_profiles' to get the progress data.
     let statsQuery = `
       SELECT 
-        COUNT(*) as total_schools,
-        -- Sum up the boolean flags (1 or 0)
-        SUM(CASE WHEN f1_profile > 0 THEN 1 ELSE 0 END) as profile,
-        SUM(CASE WHEN f2_head > 0 THEN 1 ELSE 0 END) as head,
-        SUM(CASE WHEN f3_enrollment > 0 THEN 1 ELSE 0 END) as enrollment,
-        SUM(CASE WHEN f4_classes > 0 THEN 1 ELSE 0 END) as organizedclasses,
-        SUM(CASE WHEN f9_shifting > 0 THEN 1 ELSE 0 END) as shifting,
-        SUM(CASE WHEN f5_teachers > 0 THEN 1 ELSE 0 END) as personnel,
-        SUM(CASE WHEN f6_specialization > 0 THEN 1 ELSE 0 END) as specialization,
-        SUM(CASE WHEN f7_resources > 0 THEN 1 ELSE 0 END) as resources,
-        SUM(CASE WHEN f10_stats > 0 THEN 1 ELSE 0 END) as learner_stats, -- NOTE: Frontend might call this 'learner_stats' or match index
-        SUM(CASE WHEN f8_facilities > 0 THEN 1 ELSE 0 END) as facilities,
+        COUNT(s.school_id) as total_schools,
+        -- Sum up the boolean flags (1 or 0) from school_profiles
+        COALESCE(SUM(CASE WHEN sp.f1_profile > 0 THEN 1 ELSE 0 END), 0) as profile,
+        COALESCE(SUM(CASE WHEN sp.f2_head > 0 THEN 1 ELSE 0 END), 0) as head,
+        COALESCE(SUM(CASE WHEN sp.f3_enrollment > 0 THEN 1 ELSE 0 END), 0) as enrollment,
+        COALESCE(SUM(CASE WHEN sp.f4_classes > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
+        COALESCE(SUM(CASE WHEN sp.f9_shifting > 0 THEN 1 ELSE 0 END), 0) as shifting,
+        COALESCE(SUM(CASE WHEN sp.f5_teachers > 0 THEN 1 ELSE 0 END), 0) as personnel,
+        COALESCE(SUM(CASE WHEN sp.f6_specialization > 0 THEN 1 ELSE 0 END), 0) as specialization,
+        COALESCE(SUM(CASE WHEN sp.f7_resources > 0 THEN 1 ELSE 0 END), 0) as resources,
+        COALESCE(SUM(CASE WHEN sp.f10_stats > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
+        COALESCE(SUM(CASE WHEN sp.f8_facilities > 0 THEN 1 ELSE 0 END), 0) as facilities,
         
         -- Overall Completion (100%)
-        COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools_count
-      FROM school_profiles
-      WHERE TRIM(region) = TRIM($1)
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END), 0) as completed_schools_count
+      FROM schools s
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      WHERE TRIM(s.region) = TRIM($1)
     `;
     let params = [region];
 
     if (division) {
-      statsQuery += ` AND TRIM(division) = TRIM($2)`;
+      statsQuery += ` AND TRIM(s.division) = TRIM($2)`;
       params.push(division);
     }
 
     if (req.query.district) {
-      statsQuery += ` AND TRIM(district) = TRIM($${params.length + 1})`;
+      statsQuery += ` AND TRIM(s.district) = TRIM($${params.length + 1})`;
       params.push(req.query.district);
     }
 
     const result = await pool.query(statsQuery, params);
 
-    // Safety: Ensure we return numbers, not nulls (SUM returns null if no rows)
+    // Safety: Ensure we return numbers
     const row = result.rows[0];
     const safeRow = {
       total_schools: parseInt(row.total_schools || 0),
@@ -3728,18 +3729,10 @@ app.get('/api/monitoring/stats', async (req, res) => {
       personnel: parseInt(row.personnel || 0),
       specialization: parseInt(row.specialization || 0),
       resources: parseInt(row.resources || 0),
-      facilities: parseInt(row.facilities || 0), // Added this missing one
+      facilities: parseInt(row.facilities || 0),
+      learner_stats: parseInt(row.learner_stats || 0), // Added explicit return if needed
       completed_schools_count: parseInt(row.completed_schools_count || 0)
     };
-
-    // NOTE: If frontend expects 'learner_stats' count, we should check if it's missing in the UI usage.
-    // The original query returned 9 specific columns + total. 
-    // It grouped 'learner_stats' into... wait.
-    // Original columns: profile, head, enrollment, organizedclasses, shifting, personnel, specialization, resources. (8 cols)
-    // Wait, original missed 'facilities' and 'learner_stats' in the SELECT list explicitly?
-    // Original: profile, head, enrollment, organizedclasses, shifting, personnel, specialization, resources, completed_schools_count.
-    // It seems the Dashboard only tracks those 8 specific metrics? 
-    // I will return ALL 10 just in case, but keep the keys consistent.
 
     res.json(safeRow);
   } catch (err) {
@@ -3754,20 +3747,21 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
   const { region } = req.query;
   console.log("DEBUG: FETCHING DIV STATS FOR REGION:", region);
   try {
+    // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        division, 
-        COUNT(*) as total_schools, 
-        COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools,
-        ROUND(AVG(completion_percentage), 1) as avg_completion
-      FROM school_profiles
-      WHERE TRIM(region) = TRIM($1)
-      GROUP BY division
-      ORDER BY division
+        s.division, 
+        COUNT(s.school_id) as total_schools, 
+        COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
+        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
+      FROM schools s
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      WHERE TRIM(s.region) = TRIM($1)
+      GROUP BY s.division
+      ORDER BY s.division
     `;
 
     const result = await pool.query(query, [region]);
-    console.log("DEBUG: DIV STATS RESULT:", result.rows);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -3780,20 +3774,21 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
   const { region, division } = req.query;
   console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division);
   try {
+    // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        district,
-        COUNT(*) as total_schools,
-        COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools,
-        ROUND(AVG(completion_percentage), 1) as avg_completion
-      FROM school_profiles
-      WHERE TRIM(region) = TRIM($1) AND TRIM(division) = TRIM($2)
-      GROUP BY district
-      ORDER BY district ASC
+        s.district,
+        COUNT(s.school_id) as total_schools,
+        COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
+        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
+      FROM schools s
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      WHERE TRIM(s.region) = TRIM($1) AND TRIM(s.division) = TRIM($2)
+      GROUP BY s.district
+      ORDER BY s.district ASC
     `;
 
     const result = await pool.query(query, [region, division]);
-    console.log("DEBUG: DISTRICT STATS RESULT:", result.rows);
     res.json(result.rows);
   } catch (err) {
     console.error("District Stats Error:", err);
