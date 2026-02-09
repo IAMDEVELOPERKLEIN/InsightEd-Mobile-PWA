@@ -104,7 +104,71 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS data_health_description TEXT,
       ADD COLUMN IF NOT EXISTS forms_to_recheck TEXT;
     `);
-    console.log("âœ… DB Init: Schema verified (project_documents + engineer_form PDF cols + engineer_id).");
+    console.log("✅ DB Init: Schema verified (project_documents + engineer_form PDF cols + engineer_id).");
+
+    // --- MIGRATION: LGU FORMS AND IMAGES ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lgu_forms (
+        project_id SERIAL PRIMARY KEY,
+        project_name TEXT, 
+        school_name TEXT, 
+        school_id TEXT, 
+        region TEXT, 
+        division TEXT,
+        status TEXT, 
+        accomplishment_percentage INTEGER, 
+        status_as_of TIMESTAMP,
+        target_completion_date TIMESTAMP, 
+        actual_completion_date TIMESTAMP, 
+        notice_to_proceed TIMESTAMP,
+        contractor_name TEXT, 
+        project_allocation NUMERIC, 
+        batch_of_funds TEXT, 
+        other_remarks TEXT,
+        lgu_id TEXT, 
+        ipc TEXT, 
+        lgu_name TEXT, 
+        latitude TEXT, 
+        longitude TEXT,
+        pow_pdf TEXT, 
+        dupa_pdf TEXT, 
+        contract_pdf TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+        ALTER TABLE lgu_forms
+        ADD COLUMN IF NOT EXISTS moa_date TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS tranches_count INTEGER,
+        ADD COLUMN IF NOT EXISTS tranche_amount NUMERIC,
+        ADD COLUMN IF NOT EXISTS fund_source TEXT,
+        ADD COLUMN IF NOT EXISTS province TEXT,
+        ADD COLUMN IF NOT EXISTS city TEXT,
+        ADD COLUMN IF NOT EXISTS municipality TEXT,
+        ADD COLUMN IF NOT EXISTS legislative_district TEXT,
+        ADD COLUMN IF NOT EXISTS scope_of_works TEXT,
+        ADD COLUMN IF NOT EXISTS contract_amount NUMERIC,
+        ADD COLUMN IF NOT EXISTS bid_opening_date TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS resolution_award_date TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS procurement_stage TEXT,
+        ADD COLUMN IF NOT EXISTS bidding_date TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS awarding_date TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS funds_downloaded NUMERIC,
+        ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS lgu_image (
+            id SERIAL PRIMARY KEY,
+            project_id INT REFERENCES lgu_forms(project_id),
+            image_data TEXT,
+            uploaded_by TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+    console.log("✅ DB Init: LGU Schema verified (lgu_forms + extra columns + lgu_image).");
 
 
   } catch (err) {
@@ -703,6 +767,15 @@ const old_db_init_disabled = async () => {
             ADD COLUMN IF NOT EXISTS longitude TEXT;
         `);
         console.log('âœ… Checked/Added Latitude & Longitude to engineer_form');
+
+        // --- MIGRATION: ADD CONSTRUCTION DETAILS TO ENGINEER FORM ---
+        await client.query(`
+            ALTER TABLE engineer_form 
+            ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS project_category TEXT,
+            ADD COLUMN IF NOT EXISTS scope_of_work TEXT;
+        `);
+        console.log('âœ… Checked/Added Construction Details to engineer_form');
 
       } catch (migErr) {
         console.error('âŒ Failed to migrate engineer_form columns:', migErr.message);
@@ -3238,7 +3311,10 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.longitude), // $20
       powDoc, // $21
       dupaDoc, // $22
-      contractDoc // $23
+      contractDoc, // $23
+      valueOrNull(data.constructionStartDate), // $24
+      valueOrNull(data.projectCategory), // $25
+      valueOrNull(data.scopeOfWork) // $26
     ];
 
     const projectQuery = `
@@ -3248,8 +3324,9 @@ app.post('/api/save-project', async (req, res) => {
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
-        pow_pdf, dupa_pdf, contract_pdf
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        pow_pdf, dupa_pdf, contract_pdf,
+        construction_start_date, project_category, scope_of_work
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -3420,7 +3497,10 @@ app.put('/api/update-project/:id', async (req, res) => {
       newLong,             // $20
       oldData.pow_pdf,      // $21: Preserve POW
       oldData.dupa_pdf,     // $22: Preserve DUPA
-      oldData.contract_pdf  // $23: Preserve CONTRACT
+      oldData.contract_pdf,  // $23: Preserve CONTRACT
+      valueOrNull(data.constructionStartDate) || oldData.construction_start_date, // $24
+      valueOrNull(data.projectCategory) || oldData.project_category, // $25
+      valueOrNull(data.scopeOfWork) || oldData.scope_of_work // $26
     ];
 
     const insertQuery = `
@@ -3430,8 +3510,9 @@ app.put('/api/update-project/:id', async (req, res) => {
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
-        pow_pdf, dupa_pdf, contract_pdf
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        pow_pdf, dupa_pdf, contract_pdf,
+        construction_start_date, project_category, scope_of_work
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
       RETURNING *;
     `;
 
@@ -3521,7 +3602,8 @@ app.get('/api/projects', async (req, res) => {
           SELECT DISTINCT ON (ipc) 
             project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name, engineer_id,
             accomplishment_percentage, project_allocation, batch_of_funds, contractor_name, other_remarks,
-            status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude
+            status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
+            construction_start_date, project_category, scope_of_work
           FROM engineer_form
           ORDER BY ipc, project_id DESC
       )
@@ -3535,6 +3617,8 @@ app.get('/api/projects', async (req, res) => {
         TO_CHAR(p.target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(p.actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(p.notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
+        TO_CHAR(p.construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
+        p.project_category AS "projectCategory", p.scope_of_work AS "scopeOfWork",
         p.latitude, p.longitude
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
@@ -3598,6 +3682,8 @@ app.get('/api/projects/:id', async (req, res) => {
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
+        TO_CHAR(construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
+        project_category AS "projectCategory", scope_of_work AS "scopeOfWork",
         latitude, longitude
       FROM "engineer_form" WHERE project_id = $1;
     `;
@@ -3624,6 +3710,8 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
+        TO_CHAR(construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
+        project_category AS "projectCategory", scope_of_work AS "scopeOfWork",
         latitude, longitude
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;
@@ -5172,6 +5260,37 @@ console.log('Force Start Env?', process.env.START_SERVER);
 console.log('--------------------------');
 
 if (isMainModule || process.env.START_SERVER === 'true') {
+  // --- TEMPORARY MIGRATION ENDPOINT ---
+  app.get('/api/migrate-schema', async (req, res) => {
+    try {
+      const client = await pool.connect();
+      const results = [];
+
+      // 1. Add construction_start_date
+      try {
+        await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP');
+        results.push("Added construction_start_date");
+      } catch (e) { results.push(`Failed construction_start_date: ${e.message}`); }
+
+      // 2. Add project_category
+      try {
+        await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS project_category TEXT');
+        results.push("Added project_category");
+      } catch (e) { results.push(`Failed project_category: ${e.message}`); }
+
+      // 3. Add scope_of_work
+      try {
+        await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS scope_of_work TEXT');
+        results.push("Added scope_of_work");
+      } catch (e) { results.push(`Failed scope_of_work: ${e.message}`); }
+
+      client.release();
+      res.json({ message: "Migration attempt finished", results });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const PORT = process.env.PORT || 3000;
 
 
@@ -5210,6 +5329,20 @@ app.get('/api/debug/health-stats', async (req, res) => {
     `;
     const result = await pool.query(query);
     res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================================================================
+//                      USER INFO HELPER
+// ==================================================================
+app.get('/api/user-info/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT role, first_name, last_name FROM users WHERE uid = $1', [uid]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -5286,7 +5419,26 @@ app.post('/api/lgu/save-project', async (req, res) => {
       valueOrNull(data.longitude),
       powDoc,
       dupaDoc,
-      contractDoc
+      contractDoc,
+      // --- NEW FIELDS ---
+      valueOrNull(data.moa_date), // 24
+      parseIntOrNull(data.tranches_count), // 25
+      parseNumberOrNull(data.tranche_amount), // 26
+      valueOrNull(data.fund_source), // 27
+      valueOrNull(data.province), // 28
+      valueOrNull(data.city), // 29
+      valueOrNull(data.municipality), // 30
+      valueOrNull(data.legislative_district), // 31
+      valueOrNull(data.scope_of_works), // 32
+      parseNumberOrNull(data.contract_amount), // 33
+      valueOrNull(data.bid_opening_date), // 34
+      valueOrNull(data.resolution_award_date), // 35
+      valueOrNull(data.procurement_stage), // 36
+      valueOrNull(data.bidding_date), // 37
+      valueOrNull(data.awarding_date), // 38
+      valueOrNull(data.construction_start_date), // 39
+      parseNumberOrNull(data.funds_downloaded), // 40
+      parseNumberOrNull(data.funds_utilized) // 41
     ];
 
     const projectQuery = `
@@ -5296,8 +5448,18 @@ app.post('/api/lgu/save-project', async (req, res) => {
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
         lgu_id, ipc, lgu_name, latitude, longitude,
-        pow_pdf, dupa_pdf, contract_pdf
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        pow_pdf, dupa_pdf, contract_pdf,
+        -- NEW COLUMNS
+        moa_date, tranches_count, tranche_amount, fund_source,
+        province, city, municipality, legislative_district,
+        scope_of_works, contract_amount, bid_opening_date,
+        resolution_award_date, procurement_stage, bidding_date,
+        awarding_date, construction_start_date, funds_downloaded,
+        funds_utilized
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41
+      )
       RETURNING project_id, project_name, ipc;
     `;
 
