@@ -5250,37 +5250,45 @@ console.log('Is Main Module?', isMainModule);
 console.log('Force Start Env?', process.env.START_SERVER);
 console.log('--------------------------');
 
-if (isMainModule || process.env.START_SERVER === 'true') {
-  // --- TEMPORARY MIGRATION ENDPOINT ---
-  app.get('/api/migrate-schema', async (req, res) => {
+// --- TEMPORARY MIGRATION ENDPOINT (MOVED OUTSIDE FOR ACCESS) ---
+app.get('/api/migrate-schema', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const results = [];
+
+    // 1. Add construction_start_date
     try {
-      const client = await pool.connect();
-      const results = [];
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP');
+      results.push("Added construction_start_date");
+    } catch (e) { results.push(`Failed construction_start_date: ${e.message}`); }
 
-      // 1. Add construction_start_date
-      try {
-        await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP');
-        results.push("Added construction_start_date");
-      } catch (e) { results.push(`Failed construction_start_date: ${e.message}`); }
+    // 2. Add project_category
+    try {
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS project_category TEXT');
+      results.push("Added project_category");
+    } catch (e) { results.push(`Failed project_category: ${e.message}`); }
 
-      // 2. Add project_category
-      try {
-        await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS project_category TEXT');
-        results.push("Added project_category");
-      } catch (e) { results.push(`Failed project_category: ${e.message}`); }
+    // 3. Add scope_of_work
+    try {
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS scope_of_work TEXT');
+      results.push("Added scope_of_work");
+    } catch (e) { results.push(`Failed scope_of_work: ${e.message}`); }
 
-      // 3. Add scope_of_work
-      try {
-        await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS scope_of_work TEXT');
-        results.push("Added scope_of_work");
-      } catch (e) { results.push(`Failed scope_of_work: ${e.message}`); }
+    // 4. Add head_sex to school_profiles
+    try {
+      await client.query('ALTER TABLE "school_profiles" ADD COLUMN IF NOT EXISTS head_sex TEXT');
+      results.push("Added head_sex to school_profiles");
+    } catch (e) { results.push(`Failed head_sex: ${e.message}`); }
 
-      client.release();
-      res.json({ message: "Migration attempt finished", results });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+    client.release();
+    res.json({ message: "Migration attempt finished", results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+if (isMainModule || process.env.START_SERVER === 'true') {
+
 
   const PORT = process.env.PORT || 3000;
 
