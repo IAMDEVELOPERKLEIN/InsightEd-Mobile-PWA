@@ -439,6 +439,7 @@ const Login = () => {
                 try {
                     fetch('/api/log-activity', {
                         method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             userUid: uid,
                             userName: userData.firstName || 'User',

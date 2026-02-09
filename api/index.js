@@ -50,9 +50,10 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 
 // --- DATABASE CONNECTION ---
+const isLocal = process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1'));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: isLocal ? false : { rejectUnauthorized: false }
 });
 
 // --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
@@ -1349,8 +1350,8 @@ app.get('/api/activities', async (req, res) => {
 
 // --- 1b. POST: Generic Log Activity (For Frontend Actions) ---
 app.post('/api/log-activity', async (req, res) => {
-  const { userUid, userName, role, actionType, targetEntity, details } = req.body;
   try {
+    const { userUid, userName, role, actionType, targetEntity, details } = req.body || {};
     await logActivity(userUid, userName, role, actionType, targetEntity, details);
     res.status(200).json({ success: true });
   } catch (err) {
@@ -5174,8 +5175,8 @@ export default app;
 
 // --- DEBUG ENDPOINT ---
 app.get('/api/debug/health-stats', async (req, res) => {
-    try {
-        const query = `
+  try {
+    const query = `
       SELECT 
         COALESCE(data_health_description, 'NULL') as status, 
         COUNT(*) as count 
@@ -5183,9 +5184,9 @@ app.get('/api/debug/health-stats', async (req, res) => {
       WHERE completion_percentage = 100 
       GROUP BY data_health_description
     `;
-        const result = await pool.query(query);
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });

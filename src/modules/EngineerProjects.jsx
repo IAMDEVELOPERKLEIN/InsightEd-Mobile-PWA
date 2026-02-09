@@ -615,8 +615,8 @@ const EditProjectModal = ({
 
 const EngineerProjects = () => {
   const navigate = useNavigate();
-  const [userName, setUserName] = useState("Engineer");
-  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Engineer");
+  const [userName, setUserName] = useState("Division Engineer");
+  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Division Engineer");
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -843,11 +843,8 @@ const EngineerProjects = () => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    // CHECK: Limit to 2 photos max
-    if (selectedFiles.length + files.length > 2) {
-      alert("You can only upload a maximum of 2 photos.");
-      return;
-    }
+    // Limit removed
+
 
     const validFiles = files.filter(file => file.size <= 5 * 1024 * 1024);
     const newPreviews = validFiles.map(file => URL.createObjectURL(file));
