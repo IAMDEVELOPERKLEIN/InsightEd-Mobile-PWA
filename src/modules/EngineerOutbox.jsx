@@ -5,7 +5,7 @@ import BottomNav from './BottomNav';
 
 const EngineerOutbox = () => {
     const navigate = useNavigate();
-    const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Engineer");
+    const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Division Engineer");
     const [items, setItems] = useState([]);
     const [isSyncing, setIsSyncing] = useState(false);
     const [statusMap, setStatusMap] = useState({});

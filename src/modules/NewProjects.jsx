@@ -54,7 +54,7 @@ const NewProjects = () => {
     // State to hold the CSV data
     const [schoolData, setSchoolData] = useState([]);
 
-    // --- 1. LOAD CSV DATA & CHECK PROJECT LIMIT ON MOUNT ---
+    // --- 1. LOAD CSV DATA ---
     useEffect(() => {
         // A. Load CSV
         Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
@@ -69,46 +69,6 @@ const NewProjects = () => {
                 console.error("Error loading CSV:", err);
             }
         });
-
-        // B. Check Project Limit (Max 3)
-        const checkProjectLimit = async () => {
-            if (isDummy) return; // Skip check for dummy/preview
-
-            const user = auth.currentUser;
-            if (!user) return;
-
-            try {
-                let count = 0;
-                // 1. Online Check
-                if (navigator.onLine) {
-                    const response = await fetch(`/api/projects?engineer_id=${user.uid}`);
-                    if (response.ok) {
-                        const projects = await response.json();
-                        count = projects.length;
-                    } else {
-                        throw new Error("API check failed, falling back to cache");
-                    }
-                } else {
-                    // 2. Offline Fallback
-                    const cached = await getCachedProjects();
-                    count = cached.length;
-                }
-
-                if (count >= 3) {
-                    alert("⚠️ PREVIEW LIMIT REACHED\n\nYou have reached the limit of 3 projects for this account.\nPlease contact admin or update your existing projects.");
-                    navigate('/engineer-dashboard');
-                }
-            } catch (err) {
-                console.warn("Limit check failed, falling back to cache:", err);
-                const cached = await getCachedProjects();
-                if (cached.length >= 3) {
-                    alert("⚠️ PREVIEW LIMIT REACHED\n\nYou have reached the limit of 3 projects for this account.\nPlease contact admin or update your existing projects.");
-                    navigate('/engineer-dashboard');
-                }
-            }
-        };
-
-        checkProjectLimit();
     }, [isDummy, navigate]);
 
     // --- PRE-FILL DUMMY DATA ---
@@ -217,11 +177,7 @@ const NewProjects = () => {
         const files = e.target.files;
         if (files) {
             const newFiles = Array.from(files);
-            // Limit to 5 photos total
-            if (selectedFiles.length + newFiles.length > 5) {
-                alert("⚠️ MAX LIMIT REACHED\n\nYou can only upload a maximum of 5 site photos.");
-                return;
-            }
+            // Limit removed
             setSelectedFiles((prev) => [...prev, ...newFiles]);
             
             const newPreviews = newFiles.map(file => URL.createObjectURL(file));
