@@ -64,16 +64,16 @@ const NewProjects = () => {
     // --- NEW STATE FOR FAB AND IMAGES ---
     const fileInputRef = useRef(null);
     const [showUploadOptions, setShowUploadOptions] = useState(false);
-    
+
     // Split State for Internal/External
     const [internalFiles, setInternalFiles] = useState([]);
     const [internalPreviews, setInternalPreviews] = useState([]);
-    
+
     const [externalFiles, setExternalFiles] = useState([]);
     const [externalPreviews, setExternalPreviews] = useState([]);
-    
+
     const [activeCategory, setActiveCategory] = useState('Internal'); // To track which button clicked
-    
+
     // Removed legacy selectedFiles/previews
     const [selectedFiles, setSelectedFiles] = useState([]); // Kept for backward compat checks if needed, but we will use the new ones. 
     // Actually best to remove selectedFiles usage entirely to avoid confusion, but handleSubmit uses it. 
@@ -84,21 +84,21 @@ const NewProjects = () => {
         DUPA: null,
         CONTRACT: null
     });
-    
+
     // State to hold the CSV data
     const [schoolData, setSchoolData] = useState([]);
 
     // 1.) Category Choices
-const PROJECT_CATEGORIES = [
-    "New Construction",
-    "Electrification",
-    "Health",
-    "QRF",
-    "LMS",
-    "ALS-CLC",
-    "Gabaldon",
-    "Repairs"
-];
+    const PROJECT_CATEGORIES = [
+        "New Construction",
+        "Electrification",
+        "Health",
+        "QRF",
+        "LMS",
+        "ALS-CLC",
+        "Gabaldon",
+        "Repairs"
+    ];
     // --- 1. LOAD CSV DATA ---
     useEffect(() => {
         // A. Load CSV
@@ -146,7 +146,7 @@ const PROJECT_CATEGORIES = [
         schoolName: '',
         projectName: '',
         schoolId: '',
-        
+
         // Status & Progress
         status: 'Not Yet Started',
         accomplishmentPercentage: 0,
@@ -212,7 +212,7 @@ const PROJECT_CATEGORIES = [
             (position) => {
                 const lat = position.coords.latitude.toFixed(6);
                 const long = position.coords.longitude.toFixed(6);
-                
+
                 setFormData(prev => ({
                     ...prev,
                     latitude: lat,
@@ -221,13 +221,13 @@ const PROJECT_CATEGORIES = [
             },
             (error) => {
                 console.warn("Geolocation warning:", error);
-                
+
                 // Fallback / Detailed Error
                 let msg = "Unable to retrieve location.";
                 if (error.code === 1) msg = "❌ Location permission denied. Please enable location services.";
                 else if (error.code === 2) msg = "❌ Position unavailable. Check your GPS signal.";
                 else if (error.code === 3) msg = "❌ Location request timed out.";
-                
+
                 alert(msg);
             },
             options
@@ -248,7 +248,7 @@ const PROJECT_CATEGORIES = [
         if (files) {
             const newFiles = Array.from(files);
             const newPreviews = newFiles.map(file => URL.createObjectURL(file));
-            
+
             if (activeCategory === 'Internal') {
                 setInternalFiles(prev => [...prev, ...newFiles]);
                 setInternalPreviews(prev => [...prev, ...newPreviews]);
@@ -318,7 +318,7 @@ const PROJECT_CATEGORIES = [
                 latitude: found.latitude || prev.latitude,
                 longitude: found.longitude || prev.longitude
             }));
-            
+
             let idMsg = `✅ School Found: ${found.school_name}`;
             if (found.latitude && found.longitude) {
                 idMsg += `\n📍 Coordinates Auto-Detected!`;
@@ -348,8 +348,8 @@ const PROJECT_CATEGORIES = [
             value = value.toUpperCase();
         }
 
-        // Auto-comma for Project Allocation
-        if (name === 'projectAllocation') {
+        // Auto-comma for Project Allocation and Funds Utilized
+        if (['projectAllocation', 'fundsUtilized'].includes(name)) {
             const raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
             if (!raw) {
                 value = '';
@@ -359,10 +359,10 @@ const PROJECT_CATEGORIES = [
                 value = parts.join('.');
             }
         }
-        
+
         setFormData(prev => {
             const newData = { ...prev, [name]: value };
-            
+
             // Auto-update percentage based on status
             if (name === 'status') {
                 if (['Not Yet Started', 'Under Procurement'].includes(value)) {
@@ -373,16 +373,16 @@ const PROJECT_CATEGORIES = [
             }
             // Auto-update status based on percentage
             if (name === 'accomplishmentPercentage') {
-                 const percent = Number(value);
-                 if (percent === 100 && prev.status !== 'Completed') {
-                     newData.status = 'For Final Inspection';
-                 } else if (percent > 0 && percent < 100 && ['Not Yet Started', 'Under Procurement', 'Completed'].includes(prev.status)) {
-                     newData.status = 'Ongoing';
-                 } else if (percent === 0) {
-                     newData.status = 'Not Yet Started';
-                 }
+                const percent = Number(value);
+                if (percent === 100 && prev.status !== 'Completed') {
+                    newData.status = 'For Final Inspection';
+                } else if (percent > 0 && percent < 100 && ['Not Yet Started', 'Under Procurement', 'Completed'].includes(prev.status)) {
+                    newData.status = 'Ongoing';
+                } else if (percent === 0) {
+                    newData.status = 'Not Yet Started';
+                }
             }
-            
+
             return newData;
         });
     };
@@ -403,10 +403,10 @@ const PROJECT_CATEGORIES = [
             return;
         }
 
-        if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
-            alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
-            return;
-        }
+        // if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
+        //     alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
+        //     return;
+        // }
 
         // CONDITIONAL PHOTO VALIDATION
         if (!['Not Yet Started', 'Under Procurement'].includes(formData.status)) {
@@ -444,7 +444,7 @@ const PROJECT_CATEGORIES = [
         try {
             // A. Prepare Images (Base64) with Category
             const compressedImages = [];
-            
+
             // Process Internal
             for (const file of internalFiles) {
                 const base64 = await compressImage(file);
@@ -452,8 +452,8 @@ const PROJECT_CATEGORIES = [
             }
             // Process External
             for (const file of externalFiles) {
-                 const base64 = await compressImage(file);
-                 compressedImages.push({ image_data: base64, category: 'External' });
+                const base64 = await compressImage(file);
+                compressedImages.push({ image_data: base64, category: 'External' });
             }
 
             // B. Prepare Documents (Base64)
@@ -464,8 +464,8 @@ const PROJECT_CATEGORIES = [
             if (documents.CONTRACT) processedDocs.push({ type: 'CONTRACT', base64: await convertFullFileToBase64(documents.CONTRACT) });
 
             // C. Construct Payload
-            const projectBody = { 
-                ...formData, 
+            const projectBody = {
+                ...formData,
                 projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0),
                 uid: auth.currentUser?.uid,
                 modifiedBy: auth.currentUser?.displayName || 'Engineer',
@@ -486,16 +486,16 @@ const PROJECT_CATEGORIES = [
             };
 
             if (!navigator.onLine) {
-                 await addEngineerToOutbox(payload);
-                 alert("📁 No internet. Project & Docs saved to Sync Center.");
-                 setIsSubmitting(false);
-                 navigate('/engineer-dashboard');
-                 return;
+                await addEngineerToOutbox(payload);
+                alert("📁 No internet. Project & Docs saved to Sync Center.");
+                setIsSubmitting(false);
+                navigate('/engineer-dashboard');
+                return;
             }
 
             // --- ONLINE SUBMISSION ---
             let endpoint = '/api/save-project';
-            
+
             // LGU SPECIFIC ENDPOINT
             if (userRole === 'Local Government Unit') {
                 endpoint = '/api/lgu/save-project';
@@ -513,22 +513,22 @@ const PROJECT_CATEGORIES = [
             }
 
             const projectData = await projectRes.json();
-            const ipc = projectData.ipc; 
-            
+            const ipc = projectData.ipc;
+
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
             navigate('/engineer-dashboard');
 
         } catch (error) {
             console.error("Submission failed:", error);
-            
+
             // Try saving to outbox if it might be a network glitch
             try {
-                 // We can't easily reconstruct the exact payload if we failed mid-way, 
-                 // but typically if fetch failed, we are here.
-                 
-                 alert(`❌ Submission Failed: ${error.message}\n\nPlease check your connection and try again.`);
+                // We can't easily reconstruct the exact payload if we failed mid-way, 
+                // but typically if fetch failed, we are here.
+
+                alert(`❌ Submission Failed: ${error.message}\n\nPlease check your connection and try again.`);
             } catch (fallbackErr) {
-                 alert(`❌ Critical Error: ${error.message}`);
+                alert(`❌ Critical Error: ${error.message}`);
             }
         } finally {
             setIsSubmitting(false);
@@ -568,10 +568,10 @@ const PROJECT_CATEGORIES = [
                             {/* 0. PROJECT CATEGORY (New - Dropdown) */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Category</label>
-                                <select 
-                                    name="projectCategory" 
-                                    value={formData.projectCategory || ''} 
-                                    onChange={handleChange} 
+                                <select
+                                    name="projectCategory"
+                                    value={formData.projectCategory || ''}
+                                    onChange={handleChange}
                                     className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}
                                 >
                                     <option value="">Select Category</option>
@@ -587,11 +587,68 @@ const PROJECT_CATEGORIES = [
                                 <input name="projectName" value={formData.projectName} onChange={handleChange} required readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
 
-                            {/* 1.5 SCOPE OF WORK (New) */}
+                            {/* 1.5 SCOPE OF WORK */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Work</label>
-                                <p className="text-[10px] text-slate-400 mb-1">Number of Classrooms (for New Construction) or Number of Sites</p>
                                 <textarea name="scopeOfWork" rows="2" value={formData.scopeOfWork || ''} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                            </div>
+
+                            {/* 1.6 NUMBER OF STOREYS (if applicable) */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                    Number of Storeys <span className="text-slate-400 font-normal text-[10px]">(if applicable)</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    name="numberOfStoreys"
+                                    value={formData.numberOfStoreys || ''}
+                                    onChange={(e) => {
+                                        if (e.target.value.length > 2) return;
+                                        handleChange(e);
+                                    }}
+                                    min="1"
+                                    placeholder="e.g. 2"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
+
+                            {/* 1.7 NUMBER OF CLASSROOMS (if applicable) */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                    Number of Classrooms <span className="text-slate-400 font-normal text-[10px]">(if applicable)</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    name="numberOfClassrooms"
+                                    value={formData.numberOfClassrooms || ''}
+                                    onChange={(e) => {
+                                        if (e.target.value.length > 3) return;
+                                        handleChange(e);
+                                    }}
+                                    min="0"
+                                    placeholder="e.g. 5"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
+
+                            {/* 1.8 NUMBER OF SITES */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                    Number of Sites <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    name="numberOfSites"
+                                    value={formData.numberOfSites || ''}
+                                    onChange={(e) => {
+                                        if (e.target.value.length > 2) return;
+                                        handleChange(e);
+                                    }}
+                                    min="1"
+                                    required
+                                    placeholder="e.g. 1"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                />
                             </div>
                         </div>
 
@@ -662,41 +719,41 @@ const PROJECT_CATEGORIES = [
                                         <strong>COA Requirement:</strong> Drag the pin to the exact project site, or stand on-site and click "Get Current Location".
                                     </p>
                                 </div>
-                                
+
                                 <div className="mb-4 rounded-xl overflow-hidden shadow-sm border border-slate-200">
-                                     <LocationPickerMap 
-                                        latitude={formData.latitude} 
-                                        longitude={formData.longitude} 
+                                    <LocationPickerMap
+                                        latitude={formData.latitude}
+                                        longitude={formData.longitude}
                                         onLocationSelect={handleLocationSelect}
                                         disabled={isDummy}
-                                     />
+                                    />
                                 </div>
 
                                 <div className="flex gap-3 mb-3">
                                     <div className="flex-1">
                                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude</label>
-                                        <input 
-                                            name="latitude" 
-                                            value={formData.latitude} 
-                                            readOnly 
+                                        <input
+                                            name="latitude"
+                                            value={formData.latitude}
+                                            readOnly
                                             placeholder="0.000000"
-                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none" 
+                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none"
                                         />
                                     </div>
                                     <div className="flex-1">
                                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude</label>
-                                        <input 
-                                            name="longitude" 
-                                            value={formData.longitude} 
-                                            readOnly 
+                                        <input
+                                            name="longitude"
+                                            value={formData.longitude}
+                                            readOnly
                                             placeholder="0.000000"
-                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none" 
+                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none"
                                         />
                                     </div>
                                 </div>
 
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={handleGetLocation}
                                     disabled={isDummy}
                                     className="w-full py-3 bg-blue-600 text-white font-bold text-xs uppercase rounded-lg shadow-md hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -720,7 +777,7 @@ const PROJECT_CATEGORIES = [
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality</label>
                                             <input name="municipality" value={formData.municipality} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                         </div>
-                                         <div>
+                                        <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District</label>
                                             <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                         </div>
@@ -750,7 +807,7 @@ const PROJECT_CATEGORIES = [
                                                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche</label>
                                                 <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
                                             </div>
-                                             <div>
+                                            <div>
                                                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded</label>
                                                 <input name="funds_downloaded" value={formData.funds_downloaded} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
                                             </div>
@@ -760,9 +817,9 @@ const PROJECT_CATEGORIES = [
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                     {/* Scope */}
-                                     <div>
+
+                                    {/* Scope */}
+                                    <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works</label>
                                         <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                     </div>
@@ -770,7 +827,7 @@ const PROJECT_CATEGORIES = [
 
                                 <SectionHeader title="Procurement Details" icon="⚖️" />
                                 <div className="space-y-4">
-                                     <div>
+                                    <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage</label>
                                         <select name="procurement_stage" value={formData.procurement_stage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
                                             <option value="">Select Stage...</option>
@@ -783,18 +840,18 @@ const PROJECT_CATEGORIES = [
                                             <option value="Awarded">Awarded</option>
                                         </select>
                                     </div>
-                                    
+
                                     <div className="grid grid-cols-2 gap-3">
-                                         <div>
+                                        <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
                                             <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                         </div>
-                                         <div>
+                                        <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Construction Start Date</label>
                                             <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                         </div>
                                     </div>
-                                    
+
                                     <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                                         <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Dates</h4>
                                         <div className="grid grid-cols-2 gap-3">
@@ -802,7 +859,7 @@ const PROJECT_CATEGORIES = [
                                                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bidding Date</label>
                                                 <input type="date" name="bidding_date" value={formData.bidding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
                                             </div>
-                                             <div>
+                                            <div>
                                                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bid Opening</label>
                                                 <input type="date" name="bid_opening_date" value={formData.bid_opening_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
                                             </div>
@@ -847,7 +904,7 @@ const PROJECT_CATEGORIES = [
                                 </div>
                             )}
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status As Of Date</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date</label>
                                 <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                         </div>
@@ -857,7 +914,7 @@ const PROJECT_CATEGORIES = [
                             <div className="mt-4 pt-4 border-t border-slate-100">
                                 <SectionHeader title="Site Photos" icon="📸" />
                                 <div className="space-y-6">
-                                    
+
                                     {/* EXTERNAL PHOTOS (First) */}
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                         <div className="flex justify-between items-center mb-1">
@@ -957,6 +1014,10 @@ const PROJECT_CATEGORIES = [
                                 <input type="text" name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 15,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funds Utilized (As of Current Date)</label>
+                                <input type="text" name="fundsUtilized" value={formData.fundsUtilized || ''} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 5,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch of Funds</label>
                                 <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} readOnly={isDummy} placeholder="e.g. Batch 1" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
@@ -981,13 +1042,13 @@ const PROJECT_CATEGORIES = [
 
                         {/* --- REQUIRED DOCUMENTS SECTION --- */}
                         <div className="mt-4 pt-4 border-t border-slate-100">
-                             <div className="flex items-center gap-2 mb-2">
+                            <div className="flex items-center gap-2 mb-2">
                                 <span className="text-xl">📄</span>
-                                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Prerequisite Documents</h3>
-                             </div>
-                             <p className="text-xs text-slate-400 -mt-2 mb-2">Each document must be a PDF file.</p>
+                                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Project Documents</h3>
+                            </div>
+                            <p className="text-xs text-slate-400 -mt-2 mb-2">Each document must be a PDF file.</p>
 
-                             {Object.entries(DOC_TYPES).map(([key, label]) => (
+                            {Object.entries(DOC_TYPES).map(([key, label]) => (
                                 <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
                                     <div className="flex justify-between items-center">
                                         <div>
@@ -1000,12 +1061,12 @@ const PROJECT_CATEGORIES = [
                                                     {documents[key].name}
                                                 </p>
                                             ) : (
-                                                <p className="text-[10px] text-red-400 font-bold mt-0.5">* Required</p>
+                                                <p className="text-[10px] text-red-400 font-bold mt-0.5">{/* Optional */}</p>
                                             )}
                                         </div>
                                         <div>
                                             {documents[key] ? (
-                                                <button 
+                                                <button
                                                     onClick={() => removeDocument(key)}
                                                     className="w-8 h-8 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
                                                 >
@@ -1014,10 +1075,10 @@ const PROJECT_CATEGORIES = [
                                             ) : (
                                                 <label className="cursor-pointer px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
                                                     Select PDF
-                                                    <input 
-                                                        type="file" 
+                                                    <input
+                                                        type="file"
                                                         accept=".pdf"
-                                                        className="hidden" 
+                                                        className="hidden"
                                                         onChange={(e) => handleDocumentSelect(e, key)}
                                                     />
                                                 </label>
@@ -1025,7 +1086,7 @@ const PROJECT_CATEGORIES = [
                                         </div>
                                     </div>
                                 </div>
-                             ))}
+                            ))}
                         </div>
 
 

@@ -1230,6 +1230,132 @@ const logActivity = async (userUid, userName, role, actionType, targetEntity, de
   }
 };
 
+// --- HELPER: UPDATE SCHOOL SUMMARY (INSTANT) ---
+const updateSchoolSummary = async (schoolId, db) => {
+  console.log(`[InstantUpdate] Starting for ${schoolId}...`);
+  try {
+    // 1. Fetch School Profile
+    const res = await db.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
+    if (res.rows.length === 0) {
+      console.log(`[InstantUpdate] School ${schoolId} not found in profiles.`);
+      return;
+    }
+    const sp = res.rows[0];
+
+    // 2. Completeness Checks (Critical Missing Data)
+    const issues = [];
+    const totalEnrollment = parseInt(sp.total_enrollment || 0);
+    // Use the same sum logic as calculateSchoolProgress to be safe
+    const totalTeachers = parseInt(
+      (sp.teach_kinder || 0) + (sp.teach_g1 || 0) + (sp.teach_g2 || 0) + (sp.teach_g3 || 0) +
+      (sp.teach_g4 || 0) + (sp.teach_g5 || 0) + (sp.teach_g6 || 0) +
+      (sp.teach_g7 || 0) + (sp.teach_g8 || 0) + (sp.teach_g9 || 0) + (sp.teach_g10 || 0) +
+      (sp.teach_g11 || 0) + (sp.teach_g12 || 0) +
+      (sp.teach_multi_1_2 || 0) + (sp.teach_multi_3_4 || 0) + (sp.teach_multi_5_6 || 0) + (sp.teach_multi_3plus_count || 0) +
+      (sp.teachers_es || 0) + (sp.teachers_jhs || 0) + (sp.teachers_shs || 0)
+    );
+    const totalClassrooms = parseInt(sp.build_classrooms_total || 0);
+    const totalToilets = parseInt(
+      (sp.res_toilets_male || 0) + (sp.res_toilets_female || 0) + (sp.res_toilets_common || 0) + (sp.res_toilets_pwd || 0)
+    );
+    // Fix: Correct variable names for seats as per DB schema usually res_armchair_func etc
+    const totalSeats = parseInt(
+      (sp.res_armchair_func || 0) + (sp.res_desk_func || 0)
+    );
+
+    console.log(`[InstantUpdate] Stats for ${schoolId}: Learners=${totalEnrollment}, Teachers=${totalTeachers}, Rooms=${totalClassrooms}`);
+
+    if (totalEnrollment > 0) {
+      if (totalTeachers === 0) issues.push("Critical missing data. No teachers have been reported.");
+      if (totalClassrooms === 0) issues.push("Critical missing data. No classrooms have been reported.");
+      if (totalToilets === 0) issues.push("Critical missing data. No toilets have been reported.");
+    }
+
+    // 3. Score & Description
+    let score = 100;
+    let description = "Excellent";
+    let formsToRecheck = "";
+
+    if (issues.length > 0) {
+      score = 40; // Critical
+      description = "Critical";
+      formsToRecheck = issues.join("; ");
+      console.log(`[InstantUpdate] Issues Found: ${formsToRecheck}`);
+    } else {
+      console.log(`[InstantUpdate] No Issues. Score: 100`);
+    }
+
+    // 4. Update school_summary (Upsert)
+    // We update the core metrics + data_health columns
+    // NOTE: This query duplicates the Python fields to ensure instant sync.
+    // Python script will later overwrite this with more advanced analysis (Outliers, etc.)
+    const summaryQuery = `
+      INSERT INTO school_summary (
+        school_id, school_name, iern, region, division, district,
+        total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
+        data_health_score, data_health_description, issues, last_updated
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12, $13, $14, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (school_id) DO UPDATE SET
+        school_name = EXCLUDED.school_name,
+        iern = EXCLUDED.iern,
+        region = EXCLUDED.region,
+        division = EXCLUDED.division,
+        district = EXCLUDED.district,
+        total_learners = EXCLUDED.total_learners,
+        total_teachers = EXCLUDED.total_teachers,
+        total_classrooms = EXCLUDED.total_classrooms,
+        total_toilets = EXCLUDED.total_toilets,
+        total_seats = EXCLUDED.total_seats,
+        data_health_score = EXCLUDED.data_health_score,
+        data_health_description = EXCLUDED.data_health_description,
+        issues = EXCLUDED.issues,
+        last_updated = CURRENT_TIMESTAMP
+    `;
+
+    // Simple implementation: Just overwrite for now. Python will refine it later.
+    // If Python is running concurrently, it might overwrite this, which is fine.
+    await db.query(`
+      INSERT INTO school_summary (
+        school_id, school_name, iern, region, division, district,
+        total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
+        data_health_score, data_health_description, issues, last_updated
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12, $13, $14, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (school_id) DO UPDATE SET
+        school_name = EXCLUDED.school_name,
+        iern = EXCLUDED.iern,
+        region = EXCLUDED.region,
+        division = EXCLUDED.division,
+        district = EXCLUDED.district,
+        total_learners = EXCLUDED.total_learners,
+        total_teachers = EXCLUDED.total_teachers,
+        total_classrooms = EXCLUDED.total_classrooms,
+        total_toilets = EXCLUDED.total_toilets,
+        total_seats = EXCLUDED.total_seats,
+        data_health_score = EXCLUDED.data_health_score,
+        data_health_description = EXCLUDED.data_health_description,
+        issues = EXCLUDED.issues,
+        last_updated = CURRENT_TIMESTAMP
+    `, [
+      sp.school_id, sp.school_name, sp.school_id, sp.region, sp.division, sp.district, // iern is usually ID
+      totalEnrollment, totalTeachers, totalClassrooms, totalToilets, totalSeats,
+      score, description, formsToRecheck
+    ]);
+
+    console.log(`âœ… Instant School Summary Update for ${schoolId}: ${description} (${issues.length} issues)`);
+
+  } catch (err) {
+    console.error("â Œ Instant Summary Update Error:", err.message);
+  }
+};
+
 // --- HELPER: CALCULATE SCHOOL PROGRESS (SNAPSHOT) ---
 const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
   console.log(`TRIGGER: calculateSchoolProgress for ${schoolId}`);
@@ -1358,6 +1484,9 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     ]);
 
     console.log(`âœ… Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}]`);
+
+    // --- OPTIMIZATION: INSTANT SUMMARY UPDATE ---
+    await updateSchoolSummary(schoolId, dbClientOrPool);
 
     // --- TRIGGER FRAUD DETECTION IF COMPLETE (CONTINUOUS) ---
     if (percentage === 100) {
@@ -2217,7 +2346,17 @@ app.get('/api/user-by-school/:schoolId', async (req, res) => {
 app.get('/api/school-by-user/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    // Join with school_summary to get data quality issues
+    const result = await pool.query(`
+      SELECT 
+        sp.*,
+        ss.issues as data_quality_issues,
+        ss.data_health_score,
+        ss.data_health_description
+      FROM school_profiles sp
+      LEFT JOIN school_summary ss ON sp.school_id = ss.school_id
+      WHERE sp.submitted_by = $1
+    `, [uid]);
     if (result.rows.length > 0) {
       res.json({ exists: true, data: result.rows[0] });
     } else {
@@ -2862,9 +3001,8 @@ app.get('/api/school-head/:uid', async (req, res) => {
         head_item_number as item_number, 
         head_position_title as position_title, 
         head_date_hired as date_hired,
-        head_sex as sex, 
-        head_region as region, 
-        head_division as division,
+        region, 
+        division,
         updated_at
       FROM school_profiles 
       WHERE submitted_by = $1;
@@ -3036,6 +3174,8 @@ app.post('/api/school/validate-data', async (req, res) => {
       try {
         await poolNew.query(query, [schoolId]);
         console.log("âœ… Dual-Write: Validation synced!");
+        // Trigger summary update on secondary
+        await updateSchoolSummary(schoolId, poolNew);
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Validation):", dwErr.message);
       }
@@ -3055,6 +3195,9 @@ app.post('/api/school/validate-data', async (req, res) => {
       console.error("Failed to log activity:", logErr.message);
       // Constructive failure: Don't fail the validation just because logging failed
     }
+
+    // Trigger Instant Summary Update
+    await updateSchoolSummary(schoolId, pool);
 
     res.json({ success: true, message: "Data validated successfully." });
 
@@ -3311,7 +3454,11 @@ app.post('/api/save-project', async (req, res) => {
       contractDoc, // $23
       valueOrNull(data.constructionStartDate), // $24
       valueOrNull(data.projectCategory), // $25
-      valueOrNull(data.scopeOfWork) // $26
+      valueOrNull(data.scopeOfWork), // $26
+      parseIntOrNull(data.numberOfClassrooms), // $27
+      parseIntOrNull(data.numberOfSites), // $28
+      parseIntOrNull(data.numberOfStoreys), // $29
+      parseNumberOrNull(data.fundsUtilized) // $30
     ];
 
     const projectQuery = `
@@ -3322,8 +3469,9 @@ app.post('/api/save-project', async (req, res) => {
         contractor_name, project_allocation, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
-        construction_start_date, project_category, scope_of_work
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+        construction_start_date, project_category, scope_of_work,
+        number_of_classrooms, number_of_sites, number_of_storeys, funds_utilized
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -4587,12 +4735,13 @@ app.get('/api/monitoring/stats', async (req, res) => {
         -- Overall Completion (100%)
         COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END), 0) as completed_schools_count,
         
-        -- System Validated Count (All Completed NEGATING Critical)
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND (sp.data_health_description IS DISTINCT FROM 'Critical') THEN 1 END), 0) as validated_schools_count,
-        -- Critical Issues Count (Strictly Critical)
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND sp.data_health_description = 'Critical' THEN 1 END), 0) as critical_schools_count
+        -- System Validated Count (Completed AND Excellent from school_summary OR Manually Validated)
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
+        -- For Validation Count (Completed AND NOT Excellent from school_summary)
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END), 0) as for_validation_count
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE TRIM(s.region) = TRIM($1)
     `;
     let params = [region];
@@ -4646,11 +4795,12 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         s.division, 
         COUNT(s.school_id) as total_schools, 
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN sp.data_health_description IN ('Excellent', 'Good', 'Fair') THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN sp.data_health_description = 'Critical' THEN 1 END) as critical_schools,
+        COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
         ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE TRIM(s.region) = TRIM($1)
       GROUP BY s.division
       ORDER BY s.division
@@ -4675,7 +4825,7 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         s.district,
         COUNT(s.school_id) as total_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN sp.data_health_description IN ('Excellent', 'Good', 'Fair') THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.data_health_description IN ('Excellent', 'Good', 'Fair') OR sp.school_head_validation = TRUE THEN 1 END) as validated_schools,
         COUNT(CASE WHEN sp.data_health_description = 'Critical' THEN 1 END) as critical_schools,
         ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
       FROM schools s
@@ -4742,14 +4892,16 @@ app.get('/api/monitoring/schools', async (req, res) => {
       COALESCE(sp.completion_percentage, 0) as completion_percentage,
       sp.submitted_by,
       sp.school_head_validation,
-      sp.data_health_description
+      ss.data_health_description,
+      ss.data_health_score
     `;
 
     // COUNT Query (Count from schools table)
     const countQuery = `
       SELECT COUNT(*) as total 
       FROM schools s
-      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id 
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE ${whereClauses.join(' AND ')}
     `;
     const countRes = await pool.query(countQuery, params);
@@ -4760,6 +4912,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
       SELECT ${selectFields}
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE ${whereClauses.join(' AND ')}
       ORDER BY s.school_name ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
@@ -5274,11 +5427,35 @@ app.get('/api/migrate-schema', async (req, res) => {
       results.push("Added scope_of_work");
     } catch (e) { results.push(`Failed scope_of_work: ${e.message}`); }
 
-    // 4. Add head_sex to school_profiles
+    // 4. Add number_of_classrooms
     try {
-      await client.query('ALTER TABLE "school_profiles" ADD COLUMN IF NOT EXISTS head_sex TEXT');
-      results.push("Added head_sex to school_profiles");
-    } catch (e) { results.push(`Failed head_sex: ${e.message}`); }
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER');
+      results.push("Added number_of_classrooms");
+    } catch (e) { results.push(`Failed number_of_classrooms: ${e.message}`); }
+
+    // 5. Add number_of_sites
+    try {
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS number_of_sites INTEGER');
+      results.push("Added number_of_sites");
+    } catch (e) { results.push(`Failed number_of_sites: ${e.message}`); }
+
+    // 6. Add number_of_storeys
+    try {
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER');
+      results.push("Added number_of_storeys");
+    } catch (e) { results.push(`Failed number_of_storeys: ${e.message}`); }
+
+    // 7. Add funds_utilized
+    try {
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC');
+      results.push("Added funds_utilized");
+    } catch (e) { results.push(`Failed funds_utilized: ${e.message}`); }
+
+    // 4. Add head_sex to school_profiles -- REMOVED
+    // try {
+    //   await client.query('ALTER TABLE "school_profiles" ADD COLUMN IF NOT EXISTS head_sex TEXT');
+    //   results.push("Added head_sex to school_profiles");
+    // } catch (e) { results.push(`Failed head_sex: ${e.message}`); }
 
     client.release();
     res.json({ message: "Migration attempt finished", results });

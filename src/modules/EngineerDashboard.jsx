@@ -198,7 +198,7 @@ const EngineerDashboard = () => {
         let currentRole = "";
         if (docSnap.exists()) {
           const userData = docSnap.data();
-          setUserName(userData.firstName);
+          setUserName(`${userData.firstName} ${userData.lastName || ''}`.trim());
           currentRole = userData.role;
           setUserRole(userData.role);
         }
@@ -296,9 +296,11 @@ const EngineerDashboard = () => {
               <p className="text-blue-200 text-xs font-bold tracking-wider uppercase">
                 DepEd Infrastructure
               </p>
-              <h1 className="text-2xl font-bold text-white mt-1">Dashboard</h1>
+              <h1 className="text-2xl font-bold text-white mt-1">
+                {userRole === 'Local Government Unit' ? 'LGU Partner' : 'Engr.'} {userName}
+              </h1>
               <p className="text-blue-100 mt-1 text-sm">
-                Overview of {projects.length} active projects.
+                Dashboard • Overview of {projects.length} active projects.
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">

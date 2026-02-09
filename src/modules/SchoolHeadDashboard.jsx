@@ -446,34 +446,64 @@ const SchoolHeadDashboard = () => {
                     {/* --- DASHBOARD CONTENT --- */}
                     <div className="px-6 -mt-12 relative z-10 space-y-8">
 
-                        {/* --- DATA VALIDATION ALERT (FRAUD DETECTION) --- */}
-                        {/* Show if Health is Critical, BUT hide if School Head has already manually validated it. */}
-                        {(schoolProfile?.data_health_description === 'Critical' && !schoolProfile?.school_head_validation) && (
-                            <div className="relative w-full p-4 rounded-2xl border flex items-start gap-3 shadow-lg bg-red-100 border-red-200 text-red-800 animate-in fade-in slide-in-from-top-4 mb-4">
+                        {/* --- DATA QUALITY ALERT (FROM SCHOOL_SUMMARY) --- */}
+                        {/* Show if Health is NOT Excellent, BUT hide if School Head has already manually validated it. */}
+                        {(schoolProfile?.data_health_description && schoolProfile?.data_health_description !== 'Excellent' && !schoolProfile?.school_head_validation) && (
+                            <div className={`relative w-full p-4 rounded-2xl border flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-4 mb-4 ${schoolProfile.data_health_description === 'Critical'
+                                ? 'bg-red-100 border-red-200 text-red-800'
+                                : schoolProfile.data_health_description === 'Fair'
+                                    ? 'bg-amber-100 border-amber-200 text-amber-800'
+                                    : 'bg-blue-100 border-blue-200 text-blue-800'
+                                }`}>
                                 <div className="p-2 bg-white/50 rounded-full shrink-0">
-                                    <FiAlertTriangle className="text-red-600 animate-pulse" size={20} />
+                                    <FiAlertTriangle className={`animate-pulse ${schoolProfile.data_health_description === 'Critical' ? 'text-red-600' :
+                                        schoolProfile.data_health_description === 'Fair' ? 'text-amber-600' :
+                                            'text-blue-600'
+                                        }`} size={20} />
                                 </div>
                                 <div className="flex-1">
                                     <h4 className="font-bold text-sm flex items-center gap-2">
-                                        Data Validation Required
-                                        <span className="px-2 py-0.5 rounded-full bg-red-200 text-red-800 text-[10px] font-extrabold uppercase tracking-wider">
-                                            Action Needed
+                                        {schoolProfile.data_health_description === 'Critical' ? 'Critical Data Quality Issues' :
+                                            schoolProfile.data_health_description === 'Fair' ? 'Data Quality Issues Need Attention' :
+                                                'Minor Data Quality Issues Detected'}
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${schoolProfile.data_health_description === 'Critical' ? 'bg-red-200 text-red-800' :
+                                            schoolProfile.data_health_description === 'Fair' ? 'bg-amber-200 text-amber-800' :
+                                                'bg-blue-200 text-blue-800'
+                                            }`}>
+                                            {schoolProfile.data_health_description === 'Critical' ? 'Action Needed' : 'Please Review'}
                                         </span>
                                     </h4>
                                     <p className="text-xs opacity-90 leading-relaxed mt-1 mb-2">
-                                        Our system detected potential inconsistencies in your submitted data. Please review and verify the following forms:
+                                        Our system detected the following data quality issues:
                                     </p>
-                                    {schoolProfile.forms_to_recheck && (
-                                        <div className="bg-white/60 rounded-lg p-2 text-xs font-mono font-semibold text-red-900 border border-red-200/50 mb-2">
-                                            {schoolProfile.forms_to_recheck}
+                                    {schoolProfile.data_quality_issues && schoolProfile.data_quality_issues !== 'None' && (
+                                        <div className="bg-white/60 rounded-lg p-3 text-xs font-semibold border border-opacity-50 mb-2">
+                                            {schoolProfile.data_quality_issues}
                                         </div>
                                     )}
-                                    <button
-                                        onClick={handleOpenValidation}
-                                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1"
-                                    >
-                                        <FiCheckSquare /> Validate Data
-                                    </button>
+                                    <p className="text-[10px] opacity-75 mb-3 italic">
+                                        Note: Data Accuracy Assessment may take several hours to refresh. Please check back again in a few hours.
+                                    </p>
+
+                                    <div className="mt-2 p-2 bg-white/50 rounded-lg">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-xs font-bold uppercase tracking-wider opacity-80">Data Health Score:</span>
+                                            <span className={`text-sm font-black ${schoolProfile.data_health_score <= 50 ? 'text-red-700' :
+                                                    schoolProfile.data_health_score <= 85 ? 'text-amber-700' :
+                                                        'text-green-700'
+                                                }`}>
+                                                {schoolProfile.data_health_score}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs font-medium leading-snug">
+                                            {schoolProfile.data_health_score <= 50
+                                                ? "Major data anomaly/inconsistency detected. Requires major data overhaul"
+                                                : schoolProfile.data_health_score <= 85
+                                                    ? "Minor data anomaly/inconsistency detected. Requires revision of some data inputs."
+                                                    : "Within the acceptable range of data variability. Not major changes needed."
+                                            }
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         )}
