@@ -77,16 +77,38 @@ def clean_and_impute(df):
     granular_teacher_sum = df.apply(lambda x: sum_cols(x, granular_t_cols), axis=1)
     
     # Use MAX of summary or granular to capture the most data
+    # NEW: Also include Specialization teachers as a valid source of "Teacher Count" if profile is missing
+    # (Sometimes users fill out specialization but not the main profile)
+    
+    # Pre-calculate specialization total for use here
+    spec_cols_temp = [
+        'spec_english_teaching', 'spec_filipino_teaching', 'spec_math_teaching',
+        'spec_science_teaching', 'spec_ap_teaching', 'spec_mapeh_teaching',
+        'spec_esp_teaching', 'spec_tle_teaching', 'spec_guidance', 'spec_librarian',
+        'spec_ict_coord', 'spec_drrm_coord', 'spec_general_teaching', 'spec_ece_teaching',
+        'spec_bio_sci_teaching', 'spec_phys_sci_teaching', 'spec_agri_fishery_teaching',
+        'spec_others_teaching'
+    ]
+    spec_teacher_sum = df.apply(lambda x: sum_cols(x, spec_cols_temp), axis=1)
+
+    # FIXED: Remove Specialization columns from teacher count (values represent learners/load, not teachers)
+    # df['num_teachers'] = np.maximum.reduce([summary_teacher_sum, granular_teacher_sum, spec_teacher_sum])
     df['num_teachers'] = np.maximum(summary_teacher_sum, granular_teacher_sum)
     
     # Classrooms
     # distinct from 'build_classrooms_total' which might be pre-calculated
-    # Let's trust 'build_classrooms_total' if it exists and is non-zero, else sum types
+    # ROBUST FIX: Trust 'build_classrooms_total' IF it exists AND is > 0.
+    # If it exists but is 0, check the components (good + repair + new).
+    # Take the MAXIMUM of Total vs Sum(Components) to be safe.
+    
+    classroom_components = ['build_classrooms_good', 'build_classrooms_repair', 'build_classrooms_new']
+    component_sum = df.apply(lambda x: sum_cols(x, classroom_components), axis=1)
+
     if 'build_classrooms_total' in df.columns:
-         df['num_classrooms'] = pd.to_numeric(df['build_classrooms_total'], errors='coerce').fillna(0)
+         total_reported = pd.to_numeric(df['build_classrooms_total'], errors='coerce').fillna(0)
+         df['num_classrooms'] = np.maximum(total_reported, component_sum)
     else:
-         classroom_cols = ['build_classrooms_good', 'build_classrooms_repair', 'build_classrooms_new']
-         df['num_classrooms'] = df.apply(lambda x: sum_cols(x, classroom_cols), axis=1)
+         df['num_classrooms'] = component_sum
 
     # Toilets
     toilet_cols = ['res_toilets_female', 'res_toilets_male', 'res_toilets_common', 'res_toilets_pwd']
@@ -527,6 +549,487 @@ def update_database(df, engine, target_school_id=None):
     except Exception as e:
         print(f"Failed to update database: {e}")
 
+def update_school_summary_table(df, engine):
+    print("\nUpdating School Summary Table...")
+    
+    try:
+        # 1. Create Table if not exists
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS school_summary (
+                    school_id VARCHAR(50) PRIMARY KEY,
+                    school_name TEXT,
+                    iern VARCHAR(50),
+                    region VARCHAR(50),
+                    division VARCHAR(100),
+                    district VARCHAR(100),
+                    total_teachers INT DEFAULT 0,
+                    total_teaching_experience INT DEFAULT 0,
+                    total_specialized_teachers INT DEFAULT 0,
+                    total_classrooms INT DEFAULT 0,
+                    total_seats INT DEFAULT 0,
+                    total_learners INT DEFAULT 0,
+                    total_toilets INT DEFAULT 0,
+                    total_furniture INT DEFAULT 0,
+                    total_als_learners INT DEFAULT 0,
+                    total_sped_learners INT DEFAULT 0,
+                    total_muslim_learners INT DEFAULT 0,
+                    total_organized_classes INT DEFAULT 0,
+                    total_school_resources INT DEFAULT 0,
+                    data_health_score FLOAT DEFAULT 0,
+                    data_health_description VARCHAR(50),
+                    issues TEXT,
+                    flag_outlier_ptr BOOLEAN DEFAULT FALSE,
+                    flag_outlier_pcr BOOLEAN DEFAULT FALSE,
+                    flag_outlier_psr BOOLEAN DEFAULT FALSE,
+                    flag_outlier_ptorr BOOLEAN DEFAULT FALSE,
+                    flag_outlier_pfr BOOLEAN DEFAULT FALSE,
+                    flag_zero_teachers BOOLEAN DEFAULT FALSE,
+                    flag_zero_classrooms BOOLEAN DEFAULT FALSE,
+                    flag_zero_seats BOOLEAN DEFAULT FALSE,
+                    flag_zero_toilets BOOLEAN DEFAULT FALSE,
+                    flag_zero_furniture BOOLEAN DEFAULT FALSE,
+                    flag_zero_resources BOOLEAN DEFAULT FALSE,
+                    flag_zero_organized_classes BOOLEAN DEFAULT FALSE,
+                    flag_anomaly_teachers BOOLEAN DEFAULT FALSE,
+                    flag_anomaly_classrooms BOOLEAN DEFAULT FALSE,
+                    flag_anomaly_seats BOOLEAN DEFAULT FALSE,
+                    flag_anomaly_toilets BOOLEAN DEFAULT FALSE,
+                    flag_anomaly_furniture BOOLEAN DEFAULT FALSE,
+                    flag_anomaly_organized_classes BOOLEAN DEFAULT FALSE,
+                    flag_exp_mismatch BOOLEAN DEFAULT FALSE,
+                    flag_spec_exceeds BOOLEAN DEFAULT FALSE,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """))
+            # Ensure new columns exist (Migration)
+            conn.execute(text("""
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS total_organized_classes INT DEFAULT 0;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS total_teaching_experience INT DEFAULT 0;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS total_specialized_teachers INT DEFAULT 0;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS total_school_resources INT DEFAULT 0;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS total_toilets INT DEFAULT 0;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS total_furniture INT DEFAULT 0;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS iern VARCHAR(50);
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS data_health_score FLOAT DEFAULT 0;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS data_health_description VARCHAR(50);
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS issues TEXT;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_outlier_ptr BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_outlier_pcr BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_outlier_psr BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_outlier_ptorr BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_outlier_pfr BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_teachers BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_classrooms BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_seats BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_toilets BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_furniture BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_resources BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_organized_classes BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_teachers BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_classrooms BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_seats BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_toilets BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_furniture BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_organized_classes BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_exp_mismatch BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_spec_exceeds BOOLEAN DEFAULT FALSE;
+                
+                ALTER TABLE school_summary DROP COLUMN IF EXISTS total_als_learners;
+                ALTER TABLE school_summary DROP COLUMN IF EXISTS total_sped_learners;
+                ALTER TABLE school_summary DROP COLUMN IF EXISTS total_muslim_learners;
+            """))
+            conn.commit()
+
+        # 2. Calculate Aggregates
+        
+        # Helper to sum columns if they exist
+        def sum_cols_safe(row, cols):
+            total = 0
+            for c in cols:
+                if c in row.index and pd.notnull(row[c]):
+                    try:
+                        total += float(row[c])
+                    except:
+                        pass
+            return int(total)
+
+        # ALS (Alternative Learning System)
+        # REMOVED per user request
+        
+        # SPED (Special Education / SNED / Disability)
+        # REMOVED per user request
+
+        # Muslim / ALIVE Learners
+        # REMOVED per user request
+        
+        # Teaching Experience
+        experience_cols = [
+            'teach_exp_0_1', 'teach_exp_2_5', 'teach_exp_6_10',
+            'teach_exp_11_15', 'teach_exp_16_20', 'teach_exp_21_25',
+            'teach_exp_26_30', 'teach_exp_31_35', 'teach_exp_36_40',
+            'teach_exp_40_45'
+        ]
+        
+
+
+        # Specialized Teachers (Majors - excluding teaching load)
+        specialized_cols = [
+            'spec_general_major', 'spec_ece_major', 'spec_english_major', 'spec_filipino_major',
+            'spec_math_major', 'spec_science_major', 'spec_ap_major', 'spec_mapeh_major',
+            'spec_esp_major', 'spec_tle_major', 'spec_bio_sci_major', 'spec_phys_sci_major',
+            'spec_agri_fishery_major', 'spec_others_major'
+        ]
+
+        # Organized Classes
+        classes_cols = [
+            'classes_kinder', 'classes_grade_1', 'classes_grade_2', 'classes_grade_3',
+            'classes_grade_4', 'classes_grade_5', 'classes_grade_6', 'classes_grade_7',
+            'classes_grade_8', 'classes_grade_9', 'classes_grade_10', 'classes_grade_11',
+            'classes_grade_12'
+        ]
+
+        # Toilets (for Pupil-Toilet Ratio)
+        toilet_cols = ['res_toilets_female', 'res_toilets_male', 'res_toilets_common', 'res_toilets_pwd']
+        
+        # Furniture (for Pupil-Furniture Ratio)
+        furniture_cols = ['res_desk_func', 'res_armchair_func']
+
+        # School Resources (Inventory)
+        # Includes Functional items: Labs, Furniture, Sanitation, Devices
+        resource_cols = [
+            # Labs
+            'res_sci_labs', 'res_com_labs', 'res_tvl_workshops',
+            # Furniture
+            'res_desk_func', 'res_armchair_func',
+            # Sanitation
+            'res_toilets_male', 'res_toilets_female', 'res_toilets_pwd', 'res_toilets_common', 'res_handwash_func',
+            # Devices/Equipment
+            'res_ecart_func', 'res_laptop_func', 'res_tv_func', 'res_printer_func', 'res_toilet_func' 
+        ]
+        
+        # Calculate
+        summary_df = pd.DataFrame()
+        summary_df['school_id'] = df['school_id']
+        summary_df['school_name'] = df['school_name'] if 'school_name' in df.columns else ""
+        summary_df['iern'] = df['iern'] if 'iern' in df.columns else ""
+        summary_df['region'] = df['region'] if 'region' in df.columns else ""
+        summary_df['division'] = df['division'] if 'division' in df.columns else ""
+        summary_df['district'] = df['district'] if 'district' in df.columns else ""
+        
+        # Use simple integer casting for existing calculated floats
+        summary_df['total_teachers'] = df['num_teachers'].fillna(0).astype(int)
+        summary_df['total_teaching_experience'] = df.apply(lambda x: sum_cols_safe(x, experience_cols), axis=1)
+        summary_df['total_specialized_teachers'] = df.apply(lambda x: sum_cols_safe(x, specialized_cols), axis=1)
+        summary_df['total_classrooms'] = df['num_classrooms'].fillna(0).astype(int)
+        summary_df['total_seats'] = df['num_seats_granular'].fillna(0).astype(int)
+        summary_df['total_learners'] = df['total_enrollment'].fillna(0).astype(int)
+        summary_df['total_toilets'] = df.apply(lambda x: sum_cols_safe(x, toilet_cols), axis=1)
+        summary_df['total_furniture'] = df.apply(lambda x: sum_cols_safe(x, furniture_cols), axis=1)
+        
+        # REMOVED per user request: als, sped, muslim calculations
+        
+        summary_df['total_organized_classes'] = df.apply(lambda x: sum_cols_safe(x, classes_cols), axis=1)
+        summary_df['total_school_resources'] = df.apply(lambda x: sum_cols_safe(x, resource_cols), axis=1)
+        
+
+        # Net Learners (Removed)
+        # summary_df['net_learners'] = summary_df['total_learners']
+
+        # 3. Upsert into Database
+        # We'll use a loop with ON CONFLICT UPDATE for postgres
+        data_to_insert = summary_df.to_dict(orient='records')
+        
+        print(f"Syncing {len(data_to_insert)} records to school_summary...")
+        
+        # Batch insert/update
+        with engine.connect() as conn:
+            stmt = text("""
+                INSERT INTO school_summary (
+                    school_id, school_name, iern, region, division, district,
+                    total_teachers, total_classrooms, total_seats,
+                    total_learners, total_toilets, total_furniture, total_organized_classes, total_teaching_experience, total_specialized_teachers, total_school_resources,
+                    last_updated
+                ) VALUES (
+                    :school_id, :school_name, :iern, :region, :division, :district,
+                    :total_teachers, :total_classrooms, :total_seats,
+                    :total_learners, :total_toilets, :total_furniture, :total_organized_classes, :total_teaching_experience, :total_specialized_teachers, :total_school_resources,
+                    CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (school_id) DO UPDATE SET
+                    school_name = EXCLUDED.school_name,
+                    iern = EXCLUDED.iern,
+                    region = EXCLUDED.region,
+                    division = EXCLUDED.division,
+                    total_teachers = EXCLUDED.total_teachers,
+                    total_classrooms = EXCLUDED.total_classrooms,
+                    total_seats = EXCLUDED.total_seats,
+                    total_learners = EXCLUDED.total_learners,
+                    total_toilets = EXCLUDED.total_toilets,
+                    total_furniture = EXCLUDED.total_furniture,
+                    total_organized_classes = EXCLUDED.total_organized_classes,
+                    total_teaching_experience = EXCLUDED.total_teaching_experience,
+                    total_specialized_teachers = EXCLUDED.total_specialized_teachers,
+                    total_school_resources = EXCLUDED.total_school_resources,
+                    last_updated = CURRENT_TIMESTAMP;
+            """)
+            
+            conn.execute(stmt, data_to_insert)
+            # Ensure column is removed if it exists
+            conn.execute(text("ALTER TABLE school_summary DROP COLUMN IF EXISTS net_learners;"))
+            conn.commit()
+            
+        print("School Summary Table Updated Successfully.")
+
+    except Exception as e:
+        print(f"Error updating school_summary: {e}")
+
+def analyze_school_summary(engine):
+    """
+    Phase 2: Load school_summary and perform fraud detection analysis.
+    This replaces the original fraud detection that used school_profiles.
+    """
+    print("\n=== Phase 2: Fraud Detection on School Summary ===")
+    
+    try:
+        # Load school_summary
+        print("Loading school_summary for analysis...")
+        query = "SELECT * FROM school_summary"
+        df = pd.read_sql(query, engine)
+        print(f"Loaded {len(df)} schools from summary table.")
+        
+        # Calculate efficiency ratios using summary columns
+        print("Calculating efficiency ratios...")
+        
+        # Helper for safe division
+        def safe_divide(numerator, denominator, default=0):
+            return np.where(denominator > 0, numerator / denominator, default)
+        
+        # Pupil-Teacher Ratio (PTR)
+        df['ptr'] = safe_divide(df['total_learners'], df['total_teachers'], 0)
+        
+        # Pupil-Classroom Ratio (PCR)
+        df['pcr'] = safe_divide(df['total_learners'], df['total_classrooms'], 0)
+        
+        # Pupil-Seat Ratio (PSR)
+        df['psr'] = safe_divide(df['total_learners'], df['total_seats'], 0)
+        
+        # Pupil-Toilet Ratio (PtrR)
+        df['ptorr'] = safe_divide(df['total_learners'], df['total_toilets'], 0)
+        
+        # Pupil-Furniture Ratio (PFR)
+        df['pfr'] = safe_divide(df['total_learners'], df['total_furniture'], 0)
+        
+        # Run outlier detection (Z-scores)
+        print("Detecting outliers (Z-scores)...")
+        ratio_cols = ['ptr', 'pcr', 'psr', 'ptorr', 'pfr']
+        
+        for col in ratio_cols:
+            # Calculate Z-scores for non-zero values
+            valid_data = df[df[col] > 0][col]
+            if len(valid_data) > 10:  # Need sufficient data
+                z_scores = zscore(valid_data)
+                z_threshold = 3.0
+                
+                # Create flag column
+                flag_col = f'flag_outlier_{col}' if col != 'ptorr' and col != 'pfr' else f'flag_outlier_{col}'
+                df[flag_col] = False
+                df.loc[valid_data.index, flag_col] = np.abs(z_scores) > z_threshold
+        
+        # Flag zero values for critical metrics
+        df['flag_zero_teachers'] = (df['total_teachers'] == 0) & (df['total_learners'] > 0)
+        df['flag_zero_classrooms'] = (df['total_classrooms'] == 0) & (df['total_learners'] > 0)
+        
+        # === ENHANCED RULE 1: Additional Zero-Value Flags ===
+        print("Checking for zero-value anomalies...")
+        df['flag_zero_seats'] = (df['total_seats'] == 0) & (df['total_learners'] > 0)
+        df['flag_zero_toilets'] = (df['total_toilets'] == 0) & (df['total_learners'] > 0)
+        df['flag_zero_furniture'] = (df['total_furniture'] == 0) & (df['total_learners'] > 0)
+        df['flag_zero_resources'] = (df['total_school_resources'] == 0) & (df['total_learners'] > 0)
+        df['flag_zero_organized_classes'] = (df['total_organized_classes'] == 0) & (df['total_learners'] > 0)
+        
+        # === ENHANCED RULE 2: Correlation-Based Anomaly Detection ===
+        print("Running correlation-based anomaly detection...")
+        
+        # Metrics to check against total_learners
+        metrics_to_check = {
+            'total_teachers': 'teachers',
+            'total_classrooms': 'classrooms',
+            'total_seats': 'seats',
+            'total_toilets': 'toilets',
+            'total_furniture': 'furniture',
+            'total_organized_classes': 'organized_classes'
+        }
+        
+        for metric_col, metric_name in metrics_to_check.items():
+            # Only analyze schools with learners and non-zero metric values
+            valid = (df['total_learners'] > 0) & (df[metric_col] > 0)
+            
+            if valid.sum() > 30:  # Need sufficient data for meaningful correlation
+                X = df.loc[valid, 'total_learners'].values
+                y = df.loc[valid, metric_col].values
+                
+                # Calculate expected value using simple linear regression (y = slope * X)
+                slope = np.sum(X * y) / np.sum(X * X) if np.sum(X * X) > 0 else 0
+                
+                # Calculate residuals for ALL schools (not just valid)
+                expected = df['total_learners'] * slope
+                residual = df[metric_col] - expected
+                
+                # Calculate Z-scores of residuals for valid data
+                valid_residuals = residual[valid]
+                if len(valid_residuals) > 0 and valid_residuals.std() > 0:
+                    z_scores = (valid_residuals - valid_residuals.mean()) / valid_residuals.std()
+                    z_threshold = 3.0
+                    
+                    # Flag schools with large deviations
+                    df[f'flag_anomaly_{metric_name}'] = False
+                    df.loc[valid, f'flag_anomaly_{metric_name}'] = np.abs(z_scores) > z_threshold
+                else:
+                    df[f'flag_anomaly_{metric_name}'] = False
+            else:
+                df[f'flag_anomaly_{metric_name}'] = False
+        
+        # === ENHANCED RULE 3: Teacher Metrics Validation ===
+        print("Validating teacher metrics consistency...")
+        
+        # Teaching experience should approximately equal total teachers
+        # Allow some tolerance (±5) for rounding and data entry variations
+        df['flag_exp_mismatch'] = (
+            (df['total_teachers'] > 0) & 
+            (np.abs(df['total_teaching_experience'] - df['total_teachers']) > 5)
+        )
+        
+        # Specialized teachers cannot exceed total teachers
+        df['flag_spec_exceeds'] = df['total_specialized_teachers'] > df['total_teachers']
+        
+        # Calculate data health score with HEAVY penalty for zero-value flags
+        print("Calculating data health scores...")
+        
+        # Separate zero-value flags from other flags
+        zero_flags = [col for col in df.columns if col.startswith('flag_zero_')]
+        other_flags = [col for col in df.columns if col.startswith('flag_') and not col.startswith('flag_zero_')]
+        
+        # Count each type
+        df['zero_flag_count'] = df[zero_flags].sum(axis=1)
+        df['other_flag_count'] = df[other_flags].sum(axis=1)
+        
+        # Heavy penalty for zero values (20 points each), lighter for anomalies (5 points each)
+        df['data_health_score'] = np.maximum(100 - (df['zero_flag_count'] * 20) - (df['other_flag_count'] * 5), 0)
+        
+        # Generate issues summary
+        def generate_issues(row):
+            issues = []
+            
+            # Zero-value issues (highest priority)
+            if row['flag_zero_teachers']:
+                issues.append("Missing teachers data")
+            if row['flag_zero_classrooms']:
+                issues.append("Missing classrooms data")
+            if row['flag_zero_seats']:
+                issues.append("Missing seats data")
+            if row['flag_zero_toilets']:
+                issues.append("Missing toilets data")
+            if row['flag_zero_furniture']:
+                issues.append("Missing furniture data")
+            if row['flag_zero_resources']:
+                issues.append("Missing resources data")
+            if row['flag_zero_organized_classes']:
+                issues.append("Missing organized classes data")
+            
+            # Correlation anomalies
+            if row['flag_anomaly_teachers']:
+                issues.append("Teacher count anomaly")
+            if row['flag_anomaly_classrooms']:
+                issues.append("Classroom count anomaly")
+            if row['flag_anomaly_seats']:
+                issues.append("Seat count anomaly")
+            if row['flag_anomaly_toilets']:
+                issues.append("Toilet count anomaly")
+            if row['flag_anomaly_furniture']:
+                issues.append("Furniture count anomaly")
+            if row['flag_anomaly_organized_classes']:
+                issues.append("Organized classes anomaly")
+            
+            # Teacher validation issues
+            if row['flag_exp_mismatch']:
+                issues.append("Teaching experience mismatch")
+            if row['flag_spec_exceeds']:
+                issues.append("Specialized teachers exceed total")
+            
+            # Ratio outliers
+            if row['flag_outlier_ptr']:
+                issues.append("Pupil-teacher ratio outlier")
+            if row['flag_outlier_pcr']:
+                issues.append("Pupil-classroom ratio outlier")
+            if row['flag_outlier_psr']:
+                issues.append("Pupil-seat ratio outlier")
+            if row['flag_outlier_ptorr']:
+                issues.append("Pupil-toilet ratio outlier")
+            if row['flag_outlier_pfr']:
+                issues.append("Pupil-furniture ratio outlier")
+            
+            return "; ".join(issues) if issues else "None"
+        
+        df['issues'] = df.apply(generate_issues, axis=1)
+        
+        # Description based on score (only 100 is Excellent)
+        def get_health_description(score):
+            if score == 100:
+                return "Excellent"
+            elif score >= 80:
+                return "Good"
+            elif score >= 50:
+                return "Fair"
+            else:
+                return "Critical"
+        
+        df['data_health_description'] = df['data_health_score'].apply(get_health_description)
+        
+        # Update database with health scores and flags
+        print("Updating school_summary with health scores...")
+        
+        # Get all flag columns
+        flag_columns = [col for col in df.columns if col.startswith('flag_')]
+        
+        # Prepare update data
+        update_cols = ['school_id', 'data_health_score', 'data_health_description', 'issues'] + flag_columns
+        update_df = df[update_cols]
+        
+        with engine.connect() as conn:
+            for _, row in update_df.iterrows():
+                # Build dynamic UPDATE statement
+                set_clauses = ['data_health_score = :score', 'data_health_description = :description', 'issues = :issues']
+                params = {
+                    'school_id': row['school_id'],
+                    'score': float(row['data_health_score']),
+                    'description': row['data_health_description'],
+                    'issues': row['issues']
+                }
+                
+                for flag_col in flag_columns:
+                    set_clauses.append(f"{flag_col} = :{flag_col}")
+                    params[flag_col] = bool(row[flag_col]) if pd.notnull(row[flag_col]) else False
+                
+                update_stmt = text(f"""
+                    UPDATE school_summary 
+                    SET {', '.join(set_clauses)}
+                    WHERE school_id = :school_id
+                """)
+                
+                conn.execute(update_stmt, params)
+            
+            conn.commit()
+        
+        print(f"Successfully updated health scores for {len(df)} schools.")
+        print(f"Average health score: {df['data_health_score'].mean():.1f}")
+        print(f"Schools with Critical health: {len(df[df['data_health_description'] == 'Critical'])}")
+        
+    except Exception as e:
+        print(f"Error in analyze_school_summary: {e}")
+        import traceback
+        traceback.print_exc()
+
 def main():
     # Parse Arguments
     target_school_id = None
@@ -536,7 +1039,10 @@ def main():
     else:
         print("Started Advanced Fraud Detection (Full Batch)")
 
-    # 1. Connect
+    # === PHASE 1: Populate School Summary from School Profiles ===
+    print("\n=== Phase 1: Populating School Summary ===")
+    
+    # 1. Connect and load school_profiles
     df, engine = connect_and_load_data()
     if df is None or df.empty:
         return
@@ -547,23 +1053,12 @@ def main():
     # 3. Clean & Impute
     df = clean_and_impute(df)
     
-    # 4. Feature Engineering
-    df = feature_engineering(df)
+    # 4. Update Summary Table (with aggregates from school_profiles)
+    update_school_summary_table(df, engine)
     
-    # 5. Univariate
-    df = detect_univariate_outliers(df)
-    
-    # 6. Multivariate
-    df = detect_multivariate_outliers(df)
-    
-    # 7. Auditing & Scoring
-    df = audit_data_health_completeness(df)
-    df = calculate_final_scores(df) # Generate forms_to_recheck here
-    
-    # 8. Export (Skipped)
-    
-    # 9. Update DB (Targeted)
-    update_database(df, engine, target_school_id)
+    # === PHASE 2: Fraud Detection on School Summary ===
+    # Run analysis on the populated summary table
+    analyze_school_summary(engine)
     
     print("\nAdvanced Fraud Detection & Health Check Complete.")
 

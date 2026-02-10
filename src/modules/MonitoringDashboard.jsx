@@ -1117,10 +1117,8 @@ const MonitoringDashboard = () => {
                                                         // Validation Percentages for Stacked Bar
                                                         const validatedPct = totalSchools > 0 ? (validatedCount / totalSchools) * 100 : 0;
 
-                                                        // Fix: "For Validation" should ONLY be Critical schools.
-                                                        // Previous logic (completed - validated) included NULLs.
-                                                        const criticalCount = parseInt(startStat?.critical_schools || 0);
-                                                        const forValidationCount = criticalCount;
+                                                        // For Validation: Use the for_validation_schools field from API
+                                                        const forValidationCount = parseInt(startStat?.for_validation_schools || 0);
                                                         const forValidationPct = totalSchools > 0 ? (forValidationCount / totalSchools) * 100 : 0;
 
                                                         // Define colors for progress bars (cycling)
@@ -1328,20 +1326,56 @@ const MonitoringDashboard = () => {
                                                                             <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors truncate">{s.school_name}</h4>
                                                                             {s.percentage === 100 && <FiCheckCircle className="text-emerald-500 shrink-0" size={14} />}
 
-                                                                            {/* VALIDATION BADGES (Based on Data Health) */}
-                                                                            {/* Validated if NOT Critical (Excellent, Good, Fair, OR NULL/Undefined) - essentially anything NOT Critical */}
-                                                                            {s.data_health_description !== 'Critical' && (
-                                                                                <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1">
-                                                                                    <FiCheckCircle size={10} /> Validated
-                                                                                </span>
-                                                                            )}
-                                                                            {/* Only Critical is "For Validation" */}
-                                                                            {s.data_health_description === 'Critical' && (
-                                                                                <span className="text-[9px] bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1 animate-pulse">
-                                                                                    <FiAlertCircle size={10} /> For Validation
-                                                                                </span>
-                                                                            )}
+                                                                            {/* VALIDATION BADGES (Based on Data Health from school_summary) */}
+                                                                            {/* DATA HEALTH SCORE DISPLAY */}
+                                                                            {(() => {
+                                                                                // Default to 0 if undefined
+                                                                                const score = s.data_health_score !== undefined ? s.data_health_score : 0;
 
+                                                                                let colorClass = 'bg-slate-100 text-slate-600';
+                                                                                let label = '';
+                                                                                let showScore = true;
+
+                                                                                // 1. Determine Label & Color based on Score
+                                                                                if (score <= 50) {
+                                                                                    colorClass = 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400';
+                                                                                    label = 'Major Data Anomalies';
+                                                                                } else if (score <= 85) {
+                                                                                    colorClass = 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400';
+                                                                                    label = 'Minor Data Anomalies';
+                                                                                } else if (score <= 99) {
+                                                                                    colorClass = 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400';
+                                                                                    label = 'Acceptable Variability';
+                                                                                } else { // 100 or higher
+                                                                                    colorClass = 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400';
+                                                                                    label = 'Excellent';
+                                                                                }
+
+                                                                                // 2. Override for Manually Validated (Optional: Keep separate or merge?)
+                                                                                // User Note: "Instead of just For Validation..."
+                                                                                // If already Validated, we can show "Validated" tag AND the score
+
+                                                                                return (
+                                                                                    <div className="flex flex-col items-start gap-1">
+                                                                                        {/* Show Validated Badge if applicable */}
+                                                                                        {(s.data_health_description === 'Excellent' || s.school_head_validation) && (
+                                                                                            <span className="text-[9px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1 mb-0.5">
+                                                                                                <FiCheckCircle size={10} /> Validated
+                                                                                            </span>
+                                                                                        )}
+
+                                                                                        {/* Always show Data Health Score if not just generic "Validated" fallback */}
+                                                                                        {/* If it's validated, we might still want to see the underlying score if it differs? 
+                                                            Usually Validated implies Score 100 or manually overridden. 
+                                                            Let's show the score tag regardless, as it gives more info.
+                                                        */}
+                                                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1 ${colorClass}`}>
+                                                                                            <FiAlertCircle size={10} />
+                                                                                            <span className="opacity-75">Score: {score}</span> • {label}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                );
+                                                                            })()}
                                                                             {s.percentage === 0 && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0">No Data</span>}
                                                                         </div>
 
