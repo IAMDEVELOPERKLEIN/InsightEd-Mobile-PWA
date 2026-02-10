@@ -4002,6 +4002,9 @@ app.get('/api/projects/:id', async (req, res) => {
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
         TO_CHAR(construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
         project_category AS "projectCategory", scope_of_work AS "scopeOfWork",
+        number_of_classrooms AS "numberOfClassrooms", number_of_storeys AS "numberOfStoreys",
+        number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
+        pow_pdf, dupa_pdf, contract_pdf,
         latitude, longitude
       FROM "engineer_form" WHERE project_id = $1;
     `;
@@ -4030,6 +4033,9 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
         TO_CHAR(construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
         project_category AS "projectCategory", scope_of_work AS "scopeOfWork",
+        number_of_classrooms AS "numberOfClassrooms", number_of_storeys AS "numberOfStoreys",
+        number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
+        pow_pdf, dupa_pdf, contract_pdf,
         latitude, longitude
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;

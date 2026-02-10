@@ -202,9 +202,56 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
+                                <DetailItem label="Funds Utilized" value={project.fundsUtilized} isMoney />
+                                <div className="hidden sm:block"></div> {/* Spacer */}
+                            </div>
+                            
+                            {/* Physical Specs */}
+                            <div className="grid grid-cols-3 gap-3">
+                                <DetailItem label="Classrooms" value={project.numberOfClassrooms} />
+                                <DetailItem label="Storeys" value={project.numberOfStoreys} />
+                                <DetailItem label="Sites" value={project.numberOfSites} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
                                 <DetailItem label="Region" value={project.region} />
                                 <DetailItem label="Division" value={project.division} />
                             </div>
+                        </div>
+                    </div>
+
+
+
+                    {/* Documents Section */}
+                    <div>
+                        <h3 className="text-slate-700 font-bold text-sm mb-2 ml-1">Project Documents</h3>
+                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-2">
+                             {['pow_pdf', 'dupa_pdf', 'contract_pdf'].map(docKey => {
+                                const docValue = project[docKey];
+                                let label = docKey.replace('_pdf', '').toUpperCase();
+                                return (
+                                    <div key={docKey} className="flex justify-between items-center p-2 border-b border-slate-50 last:border-0">
+                                        <div className="flex items-center gap-2">
+                                            <div className="p-1.5 bg-red-50 text-red-500 rounded-lg">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M10 13l-2.5 2.5 2.5 2.5"/><path d="M13 13l2.5 2.5-2.5 2.5"/></svg>
+                                            </div>
+                                            <span className="text-xs font-bold text-slate-700">{label}</span>
+                                        </div>
+                                        {docValue ? (
+                                            <a 
+                                                href={docValue} 
+                                                download={`${project.schoolName}_${label}.pdf`}
+                                                className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
+                                            >
+                                                Download PDF
+                                            </a>
+                                        ) : (
+                                            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-full">
+                                                Not Available
+                                            </span>
+                                        )}
+                                    </div>
+                                )
+                             })}
                         </div>
                     </div>
 
