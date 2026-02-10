@@ -4140,6 +4140,11 @@ app.post('/api/upload-image', async (req, res) => {
 });
 
 // --- 21. GET: Fetch Project Images (Active) ---
+
+
+
+
+// --- 21. GET: Fetch Project Images (Active) ---
 app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {

@@ -12,41 +12,31 @@ const LazyImage = ({ imageId, meta, onClick }) => {
     const [error, setError] = useState(false);
 
     useEffect(() => {
-        let isMounted = true;
-        const fetchImage = async () => {
-            // 1. Try Cache First (Optional optimization for offline if implemented)
-            // For now, straight fetch
-            try {
-                const res = await fetch(`/api/image/${imageId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    // normalize base64
-                    let base64 = data.image_data || "";
-                    if (!base64.startsWith("http") && !base64.startsWith("data:")) {
-                        base64 = `data:image/jpeg;base64,${base64}`;
-                    }
-                    if (isMounted) {
-                        setSrc(base64);
-                        setLoading(false);
-                    }
-                } else {
-                    throw new Error("Failed to load");
-                }
-            } catch (err) {
-                console.warn(`Failed to load image ${imageId}`, err);
-                if (isMounted) {
-                    setError(true);
-                    setLoading(false);
+        if (meta.image_data) {
+            let base64 = meta.image_data;
+            // Handle JSON string if present (legacy)
+            if (typeof base64 === 'string' && base64.trim().startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(base64);
+                    base64 = parsed.image_data || parsed;
+                } catch (e) {
+                    console.error("Failed to parse image JSON", e);
                 }
             }
-        };
-
-        // If we already passed data (e.g. from cache if we decide to cache full objects), use it
-        // But the parent is now sending metadata only.
-        fetchImage();
-
-        return () => { isMounted = false; };
-    }, [imageId]);
+            
+            // Ensure data URI prefix
+            if (typeof base64 === 'string' && !base64.startsWith("http") && !base64.startsWith("data:")) {
+                base64 = `data:image/jpeg;base64,${base64}`;
+            }
+            
+            setSrc(base64);
+            setLoading(false);
+        } else {
+            // Fallback or error if no data
+            setError(true);
+            setLoading(false);
+        }
+    }, [meta]);
 
     if (loading) {
         return (
@@ -74,6 +64,7 @@ const LazyImage = ({ imageId, meta, onClick }) => {
                 alt="Site progress"
                 className="w-full h-40 object-cover cursor-pointer bg-slate-100"
                 loading="lazy"
+                onError={() => setError(true)}
             />
             <div className="p-2 bg-white">
                 {!meta.projectId && meta.school_name && (
@@ -82,7 +73,7 @@ const LazyImage = ({ imageId, meta, onClick }) => {
                     </p>
                 )}
                 <p className="text-[9px] text-slate-400">
-                    {new Date(meta.created_at).toLocaleDateString()} at {new Date(meta.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(meta.created_at).toLocaleDateString()}
                 </p>
             </div>
         </div>
