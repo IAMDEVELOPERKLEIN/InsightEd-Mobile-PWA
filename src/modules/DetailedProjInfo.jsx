@@ -303,21 +303,26 @@ const DetailedProjInfo = () => {
                                 {/* EXTERNAL (First) */}
                                 <div>
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos</h4>
-                                    {projectImages.filter(img => img.category === 'External').length > 0 ? (
+                                    {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external').length > 0 ? (
                                          <div className="grid grid-cols-2 gap-3">
-                                            {projectImages.filter(img => img.category === 'External').map((img, idx) => {
+                                            {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external').map((img, idx) => {
                                                  const getImageSrc = (imageItem) => {
                                                     if (imageItem.image_url) return imageItem.image_url;
                                                     if (imageItem.image_data) {
-                                                        if (typeof imageItem.image_data === 'string' && imageItem.image_data.trim().startsWith('{')) {
+                                                        let base64 = imageItem.image_data;
+                                                        if (typeof base64 === 'string' && base64.trim().startsWith('{')) {
                                                             try {
-                                                                const parsed = JSON.parse(imageItem.image_data);
-                                                                return parsed.image_data || parsed; 
+                                                                const parsed = JSON.parse(base64);
+                                                                base64 = parsed.image_data || parsed; 
                                                             } catch (e) {
-                                                                return imageItem.image_data; 
+                                                                // keep as is
                                                             }
                                                         }
-                                                        return imageItem.image_data;
+                                                        // Ensure prefix
+                                                        if (typeof base64 === 'string' && !base64.startsWith("http") && !base64.startsWith("data:")) {
+                                                            return `data:image/jpeg;base64,${base64}`;
+                                                        }
+                                                        return base64;
                                                     }
                                                     return null;
                                                 };
@@ -347,21 +352,25 @@ const DetailedProjInfo = () => {
                                 {/* INTERNAL (Second) */}
                                 <div>
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos</h4>
-                                    {projectImages.filter(img => img.category === 'Internal' || !img.category).length > 0 ? (
+                                    {projectImages.filter(img => !img.category || img.category.toLowerCase() !== 'external').length > 0 ? (
                                         <div className="grid grid-cols-2 gap-3">
-                                            {projectImages.filter(img => img.category === 'Internal' || !img.category).map((img, idx) => {
+                                            {projectImages.filter(img => !img.category || img.category.toLowerCase() !== 'external').map((img, idx) => {
                                                 const getImageSrc = (imageItem) => {
                                                     if (imageItem.image_url) return imageItem.image_url;
                                                     if (imageItem.image_data) {
-                                                        if (typeof imageItem.image_data === 'string' && imageItem.image_data.trim().startsWith('{')) {
+                                                        let base64 = imageItem.image_data;
+                                                        if (typeof base64 === 'string' && base64.trim().startsWith('{')) {
                                                             try {
-                                                                const parsed = JSON.parse(imageItem.image_data);
-                                                                return parsed.image_data || parsed; 
+                                                                const parsed = JSON.parse(base64);
+                                                                base64 = parsed.image_data || parsed; 
                                                             } catch (e) {
-                                                                return imageItem.image_data;
+                                                                // keep as is
                                                             }
                                                         }
-                                                        return imageItem.image_data;
+                                                        if (typeof base64 === 'string' && !base64.startsWith("http") && !base64.startsWith("data:")) {
+                                                            return `data:image/jpeg;base64,${base64}`;
+                                                        }
+                                                        return base64;
                                                     }
                                                     return null;
                                                 };
