@@ -219,14 +219,7 @@ const MonitoringDashboard = () => {
                 ...(queryDistrict && { district: queryDistrict })
             });
 
-            // FIX: For SDO, we want the "Top Stats" to remain as Division Overview even when drilling down to a district.
-            // Create a separate params object for the main stats that EXCLUDES district.
-            const statsParams = new URLSearchParams({
-                region: queryRegion || '',
-                // FIX: For RO, exclude division from Top Stats to keep them Regional
-                ...(queryDivision && effectiveRole !== 'Regional Office' && { division: queryDivision })
-                // explicitly OMIT district here
-            });
+
 
             const statsParams = new URLSearchParams();
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { getCachedProjects, cacheGallery, getCachedGallery } from '../db';
 import LocationPickerMap from '../components/LocationPickerMap';
