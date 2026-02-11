@@ -4081,7 +4081,8 @@ app.get('/api/projects', async (req, res) => {
             accomplishment_percentage, project_allocation, batch_of_funds, contractor_name, other_remarks,
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
-            number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized
+            number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
+            pow_pdf, dupa_pdf, contract_pdf
           FROM engineer_form
           ORDER BY ipc, project_id DESC
       )
@@ -4099,6 +4100,7 @@ app.get('/api/projects', async (req, res) => {
         p.project_category AS "projectCategory", p.scope_of_work AS "scopeOfWork",
         p.number_of_classrooms AS "numberOfClassrooms", p.number_of_storeys AS "numberOfStoreys",
         p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
+        p.pow_pdf, p.dupa_pdf, p.contract_pdf,
         p.latitude, p.longitude
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
@@ -4311,8 +4313,19 @@ app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {
     // FIXED: Included image_data so frontend can render them
-    const query = `SELECT id, uploaded_by, created_at, image_data, category FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
+    // AND fetch by IPC to ensure persistence across updates (new project_ids)
+    const query = `
+      SELECT id, uploaded_by, created_at, image_data, category 
+      FROM engineer_image 
+      WHERE project_id IN (
+          SELECT project_id FROM engineer_form WHERE ipc = (
+              SELECT ipc FROM engineer_form WHERE project_id = $1
+          )
+      ) 
+      ORDER BY created_at DESC;
+    `;
     const result = await pool.query(query, [projectId]);
+
     res.json(result.rows);
   } catch (err) {
     console.error("âŒ Error fetching project images:", err.message);
@@ -5976,26 +5989,26 @@ app.get('/api/migrate-lgu-image-schema', async (req, res) => {
   try {
     const client = await pool.connect();
     const results = [];
-if (isMainModule || process.env.START_SERVER === 'true') {
+    if (isMainModule || process.env.START_SERVER === 'true') {
 
-  const PORT = process.env.PORT || 3000;
+      const PORT = process.env.PORT || 3000;
 
 
 
-  const server = app.listen(PORT, () => {
-    console.log(`\nðŸš€ SERVER RUNNING ON PORT ${PORT} `);
-    console.log(`ðŸ‘‰ API Endpoint: http://localhost:${PORT}/api/send-otp`);
-    console.log(`ðŸ‘‰ CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
-  });
+      const server = app.listen(PORT, () => {
+        console.log(`\nðŸš€ SERVER RUNNING ON PORT ${PORT} `);
+        console.log(`ðŸ‘‰ API Endpoint: http://localhost:${PORT}/api/send-otp`);
+        console.log(`ðŸ‘‰ CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+      });
 
-  server.on('error', (e) => {
-    if (e.code === 'EADDRINUSE') {
-      console.error(`âŒ Port ${PORT} is already in use! Please close the other process or use a different port.`);
-    } else {
-      console.error("âŒ Server Error:", e);
+      server.on('error', (e) => {
+        if (e.code === 'EADDRINUSE') {
+          console.error(`âŒ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+        } else {
+          console.error("âŒ Server Error:", e);
+        }
+      });
     }
-  });
-}
 
     // Add category column to lgu_image
     try {
