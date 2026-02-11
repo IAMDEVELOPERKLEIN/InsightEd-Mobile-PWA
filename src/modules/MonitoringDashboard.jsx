@@ -1014,7 +1014,7 @@ const MonitoringDashboard = () => {
 
 
                     <div className="relative z-10">
-                        {userData?.role === 'Central Office' || userData?.role === 'Super User' ? (
+                        {effectiveRole === 'Central Office' ? (
                             <>
                                 <div className="flex items-center gap-2 mb-4">
                                     {(coRegion || coDivision || coDistrict) && (
@@ -1059,7 +1059,7 @@ const MonitoringDashboard = () => {
                                     <span className="text-xs font-bold uppercase tracking-widest">
                                         {effectiveRole === 'Regional Office'
                                             ? (effectiveRegion?.toString().toLowerCase().includes('region') ? effectiveRegion : `Region ${effectiveRegion}`)
-                                            : `SDO ${userData?.division?.toString().replace(/\s+Division$/i, '')}`
+                                            : `SDO ${(effectiveDivision || userData?.division)?.toString().replace(/\s+Division$/i, '')}`
                                         }
                                     </span>
                                 </div>
@@ -1082,7 +1082,7 @@ const MonitoringDashboard = () => {
 
 
                     {/* Tabs - Hidden for SDO AND RO as they use Bottom Nav. Also hidden for Central Office when drilling down to a region. */}
-                    {userData?.role !== 'School Division Office' && userData?.role !== 'Regional Office' && !(userData?.role === 'Central Office' && coRegion) && (
+                    {effectiveRole !== 'School Division Office' && effectiveRole !== 'Regional Office' && !(effectiveRole === 'Central Office' && coRegion) && (
                         <div className="flex gap-2 mt-8 relative z-10">
                             {['all', 'school', 'engineer'].map(tab => (
                                 <button

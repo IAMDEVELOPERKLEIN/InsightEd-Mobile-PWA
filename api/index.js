@@ -2921,6 +2921,30 @@ app.get('/api/locations/municipalities', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- Province lookup (for LGU Super User Selector) ---
+app.get('/api/locations/provinces', async (req, res) => {
+  const { region } = req.query;
+  try {
+    const result = await pool.query(
+      "SELECT DISTINCT province FROM schools WHERE region = $1 AND province IS NOT NULL AND province != '' ORDER BY province ASC",
+      [region]
+    );
+    res.json(result.rows.map(r => r.province));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- Municipality by Province lookup (for LGU Super User Selector) ---
+app.get('/api/locations/municipalities-by-province', async (req, res) => {
+  const { region, province } = req.query;
+  try {
+    const result = await pool.query(
+      "SELECT DISTINCT municipality FROM schools WHERE region = $1 AND province = $2 AND municipality IS NOT NULL AND municipality != '' ORDER BY municipality ASC",
+      [region, province]
+    );
+    res.json(result.rows.map(r => r.municipality));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/locations/schools', async (req, res) => {
   const { region, division, district, municipality } = req.query;
   try {
