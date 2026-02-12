@@ -119,6 +119,9 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700 text-xs text-slate-600 dark:text-slate-300">
             {projects.map((p, idx) => {
+              // DEBUG: Check values for "Warning" logic
+              if (idx === 0) console.log("DEBUG RENDER Project[0]:", { id: p.id, school: p.schoolName, pow: p.pow_pdf, dupa: p.dupa_pdf, contract: p.contract_pdf });
+
               const isLocked = p.status === ProjectStatus.Completed;
               const progress = p.accomplishmentPercentage || 0;
 
@@ -456,6 +459,13 @@ const EngineerProjects = () => {
   };
 
   const handleSaveProject = async (updatedProject) => {
+    console.log("DEBUG SAVE PROJECT PAYLOAD:", {
+       id: updatedProject.id, 
+       pow_len: updatedProject.pow_pdf?.length, 
+       dupa_len: updatedProject.dupa_pdf?.length, 
+       contract_len: updatedProject.contract_pdf?.length 
+    });
+
     const user = auth.currentUser;
     if (!user) return;
 
