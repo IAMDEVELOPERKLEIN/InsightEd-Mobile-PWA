@@ -2509,6 +2509,27 @@ app.get('/api/check-school/:id', async (req, res) => {
   }
 });
 
+// --- 3a. GET: Get School Profile by ID (For Validation) ---
+app.get('/api/school-profile/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT school_id, school_name, region, division, latitude, longitude 
+      FROM school_profiles 
+      WHERE school_id = $1
+    `, [schoolId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "School not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch School Profile Error:", err);
+    res.status(500).json({ error: "Failed to fetch school profile" });
+  }
+});
+
 // --- 3b. GET: Fetch All Schools (For Admin Dashboard) ---
 app.get('/api/schools', async (req, res) => {
   try {
