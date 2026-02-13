@@ -373,34 +373,32 @@ const SchoolInformation = ({ embedded = false }) => {
     const sectionClass = "bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-5";
 
     return (
-        <div className={`min-h-screen font-sans pb-40 ${embedded ? 'bg-transparent' : 'bg-slate-50'}`}>
+        <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300 font-sans ${embedded ? 'pb-32 !bg-transparent' : 'pb-40'}`}>
             {/* --- PREMIUM BLUE HEADER - Hide if embedded --- */}
             {!embedded && (
-                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+                <div className="bg-[#004A99] min-h-[220px] rounded-b-[2.5rem] relative shadow-lg overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full bg-[url('/grid-pattern.png')] opacity-10"></div>
+                    <div className="absolute top-10 right-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+                    <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-blue-400/20 rounded-full blur-2xl"></div>
 
-                    <div className="relative z-10 flex items-center gap-4">
-                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
+                    <div className="relative pt-12 px-6 flex items-center justify-between z-10">
+                        <button onClick={goBack} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl backdrop-blur-md transition-all text-white border border-white/10 shadow-lg group">
+                            <FiArrowLeft size={22} className="group-hover:-translate-x-1 transition-transform" />
                         </button>
-                        <div>
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-200 mb-1 bg-white/10 px-3 py-1 rounded-full border border-white/5">School Form 2</span>
                             <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-white tracking-tight">School Head Info</h1>
-                                {isDummy && (
-                                    <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-200 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-amber-500/30">
-                                        Sample Mode
-                                    </span>
-                                )}
+                                <div className="p-1.5 bg-yellow-400 rounded-lg shadow-lg rotate-3">
+                                    <FiBriefcase className="text-yellow-900 text-lg" />
+                                </div>
+                                <h1 className="text-xl font-bold text-white tracking-tight">School Head</h1>
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">
-                                {(viewOnly || isReadOnly) ? "Monitor View (Read-Only)" : (lastUpdated ? `Last Verified: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage personnel record')}
-                            </p>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="px-5 -mt-10 relative z-20 max-w-3xl mx-auto space-y-5">
+            <div className={`px-5 relative z-20 max-w-3xl mx-auto space-y-5 ${embedded ? 'pt-4' : '-mt-10'}`}>
 
                 {/* --- PSI_CD LOOKUP SECTION --- */}
                 <div className={sectionClass}>
@@ -537,27 +535,29 @@ const SchoolInformation = ({ embedded = false }) => {
             </div>
 
             {/* Footer Actions - Hide if embedded */}
-            {!embedded && (
-                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                    <div className="max-w-lg mx-auto flex gap-3">
-                        {(viewOnly || isReadOnly) ? (
-                            <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
-                        ) : isLocked ? (
-                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                                🔓 Unlock to Edit Data
-                            </button>
-                        ) : (
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                                {isSaving ? (
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <><FiSave /> Save Changes</>
-                                )}
-                            </button>
-                        )}
+            {
+                !embedded && (
+                    <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                        <div className="max-w-lg mx-auto flex gap-3">
+                            {(viewOnly || isReadOnly) ? (
+                                <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
+                            ) : isLocked ? (
+                                <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                    🔓 Unlock to Edit Data
+                                </button>
+                            ) : (
+                                <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {isSaving ? (
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <><FiSave /> Save Changes</>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* --- MODALS --- */}
             {

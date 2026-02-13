@@ -393,29 +393,44 @@ const Enrolment = ({ embedded = false }) => {
     if (loading) return <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-slate-900"><div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div></div>;
 
     return (
-        <div className={`min-h-screen font-sans pb-40 ${embedded ? 'bg-transparent' : 'bg-slate-50'}`}>
-            {/* Standard Blue Header - Hide if embedded */}
+        <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300 font-sans ${embedded ? 'pb-32 !bg-transparent' : 'pb-40'}`}>
             {!embedded && (
-                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
-                    <div className="relative z-10 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                                <FiArrowLeft size={24} />
-                            </button>
-                            <div>
-                                <h1 className="text-2xl font-bold text-white tracking-tight">Enrolment</h1>
-                                <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the total number of officially enrolled learners per grade level?</p>
+                <div className="bg-[#004A99] min-h-[220px] rounded-b-[2.5rem] relative shadow-lg overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full bg-[url('/grid-pattern.png')] opacity-10"></div>
+                    <div className="absolute top-10 right-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+                    <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-blue-400/20 rounded-full blur-2xl"></div>
+
+                    <div className="relative pt-12 px-6 flex items-center justify-between z-10">
+                        <button onClick={goBack} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl backdrop-blur-md transition-all text-white border border-white/10 shadow-lg group">
+                            <FiArrowLeft size={22} className="group-hover:-translate-x-1 transition-transform" />
+                        </button>
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-200 mb-1 bg-white/10 px-3 py-1 rounded-full border border-white/5">School Form 4</span>
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-yellow-400 rounded-lg shadow-lg rotate-3">
+                                    <FiLayers className="text-yellow-900 text-lg" />
+                                </div>
+                                <h1 className="text-xl font-bold text-white tracking-tight">Enrolment</h1>
                             </div>
                         </div>
-                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiHelpCircle size={24} />
-                        </button>
+                    </div>
+                    {/* Header Stats */}
+                    <div className="px-6 mt-8 flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                        <div className="flex-shrink-0 bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3 min-w-[120px]">
+                            <span className="block text-[10px] text-blue-200 font-bold uppercase mb-1">Total Learners</span>
+                            <span className="text-2xl font-black text-white">{formData.total_enrollment.toLocaleString()}</span>
+                        </div>
+                        {formData.aral_total > 0 && (
+                            <div className="flex-shrink-0 bg-amber-500/20 backdrop-blur-md border border-amber-500/30 rounded-2xl p-3 min-w-[120px]">
+                                <span className="block text-[10px] text-amber-200 font-bold uppercase mb-1">ARAL Learners</span>
+                                <span className="text-2xl font-black text-amber-100">{formData.aral_total.toLocaleString()}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
-            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-5">
+            <div className={`px-5 relative z-20 max-w-3xl mx-auto space-y-4 ${embedded ? 'pt-4' : '-mt-10'}`}>
 
                 {/* Grand Total Cards - Compact */}
                 <div className="bg-white p-6 rounded-[2rem] shadow-xl shadow-blue-900/5 border border-slate-100 flex items-center justify-between">
