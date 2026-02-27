@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiArrowLeft, FiSave, FiCheckCircle, FiCheck } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiLock, FiUnlock, FiEdit2 } from "react-icons/fi";
 import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
 import locationData from '../../locations.json';
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 4;
+
+// Shared chunky input class
+const chunkyInput = "w-full p-4 mt-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:bg-blue-50 transition-colors shadow-sm";
+const chunkySelect = "w-full p-4 mt-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:bg-blue-50 transition-colors shadow-sm appearance-none bg-white disabled:opacity-50 disabled:bg-gray-100";
 
 const Unit1SchoolIdentity = () => {
     const navigate = useNavigate();
@@ -15,6 +19,10 @@ const Unit1SchoolIdentity = () => {
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [showIernModal, setShowIernModal] = useState(false);
+    const [fetchedIern, setFetchedIern] = useState(null);
+    const [isReviewMode, setIsReviewMode] = useState(false);
+    const [isModeLoading, setIsModeLoading] = useState(true);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -30,6 +38,7 @@ const Unit1SchoolIdentity = () => {
         curricular_offering: "",
         latitude: "",
         longitude: "",
+        iern: "",
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -39,25 +48,174 @@ const Unit1SchoolIdentity = () => {
     const [districtOptions, setDistrictOptions] = useState([]);
     const [legDistrictOptions, setLegDistrictOptions] = useState([]);
 
-    // Load draft on mount
+    // Load draft or check for completed data on mount
     useEffect(() => {
-        const loadDraft = async () => {
-            const draft = await getUnit1Draft('draft_unit_1');
+        const init = async () => {
             const storedSchoolId = localStorage.getItem('schoolId');
 
+            // 1. Check if this unit is already completed (fetch from backend)
+            if (storedSchoolId) {
+                try {
+                    const savedRes = await fetch(`/api/ph_schools/${storedSchoolId}`);
+                    if (savedRes.ok) {
+                        const savedData = await savedRes.json();
+                        if (savedData.exists && savedData.data?.school_name) {
+                            // Pre-fill form with existing data
+                            const d = savedData.data;
+
+                            // Failsafe: if iern is null in ph_schools, look it up from schools_IERN
+                            let resolvedIern = d.iern || "";
+                            if (!resolvedIern) {
+                                try {
+                                    const iernFix = await fetch(`/api/schools_iern/${storedSchoolId}`);
+                                    if (iernFix.ok) {
+                                        const iernFixData = await iernFix.json();
+                                        if (iernFixData.exists && iernFixData.data?.iern) {
+                                            resolvedIern = iernFixData.data.iern;
+                                            // Silently patch ph_schools.iern so it's correct for next time
+                                            fetch('/api/ph_schools/unit1', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    school_id: d.school_id || storedSchoolId,
+                                                    iern: resolvedIern,
+                                                    school_name: d.school_name,
+                                                    region: d.region,
+                                                    division: d.division,
+                                                    district: d.district,
+                                                    curricular_offering: d.curricular_offering,
+                                                })
+                                            }).catch(() => {});
+                                        }
+                                    }
+                                } catch(e) {}
+                            }
+
+                            // --- BACKFILL missing location fields from legacy records ---
+                            // (For records saved before the province/municipality/barangay columns existed)
+                            let resolvedProvince = d.province || "";
+                            let resolvedMunicipality = d.municipality || "";
+                            let resolvedBarangay = d.barangay || "";
+                            let resolvedLegDistrict = d.leg_district || "";
+
+                            if (!resolvedProvince && d.school_id) {
+                                try {
+                                    // Try school-profile for province + municipality
+                                    const profileRes = await fetch(`/api/school-profile/${d.school_id || storedSchoolId}`);
+                                    if (profileRes.ok) {
+                                        const profileData = await profileRes.json();
+                                        resolvedProvince = profileData.province || resolvedProvince;
+                                        resolvedMunicipality = profileData.municipality || profileData.city || resolvedMunicipality;
+                                        resolvedBarangay = profileData.barangay || resolvedBarangay;
+                                        resolvedLegDistrict = profileData.leg_district || profileData.legislativeDistrict || resolvedLegDistrict;
+                                    }
+                                } catch(e) {}
+
+                                // Also try schools_IERN for barangay if still missing
+                                if (!resolvedBarangay) {
+                                    try {
+                                        const iernB = await fetch(`/api/schools_iern/${d.school_id || storedSchoolId}`);
+                                        if (iernB.ok) {
+                                            const iernBData = await iernB.json();
+                                            if (iernBData.exists && iernBData.data?.Barangay) {
+                                                resolvedBarangay = iernBData.data.Barangay;
+                                            }
+                                        }
+                                    } catch(e) {}
+                                }
+
+                                // Silently patch DB so future edits don't need backfill
+                                if (resolvedProvince || resolvedMunicipality || resolvedBarangay) {
+                                    fetch('/api/ph_schools/unit1', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            school_id: d.school_id || storedSchoolId,
+                                            iern: resolvedIern || d.iern,
+                                            school_name: d.school_name,
+                                            region: d.region,
+                                            province: resolvedProvince,
+                                            municipality: resolvedMunicipality,
+                                            barangay: resolvedBarangay,
+                                            division: d.division,
+                                            district: d.district,
+                                            leg_district: resolvedLegDistrict,
+                                            curricular_offering: d.curricular_offering,
+                                            latitude: d.latitude,
+                                            longitude: d.longitude,
+                                        })
+                                    }).catch(() => {});
+                                }
+                            }
+
+                            setFormData(prev => ({
+                                ...prev,
+                                school_id: d.school_id || storedSchoolId,
+                                school_name: d.school_name || "",
+                                iern: resolvedIern,
+                                region: d.region || "",
+                                province: resolvedProvince,
+                                municipality: resolvedMunicipality,
+                                barangay: resolvedBarangay,
+                                division: d.division || "",
+                                district: d.district || "",
+                                leg_district: resolvedLegDistrict,
+                                curricular_offering: d.curricular_offering || "",
+                                latitude: d.latitude || "",
+                                longitude: d.longitude || "",
+                            }));
+
+                            // Pre-populate dropdown options so they display correctly in edit mode
+                            if (d.region) {
+                                // Province options from JSON
+                                if (locationData && locationData[d.region]) {
+                                    setProvinceOptions(Object.keys(locationData[d.region]).sort());
+                                    if (resolvedProvince && locationData[d.region][resolvedProvince]) {
+                                        setCityOptions(Object.keys(locationData[d.region][resolvedProvince]).sort());
+                                        if (resolvedMunicipality && locationData[d.region][resolvedProvince][resolvedMunicipality]) {
+                                            setBarangayOptions(locationData[d.region][resolvedProvince][resolvedMunicipality].sort());
+                                        }
+                                    }
+                                }
+                                // Division / District / Leg District options from API
+                                try {
+                                    const divRes = await fetch(`/api/locations/divisions?region=${encodeURIComponent(d.region)}`);
+                                    if (divRes.ok) setDivisionOptions(await divRes.json());
+                                } catch(e) {}
+                                try {
+                                    const distRes = await fetch(`/api/locations/districts?region=${encodeURIComponent(d.region)}&division=${encodeURIComponent(d.division || '')}`);
+                                    if (distRes.ok) setDistrictOptions(await distRes.json());
+                                } catch(e) {}
+                                try {
+                                    const legRes = await fetch(`/api/locations/leg-districts?region=${encodeURIComponent(d.region)}`);
+                                    if (legRes.ok) setLegDistrictOptions(await legRes.json());
+                                } catch(e) {}
+                            }
+                            setIsReviewMode(true);
+                            setIsModeLoading(false);
+                            return;
+
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Could not fetch saved Unit 1 data", e);
+                }
+            }
+
+            // 2. Otherwise load draft
+            const draft = await getUnit1Draft('draft_unit_1');
             if (draft && draft.step > 1) {
                 setFormData(draft.formData || {});
-                setCurrentStep(draft.step || 1);
-
-                // Show welcome back toast if resuming from step 2 or 3
+                const savedStep = draft.step || 1;
+                setCurrentStep(savedStep <= TOTAL_STEPS ? savedStep : 1);
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
             } else if (storedSchoolId) {
-                // If Beta Tester is on step 1, auto-fetch from database immediately
                 handleFetchData(storedSchoolId);
             }
+            setIsModeLoading(false);
         };
-        loadDraft();
+        init();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -114,7 +272,6 @@ const Unit1SchoolIdentity = () => {
         const saveDraft = async () => {
             await saveUnit1Draft('draft_unit_1', { formData, step: currentStep });
         };
-        // Don't save empty draft on initial load before state settles
         if (formData.school_id || currentStep > 1) {
             saveDraft();
         }
@@ -158,23 +315,49 @@ const Unit1SchoolIdentity = () => {
         if (!idToFetch) return;
         setLoading(true);
         try {
+            // First, attempt to fetch from the new IERN endpoint
+            const iernRes = await fetch(`/api/schools_iern/${idToFetch}`);
+            if (iernRes.ok) {
+                const iernData = await iernRes.json();
+                if (iernData.exists && iernData.data) {
+                    const row = iernData.data;
+                    setFormData(prev => ({
+                        ...prev,
+                        school_id: idToFetch,
+                        school_name: row.School_Name || prev.school_name,
+                        region: row.Region || prev.region,
+                        division: row.Division || prev.division,
+                        district: row.District || prev.district,
+                        barangay: row.Barangay || prev.barangay,
+                        latitude: row.Latitude || prev.latitude,
+                        longitude: row.Longitude || prev.longitude,
+                        iern: row.iern || "",
+                    }));
+                    setFetchedIern(row.iern || "");
+                    setShowIernModal(true);
+                    setLoading(false);
+                    return; // Early return to avoid fetching the generic profile if IERN is hit
+                }
+            }
+            
+            // Fallback: fetch from general school-profile
             const res = await fetch(`/api/school-profile/${idToFetch}`);
             if (res.ok) {
                 const data = await res.json();
                 setFormData(prev => ({
                     ...prev,
                     school_id: idToFetch,
-                    school_name: data.school_name || data.schoolName || "",
-                    region: data.region || "",
-                    province: data.province || "",
-                    municipality: data.municipality || data.city || "",
-                    barangay: data.barangay || "",
-                    division: data.division || "",
-                    district: data.district || "",
-                    leg_district: data.leg_district || data.legislativeDistrict || "",
-                    curricular_offering: data.curricular_offering || data.curricularOffering || "",
-                    latitude: data.latitude || "",
-                    longitude: data.longitude || "",
+                    school_name: data.school_name || data.schoolName || prev.school_name,
+                    region: data.region || prev.region,
+                    province: data.province || prev.province,
+                    municipality: data.municipality || data.city || prev.municipality,
+                    barangay: data.barangay || prev.barangay,
+                    division: data.division || prev.division,
+                    district: data.district || prev.district,
+                    leg_district: data.leg_district || data.legislativeDistrict || prev.leg_district,
+                    curricular_offering: data.curricular_offering || data.curricularOffering || prev.curricular_offering,
+                    latitude: data.latitude || prev.latitude,
+                    longitude: data.longitude || prev.longitude,
                 }));
             }
         } catch (err) {
@@ -195,14 +378,17 @@ const Unit1SchoolIdentity = () => {
         }
     };
 
-    const isStep1Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id);
-    const isStep2Valid = formData.school_name && formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
-    const isStep3Valid = formData.curricular_offering !== "" && formData.latitude !== "" && formData.longitude !== "";
+    // ---------- Validation per step ----------
+    const isStep1Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id) && formData.school_name.trim() !== "";
+    const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
+    const isStep3Valid = formData.curricular_offering !== "";
+    const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
 
     const isCurrentStepValid = () => {
         if (currentStep === 1) return isStep1Valid;
         if (currentStep === 2) return isStep2Valid;
         if (currentStep === 3) return isStep3Valid;
+        if (currentStep === 4) return isStep4Valid;
         return false;
     };
 
@@ -210,21 +396,45 @@ const Unit1SchoolIdentity = () => {
         try {
             setLoading(true);
 
-            // Final Validation Pass / Sync Verification
-            // 1. Send data to production endpoints (simulated here)
-            // await fetch('/api/schools/update', { method: 'POST', body: JSON.stringify(formData) })
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network request
+            // Failsafe: If iern is still empty, do one last lookup from schools_IERN
+            let finalIern = formData.iern;
+            if (!finalIern && formData.school_id) {
+                try {
+                    const iernRes = await fetch(`/api/schools_iern/${formData.school_id}`);
+                    if (iernRes.ok) {
+                        const iernData = await iernRes.json();
+                        if (iernData.exists && iernData.data?.iern) {
+                            finalIern = iernData.data.iern;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Failsafe IERN lookup failed:", e);
+                }
+            }
+            
+            // Save to Backend
+            const payload = { ...formData, iern: finalIern || null };
+            const res = await fetch('/api/ph_schools/unit1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-            // 2. Clear draft upon success
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                console.error("Server returned error:", errorData);
+                throw new Error(errorData.error || `Server HTTP Error: ${res.status}`);
+            }
+
+            // Sync with draft cleanup
             await clearUnit1Draft('draft_unit_1');
 
-            // 3. Update Quest Progress (Zero-Disruption Assurance & XP logic)
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
 
             if (!progress.completedUnits.includes(1)) {
                 progress.completedUnits.push(1);
-                progress.xp += 150; // XP logic
+                progress.xp += 150;
                 localStorage.setItem('quest_progress', JSON.stringify(progress));
             }
 
@@ -239,311 +449,458 @@ const Unit1SchoolIdentity = () => {
 
     const progressPercentage = (currentStep / TOTAL_STEPS) * 100;
 
+    // Step question titles
+    const stepQuestions = {
+        1: "What's the school's name and ID?",
+        2: "Where is the school located?",
+        3: "What does the school offer?",
+        4: "Pin the school on the map 📍",
+    };
+
+    const stepSubtitles = {
+        1: "Enter the 6-digit DepEd School ID and verify the name.",
+        2: "Select the region, division, and district details.",
+        3: "Choose the curricular offering level.",
+        4: "Set the exact coordinates using the map or manual input.",
+    };
+
+    // Slide animation direction
+    const slideVariants = {
+        enter: { opacity: 0, x: 60, scale: 0.97 },
+        center: { opacity: 1, x: 0, scale: 1 },
+        exit: { opacity: 0, x: -60, scale: 0.97 },
+    };
+
     return (
-        <div className="min-h-screen bg-white flex flex-col">
-            {/* Header & Progress */}
-            <header className="px-6 py-4 border-b border-gray-100 flex flex-col gap-4 sticky top-0 bg-white z-10">
-                <div className="flex items-center justify-between">
-                    <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100">
-                        <FiArrowLeft className="text-gray-600 w-5 h-5" />
-                    </button>
-                    <span className="text-sm font-semibold text-gray-500">
-                        Step {currentStep} of {TOTAL_STEPS}
-                    </span>
-                    <button className="text-indigo-600 p-2 text-sm font-medium hover:bg-indigo-50 rounded-md">
-                        Save Draft
-                    </button>
-                </div>
+        <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-gray-50 to-gray-200 flex flex-col font-sans">
 
-                {/* Progress Bar with Milestone Markers */}
-                <div className="relative w-full h-2 bg-gray-100 rounded-full mb-2">
-                    <motion.div
-                        className="absolute top-0 left-0 h-full bg-indigo-600 rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progressPercentage}%` }}
-                        transition={{ duration: 0.5, ease: "easeOut" }}
-                    />
+            {/* ========== TASK 2: GAMIFIED HEADER ========== */}
+            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                <div className="max-w-md mx-auto flex items-center gap-3">
+                    {/* X Button */}
+                    <button
+                        onClick={() => navigate('/modular-dashboard')}
+                        className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+                        aria-label="Exit lesson"
+                    >
+                        <FiX className="w-6 h-6" />
+                    </button>
 
-                    {/* Markers */}
-                    {[1, 2, 3].map((step) => (
-                        <div
-                            key={step}
-                            className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-white transition-colors duration-300 ${currentStep >= step ? 'bg-indigo-600' : 'bg-gray-200'}`}
-                            style={{ left: `${(step / TOTAL_STEPS) * 100}%`, transform: 'translate(-50%, -50%)' }}
+                    {/* Thick Progress Bar */}
+                    <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
+                        <motion.div
+                            className="h-full bg-green-500 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progressPercentage}%` }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
                         />
-                    ))}
+                    </div>
+
+                    {/* Step counter */}
+                    <span className="text-sm font-bold text-gray-400 whitespace-nowrap">
+                        {currentStep}/{TOTAL_STEPS}
+                    </span>
                 </div>
             </header>
 
-            {/* Main Form Content */}
-            <main className="flex-1 overflow-y-auto p-6 md:p-10 max-w-2xl mx-auto w-full relative">
+            {/* Welcome Back Toast */}
+            <AnimatePresence>
+                {showWelcomeBack && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2 z-[60]"
+                    >
+                        <FiCheckCircle className="text-green-400" />
+                        Welcome back! Continuing from Step {currentStep}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-                {/* Welcome Back Toast */}
-                <AnimatePresence>
-                    {showWelcomeBack && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            className="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2 z-20"
-                        >
-                            <FiCheckCircle className="text-green-400" />
-                            Welcome back! Continuing from Step {currentStep}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-gray-800">School Identity</h1>
-                    <p className="text-gray-500 text-sm mt-1">Please provide the basic details of the school.</p>
-                </div>
-
-                {/* --- STEP 1: School ID --- */}
+            {/* ========== TASK 3: MAIN CONTENT ========== */}
+            <main className="flex-1 overflow-y-auto pb-28">
                 <AnimatePresence mode="wait">
-                    {currentStep === 1 && (
+
+                {/* ---- REVIEW MODE: Summary Receipt Card ---- */}
+                {isReviewMode ? (
+                    <motion.div
+                        key="review-card"
+                        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                        transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}
+                        className="max-w-md w-full mx-auto mt-10 px-6"
+                    >
+                        {/* Receipt Header */}
+                        <div className="text-center mb-6">
+                            <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ delay: 0.2, type: "spring", bounce: 0.5 }}
+                                className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-200"
+                            >
+                                <FiCheckCircle className="w-8 h-8 text-white" />
+                            </motion.div>
+                            <h2 className="text-2xl font-black text-gray-800">Unit 1 Complete!</h2>
+                            <p className="text-sm text-gray-400 mt-1">School Identity has been verified and saved.</p>
+                        </div>
+
+                        {/* Receipt Body */}
                         <motion.div
-                            key="step1"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.3 }}
+                            className="bg-white rounded-3xl shadow-xl shadow-gray-100/80 border border-gray-100 overflow-hidden"
                         >
-                            <div className="relative">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">School ID</label>
-                                <input
-                                    type="text"
-                                    name="school_id"
-                                    value={formData.school_id}
-                                    onChange={handleChange}
-                                    placeholder="e.g. 101010"
-                                    maxLength={6}
-                                    className={`w-full px-4 py-3 rounded-lg border focus:ring-2 outline-none transition-all ${isStep1Valid
-                                        ? "border-green-500 focus:ring-green-500 bg-green-50"
-                                        : "border-gray-300 focus:ring-indigo-500 focus:border-indigo-500"
-                                        }`}
-                                />
-                                {isStep1Valid && (
+                            {/* Receipt paper top notch */}
+                            <div className="h-2 bg-emerald-400" />
+                            <div className="px-6 py-5 space-y-4">
+                                {[
+                                    { label: "School ID", value: formData.school_id, icon: "🏫" },
+                                    { label: "School Name", value: formData.school_name, icon: "✏️" },
+                                    { label: "IERN", value: formData.iern || "Not Assigned", icon: "🪪" },
+                                    { label: "Region", value: formData.region, icon: "📍" },
+                                    { label: "Division", value: formData.division, icon: "🗂️" },
+                                    { label: "Curricular Offering", value: formData.curricular_offering || "Not Set", icon: "📚" },
+                                ].map((item, i) => (
                                     <motion.div
-                                        initial={{ scale: 0 }}
-                                        animate={{ scale: 1 }}
-                                        className="absolute right-3 top-10"
+                                        key={item.label}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.35 + i * 0.06 }}
+                                        className="flex items-start gap-3"
                                     >
-                                        <div className="bg-green-100 p-1 rounded-full">
+                                        <span className="text-lg mt-0.5">{item.icon}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-bold uppercase tracking-wider text-gray-300">{item.label}</p>
+                                            <p className="text-base font-semibold text-gray-800 truncate">{item.value || "—"}</p>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                            {/* Dashed divider */}
+                            <div className="mx-6 border-t-2 border-dashed border-gray-100" />
+                            <div className="px-6 py-4">
+                                <p className="text-xs text-center text-gray-300">Tap below to make corrections</p>
+                            </div>
+                        </motion.div>
+
+                        {/* Unlock & Edit Button */}
+                        <motion.button
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.7 }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => { setIsReviewMode(false); setCurrentStep(1); }}
+                            className="mt-6 w-full py-5 rounded-2xl font-black text-lg tracking-wide bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-200 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all flex items-center justify-center gap-3"
+                        >
+                            <FiEdit2 className="w-5 h-5" />
+                            Unlock &amp; Edit Data
+                        </motion.button>
+                    </motion.div>
+                ) : (
+                    /* ---- WIZARD MODE ---- */
+                    <div className="flex-1 max-w-md w-full mx-auto mt-12 px-6">
+                    <AnimatePresence mode="wait">
+
+                        {/* ---- STEP 1: School Name & School ID ---- */}
+                        {currentStep === 1 && (
+                            <motion.div
+                                key="step1"
+                                variants={slideVariants}
+                                initial="enter"
+                                animate="center"
+                                exit="exit"
+                                transition={{ duration: 0.3 }}
+                            >
+                                <h2 className="text-2xl font-bold text-gray-800">
+                                    {stepQuestions[1]}
+                                </h2>
+                                <p className="mt-2 text-sm text-gray-400">{stepSubtitles[1]}</p>
+
+                                <div className="relative mt-6">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">School ID</label>
+                                    <input
+                                        type="text"
+                                        name="school_id"
+                                        value={formData.school_id}
+                                        onChange={handleChange}
+                                        placeholder="e.g. 101010"
+                                        maxLength={6}
+                                        className={chunkyInput}
+                                    />
+                                    {formData.school_id.length === 6 && /^\d+$/.test(formData.school_id) && (
+                                        <motion.div
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            className="absolute right-4 top-10 bg-green-100 p-1.5 rounded-full"
+                                        >
                                             <FiCheck className="text-green-600 w-5 h-5" />
+                                        </motion.div>
+                                    )}
+                                </div>
+
+                                <div className="mt-4">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">School Name</label>
+                                    <input
+                                        type="text"
+                                        name="school_name"
+                                        value={formData.school_name}
+                                        onChange={handleChange}
+                                        disabled={!!formData.iern}
+                                        placeholder="e.g. San Isidro Elementary School"
+                                        className={chunkyInput}
+                                    />
+                                </div>
+                                {formData.iern && (
+                                    <div className="mt-4">
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-green-500 mb-1">Official IERN</label>
+                                        <input
+                                            type="text"
+                                            value={formData.iern}
+                                            disabled
+                                            className={chunkyInput + " !border-green-300 !bg-green-50"}
+                                        />
+                                    </div>
+                                )}
+                            </motion.div>
+                        )}
+
+                        {/* ---- STEP 2: Region, Division, District ---- */}
+                        {currentStep === 2 && (
+                            <motion.div
+                                key="step2"
+                                variants={slideVariants}
+                                initial="enter"
+                                animate="center"
+                                exit="exit"
+                                transition={{ duration: 0.3 }}
+                            >
+                                <h2 className="text-2xl font-bold text-gray-800">
+                                    {stepQuestions[2]}
+                                </h2>
+                                <p className="mt-2 text-sm text-gray-400">{stepSubtitles[2]}</p>
+
+                                <div className="mt-6 space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Region</label>
+                                        <select name="region" value={formData.region} onChange={handleRegionChange} disabled={!!formData.iern} className={chunkySelect}>
+                                            <option value="">Select Region</option>
+                                            {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Province</label>
+                                            <select name="province" value={formData.province} onChange={handleProvinceChange} disabled={!formData.region} className={chunkySelect}>
+                                                <option value="">Select</option>
+                                                {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Municipality</label>
+                                            <select name="municipality" value={formData.municipality} onChange={handleCityChange} disabled={!formData.province} className={chunkySelect}>
+                                                <option value="">Select</option>
+                                                {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Barangay</label>
+                                            <select name="barangay" value={formData.barangay} onChange={handleChange} disabled={!formData.municipality} className={chunkySelect}>
+                                                <option value="">Select</option>
+                                                {barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Division</label>
+                                             <select name="division" value={formData.division} onChange={handleDivisionChange} disabled={!formData.region} className={chunkySelect}>
+                                                <option value="">Select</option>
+                                                {divisionOptions.map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">District</label>
+                                             <select name="district" value={formData.district} onChange={handleChange} disabled={!formData.division} className={chunkySelect}>
+                                                <option value="">Select</option>
+                                                {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Leg. District</label>
+                                            <select name="leg_district" value={formData.leg_district} onChange={handleChange} className={chunkySelect}>
+                                                <option value="">Select</option>
+                                                {legDistrictOptions.map(l => <option key={l} value={l}>{l}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* ---- STEP 3: School Type & Curricular Offering ---- */}
+                        {currentStep === 3 && (
+                            <motion.div
+                                key="step3"
+                                variants={slideVariants}
+                                initial="enter"
+                                animate="center"
+                                exit="exit"
+                                transition={{ duration: 0.3 }}
+                            >
+                                <h2 className="text-2xl font-bold text-gray-800">
+                                    {stepQuestions[3]}
+                                </h2>
+                                <p className="mt-2 text-sm text-gray-400">{stepSubtitles[3]}</p>
+
+                                <div className="mt-6">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Curricular Offering</label>
+                                    <select
+                                        name="curricular_offering"
+                                        value={formData.curricular_offering}
+                                        onChange={handleChange}
+                                        className={chunkySelect}
+                                    >
+                                        <option value="">Select Curricular Offering...</option>
+                                        <option value="Purely Elementary">Purely ES</option>
+                                        <option value="Elementary School and Junior High School (K-10)">ES and JHS (K to 10)</option>
+                                        <option value="Junior High and Senior High">JHS with SHS</option>
+                                        <option value="All Offering (K to 12)">All Offering (K to 12)</option>
+                                        <option value="Purely Junior High School">Purely JHS</option>
+                                        <option value="Purely Senior High School">Purely SHS</option>
+                                    </select>
+                                </div>
+
+                                {/* Visual feedback when selected */}
+                                {formData.curricular_offering && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mt-6 bg-green-50 border-2 border-green-200 rounded-2xl p-4 flex items-center gap-3"
+                                    >
+                                        <div className="bg-green-100 p-2 rounded-full">
+                                            <FiCheck className="text-green-600 w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-green-700">Selected</p>
+                                            <p className="text-xs text-green-600">{formData.curricular_offering}</p>
                                         </div>
                                     </motion.div>
                                 )}
-                                <p className="text-xs text-gray-500 mt-2">Enter the official 6-digit DepEd School ID to securely fetch existing records.</p>
-                            </div>
-                        </motion.div>
-                    )}
+                            </motion.div>
+                        )}
 
-                    {/* --- STEP 2: Basic Name & Location --- */}
-                    {currentStep === 2 && (
-                        <motion.div
-                            key="step2"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">School Name</label>
-                                <input
-                                    type="text"
-                                    name="school_name"
-                                    value={formData.school_name}
-                                    onChange={handleChange}
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Region</label>
-                                    <select
-                                        name="region"
-                                        value={formData.region}
-                                        onChange={handleRegionChange}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
-                                    >
-                                        <option value="">Select Region</option>
-                                        {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Province</label>
-                                    <select
-                                        name="province"
-                                        value={formData.province}
-                                        onChange={handleProvinceChange}
-                                        disabled={!formData.region}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white disabled:bg-gray-100"
-                                    >
-                                        <option value="">Select Province</option>
-                                        {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Municipality / City</label>
-                                    <select
-                                        name="municipality"
-                                        value={formData.municipality}
-                                        onChange={handleCityChange}
-                                        disabled={!formData.province}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white disabled:bg-gray-100"
-                                    >
-                                        <option value="">Select City/Mun</option>
-                                        {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Barangay</label>
-                                    <select
-                                        name="barangay"
-                                        value={formData.barangay}
-                                        onChange={handleChange}
-                                        disabled={!formData.municipality}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white disabled:bg-gray-100"
-                                    >
-                                        <option value="">Select Barangay</option>
-                                        {barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Division</label>
-                                    <select
-                                        name="division"
-                                        value={formData.division}
-                                        onChange={handleDivisionChange}
-                                        disabled={!formData.region}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white disabled:bg-gray-100"
-                                    >
-                                        <option value="">Select Division</option>
-                                        {divisionOptions.map(d => <option key={d} value={d}>{d}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">District</label>
-                                    <select
-                                        name="district"
-                                        value={formData.district}
-                                        onChange={handleChange}
-                                        disabled={!formData.division}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white disabled:bg-gray-100"
-                                    >
-                                        <option value="">Select District</option>
-                                        {districtOptions.map(d => <option key={d} value={d}>{d}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Legislative District</label>
-                                <select
-                                    name="leg_district"
-                                    value={formData.leg_district}
-                                    onChange={handleChange}
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
-                                >
-                                    <option value="">Select District</option>
-                                    {legDistrictOptions.map(l => <option key={l} value={l}>{l}</option>)}
-                                </select>
-                            </div>
-                        </motion.div>
-                    )}
+                        {/* ---- STEP 4: Contact Info / Coordinates ---- */}
+                        {currentStep === 4 && (
+                            <motion.div
+                                key="step4"
+                                variants={slideVariants}
+                                initial="enter"
+                                animate="center"
+                                exit="exit"
+                                transition={{ duration: 0.3 }}
+                            >
+                                <h2 className="text-2xl font-bold text-gray-800">
+                                    {stepQuestions[4]}
+                                </h2>
+                                <p className="mt-2 text-sm text-gray-400">{stepSubtitles[4]}</p>
 
-                    {/* --- STEP 3: Classification --- */}
-                    {currentStep === 3 && (
-                        <motion.div
-                            key="step3"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Curricular Offering</label>
-                                <select
-                                    name="curricular_offering"
-                                    value={formData.curricular_offering}
-                                    onChange={handleChange}
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
-                                >
-                                    <option value="">Select Curricular Offering...</option>
-                                    <option value="Purely Elementary">Purely Elementary</option>
-                                    <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
-                                    <option value="All Offering (K-12)">All Offering (K-12)</option>
-                                    <option value="Junior and Senior High">Junior and Senior High</option>
-                                    <option value="Purely Junior High School">Purely Junior High School</option>
-                                    <option value="Purely Senior High School">Purely Senior High School</option>
-                                </select>
-                            </div>
+                                <div className="mt-6 grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Latitude</label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            name="latitude"
+                                            value={formData.latitude}
+                                            onChange={handleChange}
+                                            className={chunkyInput}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Longitude</label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            name="longitude"
+                                            value={formData.longitude}
+                                            onChange={handleChange}
+                                            className={chunkyInput}
+                                        />
+                                    </div>
+                                </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Latitude</label>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        name="latitude"
-                                        value={formData.latitude}
-                                        onChange={handleChange}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                                <div className="mt-4 rounded-2xl overflow-hidden border-2 border-gray-200 shadow-sm">
+                                    <LocationPickerMap
+                                        latitude={formData.latitude}
+                                        longitude={formData.longitude}
+                                        onChange={(lat, lng) => setFormData(prev => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }))}
+                                        readOnly={false}
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        name="longitude"
-                                        value={formData.longitude}
-                                        onChange={handleChange}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
-                                    />
+
+                                <div className="mt-6 bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 flex items-start gap-3">
+                                    <FiCheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-blue-600" />
+                                    <p className="text-sm text-blue-700 font-medium">You are about to complete Unit 1. This will securely sync your school identity data.</p>
                                 </div>
-                            </div>
-
-                            <div className="rounded-xl overflow-hidden border border-gray-200">
-                                <LocationPickerMap
-                                    latitude={formData.latitude}
-                                    longitude={formData.longitude}
-                                    onChange={(lat, lng) => setFormData(prev => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }))}
-                                    readOnly={false}
-                                />
-                            </div>
-
-                            <div className="bg-blue-50 text-blue-800 p-4 rounded-lg flex items-start gap-3 mt-8">
-                                <FiCheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-blue-600" />
-                                <p className="text-sm">You are about to complete Unit 1. This will securely sync your initial school identity to the main database.</p>
-                            </div>
-                        </motion.div>
-                    )}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+                )}
                 </AnimatePresence>
             </main>
 
-            {/* Footer Footer Footer */}
-            <footer className="px-6 py-4 border-t border-gray-100 bg-white sticky bottom-0 z-10">
-                <div className="max-w-2xl mx-auto flex justify-between">
-                    <button
-                        onClick={handleBack}
-                        className={`px-6 py-3 rounded-lg font-medium transition-colors ${currentStep === 1 ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
-                        disabled={currentStep === 1}
-                    >
-                        {currentStep === 1 ? 'Cancel' : 'Previous'}
-                    </button>
-                    <button
-                        onClick={handleNext}
-                        disabled={loading || !isCurrentStepValid()}
-                        className="px-8 py-3 rounded-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
-                    >
-                        {loading ? 'Syncing with Command Center...' : currentStep === TOTAL_STEPS ? 'Complete Unit 1' : 'Next Step'}
-                    </button>
+            {/* ========== TASK 4: STICKY ACTION BAR (only shown in wizard mode) ========== */}
+            {!isReviewMode && (
+            <div className="fixed bottom-0 left-0 w-full p-6 bg-white border-t border-gray-100 flex justify-center z-50">
+                <div className="w-full max-w-md flex gap-3">
+                    {/* Back button (only shown after step 1) */}
+                    {currentStep > 1 && (
+                        <motion.button
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            onClick={handleBack}
+                            className="px-5 py-4 rounded-2xl font-bold text-gray-500 bg-gray-100 border-b-[4px] border-gray-200 active:border-b-0 active:translate-y-[4px] transition-all"
+                        >
+                            Back
+                        </motion.button>
+                    )}
+
+                    {/* Continue / Complete Level button */}
+                    {currentStep === TOTAL_STEPS ? (
+                        <button
+                            onClick={handleNext}
+                            disabled={loading || !isCurrentStepValid()}
+                            className="flex-1 py-4 rounded-2xl text-white font-bold text-lg text-center bg-green-500 border-b-[6px] border-green-700 active:border-b-0 active:translate-y-[6px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                        >
+                            {loading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Syncing...
+                                </span>
+                            ) : "Complete Level ⭐"}
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleNext}
+                            disabled={loading || !isCurrentStepValid()}
+                            className="flex-1 py-4 rounded-2xl text-white font-bold text-lg text-center bg-blue-500 border-b-[6px] border-blue-700 active:border-b-0 active:translate-y-[6px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                        >
+                            {loading ? 'Loading...' : 'Continue'}
+                        </button>
+                    )}
                 </div>
-            </footer>
+            </div>
+            )}
 
             <SuccessModal
                 isOpen={showSuccess}
@@ -551,6 +908,60 @@ const Unit1SchoolIdentity = () => {
                 message="Unit 1 completed! Moving on to the next objective."
                 redirectUrl="/modular-dashboard"
             />
+
+            <AnimatePresence>
+                {showIernModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.8, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.8, y: 20 }}
+                            transition={{ type: "spring", bounce: 0.5 }}
+                            className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center relative overflow-hidden"
+                        >
+                            {/* Decorative Background */}
+                            <div className="absolute top-[-50px] left-1/2 -translate-x-1/2 w-40 h-40 bg-green-100 rounded-full blur-3xl opacity-50"></div>
+                            
+                            <motion.div 
+                                initial={{ rotate: -180, scale: 0 }}
+                                animate={{ rotate: 0, scale: 1 }}
+                                transition={{ type: "spring", delay: 0.2 }}
+                                className="w-20 h-20 bg-green-500 rounded-full mx-auto flex items-center justify-center shadow-lg relative z-10"
+                            >
+                                <span className="text-4xl">🌟</span>
+                            </motion.div>
+                            
+                            <h2 className="text-3xl font-extrabold text-gray-800 mt-6 relative z-10">School Identified!</h2>
+                            <p className="text-gray-500 mt-3 text-sm relative z-10">
+                                Your official InsightEd Educational Registry Number (IERN) is:
+                            </p>
+                            
+                            <motion.div 
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ delay: 0.4 }}
+                                className="bg-gray-50 border-2 border-gray-200 rounded-2xl p-4 mt-6 relative z-10"
+                            >
+                                <span className="text-4xl tracking-widest font-black text-green-600">
+                                    {fetchedIern}
+                                </span>
+                            </motion.div>
+                            
+                            <button
+                                onClick={() => setShowIernModal(false)}
+                                className="w-full mt-8 py-4 rounded-2xl text-white font-bold text-lg text-center bg-blue-500 border-b-[6px] border-blue-700 active:border-b-0 active:translate-y-[6px] transition-all relative z-10"
+                            >
+                                Start Verification
+                            </button>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

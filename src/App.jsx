@@ -71,6 +71,9 @@ import Leaderboard from './modules/Leaderboard';
 // Beta Tester Modular Flow
 import ModularDashboard from './components/ModularDashboard';
 import Unit1SchoolIdentity from './components/modular/Unit1SchoolIdentity';
+import Unit2Learners from './components/modular/Unit2Learners';
+import Unit3OrganizedClasses from './components/modular/Unit3OrganizedClasses';
+
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
 const AnimatedRoutes = () => {
@@ -160,6 +163,22 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
               <Unit1SchoolIdentity />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-2"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit2Learners />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-3"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit3OrganizedClasses />
             </ProtectedRoute>
           }
         />

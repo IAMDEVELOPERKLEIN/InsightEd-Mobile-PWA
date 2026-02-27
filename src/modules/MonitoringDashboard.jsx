@@ -1713,6 +1713,16 @@ const MonitoringDashboard = () => {
                                                                                 );
                                                                             })()}
 
+                                                                            {/* Data Quality Issues from school_summary */}
+                                                                            {s.data_quality_issues && s.data_quality_issues !== 'None' && s.data_quality_issues.trim() !== '' && (
+                                                                                <div className="mt-1 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg p-2">
+                                                                                    <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-0.5">Issues Detected</p>
+                                                                                    <p className="text-[10px] text-red-600 dark:text-red-300 font-semibold leading-relaxed whitespace-pre-wrap">
+                                                                                        {s.data_quality_issues}
+                                                                                    </p>
+                                                                                </div>
+                                                                            )}
+
                                                                             {s.missing.length > 0 && s.missing.length < 10 && (
                                                                                 <p className="text-[10px] text-slate-400 truncate">
                                                                                     Missing: {s.missing.join(', ')}

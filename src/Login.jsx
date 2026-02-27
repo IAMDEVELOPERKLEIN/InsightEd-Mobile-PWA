@@ -494,22 +494,18 @@ const Login = () => {
                 console.log("Navigating for role:", role);
                 // alert(`Login Success! Role: ${role}`); // Temporary Debug
                 if (role === 'School Head' || role === 'Beta Tester') {
-                    // Try to fetch profile, but don't block navigation on it
+                    // Fetch schoolId FIRST, THEN navigate — so it's ready when unit pages mount
+                    const destPath = role === 'School Head' ? '/schoolhead-dashboard' : getDashboardPath(role);
                     fetch(`/api/school-by-user/${uid}`)
                         .then(res => res.json())
                         .then(result => {
                             if (result.exists) localStorage.setItem('schoolId', result.data.school_id);
                         })
-                        .catch(err => console.log("Profile check failed, proceeding anyway"));
-
-                    if (role === 'School Head') {
-                        console.log("Navigating to SchoolHeadDashboard");
-                        navigate('/schoolhead-dashboard');
-                    } else {
-                        const path = getDashboardPath(role);
-                        console.log("Navigating to:", path);
-                        navigate(path);
-                    }
+                        .catch(err => console.log("Profile check failed, proceeding anyway"))
+                        .finally(() => {
+                            console.log("Navigating to:", destPath);
+                            navigate(destPath);
+                        });
                 } else if (role === 'Local Government Unit') {
                     // --- LGU LOGIC: Redirect to LGU Dashboard ---
                     console.log("Redirecting LGU to Dashboard...");

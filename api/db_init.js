@@ -634,6 +634,24 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init facility_inventory table:`, migErr.message);
     }
+    // --- 17. PH_SCHOOLS LOCATION COLUMNS ---
+    try {
+        await client.query(`
+            ALTER TABLE ph_schools
+            ADD COLUMN IF NOT EXISTS province TEXT,
+            ADD COLUMN IF NOT EXISTS municipality TEXT,
+            ADD COLUMN IF NOT EXISTS barangay TEXT,
+            ADD COLUMN IF NOT EXISTS leg_district TEXT,
+            ADD COLUMN IF NOT EXISTS latitude TEXT,
+            ADD COLUMN IF NOT EXISTS longitude TEXT;
+        `);
+        console.log(`✅ [${dbLabel}] ph_schools Location Columns Ensured`);
+    } catch (migErr) {
+        // Table may not exist yet (created separately) — silently skip
+        if (!migErr.message.includes('does not exist')) {
+            console.error(`❌ [${dbLabel}] Failed to migrate ph_schools columns:`, migErr.message);
+        }
+    }
 };
 
 export { initOtpTable, runMigrations };

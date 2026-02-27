@@ -4520,8 +4520,12 @@ app.get('/api/schools/:schoolId/health-score', async (req, res) => {
         (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
         (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
         (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
-        (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status
+        (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
+        ss.data_health_score,
+        ss.data_health_description,
+        ss.issues as data_quality_issues
       FROM school_profiles sp
+      LEFT JOIN school_summary ss ON sp.school_id = ss.school_id
       WHERE sp.school_id = $1
     `, [schoolId]);
 
@@ -4547,7 +4551,16 @@ app.get('/api/schools/:schoolId/health-score', async (req, res) => {
     const completedCount = checklist.filter(item => item.status).length;
     const score = Math.round((completedCount / checklist.length) * 100);
 
-    res.json({ score, checklist, totalModules: checklist.length, completedCount });
+    res.json({
+      score,
+      checklist,
+      totalModules: checklist.length,
+      completedCount,
+      // Include actual data health from school_summary (Python fraud detection)
+      dataHealthScore: data.data_health_score,
+      dataHealthDescription: data.data_health_description,
+      dataQualityIssues: data.data_quality_issues
+    });
   } catch (err) {
     console.error("Fetch Health Score Error:", err);
     res.status(500).json({ error: "Failed to calculate health score" });
@@ -9066,7 +9079,8 @@ app.get('/api/monitoring/schools', async (req, res) => {
       sp.submitted_by,
       sp.school_head_validation,
       ss.data_health_description,
-      ss.data_health_score
+      ss.data_health_score,
+      ss.issues as data_quality_issues
     `;
 
     // COUNT Query (Count from schools table)
@@ -10701,9 +10715,228 @@ if (isMainModule || process.env.START_SERVER || true) {
   initializeAndStart();
 }
 
+// ==================================================================
+//               IERN LOOKUP ENDPOINT
+// ==================================================================
 
+// GET: Fetch IERN Data by SchoolID
+app.get('/api/schools_iern/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    // The table uses "SchoolID" (exact mixed-case column name from CSV import)
+    const result = await pool.query('SELECT * FROM "schools_IERN" WHERE "SchoolID" = $1', [schoolId]);
+
+    if (result.rows.length > 0) {
+      res.json({ exists: true, data: result.rows[0] });
+    } else {
+      res.status(404).json({ exists: false, error: 'IERN data not found for this school ID.' });
+    }
+  } catch (err) {
+    console.error("Fetch IERN Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// ==================================================================
+//               MODULAR BETA ENDPOINTS (PH_SCHOOLS)
+// ==================================================================
+
+// --- 28. GET: Fetch Quest Progress (Modular Beta) ---
+app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT total_enrollment, enroll_kinder, has_multigrade FROM ph_schools WHERE school_id = $1', [schoolId]);
+
+    let completedUnits = [];
+    let xp = 0;
+
+    if (result.rows.length > 0) {
+      completedUnits.push(1);
+      xp += 150;
+
+      const row = result.rows[0];
+      if (row.enroll_kinder !== null) {
+        completedUnits.push(2);
+        xp += 200;
+      }
+      if (row.has_multigrade !== null) {
+        completedUnits.push(3);
+        xp += 200;
+      }
+    }
+
+    res.json({ success: true, progress: { completedUnits, xp } });
+  } catch (err) {
+    console.error("Fetch Quest Progress Error:", err);
+    res.status(500).json({ error: "Failed to fetch progress" });
+  }
+});
+
+// --- 29a. GET: Fetch Saved Ph_Schools Data (for Review Mode pre-fill) ---
+app.get('/api/ph_schools/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (result.rows.length > 0) {
+      res.json({ exists: true, data: result.rows[0] });
+    } else {
+      res.json({ exists: false, data: null });
+    }
+  } catch (err) {
+    console.error("Fetch ph_schools Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
+app.post('/api/ph_schools/unit1', async (req, res) => {
+  const data = req.body;
+  try {
+    const query = `
+      INSERT INTO ph_schools (
+        school_id, iern, school_name, region, province, municipality, barangay,
+        division, district, leg_district, curricular_offering, latitude, longitude
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ON CONFLICT (school_id) DO UPDATE SET
+        iern = EXCLUDED.iern,
+        school_name = EXCLUDED.school_name,
+        region = EXCLUDED.region,
+        province = EXCLUDED.province,
+        municipality = EXCLUDED.municipality,
+        barangay = EXCLUDED.barangay,
+        division = EXCLUDED.division,
+        district = EXCLUDED.district,
+        leg_district = EXCLUDED.leg_district,
+        curricular_offering = EXCLUDED.curricular_offering,
+        latitude = EXCLUDED.latitude,
+        longitude = EXCLUDED.longitude,
+        updated_at = CURRENT_TIMESTAMP;
+    `;
+    const values = [
+      data.school_id, data.iern || null, data.school_name,
+      data.region, data.province || null, data.municipality || null, data.barangay || null,
+      data.division, data.district, data.leg_district || null,
+      data.curricular_offering,
+      data.latitude || null, data.longitude || null
+    ];
+    await pool.query(query, values);
+    
+    // Auto-update school_summary instantly
+    try {
+      if (poolNew) await updateSchoolSummary(data.school_id, poolNew);
+    } catch(e) {}
+
+    res.json({ success: true, message: "Unit 1 saved successfully!" });
+  } catch (err) {
+    console.error("Save Unit 1 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- 27. PUT: Save Unit 2 Learner Data (Modular Beta) ---
+app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  const data = req.body;
+  
+  try {
+    const fields = [
+      'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',
+      'enroll_g4 = $5', 'enroll_g5 = $6', 'enroll_g6 = $7', 'total_enrollment = $8',
+      'sned_learners = $9', 'non_graded_learners = $10',
+      'aral_math_g1 = $11', 'aral_math_g2 = $12', 'aral_math_g3 = $13', 'aral_math_g4 = $14', 'aral_math_g5 = $15', 'aral_math_g6 = $16',
+      'aral_read_g1 = $17', 'aral_read_g2 = $18', 'aral_read_g3 = $19', 'aral_read_g4 = $20', 'aral_read_g5 = $21', 'aral_read_g6 = $22',
+      'aral_sci_g1 = $23', 'aral_sci_g2 = $24', 'aral_sci_g3 = $25', 'aral_sci_g4 = $26', 'aral_sci_g5 = $27', 'aral_sci_g6 = $28',
+      'male_enrollment = $29', 'female_enrollment = $30', 'verified_as_of = CURRENT_TIMESTAMP'
+    ];
+
+    const parseVal = (val) => (val === "" || val === null || val === undefined || isNaN(parseInt(val))) ? 0 : parseInt(val);
+
+    const values = [
+      parseVal(data.enroll_kinder), parseVal(data.enroll_g1), parseVal(data.enroll_g2), parseVal(data.enroll_g3),
+      parseVal(data.enroll_g4), parseVal(data.enroll_g5), parseVal(data.enroll_g6), parseVal(data.total_enrollment),
+      parseVal(data.sned_learners), parseVal(data.non_graded_learners),
+      parseVal(data.aral_math_g1), parseVal(data.aral_math_g2), parseVal(data.aral_math_g3), parseVal(data.aral_math_g4), parseVal(data.aral_math_g5), parseVal(data.aral_math_g6),
+      parseVal(data.aral_read_g1), parseVal(data.aral_read_g2), parseVal(data.aral_read_g3), parseVal(data.aral_read_g4), parseVal(data.aral_read_g5), parseVal(data.aral_read_g6),
+      parseVal(data.aral_sci_g1), parseVal(data.aral_sci_g2), parseVal(data.aral_sci_g3), parseVal(data.aral_sci_g4), parseVal(data.aral_sci_g5), parseVal(data.aral_sci_g6),
+      parseVal(data.male_enrollment), parseVal(data.female_enrollment),
+      schoolId // $31
+    ];
+
+    const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $31`;
+
+    await pool.query(query, values);
+    
+    // Auto-update school_summary instantly
+    try {
+      if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+    } catch(e) {}
+
+    res.json({ success: true, message: "Unit 2 Learner data saved successfully!" });
+
+  } catch (err) {
+    console.error("Save Unit 2 Learner Data Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+// --- 30. PUT: Save Unit 3 Organized Classes Data (Modular Beta) ---
+app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  const data = req.body;
+  const { has_multigrade, multigrade_details } = data;
+
+  if (typeof has_multigrade === 'undefined') {
+    return res.status(400).json({ error: 'has_multigrade is required' });
+  }
+
+  const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
+
+  try {
+    const detailsJson = has_multigrade
+      ? JSON.stringify(multigrade_details || [])
+      : JSON.stringify([]);
+
+    const query = `
+      UPDATE ph_schools
+      SET
+        has_multigrade      = $1,
+        multigrade_details  = $2::jsonb,
+        sections_kinder     = $3,  size_less_kinder    = $4,  size_within_kinder  = $5,  size_above_kinder  = $6,
+        sections_g1         = $7,  size_less_g1        = $8,  size_within_g1      = $9,  size_above_g1      = $10,
+        sections_g2         = $11, size_less_g2        = $12, size_within_g2      = $13, size_above_g2      = $14,
+        sections_g3         = $15, size_less_g3        = $16, size_within_g3      = $17, size_above_g3      = $18,
+        sections_g4         = $19, size_less_g4        = $20, size_within_g4      = $21, size_above_g4      = $22,
+        sections_g5         = $23, size_less_g5        = $24, size_within_g5      = $25, size_above_g5      = $26,
+        sections_g6         = $27, size_less_g6        = $28, size_within_g6      = $29, size_above_g6      = $30,
+        updated_at          = CURRENT_TIMESTAMP
+      WHERE school_id = $31
+    `;
+
+    const values = [
+      has_multigrade, detailsJson,
+      pInt(data.sections_kinder), pInt(data.size_less_kinder), pInt(data.size_within_kinder), pInt(data.size_above_kinder),
+      pInt(data.sections_g1),     pInt(data.size_less_g1),     pInt(data.size_within_g1),     pInt(data.size_above_g1),
+      pInt(data.sections_g2),     pInt(data.size_less_g2),     pInt(data.size_within_g2),     pInt(data.size_above_g2),
+      pInt(data.sections_g3),     pInt(data.size_less_g3),     pInt(data.size_within_g3),     pInt(data.size_above_g3),
+      pInt(data.sections_g4),     pInt(data.size_less_g4),     pInt(data.size_within_g4),     pInt(data.size_above_g4),
+      pInt(data.sections_g5),     pInt(data.size_less_g5),     pInt(data.size_within_g5),     pInt(data.size_above_g5),
+      pInt(data.sections_g6),     pInt(data.size_less_g6),     pInt(data.size_within_g6),     pInt(data.size_above_g6),
+      schoolId // $31
+    ];
+
+    await pool.query(query, values);
+
+    // Auto-update school_summary instantly
+    try {
+      if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+    } catch(e) {}
+
+    res.json({ success: true, message: 'Unit 3 Organized Classes data saved successfully!' });
+  } catch (err) {
+    console.error('Save Unit 3 Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 export default app;
-
-
-
