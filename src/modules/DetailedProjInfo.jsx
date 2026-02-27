@@ -10,26 +10,7 @@ import { compressImage } from '../utils/imageCompression';
 import { LuHistory, LuUser, LuCalendar } from "react-icons/lu";
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
-const RemarksHistory = ({ ipc }) => {
-    const [history, setHistory] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchHistory = async () => {
-            try {
-                const res = await fetch(`/api/project-history/${ipc}`);
-                if (!res.ok) throw new Error("Failed to fetch history");
-                const data = await res.json();
-                setHistory(data);
-            } catch (err) {
-                console.error("History fetch error:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        if (ipc) fetchHistory();
-    }, [ipc]);
-
+const RemarksHistory = ({ history, loading }) => {
     if (loading) return (
         <div className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-center items-center gap-3">
             <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
@@ -76,6 +57,182 @@ const RemarksHistory = ({ ipc }) => {
     );
 };
 
+// --- SUB-COMPONENT: VO COMPARISON ---
+const VOComparison = ({ current, previous }) => {
+    if (!previous) return null;
+
+    const fieldsToCompare = [
+        { key: 'projectName', label: 'Project Name' },
+        { key: 'projectCategory', label: 'Category' },
+        { key: 'scopeOfWork', label: 'Scope of Work' },
+        { key: 'projectAllocation', label: 'Allocation', isMoney: true },
+        { key: 'batchOfFunds', label: 'Batch' },
+        { key: 'contractorName', label: 'Contractor' },
+        { key: 'numberOfClassrooms', label: 'Classrooms' },
+        { key: 'numberOfStoreys', label: 'Storeys' },
+        { key: 'numberOfSites', label: 'Sites' },
+        { key: 'targetCompletionDate', label: 'Target Completion' },
+        { key: 'noticeToProceed', label: 'Notice to Proceed' },
+        { key: 'constructionStartDate', label: 'Construction Start' },
+        { key: 'fundsUtilized', label: 'Funds Utilized', isMoney: true },
+        { key: 'latitude', label: 'Latitude' },
+        { key: 'longitude', label: 'Longitude' },
+        { key: 'vo_number', label: 'VO Number' },
+        { key: 'vo_requested_date', label: 'Requested Date' },
+        { key: 'vo_requested_by', label: 'Requested By' }
+    ];
+
+    const changes = fieldsToCompare.filter(field => {
+        let val1 = current[field.key];
+        let val2 = previous[field.key];
+        
+        // Normalize for comparison
+        if (field.isMoney) {
+            val1 = Number(val1 || 0);
+            val2 = Number(val2 || 0);
+        } else {
+            val1 = String(val1 || '').trim();
+            val2 = String(val2 || '').trim();
+        }
+        
+        return val1 !== val2;
+    });
+
+    if (changes.length === 0) return (
+        <div className="bg-emerald-50/30 border border-emerald-100 p-3 rounded-xl">
+            <p className="text-[10px] text-emerald-600 font-bold text-center italic">VO Snapshot: Specification values matched previous record.</p>
+        </div>
+    );
+
+    return (
+        <div className="space-y-2 mt-4">
+            <h4 className="text-[9px] font-black text-amber-700 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                Variation Changes (Old vs New)
+            </h4>
+            <div className="grid grid-cols-1 gap-2">
+                {changes.map(field => (
+                    <div key={field.key} className="bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-amber-100 shadow-sm overflow-hidden group hover:border-amber-300 transition-all">
+                        <p className="text-[9px] font-black text-amber-600 uppercase mb-2 tracking-wider">{field.label}</p>
+                        <div className="flex items-center gap-2">
+                            {/* Old */}
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Previous</div>
+                                <div className="text-xs font-bold text-slate-500 line-through decoration-slate-300 truncate">
+                                    {field.isMoney ? `₱${Number(previous[field.key] || 0).toLocaleString()}` : (previous[field.key] || 'N/A')}
+                                </div>
+                            </div>
+                            
+                            {/* Arrow */}
+                            <div className="flex-none text-amber-400 font-black text-lg group-hover:translate-x-1 transition-transform">→</div>
+                            
+                            {/* New */}
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[8px] font-bold text-amber-700 uppercase mb-0.5">Updated</div>
+                                <div className="text-xs font-black text-amber-900 truncate">
+                                    {field.isMoney ? `₱${Number(current[field.key] || 0).toLocaleString()}` : (current[field.key] || 'N/A')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// --- SUB-COMPONENT: REALIGNMENT COMPARISON ---
+const RealignmentComparison = ({ current, previous, remarks }) => {
+    if (!previous) return null;
+
+    // Try to extract source school name from remarks
+    let sourceSchool = 'School B';
+    if (remarks) {
+        const match = remarks.match(/from (.*?) \(Full/);
+        if (match && match[1]) sourceSchool = match[1];
+        else {
+            const sourceMatch = remarks.match(/transferred to (.*)\./);
+            if (sourceMatch && sourceMatch[1]) sourceSchool = sourceMatch[1];
+        }
+    }
+
+    const fieldsToCompare = [
+        { key: 'projectName', label: 'Project Name' },
+        { key: 'projectCategory', label: 'Category' },
+        { key: 'scopeOfWork', label: 'Scope of Work' },
+        { key: 'projectAllocation', label: 'Allocation', isMoney: true },
+        { key: 'numberOfClassrooms', label: 'Classrooms' },
+        { key: 'numberOfStoreys', label: 'Storeys' },
+        { key: 'numberOfSites', label: 'Sites' },
+        { key: 'contractorName', label: 'Contractor' },
+        { key: 'batchOfFunds', label: 'Batch' },
+        { key: 'targetCompletionDate', label: 'Target Completion' },
+        { key: 'noticeToProceed', label: 'Notice to Proceed' },
+        { key: 'constructionStartDate', label: 'Construction Start' }
+    ];
+
+    const changes = fieldsToCompare.filter(field => {
+        let val1 = current[field.key];
+        let val2 = previous[field.key];
+        
+        if (field.isMoney) {
+            val1 = Number(val1 || 0);
+            val2 = Number(val2 || 0);
+        } else {
+            val1 = String(val1 || '').trim();
+            val2 = String(val2 || '').trim();
+        }
+        
+        return val1 !== val2;
+    });
+
+    if (changes.length === 0) return (
+        <div className="bg-purple-50/30 border border-purple-100 p-3 rounded-xl">
+            <p className="text-[10px] text-purple-600 font-bold text-center italic uppercase tracking-tighter">Inherited technical specifications matched previous record.</p>
+        </div>
+    );
+
+    const isSource = remarks?.includes('transferred to');
+
+    return (
+        <div className="space-y-2 mt-4">
+            <h4 className="text-[9px] font-black text-purple-700 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></span>
+                {isSource ? 'Out-migration Details (Allocation Transfer)' : 'In-migration Details (Project Transfer)'}
+            </h4>
+            <div className="grid grid-cols-1 gap-2">
+                {changes.map(field => (
+                    <div key={field.key} className="bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-purple-100 shadow-sm overflow-hidden group hover:border-purple-300 transition-all">
+                        <p className="text-[9px] font-black text-purple-600 uppercase mb-2 tracking-wider">{field.label}</p>
+                        <div className="flex items-center gap-2">
+                            {/* Old (Original) */}
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[8px] font-bold text-slate-400 uppercase mb-0.5">Original ({current.schoolName})</div>
+                                <div className="text-xs font-bold text-slate-500 line-through decoration-slate-300 truncate">
+                                    {field.isMoney ? `₱${Number(previous[field.key] || 0).toLocaleString()}` : (previous[field.key] || 'N/A')}
+                                </div>
+                            </div>
+                            
+                            {/* Arrow */}
+                            <div className="flex-none text-purple-400 font-black text-lg group-hover:translate-x-1 transition-transform">→</div>
+                            
+                            {/* New (Inherited) */}
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[8px] font-bold text-purple-700 uppercase mb-0.5">
+                                    {isSource ? 'Revised Value' : `Inherited (${sourceSchool})`}
+                                </div>
+                                <div className="text-xs font-black text-purple-900 truncate">
+                                    {field.isMoney ? `₱${Number(current[field.key] || 0).toLocaleString()}` : (current[field.key] || 'N/A')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const DetailedProjInfo = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -83,6 +240,10 @@ const DetailedProjInfo = () => {
     const type = searchParams.get('type'); // 'LGU' or null
     const [project, setProject] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    // History State
+    const [history, setHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(true);
 
     // New State for Images
     const [projectImages, setProjectImages] = useState([]);
@@ -267,9 +428,43 @@ const DetailedProjInfo = () => {
             }
         };
 
+        const fetchHistory = async (ipc) => {
+            setHistoryLoading(true);
+            try {
+                const res = await fetch(`/api/project-history/${ipc}`);
+                if (!res.ok) throw new Error("Failed to fetch history");
+                const data = await res.json();
+                setHistory(data);
+            } catch (err) {
+                console.error("History fetch error:", err);
+            } finally {
+                setHistoryLoading(false);
+            }
+        };
+
         fetchProjectDetails();
         fetchImages();
+        // Since project details fetch might update IPC, we handle history fetch there or when project is set
     }, [id, navigate]);
+
+    useEffect(() => {
+        if (project?.ipc) {
+            const fetchHistory = async () => {
+                setHistoryLoading(true);
+                try {
+                    const res = await fetch(`/api/project-history/${project.ipc}`);
+                    if (!res.ok) throw new Error("Failed to fetch history");
+                    const data = await res.json();
+                    setHistory(data);
+                } catch (err) {
+                    console.error("History fetch error:", err);
+                } finally {
+                    setHistoryLoading(false);
+                }
+            };
+            fetchHistory();
+        }
+    }, [project?.ipc]);
 
     // --- HANDLERS ---
 
@@ -404,15 +599,33 @@ const DetailedProjInfo = () => {
                                 <span className="text-sm text-white font-mono font-bold tracking-wider shadow-black drop-shadow-sm">{project.schoolId}</span>
                             </div>
 
-                            {/* IPC Pill */}
-                            {project.ipc && (
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 backdrop-blur-md rounded-xl border border-emerald-400/30 shadow-lg shadow-emerald-900/20 group hover:bg-emerald-500/30 transition-all">
-                                    <span className="text-[9px] text-emerald-200 uppercase font-black tracking-widest group-hover:text-emerald-100 transition-colors">InsightEd Project Code</span>
-                                    <div className="h-3 w-[1px] bg-emerald-400/30"></div>
-                                    <span className="text-sm text-emerald-50 font-mono font-bold tracking-wider shadow-black drop-shadow-sm">{project.ipc}</span>
-                                </div>
-                            )}
-                        </div>
+                             {/* IPC Pill */}
+                             {project.ipc && (
+                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 backdrop-blur-md rounded-xl border border-emerald-400/30 shadow-lg shadow-emerald-900/20 group hover:bg-emerald-500/30 transition-all">
+                                     <span className="text-[9px] text-emerald-200 uppercase font-black tracking-widest group-hover:text-emerald-100 transition-colors">InsightEd Project Code</span>
+                                     <div className="h-3 w-[1px] bg-emerald-400/30"></div>
+                                     <span className="text-sm text-emerald-50 font-mono font-bold tracking-wider shadow-black drop-shadow-sm">{project.ipc}</span>
+                                 </div>
+                             )}
+
+                             {/* VO Badge */}
+                             {project.hasVariationOrder && (
+                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/20 backdrop-blur-md rounded-xl border border-amber-400/30 shadow-lg shadow-amber-900/20 animate-pulse">
+                                     <span className="text-[9px] text-amber-200 uppercase font-black tracking-widest">Variation Order</span>
+                                     <div className="h-3 w-[1px] bg-amber-400/30"></div>
+                                     <span className="text-sm text-amber-50 font-black tracking-wider">ACTIVE</span>
+                                 </div>
+                             )}
+
+                             {/* Realignment Badge */}
+                             {project.isRealigned && (
+                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 backdrop-blur-md rounded-xl border border-purple-400/30 shadow-lg shadow-purple-900/20">
+                                     <span className="text-[9px] text-purple-200 uppercase font-black tracking-widest">Realignment</span>
+                                     <div className="h-3 w-[1px] bg-purple-400/30"></div>
+                                     <span className="text-sm text-purple-50 font-black tracking-wider uppercase">{project.updateType?.replace('Realignment (', '').replace(')', '') || 'ACTIVE'}</span>
+                                 </div>
+                             )}
+                         </div>
 
                         <h1 className="text-2xl sm:text-3xl font-black text-white leading-tight tracking-tight drop-shadow-md">{project.schoolName}</h1>
                         <div className="mt-2 inline-block px-4 py-1.5 rounded-full border border-blue-400/30 bg-blue-900/30 backdrop-blur-sm">
@@ -474,14 +687,132 @@ const DetailedProjInfo = () => {
                             <DetailItem label="Contractor" value={project.contractorName} />
                             <DetailItem label="Scope of Work" value={project.scopeOfWork} />
                             <div className="grid grid-cols-2 gap-3">
-                                <DetailItem label="Allocation" value={project.projectAllocation} isMoney />
+                                <DetailItem 
+                                    label="Original Allocation" 
+                                    value={history.length > 0 ? history[history.length - 1].project_allocation : (project.projectAllocation || 0)} 
+                                    isMoney 
+                                />
                                 <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <DetailItem label="Funds Utilized" value={project.fundsUtilized} isMoney />
-                                <div className="hidden sm:block"></div> {/* Spacer */}
+                                <DetailItem label="Funds Released" value={project.fundReleased} isMoney />
                             </div>
                             <DetailItem label="Remarks" value={project.otherRemarks} />
+
+                            {/* --- VARIATION ORDER DISPLAY --- */}
+                            {project.hasVariationOrder && (
+                                <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-200 shadow-sm space-y-3">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-6 h-6 bg-amber-100 rounded flex items-center justify-center text-amber-600 text-[10px]">⚖️</div>
+                                        <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Variation Order (VO)</h4>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <p className="text-[9px] uppercase font-bold text-amber-600 mb-0.5">VO Number</p>
+                                            <p className="text-sm font-bold text-amber-900">{project.vo_number || project.variation_order_no || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] uppercase font-bold text-amber-600 mb-0.5">Requested Date</p>
+                                            <p className="text-sm font-bold text-amber-900">{project.vo_requested_date || project.vo_approval_date || project.variation_order_date || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-white/50 p-2 rounded-lg border border-amber-100">
+                                            <p className="text-[9px] uppercase font-black text-amber-600 mb-0.5">VO Amount (Added)</p>
+                                            <p className="text-sm font-black text-amber-900">
+                                                ₱{Number(project.projectAllocation || 0).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div className="bg-amber-500 p-2 rounded-lg shadow-inner">
+                                            <p className="text-[9px] uppercase font-black text-white/80 mb-0.5">Revised Total</p>
+                                            <p className="text-sm font-black text-white drop-shadow-sm">
+                                                ₱{Number(
+                                                    (Number(history.length > 0 ? history[history.length - 1].project_allocation : 0) + Number(project.projectAllocation || 0))
+                                                ).toLocaleString()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-[9px] text-amber-600 italic font-medium mt-1">
+                                        Original: ₱{Number(history.length > 0 ? history[history.length - 1].project_allocation : 0).toLocaleString()}
+                                    </div>
+                                    {project.vo_requested_by && (
+                                        <div className="bg-white/40 p-2 rounded-lg border border-amber-100/50">
+                                            <p className="text-[9px] uppercase font-black text-amber-600 mb-0.5">Requested By</p>
+                                            <p className="text-[11px] font-bold text-amber-900 uppercase">{project.vo_requested_by}</p>
+                                        </div>
+                                    )}
+                                    {project.otherRemarks && (
+                                        <div className="pt-2 border-t border-amber-100">
+                                            <p className="text-[9px] uppercase font-bold text-amber-600 mb-0.5">VO Remarks / Justification</p>
+                                            <p className="text-[11px] font-medium text-amber-800 italic leading-relaxed">"{project.otherRemarks}"</p>
+                                        </div>
+                                    )}
+
+                                    {/* --- VO SIDE-BY-SIDE COMPARISON --- */}
+                                    <VOComparison 
+                                        current={project} 
+                                        // History is ordered DESC, current project ID is the latest (idx 0).
+                                        // Previous version is idx 1.
+                                        previous={history.length > 1 ? history[1] : null}
+                                    />
+                                    {project.variationOrderPdf && (
+                                        <div className="pt-2">
+                                            <a 
+                                                href={project.variationOrderPdf?.startsWith('data:') ? project.variationOrderPdf : `data:application/pdf;base64,${project.variationOrderPdf}`} 
+                                                download={`${project.schoolName}_Signed_VO.pdf`}
+                                                className="w-full flex items-center justify-center gap-2 py-2 bg-amber-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-amber-600 transition-all shadow-sm"
+                                            >
+                                                <span>📄</span> View signed VO Document
+                                            </a>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* --- REALIGNMENT DISPLAY --- */}
+                            {project.isRealigned && (
+                                <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-200 shadow-sm space-y-3">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-6 h-6 bg-purple-100 rounded flex items-center justify-center text-purple-600 text-[10px]">🔄</div>
+                                        <h4 className="text-[10px] font-black text-purple-800 uppercase tracking-widest">Project Realignment</h4>
+                                    </div>
+                                    <div className="bg-white/50 p-3 rounded-lg border border-purple-100">
+                                        <p className="text-[9px] uppercase font-black text-purple-600 mb-1">Type of Adjustment</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                project.updateType?.includes('Source') 
+                                                ? 'bg-red-100 text-red-700 border border-red-200' 
+                                                : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                            }`}>
+                                                {project.updateType === 'Realignment (Source)' ? 'FUNDS TRANSFERRED OUT' : 'FUNDS RECEIVED'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {project.otherRemarks && (
+                                        <div className="bg-purple-900/5 p-3 rounded-lg border border-purple-100/50 italic">
+                                            <p className="text-[9px] uppercase font-black text-purple-600/70 mb-1 not-italic tracking-tighter">Realignment Details</p>
+                                            <p className="text-sm font-medium text-purple-900 leading-relaxed">
+                                                "{project.otherRemarks}"
+                                            </p>
+                                        </div>
+                                    )}
+
+                                        <div className="text-[9px] text-purple-500 font-medium px-1 flex items-center gap-1">
+                                            <div className="w-1 h-1 bg-purple-400 rounded-full"></div>
+                                            This project's technical specifications and allocation were updated via a complete Project Transfer.
+                                        </div>
+
+                                        {/* --- REALIGNMENT SIDE-BY-SIDE COMPARISON --- */}
+                                        <RealignmentComparison 
+                                            current={project}
+                                            remarks={project.otherRemarks}
+                                            // The previous state is the record before the realignment happened
+                                            previous={history.length > 1 ? history[1] : null}
+                                        />
+                                </div>
+                            )}
 
                             {/* Physical Specs */}
                             <div className="grid grid-cols-3 gap-3">
@@ -550,7 +881,7 @@ const DetailedProjInfo = () => {
                                         </div>
                                         {docValue ? (
                                             <a
-                                                href={docValue}
+                                                href={docValue?.startsWith('data:') ? docValue : `data:application/pdf;base64,${docValue}`}
                                                 download={`${project.schoolName}_${label}.pdf`}
                                                 className="text-[10px] font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
                                             >
@@ -613,11 +944,11 @@ const DetailedProjInfo = () => {
                         ) : (
                             <>
                                 {/* EXTERNAL (First) */}
-                                <div>
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos</h4>
-                                    {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external').length > 0 ? (
+                                {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external' && img.image_data !== '').length > 0 && (
+                                    <div>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos</h4>
                                         <div className="grid grid-cols-2 gap-3">
-                                            {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external').map((img, idx) => {
+                                            {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external' && img.image_data !== '').map((img, idx) => {
                                                 const getImageSrc = (imageItem) => {
                                                     if (imageItem.image_url) return imageItem.image_url;
                                                     if (imageItem.image_data) {
@@ -655,19 +986,15 @@ const DetailedProjInfo = () => {
                                                 )
                                             })}
                                         </div>
-                                    ) : (
-                                        <div className="bg-slate-50 rounded-xl p-4 text-center border border-dashed border-slate-200 text-slate-400 text-xs italic">
-                                            No external photos uploaded.
-                                        </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
 
                                 {/* INTERNAL (Second) */}
-                                <div>
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos</h4>
-                                    {projectImages.filter(img => !img.category || img.category.toLowerCase() !== 'external').length > 0 ? (
+                                {projectImages.filter(img => (!img.category || img.category.toLowerCase() !== 'external') && img.category?.toLowerCase() !== 'default' && img.image_data !== '').length > 0 && (
+                                    <div>
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos</h4>
                                         <div className="grid grid-cols-2 gap-3">
-                                            {projectImages.filter(img => !img.category || img.category.toLowerCase() !== 'external').map((img, idx) => {
+                                            {projectImages.filter(img => (!img.category || img.category.toLowerCase() !== 'external') && img.category?.toLowerCase() !== 'default' && img.image_data !== '').map((img, idx) => {
                                                 const getImageSrc = (imageItem) => {
                                                     if (imageItem.image_url) return imageItem.image_url;
                                                     if (imageItem.image_data) {
@@ -704,12 +1031,8 @@ const DetailedProjInfo = () => {
                                                 )
                                             })}
                                         </div>
-                                    ) : (
-                                        <div className="bg-slate-50 rounded-xl p-4 text-center border border-dashed border-slate-200 text-slate-400 text-xs italic">
-                                            No internal photos uploaded.
-                                        </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>
@@ -724,7 +1047,7 @@ const DetailedProjInfo = () => {
 
                     {/* Remarks History Section */}
                     {project.ipc && (
-                        <RemarksHistory ipc={project.ipc} />
+                        <RemarksHistory history={history} loading={historyLoading} />
                     )}
 
                 </div>

@@ -13,7 +13,7 @@ const ProjectStatus = {
 };
 
 const DOC_TYPES = {
-    POW: "Program of Works",
+    POW: "Program of Works / Progress of Work",
     DUPA: "DUPA",
     CONTRACT: "Signed Contract"
 };
@@ -65,13 +65,17 @@ const EditProjectModal = ({
     externalFiles  // Array of File objects
 }) => {
     const [formData, setFormData] = useState(null);
+    const [documents, setDocuments] = useState({ POW: null, DUPA: null, CONTRACT: null, VO: null });
 
-    // Local document state (for 'full' mode)
-    const [documents, setDocuments] = useState({
-        POW: null,
-        DUPA: null,
-        CONTRACT: null
+    // Realignment specific state
+    const [realignmentCandidates, setRealignmentCandidates] = useState([]);
+    const [isFetchingCandidates, setIsFetchingCandidates] = useState(false);
+    const [candidatesError, setCandidatesError] = useState(null);
+    const [realignmentForm, setRealignmentForm] = useState({
+        targetIpc: ''
     });
+
+    const [isSubmittingRealignment, setIsSubmittingRealignment] = useState(false);
 
     useEffect(() => {
         if (project) {
@@ -101,12 +105,40 @@ const EditProjectModal = ({
                 statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0], // Default to today if missing
                 accomplishmentPercentage: project.accomplishmentPercentage || 0,
                 status: project.status || ProjectStatus.NotYetStarted,
-                otherRemarks: project.otherRemarks || ''
+                otherRemarks: project.otherRemarks || '',
+                // Tab Modes
+                hasVariationOrder: project.hasVariationOrder || project.has_variation_order || false,
+                isRealignment: false,
+                variationOrderPdf: project.variationOrderPdf || project.variation_order_pdf || null,
+                // New VO Fields
+                vo_number: project.vo_number || '',
+                vo_requested_date: (project.vo_requested_date || project.vo_approval_date) ? (project.vo_requested_date || project.vo_approval_date).split('T')[0] : '',
+                vo_requested_by: project.vo_requested_by || project.vo_approved_by || ''
             });
-            // Reset docs on open
             setDocuments({ POW: null, DUPA: null, CONTRACT: null });
         }
     }, [project, isOpen]);
+
+    useEffect(() => {
+        if (formData?.isRealignment && project?.id) {
+            const fetchCandidates = async () => {
+                setIsFetchingCandidates(true);
+                try {
+                    setCandidatesError(null);
+                    const res = await fetch(`/api/projects/realignment-candidates/${project.id}`);
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.message || "Failed to fetch candidates");
+                    setRealignmentCandidates(data);
+                } catch (err) {
+                    console.error("Candidates Fetch Error:", err);
+                    setCandidatesError(err.message);
+                } finally {
+                    setIsFetchingCandidates(false);
+                }
+            };
+            fetchCandidates();
+        }
+    }, [formData?.isRealignment, project?.id]);
 
     // --- Document Handlers ---
     const handleDocumentSelect = (e, type) => {
@@ -137,7 +169,7 @@ const EditProjectModal = ({
             let newData = { ...prev, [name]: value };
 
             // Force Uppercase for Scope of Work & Batch of Funds
-            if (['scopeOfWork', 'batchOfFunds', 'projectCategory'].includes(name)) {
+            if (['scopeOfWork', 'batchOfFunds'].includes(name)) {
                 newData[name] = value.toUpperCase();
             }
 
@@ -265,7 +297,7 @@ const EditProjectModal = ({
                 </div>
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Project Name</label>
-                    <input name="projectName" value={formData.projectName} readOnly className="w-full p-2 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs" />
+                    <input name="projectName" value={formData.projectName} onChange={handleChange} disabled={readOnly} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs ${readOnly ? 'bg-slate-100' : ''}`} />
                 </div>
             </div>
 
@@ -334,6 +366,10 @@ const EditProjectModal = ({
                     <input type="number" name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                 </div>
                 <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                    <input type="number" name="fundsUtilized" value={formData.fundsUtilized} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Batch</label>
                     <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                 </div>
@@ -341,8 +377,284 @@ const EditProjectModal = ({
         </div>
     );
 
-    const renderStatusAndProgress = () => (
-        <div className="grid grid-cols-2 gap-4">
+    const renderTabs = () => {
+        if (mode === 'docs_only') return null;
+        
+        return (
+            <div className="flex p-1 bg-slate-100 rounded-2xl mb-4">
+                <button
+                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: false }))}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${(!formData.hasVariationOrder && !formData.isRealignment) 
+                        ? 'bg-white text-blue-600 shadow-sm' 
+                        : 'text-slate-500 hover:bg-white/50'}`}
+                >
+                    Regular Status Update
+                </button>
+                <button
+                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: true, isRealignment: false }))}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.hasVariationOrder 
+                        ? 'bg-amber-500 text-white shadow-md' 
+                        : 'text-slate-500 hover:bg-white/50'}`}
+                >
+                    Variation Order
+                </button>
+                <button
+                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: true }))}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.isRealignment 
+                        ? 'bg-purple-600 text-white shadow-md' 
+                        : 'text-slate-500 hover:bg-white/50'}`}
+                >
+                    Realignment
+                </button>
+            </div>
+        );
+    };
+
+    const renderVariationOrderHeader = () => {
+        if (!formData.hasVariationOrder) return null;
+        
+        return (
+            <>
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-xl text-amber-600 shadow-inner">⚖️</div>
+                        <div>
+                            <h3 className="text-sm font-black text-amber-900 uppercase tracking-wide">Variation Order Mode</h3>
+                            <p className="text-[10px] text-amber-700 font-bold leading-tight">Updating project specification, timelines, or funding details.</p>
+                        </div>
+                    </div>
+
+                    {/* NEW VO TRACKING FIELDS */}
+                    <div className="mt-4 pt-4 border-t border-amber-200 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">VO Number</label>
+                            <input
+                                type="number"
+                                name="vo_number"
+                                value={formData.vo_number}
+                                onChange={handleChange}
+                                placeholder="e.g. 1"
+                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Requested Date</label>
+                            <input
+                                type="date"
+                                name="vo_requested_date"
+                                value={formData.vo_requested_date}
+                                onChange={handleChange}
+                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Requested By</label>
+                            <input
+                                name="vo_requested_by"
+                                value={formData.vo_requested_by}
+                                onChange={handleChange}
+                                placeholder="Name of Requester"
+                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 outline-none uppercase"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-amber-100">
+                        <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2">VO Document (PDF)</label>
+                        <div className={`p-2 rounded-xl border border-dashed transition-all ${documents.VO || formData.variationOrderPdf ? 'bg-white border-amber-400' : 'bg-amber-100/30 border-amber-200'}`}>
+                            {documents.VO ? (
+                                <div className="flex justify-between items-center px-1">
+                                    <span className="text-[10px] text-amber-900 font-bold truncate max-w-[200px]">📄 {documents.VO.name}</span>
+                                    <button onClick={() => removeDocument('VO')} className="text-red-500 font-black text-xs p-1 hover:bg-red-50 rounded">✕</button>
+                                </div>
+                            ) : formData.variationOrderPdf ? (
+                                <div className="flex justify-between items-center px-1">
+                                    <span className="text-[10px] text-amber-600 font-bold italic">Existing VO PDF available</span>
+                                    <div className="flex gap-2">
+                                        {!readOnly && (
+                                            <label className="cursor-pointer text-[9px] font-black text-amber-700 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg shadow-sm border border-amber-200 hover:bg-amber-50 transition-all">
+                                                Change
+                                                <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'VO')} />
+                                            </label>
+                                        )}
+                                        <a 
+                                            href={formData.variationOrderPdf?.startsWith('data:') ? formData.variationOrderPdf : `data:application/pdf;base64,${formData.variationOrderPdf}`} 
+                                            download={`${formData.schoolName}_VO_${formData.vo_number || 'Update'}.pdf`}
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg shadow-sm border border-blue-200 hover:bg-blue-50"
+                                        >
+                                            View
+                                        </a>
+                                    </div>
+                                </div>
+                            ) : (
+                                !readOnly && (
+                                    <label className="cursor-pointer flex items-center justify-center gap-2 py-2.5 text-amber-600 hover:text-amber-700 transition-all">
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Upload Required VO PDF</span>
+                                        <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'VO')} />
+                                    </label>
+                                )
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </>
+        );
+    };
+
+    const renderRealignmentTab = () => {
+        if (!formData.isRealignment) return null;
+
+        return (
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 mb-4 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-xl text-purple-600 shadow-inner">🔄</div>
+                    <div>
+                        <h3 className="text-sm font-black text-purple-900 uppercase tracking-wide">Project Realignment</h3>
+                        <p className="text-[10px] text-purple-700 font-bold leading-tight">Transfer budget funds to another project within the same category, region, and district.</p>
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t border-purple-200 space-y-4">
+                    {/* Target Project Selection */}
+                    <div>
+                        <label className="block text-[10px] font-black text-purple-700 uppercase tracking-widest mb-1">Target Project</label>
+                        {isFetchingCandidates ? (
+                            <div className="text-xs text-purple-400 italic py-2">Searching for eligible projects matching category and district...</div>
+                        ) : candidatesError ? (
+                            <div className="text-xs text-red-500 bg-red-50 p-3 rounded-xl border border-red-100 flex items-start gap-2">
+                                <span className="text-sm">⚠️</span>
+                                <span>{candidatesError}</span>
+                            </div>
+                        ) : realignmentCandidates.length > 0 ? (
+                            <select
+                                value={realignmentForm.targetIpc}
+                                onChange={(e) => setRealignmentForm(prev => ({ ...prev, targetIpc: e.target.value }))}
+                                className="w-full p-2 bg-white border border-purple-200 rounded-lg text-xs focus:ring-1 focus:ring-purple-500 outline-none"
+                            >
+                                <option value="">Select Target Project...</option>
+                                {realignmentCandidates.map(c => (
+                                    <option key={c.ipc} value={c.ipc}>
+                                        {c.schoolName} - {c.projectName} (IPC: {c.ipc})
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            <div className="text-xs text-red-500 bg-red-50 p-2 rounded-lg border border-red-100">
+                                ⚠️ No eligible projects found matching the same category, region, and district.
+                            </div>
+                        )}
+                    </div>
+
+                    {/* (Amount, Date, RequestedBy and Remarks removed as per simplification) */}
+                </div>
+            </div>
+        );
+    };
+
+    const renderLocation = () => (
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Project Location</h3>
+            <div className="rounded-xl overflow-hidden border border-slate-200 h-40 shadow-inner">
+                <LocationPickerMap
+                    latitude={formData.latitude}
+                    longitude={formData.longitude}
+                    onLocationSelect={handleLocationSelect}
+                    disabled={readOnly}
+                />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude</label>
+                    <input name="latitude" value={formData.latitude} readOnly className="w-full p-2 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-[10px] font-mono" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude</label>
+                    <input name="longitude" value={formData.longitude} readOnly className="w-full p-2 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-[10px] font-mono" />
+                </div>
+            </div>
+            {!readOnly && (
+                <button
+                    type="button"
+                    onClick={handleGetLocation}
+                    className="w-full py-2 bg-blue-50 text-blue-600 font-bold text-[10px] uppercase rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
+                >
+                    <span>📡</span> {formData.latitude ? 'Refine Location' : 'Get Current Location'}
+                </button>
+            )}
+        </div>
+    );
+
+    const renderLguDetails = () => (
+        <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-200 space-y-4">
+            <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">LGU Project Details</h3>
+            
+            {/* Location Details */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Province</label>
+                    <input name="province" value={formData.province || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Municipality</label>
+                    <input name="municipality" value={formData.municipality || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Leg. District</label>
+                    <input name="legislative_district" value={formData.legislative_district || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs" />
+                </div>
+            </div>
+
+            {/* Funding & MOA */}
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Fund Source</label>
+                    <input name="fund_source" value={formData.fund_source || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">MOA Date</label>
+                    <input type="date" name="moa_date" value={formData.moa_date || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs" />
+                </div>
+            </div>
+
+            {/* Tranches */}
+            <div className="p-3 bg-white/50 rounded-xl border border-blue-100">
+                <h4 className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-3">Fund tranches</h4>
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-[9px] font-bold text-blue-700 uppercase mb-1">No. of Tranches</label>
+                        <input type="number" name="tranches_count" value={formData.tranches_count || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-50 rounded-lg text-xs" />
+                    </div>
+                    <div>
+                        <label className="block text-[9px] font-bold text-blue-700 uppercase mb-1">Amt per Tranche</label>
+                        <input name="tranche_amount" value={formData.tranche_amount || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-50 rounded-lg text-xs" />
+                    </div>
+                </div>
+            </div>
+            
+            {/* Procurement Stage (Optional for VO context but included for "all fields") */}
+            <div>
+                <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Procurement Stage</label>
+                <select name="procurement_stage" value={formData.procurement_stage || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs">
+                    <option value="">Select Stage...</option>
+                    <option value="Pre-Procurement">Pre-Procurement</option>
+                    <option value="Advertisement">Advertisement</option>
+                    <option value="Pre-Bid Conference">Pre-Bid Conference</option>
+                    <option value="Opening of Bids">Opening of Bids</option>
+                    <option value="Bid Evaluation">Bid Evaluation</option>
+                    <option value="Post Qualification">Post Qualification</option>
+                    <option value="Awarded">Awarded</option>
+                </select>
+            </div>
+        </div>
+    );
+
+    const renderStatusAndProgress = () => {
+        // Show status fields even for VO
+        
+        return (
+            <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Current Status</label>
                 <div className="relative">
@@ -386,13 +698,163 @@ const EditProjectModal = ({
                 </div>
             )}
         </div>
-    );
+        );
+    };
 
     const renderFundsUtilized = () => (
         // For Quick Mode: Standalone Funds Utilized input
         <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Funds Utilized</label>
             <input type="number" name="fundsUtilized" value={formData.fundsUtilized} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+        </div>
+    );
+
+    const renderSitePhotos = (isVo = false) => {
+        if (formData.status === ProjectStatus.NotYetStarted || formData.status === ProjectStatus.UnderProcurement) return null;
+
+        const isRequiredStatus = [ProjectStatus.Ongoing, ProjectStatus.ForFinalInspection, ProjectStatus.Completed].includes(formData.status);
+        const hasPhotos = (internalPreviews?.length || 0) > 0 || (externalPreviews?.length || 0) > 0;
+
+        return (
+            <div className={`${isVo ? 'bg-white shadow-sm' : 'bg-slate-50'} p-4 rounded-2xl border border-slate-200`}>
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Site Photos {isVo ? '(VO Proof)' : ''}
+                    </h3>
+                    {isRequiredStatus && !hasPhotos && !readOnly && (
+                        <span className="text-[9px] font-black text-red-500 bg-red-50 px-2 py-0.5 rounded uppercase animate-pulse">Required for {formData.status}</span>
+                    )}
+                </div>
+                <div className="space-y-4">
+                    {/* External */}
+                    <div className={`${isVo ? 'bg-slate-50' : 'bg-white'} p-3 rounded-xl border border-slate-100 shadow-sm`}>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] font-bold text-slate-600 uppercase">External Photos</span>
+                            <span className="text-[9px] font-bold text-blue-500">{externalPreviews?.length || 0} Added</span>
+                        </div>
+                        <div className="text-[9px] text-slate-400 mb-2 italic space-y-0.5">
+                            <p>• Front, Left, Right, Rear (wide shots)</p>
+                            <p>• Orthographic at height 20-30m (optional)</p>
+                        </div>
+                        {!readOnly && (
+                            <div className="flex gap-2 mb-2">
+                                <button onClick={() => onCameraClick('External')} className={`flex-1 py-3 ${isVo ? 'bg-white' : 'bg-slate-50'} border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all`}>📷 Camera</button>
+                                <button onClick={() => onGalleryClick('External')} className={`flex-1 py-3 ${isVo ? 'bg-white' : 'bg-slate-50'} border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all`}>🖼️ Gallery</button>
+                            </div>
+                        )}
+                        {externalPreviews?.length > 0 && (
+                            <div className="grid grid-cols-4 gap-2">
+                                {externalPreviews.map((url, index) => (
+                                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
+                                        <img src={url} alt="external" className="w-full h-full object-cover" />
+                                        {!readOnly && <button onClick={() => onRemoveFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    {/* Internal */}
+                    <div className={`${isVo ? 'bg-slate-50' : 'bg-white'} p-3 rounded-xl border border-slate-100 shadow-sm`}>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] font-bold text-slate-600 uppercase">Internal Photos</span>
+                            <span className="text-[9px] font-bold text-blue-500">{internalPreviews?.length || 0} Added</span>
+                        </div>
+                        <div className="text-[9px] text-slate-400 mb-2 italic space-y-0.5">
+                            <p>• Classrooms: Longest wall, Lighting, Outlets, etc.</p>
+                            <p>• Camera at 1.4-1.6m height, Facing longest wall.</p>
+                        </div>
+                        {!readOnly && (
+                            <div className="flex gap-2 mb-2">
+                                <button onClick={() => onCameraClick('Internal')} className={`flex-1 py-3 ${isVo ? 'bg-white' : 'bg-slate-50'} border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all`}>📷 Camera</button>
+                                <button onClick={() => onGalleryClick('Internal')} className={`flex-1 py-3 ${isVo ? 'bg-white' : 'bg-slate-50'} border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all`}>🖼️ Gallery</button>
+                            </div>
+                        )}
+                        {internalPreviews?.length > 0 && (
+                            <div className="grid grid-cols-4 gap-2">
+                                {internalPreviews.map((url, index) => (
+                                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
+                                        <img src={url} alt="internal" className="w-full h-full object-cover" />
+                                        {!readOnly && <button onClick={() => onRemoveFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderDocumentUploads = () => (
+        <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="flex items-center gap-2 mb-2">
+                <span className="text-xl">📄</span>
+                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">{readOnly ? 'Project Documents' : 'Update Documents'}</h3>
+            </div>
+            {!readOnly && <p className="text-xs text-slate-400 -mt-2 mb-2">Each document must be a PDF file.</p>}
+
+            <div className="space-y-2">
+                {Object.entries(DOC_TYPES)
+                    .map(([key, label]) => (
+                    <div key={key} className={`p-3 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <p className={`text-[10px] font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                    {label}
+                                </p>
+                                {documents[key] ? (
+                                    <p className="text-[9px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                        {documents[key].name}
+                                    </p>
+                                ) : (
+                                    project && project[`${key.toLowerCase()}_pdf`] ? (
+                                        <div className="flex flex-col mt-0.5">
+                                            <p className="text-[9px] text-blue-500 font-bold mb-1">Existing File Available</p>
+                                            <a
+                                                href={project[`${key.toLowerCase()}_pdf`]?.startsWith('data:') ? project[`${key.toLowerCase()}_pdf`] : `data:application/pdf;base64,${project[`${key.toLowerCase()}_pdf`]}`}
+                                                download={`${formData.schoolName}_${label}.pdf`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-block w-fit px-3 py-1.5 bg-blue-50 text-blue-700 text-[9px] font-black rounded-lg border border-blue-100 hover:bg-blue-100 transition-all uppercase tracking-wider"
+                                            >
+                                                View Document
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <p className="text-[9px] text-slate-400 mt-0.5">No file uploaded</p>
+                                    )
+                                )}
+                            </div>
+                            <div>
+                                {documents[key] ? (
+                                    <button
+                                        onClick={() => removeDocument(key)}
+                                        className="w-6 h-6 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
+                                    >
+                                        ✕
+                                    </button>
+                                ) : (
+                                    !readOnly && (
+                                        <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-[9px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
+                                            Select PDF
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                className="hidden"
+                                                onChange={(e) => handleDocumentSelect(e, key)}
+                                            />
+                                        </label>
+                                    )
+                                )}
+                                {readOnly && !documents[key] && !project[`${key.toLowerCase()}_pdf`] && (
+                                    <span className="text-[9px] text-slate-300 font-bold italic px-2">N/A</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 
@@ -418,168 +880,43 @@ const EditProjectModal = ({
                 {/* --- BODY --- */}
                 <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
 
-                    {/* FULL MODE: Project Details */}
-                    {mode === 'full' && renderProjectDetails()}
+                    {/* TABS SWITCHER */}
+                    {renderTabs()}
 
-                    {/* FULL MODE: Timeline & Funds (Part 1 - Allocation, Batch) */}
-                    {mode === 'full' && renderTimelineAndFunds()}
+                    {/* IF REGULAR UPDATE: Show status/progress/photos */}
+                    {!formData.hasVariationOrder && !formData.isRealignment && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {renderStatusAndProgress()}
+                            {renderFundsUtilized()}
+                            {renderSitePhotos()}
+                            {renderDocumentUploads()}
+                        </div>
+                    )}
 
-                    {/* COMMON: Status & Percentage - SHOW ONLY IN QUICK MODE PER USER REQUEST */}
-                    {mode === 'quick' && renderStatusAndProgress()}
+                    {/* IF VARIATION ORDER: Show creation fields in Amber Container */}
+                    {formData.hasVariationOrder && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 bg-amber-50/50 p-4 sm:p-6 rounded-[2rem] border border-amber-200 shadow-inner">
+                            {renderVariationOrderHeader()}
+                            <div className="space-y-6">
+                                {renderProjectDetails()}
+                                {renderStatusAndProgress()}
+                                {renderFundsUtilized()}
+                                {renderDocumentUploads()}
 
-                    {/* COMMON: Funds Utilized */}
-                    {/* In full mode, this is inside renderTimelineAndFunds. In quick mode, render here. */}
-                    {mode === 'quick' && renderFundsUtilized()}
-
-                    {/* COMMON: Site Photos - SHOW ONLY IN QUICK MODE PER USER REQUEST */}
-                    {mode === 'quick' && 
-                     formData.status !== ProjectStatus.NotYetStarted && 
-                     formData.status !== ProjectStatus.UnderProcurement && (
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Site Photos</h3>
-                            <div className="space-y-4">
-                                {/* External */}
-                                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-[10px] font-bold text-slate-600 uppercase">External Photos</span>
-                                        <span className="text-[9px] font-bold text-blue-500">{externalPreviews?.length || 0} Added</span>
-                                    </div>
-                                    <div className="text-[9px] text-slate-400 mb-2 italic space-y-0.5">
-                                        <p>• Front, Left, Right, Rear (wide shots)</p>
-                                        <p>• Orthographic at height 20-30m (optional)</p>
-                                    </div>
-                                    {!readOnly && (
-                                        <div className="flex gap-2 mb-2">
-                                            <button onClick={() => onCameraClick('External')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
-                                                📷 Camera
-                                            </button>
-                                            <button onClick={() => onGalleryClick('External')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
-                                                🖼️ Gallery
-                                            </button>
-                                        </div>
-                                    )}
-                                    {externalPreviews?.length > 0 && (
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {externalPreviews.map((url, index) => (
-                                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
-                                                    <img src={url} alt="external" className="w-full h-full object-cover" />
-                                                    {!readOnly && (
-                                                        <button onClick={() => onRemoveFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Internal */}
-                                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-[10px] font-bold text-slate-600 uppercase">Internal Photos</span>
-                                        <span className="text-[9px] font-bold text-blue-500">{internalPreviews?.length || 0} Added</span>
-                                    </div>
-                                    <div className="text-[9px] text-slate-400 mb-2 italic space-y-0.5">
-                                        <p>• Classrooms (2-3): Wide shot from doorway/corner, Camera at 1.4-1.6m height, Facing longest wall.</p>
-                                        <p>• Key indicators: Ceiling, Lighting, Outlets, Painted walls, Floor condition.</p>
-                                    </div>
-                                    {!readOnly && (
-                                        <div className="flex gap-2 mb-2">
-                                            <button onClick={() => onCameraClick('Internal')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
-                                                📷 Camera
-                                            </button>
-                                            <button onClick={() => onGalleryClick('Internal')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
-                                                🖼️ Gallery
-                                            </button>
-                                        </div>
-                                    )}
-                                    {internalPreviews?.length > 0 && (
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {internalPreviews.map((url, index) => (
-                                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
-                                                    <img src={url} alt="internal" className="w-full h-full object-cover" />
-                                                    {!readOnly && (
-                                                        <button onClick={() => onRemoveFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
+                                {renderTimelineAndFunds()}
+                                {renderLocation()}
+                                {(formData.province || formData.municipality || formData.userRole === 'Local Government Unit') && renderLguDetails()}
                             </div>
                         </div>
                     )}
 
-                    {/* FULL OR DOCS_ONLY MODE: Documents */}
-                    {(mode === 'full' || mode === 'docs_only') && (
-                        <div className="mt-4 pt-4 border-t border-slate-100">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="text-xl">📄</span>
-                                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">{readOnly ? 'Project Documents' : 'Update Documents'}</h3>
-                            </div>
-                            {!readOnly && <p className="text-xs text-slate-400 -mt-2 mb-2">Upload new PDFs to replace existing ones.</p>}
-
-                            <div className="space-y-2">
-                                {Object.entries(DOC_TYPES).map(([key, label]) => (
-                                    <div key={key} className={`p-3 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
-                                        <div className="flex justify-between items-center">
-                                            <div>
-                                                <p className={`text-[10px] font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                    {label}
-                                                </p>
-                                                {documents[key] ? (
-                                                    <p className="text-[9px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                                        {documents[key].name}
-                                                    </p>
-                                                ) : (
-                                                    project && project[`${key.toLowerCase()}_pdf`] ? (
-                                                        <div className="flex flex-col mt-0.5">
-                                                            <p className="text-[9px] text-blue-500 font-bold mb-1">Existing File Available</p>
-                                                            {readOnly && (
-                                                                <a
-                                                                    href={project[`${key.toLowerCase()}_pdf`]}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="inline-block w-fit px-2 py-1 bg-blue-100 text-blue-700 text-[9px] font-bold rounded-md hover:bg-blue-200 transition-colors"
-                                                                >
-                                                                    Download / View PDF
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-[9px] text-slate-400 mt-0.5">No file uploaded</p>
-                                                    )
-                                                )}
-                                            </div>
-                                            <div>
-                                                {documents[key] ? (
-                                                    <button
-                                                        onClick={() => removeDocument(key)}
-                                                        className="w-6 h-6 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                ) : (
-                                                    <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-[9px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
-                                                        Upload
-                                                        <input
-                                                            type="file"
-                                                            accept=".pdf"
-                                                            className="hidden"
-                                                            onChange={(e) => handleDocumentSelect(e, key)}
-                                                        />
-                                                    </label>
-                                                )}
-                                                {readOnly && !documents[key] && !project[`${key.toLowerCase()}_pdf`] && (
-                                                    <span className="text-[9px] text-slate-300 font-bold italic px-2">N/A</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                    {/* IF REALIGNMENT: Show realignment fields */}
+                    {formData.isRealignment && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {renderRealignmentTab()}
                         </div>
                     )}
+
 
 
                     {/* LOCATION REMOVED PER USER REQUEST */}
@@ -653,18 +990,65 @@ const EditProjectModal = ({
                     {!readOnly && (
                         <button
                             onClick={async () => {
-                                // VALIDATION
-                                const requiredFields = [
-                                    { key: 'statusAsOfDate', label: 'Status Date' },
-                                    { key: 'accomplishmentPercentage', label: 'Accomplishment %' }
-                                    // { key: 'otherRemarks', label: 'Remarks' } // REMOVED: Optional
-                                ];
-
-                                for (const field of requiredFields) {
-                                    if (formData[field.key] === "" || formData[field.key] === null || formData[field.key] === undefined) {
-                                        alert(`⚠️ MISSING FIELD\n\nPlease enter the ${field.label}.`);
+                                // REALIGNMENT SUBMISSION
+                                if (formData.isRealignment) {
+                                    if (!realignmentForm.targetIpc) {
+                                        alert("⚠️ MISSING FIELD\n\nPlease select a target project.");
                                         return;
                                     }
+
+                                    // Trigger realignment API
+                                    setIsSubmittingRealignment(true);
+                                    try {
+                                        const res = await fetch('/api/projects/realign', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                sourceProjectId: project.id,
+                                                ...realignmentForm
+                                            })
+                                        });
+
+                                        if (!res.ok) throw new Error("Realignment failed");
+                                        
+                                        alert("✅ SUCCESS\n\nProject realignment completed successfully.");
+                                        onClose(); // Close modal on success
+                                    } catch (err) {
+                                        alert("❌ ERROR\n\nFailed to process realignment: " + err.message);
+                                    } finally {
+                                        setIsSubmittingRealignment(false);
+                                    }
+                                    return;
+                                }
+
+                                // VALIDATION
+                                if (formData.hasVariationOrder) {
+                                    // Mandate VO PDF
+                                    if (!documents.VO && !formData.variationOrderPdf) {
+                                        alert("⚠️ DOCUMENT REQUIRED\n\nVariation Order updates MUST include the VO document (PDF).");
+                                        return;
+                                    }
+                                } else {
+                                    const requiredFields = [
+                                        { key: 'statusAsOfDate', label: 'Status Date' },
+                                        { key: 'accomplishmentPercentage', label: 'Accomplishment %' }
+                                    ];
+
+                                    for (const field of requiredFields) {
+                                        if (formData[field.key] === "" || formData[field.key] === null || formData[field.key] === undefined) {
+                                            alert(`⚠️ MISSING FIELD\n\nPlease enter the ${field.label}.`);
+                                            return;
+                                        }
+                                    }
+                                }
+
+                                // Mandate Photos for Ongoing/Completed statuses
+                                const isRequiredStatus = [ProjectStatus.Ongoing, ProjectStatus.ForFinalInspection, ProjectStatus.Completed].includes(formData.status);
+                                const hasPhotos = (internalPreviews?.length || 0) > 0 || (externalPreviews?.length || 0) > 0;
+                                
+                                if (isRequiredStatus && !hasPhotos) {
+                                    alert(`⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for projects in ${formData.status} status.`);
+                                    return;
                                 }
 
                                 // CONVERT DOCUMENTS (Only relevant for full mode or if docs are handled here)
@@ -672,13 +1056,17 @@ const EditProjectModal = ({
                                 if (documents.POW) finalData.pow_pdf = await convertFullFileToBase64(documents.POW);
                                 if (documents.DUPA) finalData.dupa_pdf = await convertFullFileToBase64(documents.DUPA);
                                 if (documents.CONTRACT) finalData.contract_pdf = await convertFullFileToBase64(documents.CONTRACT);
+                                if (documents.VO) finalData.variationOrderPdf = await convertFullFileToBase64(documents.VO);
+                                
+                                // Set update_type based on VO status
+                                finalData.update_type = formData.hasVariationOrder ? 'Variation Order' : 'Regular Update';
 
                                 onSave(finalData);
                             }}
-                            disabled={isUploading}
+                            disabled={isUploading || isSubmittingRealignment}
                             className="flex-[2] py-4 text-white font-black text-xs uppercase tracking-widest bg-gradient-to-r from-[#004A99] to-[#003366] rounded-2xl shadow-xl shadow-blue-900/20 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                         >
-                            {isUploading ? (
+                            {(isUploading || isSubmittingRealignment) ? (
                                 <>
                                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                                     Syncing Data...
