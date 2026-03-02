@@ -10,6 +10,7 @@ const ModularDashboard = () => {
     const navigate = useNavigate();
     const [hasDraft, setHasDraft] = useState(false);
     const [questProgress, setQuestProgress] = useState({ completedUnits: [], xp: 0 });
+    const [curricularOffering, setCurricularOffering] = useState('');
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -35,8 +36,11 @@ const ModularDashboard = () => {
                     if (res.ok) {
                         const data = await res.json();
                         if (data.success && data.progress) {
+                            if (data.progress.curricular_offering) {
+                                setCurricularOffering(data.progress.curricular_offering);
+                            }
                             // Merge backend Truth with local if backend has more completion
-                            if (data.progress.completedUnits.length > initialProgress.completedUnits.length) {
+                            if (data.progress.completedUnits.length >= initialProgress.completedUnits.length) {
                                 setQuestProgress(data.progress);
                                 localStorage.setItem('quest_progress', JSON.stringify(data.progress));
                             }
@@ -63,68 +67,90 @@ const ModularDashboard = () => {
         navigate(-1);
     };
 
-    const modules = [
-        {
-            id: 1,
-            title: "School",
-            icon: <FiHome className="w-7 h-7" />,
-            path: "/modular/unit-1",
-            locked: false,
-        },
-        {
-            id: 2,
-            title: "Enroll",
-            icon: <FiUsers className="w-7 h-7" />,
-            path: "/modular/unit-2",
-            locked: !questProgress.completedUnits.includes(1),
-        },
-        {
-            id: 3,
-            title: "Classes",
-            icon: <FiGrid className="w-7 h-7" />,
-            path: "/modular/unit-3",
-            locked: !questProgress.completedUnits.includes(2),
-        },
-        {
-            id: 4,
-            title: "Learner Profile",
-            icon: <FiBookOpen className="w-7 h-7" />,
-            path: "/modular/unit-4",
-            locked: !questProgress.completedUnits.includes(3),
-        },
-        {
-            id: 5,
-            title: "Shifting & Modality",
-            icon: <FiClock className="w-7 h-7" />,
-            path: "/modular/unit-5",
-            locked: !questProgress.completedUnits.includes(4),
-        },
-        {
-            id: 6,
-            title: "Physical Facilities",
-            icon: <FiBookOpen className="w-7 h-7" />, // or use a different icon if available
-            path: "/modular/unit-6",
-            locked: !questProgress.completedUnits.includes(5),
-        },
-    ];
+    const modules = React.useMemo(() => {
+        const offering = (curricularOffering || "").toLowerCase();
+        
+        // Determine if school offers High School 
+        const hasHighSchool = offering.includes('7') || offering.includes('8') || offering.includes('9') || 
+                              offering.includes('10') || offering.includes('11') || offering.includes('12') || 
+                              offering.includes('high school');
 
-    // Alternating margins for winding path
-    const pathOffsets = ["ml-0", "-ml-16", "ml-16", "-ml-16", "ml-16", "ml-0"];
+        // Logic to completely remove certain units if highly irrelevant
+        // Currently all units 1-6 apply generally to all levels, but filtering can be added here
+        let mods = [
+            {
+                id: 1,
+                title: "School",
+                icon: <FiHome className="w-7 h-7" />,
+                path: "/modular/unit-1",
+                locked: false,
+            },
+            {
+                id: 2,
+                title: hasHighSchool ? "JHS/SHS Enrollment" : "Enroll",
+                icon: <FiUsers className="w-7 h-7" />,
+                path: "/modular/unit-2",
+                locked: !questProgress.completedUnits.includes(1),
+            },
+            {
+                id: 3,
+                title: "Classes",
+                icon: <FiGrid className="w-7 h-7" />,
+                path: "/modular/unit-3",
+                locked: !questProgress.completedUnits.includes(2),
+            },
+            {
+                id: 4,
+                title: hasHighSchool ? "JHS/SHS Profile" : "Learner Profile",
+                icon: <FiBookOpen className="w-7 h-7" />,
+                path: "/modular/unit-4",
+                locked: !questProgress.completedUnits.includes(3),
+            },
+            {
+                id: 5,
+                title: "Shifting & Modality",
+                icon: <FiClock className="w-7 h-7" />,
+                path: "/modular/unit-5",
+                locked: !questProgress.completedUnits.includes(4),
+            },
+            {
+                id: 6,
+                title: "Physical Facilities",
+                icon: <FiBookOpen className="w-7 h-7" />, 
+                path: "/modular/unit-6",
+                locked: !questProgress.completedUnits.includes(5),
+            },
+        ];
+
+        return mods;
+    }, [curricularOffering, questProgress.completedUnits]);
+
+    // Alternating margins for dynamic winding path
+    const getPathOffset = (index) => {
+        if (index === 0) return "ml-0";
+        if (index === modules.length - 1) return "ml-0";
+        // Zig-zag offset
+        return index % 2 === 1 ? "-ml-16" : "ml-16";
+    };
 
     const handleModuleClick = (mod) => {
         if (mod.locked) return;
         navigate(mod.path);
     };
 
-    // Determine mascot message based on progress
+    // Determine mascot message based on progress dynamically
     const getMascotMessage = () => {
         const completed = questProgress.completedUnits.length;
+        const total = modules.length;
+        const isHighSchool = (curricularOffering || "").toLowerCase().includes('high');
+
         if (completed === 0) return "Start with the School Profile module! 🏢";
-        if (completed === 1) return "Great job! Try testing Enrollment next!";
-        if (completed === 2) return "Excellent progress! Scheduling is next! 📈";
-        if (completed === 3) return "Halfway there! Let's check shifting models!";
-        if (completed === 4) return "Almost done! Facilities is the final stretch!";
-        return "You've completed all modules! 🏆";
+        if (completed === 1) return `Great job! Let's plot your ${isHighSchool ? 'High School' : ''} Enrollment next!`;
+        if (completed === 2) return "Excellent progress! Log your organized classes and sections! 📈";
+        if (completed === 3) return "Halfway there! Complete the learner demographics profile.";
+        if (completed === 4) return "Almost done! Let's check shifting formulas!";
+        if (completed === total - 1) return "Final stretch! Ready up the Facilities report!";
+        return "You've successfully conquered all modules! 🏆";
     };
 
     return (
@@ -182,7 +208,7 @@ const ModularDashboard = () => {
                             initial={{ opacity: 0, y: 30, scale: 0.8 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             transition={{ delay: idx * 0.12, type: "spring", bounce: 0.4 }}
-                            className={`relative z-10 flex flex-col items-center ${pathOffsets[idx]}`}
+                            className={`relative z-10 flex flex-col items-center ${getPathOffset(idx)}`}
                         >
                             {/* Module Label */}
                             <motion.p

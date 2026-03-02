@@ -11155,14 +11155,16 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const result = await pool.query(
-      'SELECT total_enrollment, enroll_kinder, has_multigrade, selected_learner_groups FROM ph_schools WHERE school_id = $1',
+      'SELECT total_enrollment, enroll_kinder, has_multigrade, selected_learner_groups, curricular_offering FROM ph_schools WHERE school_id = $1',
       [schoolId]
     );
 
     let completedUnits = [];
     let xp = 0;
 
+    let curricular_offering = null;
     if (result.rows.length > 0) {
+      curricular_offering = result.rows[0].curricular_offering;
       completedUnits.push(1);
       xp += 150;
 
@@ -11181,7 +11183,7 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       }
     }
 
-    res.json({ success: true, progress: { completedUnits, xp } });
+    res.json({ success: true, progress: { completedUnits, xp, curricular_offering } });
   } catch (err) {
     console.error("Fetch Quest Progress Error:", err);
     res.status(500).json({ error: "Failed to fetch progress" });
