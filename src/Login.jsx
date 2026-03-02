@@ -439,6 +439,16 @@ const Login = () => {
                 }
             }
 
+            // --- NORMALIZE ROLE ---
+            let normalizedRole = role;
+            if (role === 'school_head') normalizedRole = 'School Head';
+            if (role === 'lgu') normalizedRole = 'Local Government Unit';
+            if (role === 'division_engineer') normalizedRole = 'Division Engineer';
+            if (role === 'admin') normalizedRole = 'Admin';
+            if (role === 'super_admin') normalizedRole = 'Super Admin';
+
+            role = normalizedRole;
+
             console.log("Determined Role:", role);
 
             if (role) {

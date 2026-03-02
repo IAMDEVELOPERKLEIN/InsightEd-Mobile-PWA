@@ -59,6 +59,7 @@ const SchoolHeadDashboard = () => {
 
     // --- SINGLE SCHOOL VALIDATION STATE ---
     const [isValidating, setIsValidating] = useState(true); // Start with loading to prevent score flash
+    const [healthCheckCountdown, setHealthCheckCountdown] = useState(15);
     const [showExcellentModal, setShowExcellentModal] = useState(false);
     const [showHealthUpdatedModal, setShowHealthUpdatedModal] = useState(false);
 
@@ -108,6 +109,17 @@ const SchoolHeadDashboard = () => {
             alert("An error occurred during validation.");
         }
     };
+
+    useEffect(() => {
+        let timer;
+        if (isValidating) {
+            setHealthCheckCountdown(15);
+            timer = setInterval(() => {
+                setHealthCheckCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [isValidating]);
 
     /**
      * Trigger Single School Fraud Detection
@@ -713,7 +725,10 @@ const SchoolHeadDashboard = () => {
                                 {isValidating ? (
                                     <>
                                         <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent mb-1"></div>
-                                        <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1">Checking Data Health</p>
+                                        <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1">
+                                            Checking Data Health
+                                            {healthCheckCountdown > 0 ? ` (${healthCheckCountdown}s)` : ' (Finalizing...)'}
+                                        </p>
                                     </>
                                 ) : (
                                     <>
