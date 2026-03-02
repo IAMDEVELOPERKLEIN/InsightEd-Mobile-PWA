@@ -31,6 +31,12 @@ const Unit2Learners = () => {
         enroll_g4: "",
         enroll_g5: "",
         enroll_g6: "",
+        enroll_g7: "",
+        enroll_g8: "",
+        enroll_g9: "",
+        enroll_g10: "",
+        enroll_g11: "",
+        enroll_g12: "",
         
         // Step 2: Special
         hasSned: null, // boolean or null
@@ -77,6 +83,12 @@ const Unit2Learners = () => {
                             enroll_g4: d.enroll_g4 ?? "",
                             enroll_g5: d.enroll_g5 ?? "",
                             enroll_g6: d.enroll_g6 ?? "",
+                            enroll_g7: d.enroll_g7 ?? "",
+                            enroll_g8: d.enroll_g8 ?? "",
+                            enroll_g9: d.enroll_g9 ?? "",
+                            enroll_g10: d.enroll_g10 ?? "",
+                            enroll_g11: d.enroll_g11 ?? "",
+                            enroll_g12: d.enroll_g12 ?? "",
                             sned_learners: d.sned_learners ?? "",
                             hasSned: d.sned_learners > 0,
                             non_graded_learners: d.non_graded_learners ?? "",
@@ -123,14 +135,18 @@ const Unit2Learners = () => {
     // --- MAGIC MATH LOGIC ---
     // sum base enrollment
     const totalEnrollment = useMemo(() => {
-        const fields = ['enroll_kinder', 'enroll_g1', 'enroll_g2', 'enroll_g3', 'enroll_g4', 'enroll_g5', 'enroll_g6'];
+        const fields = [
+            'enroll_kinder', 'enroll_g1', 'enroll_g2', 'enroll_g3', 'enroll_g4', 'enroll_g5', 
+            'enroll_g6', 'enroll_g7', 'enroll_g8', 'enroll_g9', 'enroll_g10', 'enroll_g11', 'enroll_g12'
+        ];
         return fields.reduce((sum, field) => {
             const val = parseInt(formData[field]) || 0;
             return sum + val;
         }, 0);
     }, [
         formData.enroll_kinder, formData.enroll_g1, formData.enroll_g2, 
-        formData.enroll_g3, formData.enroll_g4, formData.enroll_g5, formData.enroll_g6
+        formData.enroll_g3, formData.enroll_g4, formData.enroll_g5, formData.enroll_g6,
+        formData.enroll_g7, formData.enroll_g8, formData.enroll_g9, formData.enroll_g10, formData.enroll_g11, formData.enroll_g12
     ]);
 
     // derive female
@@ -406,7 +422,7 @@ const Unit2Learners = () => {
                                 </div>
 
                                 <div className="space-y-4">
-                                    {['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'].map((grade) => (
+                                    {['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'].map((grade) => (
                                         <div key={grade} className="flex items-center gap-4">
                                             <label className="w-20 text-sm font-bold uppercase tracking-wider text-gray-400">
                                                 {grade === 'kinder' ? 'Kinder' : grade.toUpperCase()}
