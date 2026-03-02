@@ -437,6 +437,35 @@ const AdminDashboard = () => {
         }
     };
 
+    const handleResubmitRequest = async (pendingId) => {
+        const comment = prompt("Please enter a reason for requesting re-submission (e.g., 'PDF is blurry'):");
+        if (!comment) return; // Cancelled or empty
+
+        try {
+            const user = auth.currentUser;
+            const res = await fetch(`/api/admin/resubmit-request/${pendingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reviewed_by: user.uid,
+                    reviewed_by_name: userName,
+                    admin_comment: comment
+                })
+            });
+
+            if (res.ok) {
+                alert("📝 Resubmit Request Sent.");
+            } else {
+                const data = await res.json();
+                alert("❌ Failed to send request: " + data.error);
+            }
+            fetchPendingSchools();
+        } catch (err) {
+            console.error(err);
+            alert("❌ Error requesting resubmission.");
+        }
+    };
+
     const handleResetPassword = async (uid, email) => {
         if (!window.confirm(`Are you sure you want to RESET the password for ${email}?`)) return;
 
@@ -835,6 +864,13 @@ const AdminDashboard = () => {
                                             title="Reject"
                                         >
                                             <FiX size={20} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleResubmitRequest(school.pending_id)}
+                                            className="p-3 rounded-xl text-amber-500 hover:bg-amber-50 transition-colors"
+                                            title="Request Resubmit"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                         </button>
                                         <button
                                             onClick={() => handleApproveSchool(school.pending_id)}

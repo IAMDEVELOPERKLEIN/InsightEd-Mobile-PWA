@@ -3898,17 +3898,17 @@ app.post('/api/sdo/upload-document', async (req, res) => {
 // GET - SDO Retrieve Document (Base64)
 app.get('/api/sdo/document/:id/:type', async (req, res) => {
   const { id, type } = req.params;
-  const { isPending } = req.query; // e.g. ?isPending=true
-
+  
   try {
-    let query = '';
-    let params = [id, type];
-
-    if (isPending === 'true') {
-      query = 'SELECT file_data FROM school_documents WHERE pending_id = $1 AND doc_type = $2 ORDER BY created_at DESC LIMIT 1';
-    } else {
-      query = 'SELECT file_data FROM school_documents WHERE school_id = $1 AND doc_type = $2 ORDER BY created_at DESC LIMIT 1';
-    }
+    // Robust query: Look up by either school_id OR pending_id 
+    // to prevent Document Not Found errors if the front-end confuses them.
+    const query = `
+      SELECT file_data FROM school_documents 
+      WHERE (school_id = $1 OR pending_id::text = $1) 
+        AND doc_type = $2 
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    const params = [id, type];
 
     const docRes = await pool.query(query, params);
 
@@ -3952,7 +3952,7 @@ app.get('/api/sdo/pending-schools', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT * FROM pending_schools
-      WHERE submitted_by = $1
+      WHERE submitted_by = $1 AND status IN ('pending', 'needs_revision')
       ORDER BY submitted_at DESC
     `, [sdo_uid]);
 
@@ -4188,6 +4188,82 @@ app.post('/api/admin/reject-school/:pending_id', async (req, res) => {
   } catch (err) {
     console.error("Reject School Error:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH - Admin Request Resubmit
+app.patch('/api/admin/resubmit-request/:pending_id', async (req, res) => {
+  const { pending_id } = req.params;
+  const { reviewed_by, reviewed_by_name, admin_comment } = req.body;
+
+  try {
+    const pendingResult = await pool.query(
+      'SELECT * FROM pending_schools WHERE pending_id = $1',
+      [pending_id]
+    );
+
+    if (pendingResult.rows.length === 0) {
+      return res.status(404).json({ error: "Pending school not found" });
+    }
+    const school = pendingResult.rows[0];
+
+    // Update status to needs_revision and add comment
+    await pool.query(`
+      UPDATE pending_schools
+      SET status = 'needs_revision', reviewed_by = $1, reviewed_by_name = $2, 
+          reviewed_at = CURRENT_TIMESTAMP, admin_comment = $3
+      WHERE pending_id = $4
+    `, [reviewed_by, reviewed_by_name, admin_comment, pending_id]);
+
+    if (reviewed_by) {
+      await logActivity(
+        reviewed_by,
+        reviewed_by_name || 'Admin',
+        'Admin',
+        'REQUEST_RESUBMIT',
+        school.school_name,
+        `Requested document resubmission for: ${school.school_name} (${school.school_id}). Comment: ${admin_comment}`
+      );
+    }
+
+    console.log(`âœ… School marked for resubmission: ${school.school_name}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Resubmit Request Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST - SDO Re-Upload Document (Base64)
+app.post('/api/sdo/resubmit-document/:pending_id', async (req, res) => {
+  const { pending_id } = req.params;
+  const { school_id, type, base64 } = req.body;
+
+  if (!type || !base64) {
+    return res.status(400).json({ error: "Document type and base64 data are required" });
+  }
+
+  try {
+    // 1. Insert/Update the document
+    // We insert a new row so the history is preserved, and the GET route's ORDER BY created_at DESC LIMIT 1 fetches this latest one.
+    const query = `
+      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data)
+      VALUES ($1, $2, $3, $4)
+    `;
+    await pool.query(query, [pending_id, school_id || null, type, base64]);
+
+    // 2. Set the status back to 'pending'
+    await pool.query(`
+      UPDATE pending_schools
+      SET status = 'pending', submitted_at = CURRENT_TIMESTAMP, admin_comment = NULL
+      WHERE pending_id = $1
+    `, [pending_id]);
+
+    console.log(`✅ Document re-uploaded and status reset to pending for Pending ID: ${pending_id}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ SDO Resubmit Document Error:", err.message);
+    res.status(500).json({ error: "Failed to resubmit document" });
   }
 });
 

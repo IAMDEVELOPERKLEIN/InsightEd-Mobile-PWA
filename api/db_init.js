@@ -521,7 +521,8 @@ const runMigrations = async (client, dbLabel) => {
                 reviewed_by TEXT,
                 reviewed_by_name TEXT,
                 reviewed_at TIMESTAMP,
-                rejection_reason TEXT
+                rejection_reason TEXT,
+                admin_comment TEXT
             );
         `);
         console.log(`✅ [${dbLabel}] Pending Schools Table Initialized`);

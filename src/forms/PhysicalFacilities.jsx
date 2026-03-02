@@ -1607,12 +1607,11 @@ const PhysicalFacilities = ({ embedded }) => {
                         </div>
 
                         {/* Add Button */}
-                        {!isReadOnly && (
+                        {!isLocked && !isReadOnly && (
                             <div className="mb-4">
                                 <button
                                     onClick={addDemolition}
-                                    disabled={isDemolitionSubmitted}
-                                    className="w-full py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors text-sm shadow-md shadow-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="w-full py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors text-sm shadow-md shadow-red-500/20 flex items-center justify-center gap-2"
                                 >
                                     <FiPlus /> Add Building for Demolition
                                 </button>
@@ -1632,7 +1631,7 @@ const PhysicalFacilities = ({ embedded }) => {
                                             {item.reason_upgrade && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">Upgrade</span>}
                                         </div>
                                     </div>
-                                    {!isDemolitionSubmitted && !isReadOnly && (
+                                    {!isLocked && !isReadOnly && (
                                         <button onClick={() => removeDemolition(idx)} className="text-red-400 hover:text-red-600">
                                             <FiTrash2 />
                                         </button>

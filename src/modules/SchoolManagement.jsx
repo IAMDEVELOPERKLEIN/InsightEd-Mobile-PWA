@@ -559,6 +559,56 @@ const SchoolManagement = () => {
         }
     };
 
+    const handleResubmitDocument = async (pendingId, schoolId, file) => {
+        if (!file) return;
+
+        if (file.type !== 'application/pdf') {
+            alert('Please upload a PDF file.');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            alert('File size exceeds 5MB limit.');
+            return;
+        }
+
+        setUploading(true);
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64String = reader.result;
+            
+            try {
+                const res = await fetch(`/api/sdo/resubmit-document/${pendingId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        school_id: schoolId,
+                        type: 'SPECIAL_ORDER',
+                        base64: base64String
+                    })
+                });
+
+                if (res.ok) {
+                    alert("✅ Document re-uploaded successfully!");
+                    fetchPendingSchools();
+                } else {
+                    const data = await res.json();
+                    alert("❌ Failed to re-upload: " + data.error);
+                }
+            } catch (err) {
+                console.error("Resubmit error:", err);
+                alert("❌ An error occurred while resubmitting.");
+            } finally {
+                setUploading(false);
+            }
+        };
+        reader.onerror = () => {
+            console.error("Failed to read file");
+            alert("Failed to read file locally.");
+            setUploading(false);
+        };
+        reader.readAsDataURL(file);
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
@@ -1053,6 +1103,33 @@ const SchoolManagement = () => {
                                                                     Reason: {school.rejection_reason}
                                                                 </p>
                                                             )}
+                                                        </div>
+                                                    )}
+                                                    {school.status === 'needs_revision' && (
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="px-4 py-2 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-xl text-sm font-bold flex items-center gap-2">
+                                                                <FiClock size={16} />
+                                                                Needs Revision
+                                                            </span>
+                                                            {school.admin_comment && (
+                                                                <div className="mt-2 text-right">
+                                                                    <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg border border-amber-200 dark:border-amber-800/50 max-w-[200px]">
+                                                                        <strong>Admin Note:</strong> {school.admin_comment}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                            <div className="mt-3">
+                                                                <label className="cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors inline-block text-center">
+                                                                    {uploading ? 'Processing...' : 'Re-upload PDF'}
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="application/pdf"
+                                                                        disabled={uploading}
+                                                                        className="hidden"
+                                                                        onChange={(e) => handleResubmitDocument(school.pending_id, school.school_id, e.target.files[0])}
+                                                                    />
+                                                                </label>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
