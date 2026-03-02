@@ -362,8 +362,9 @@ const Login = () => {
                                 setLoading(false);
                                 return; // Stop execution
                             }
-                            // Optional: Sync role from valid backend response? 
-                            // role = valData.role || role; 
+                            // Sync role from valid backend response if missing in Firestore
+                            role = valData.role || role;
+                            userData = { ...userData, role };
                         }
                     } catch (valErr) {
                         console.warn("Backend validation unreachable, falling back to Firestore/Cache warning...", valErr);
