@@ -54,7 +54,7 @@ const formatDateShort = (dateString) => {
 
 // --- SUB-COMPONENTS ---
 
-const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQuery, readOnly }) => {
+const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading, searchQuery, readOnly }) => {
   const navigate = useNavigate();
 
   const getStatusColor = (status) => {
@@ -273,16 +273,25 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                         <FiImage size={12} /> GALLERY
                       </button>
                       {!readOnly && (
-                        <button
-                          onClick={() => onEdit(p, 'quick')}
-                          disabled={isLocked}
-                          className={`w-full py-2 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${isLocked
-                            ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
-                            : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
-                            }`}
-                        >
-                          {isLocked ? "LOCKED" : "UPDATE"}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => onEdit(p, 'quick')}
+                            disabled={isLocked}
+                            className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${isLocked
+                              ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
+                              : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
+                              }`}
+                          >
+                            {isLocked ? "LOCKED" : "UPDATE"}
+                          </button>
+                          <button
+                            onClick={() => onDelete(p.id)}
+                            className="p-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg border border-red-100 transition-all active:scale-95"
+                            title="Delete Project"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                          </button>
+                        </div>
                       )}
                     </div>
                   </td>
@@ -480,6 +489,32 @@ const EngineerProjects = () => {
 
   // Handlers
   const handleViewProject = (project) => navigate(`/project-details/${project.id}`);
+
+  const handleDeleteProject = async (projectId) => {
+    const isConfirmed = window.confirm("⚠️ DELETE PROJECT\n\nAre you sure you want to delete this project? This will permanently remove all associated progress, photos, and documents. This action cannot be undone.");
+    
+    if (!isConfirmed) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to delete project");
+      }
+
+      // Update local state
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      alert("Project deleted successfully.");
+
+    } catch (err) {
+      console.error("Delete Error:", err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
   const handleEditProject = (project, mode = 'quick') => {
     setSelectedProject(project);
     setModalMode(mode);
@@ -508,11 +543,12 @@ const EngineerProjects = () => {
       Number(originalProject.accomplishmentPercentage) !== Number(updatedProject.accomplishmentPercentage)
     );
 
-    // CHECK: Mandatory Photo Upload (For any progressive update: Ongoing, Final Inspection, or Completed)
+    // CHECK: Mandatory Photo Upload (Exempt Variation Order & Realignment)
     const progressiveStatuses = [ProjectStatus.Ongoing, ProjectStatus.ForFinalInspection, ProjectStatus.Completed];
     const isProgressiveUpdate = progressiveStatuses.includes(updatedProject.status);
+    const canSkipPhotos = updatedProject.hasVariationOrder || updatedProject.isRealigned || updatedProject.isProjectDetailsUpdate || updatedProject.update_type === 'Details Update';
 
-    if (modalMode !== 'docs_only' && isProgressiveUpdate && internalFiles.length === 0 && externalFiles.length === 0) {
+    if (modalMode !== 'docs_only' && isProgressiveUpdate && internalFiles.length === 0 && externalFiles.length === 0 && !canSkipPhotos) {
       alert(`⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for projects in "${updatedProject.status}" status.`);
       return;
     }
@@ -713,6 +749,7 @@ const EngineerProjects = () => {
           <ProjectTable
             projects={filteredProjects}
             onEdit={handleEditProject}
+            onDelete={handleDeleteProject}
             onView={handleViewProject}
             isLoading={isLoading}
             searchQuery={searchQuery}

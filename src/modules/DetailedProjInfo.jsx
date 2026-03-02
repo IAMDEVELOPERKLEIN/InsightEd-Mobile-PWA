@@ -10,7 +10,7 @@ import { compressImage } from '../utils/imageCompression';
 import { LuHistory, LuUser, LuCalendar } from "react-icons/lu";
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
-const RemarksHistory = ({ history, loading }) => {
+const RemarksHistory = ({ history, loading, currentRemarks }) => {
     if (loading) return (
         <div className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-center items-center gap-3">
             <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
@@ -18,41 +18,60 @@ const RemarksHistory = ({ history, loading }) => {
         </div>
     );
 
-    const validHistory = history.filter(h => h.remarks && h.remarks.trim() !== "");
+    // Combine history with current if not already present
+    // The history endpoint normally returns everything, but this ensures robustness
+    const displayHistory = [...history];
+    if (currentRemarks && currentRemarks.trim() !== "" && !history.some(h => h.remarks === currentRemarks)) {
+        // Only if it's truly "newer" or missing - actually history DESC should have it.
+        // But let's trust the history API for the most part.
+    }
 
-    if (validHistory.length === 0) return null;
+    const validHistory = displayHistory.filter(h => 
+        (h.remarks && h.remarks.trim() !== "") || 
+        h.update_type === 'Newly Created' || 
+        h.update_type === 'Variation Order' ||
+        h.update_type === 'Realignment'
+    );
 
     return (
         <div className="space-y-3">
             <h3 className="text-slate-700 font-bold text-sm flex items-center gap-2 ml-1">
-                <LuHistory className="text-blue-500" /> Remarks History
+                <LuHistory className="text-blue-500" /> Project Update Log
             </h3>
-            <div className="space-y-3">
-                {validHistory.map((entry, idx) => (
-                    <div key={idx} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
-                        <div className="absolute top-0 right-0 w-1 h-full bg-slate-100 group-hover:bg-blue-400 transition-colors"></div>
-                        <div className="flex justify-between items-start mb-2">
-                            <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
-                                    <LuUser size={12} />
+            {validHistory.length === 0 ? (
+                <div className="bg-white p-6 rounded-2xl border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">No Remarks Logged Yet</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {validHistory.map((entry, idx) => (
+                        <div key={idx} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-slate-100 group-hover:bg-blue-400 transition-colors"></div>
+                            <div className="flex justify-between items-start mb-2 pl-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                                        <LuUser size={12} />
+                                    </div>
+                                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">{entry.engineerName}</span>
                                 </div>
-                                <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">{entry.engineerName}</span>
+                                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                    <LuCalendar size={10} className="text-slate-400" />
+                                    <span className="text-[9px] font-bold text-slate-500">{entry.statusAsOfDate}</span>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
-                                <LuCalendar size={10} className="text-slate-400" />
-                                <span className="text-[9px] font-bold text-slate-500">{entry.statusAsOfDate}</span>
+                            <p className="text-xs text-slate-700 font-medium leading-relaxed italic border-l-2 border-slate-100 pl-3">
+                                {entry.remarks ? `"${entry.remarks}"` : <span className="text-slate-400 not-italic">No additional remarks provided for this update.</span>}
+                            </p>
+                            <div className="mt-2 flex items-center gap-1.5 pl-2">
+                                <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Update Type:</span>
+                                <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{entry.update_type || 'Status Update'}</span>
+                                <div className="w-1 h-1 bg-slate-200 rounded-full"></div>
+                                <span className="text-[9px] font-bold text-slate-400">{entry.status}</span>
                             </div>
                         </div>
-                        <p className="text-xs text-slate-700 font-medium leading-relaxed italic border-l-2 border-slate-100 pl-3">
-                            "{entry.remarks}"
-                        </p>
-                        <div className="mt-2 flex items-center gap-1.5">
-                            <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">At Stage:</span>
-                            <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{entry.status}</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
@@ -689,7 +708,7 @@ const DetailedProjInfo = () => {
                             <div className="grid grid-cols-2 gap-3">
                                 <DetailItem 
                                     label="Original Allocation" 
-                                    value={history.length > 0 ? history[history.length - 1].project_allocation : (project.projectAllocation || 0)} 
+                                    value={history.length > 0 ? (history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : (project.projectAllocation || 0)} 
                                     isMoney 
                                 />
                                 <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
@@ -717,25 +736,33 @@ const DetailedProjInfo = () => {
                                             <p className="text-sm font-bold text-amber-900">{project.vo_requested_date || project.vo_approval_date || project.variation_order_date || 'N/A'}</p>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="bg-white/50 p-2 rounded-lg border border-amber-100">
-                                            <p className="text-[9px] uppercase font-black text-amber-600 mb-0.5">VO Amount (Added)</p>
-                                            <p className="text-sm font-black text-amber-900">
-                                                ₱{Number(project.projectAllocation || 0).toLocaleString()}
-                                            </p>
-                                        </div>
-                                        <div className="bg-amber-500 p-2 rounded-lg shadow-inner">
-                                            <p className="text-[9px] uppercase font-black text-white/80 mb-0.5">Revised Total</p>
-                                            <p className="text-sm font-black text-white drop-shadow-sm">
-                                                ₱{Number(
-                                                    (Number(history.length > 0 ? history[history.length - 1].project_allocation : 0) + Number(project.projectAllocation || 0))
-                                                ).toLocaleString()}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="text-[9px] text-amber-600 italic font-medium mt-1">
-                                        Original: ₱{Number(history.length > 0 ? history[history.length - 1].project_allocation : 0).toLocaleString()}
-                                    </div>
+                                    {(() => {
+                                        const originalAlloc = Number(history.length > 0 ? (history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : project.projectAllocation || 0);
+                                        const revisedTotal = Number(project.projectAllocation || 0);
+                                        const voAdded = revisedTotal - originalAlloc;
+
+                                        return (
+                                            <>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="bg-white/50 p-2 rounded-lg border border-amber-100">
+                                                        <p className="text-[9px] uppercase font-black text-amber-600 mb-0.5">VO Amount (Added)</p>
+                                                        <p className="text-sm font-black text-amber-900">
+                                                            ₱{voAdded.toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                    <div className="bg-amber-500 p-2 rounded-lg shadow-inner">
+                                                        <p className="text-[9px] uppercase font-black text-white/80 mb-0.5">Revised Total</p>
+                                                        <p className="text-sm font-black text-white drop-shadow-sm">
+                                                            ₱{revisedTotal.toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-[9px] text-amber-600 italic font-medium mt-1">
+                                                    Original Allocation: ₱{originalAlloc.toLocaleString()}
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                     {project.vo_requested_by && (
                                         <div className="bg-white/40 p-2 rounded-lg border border-amber-100/50">
                                             <p className="text-[9px] uppercase font-black text-amber-600 mb-0.5">Requested By</p>
@@ -1037,18 +1064,14 @@ const DetailedProjInfo = () => {
                         )}
                     </div>
 
-                    {/* Remarks Section */}
-                    {project.otherRemarks && (
-                        <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 text-amber-900">
-                            <p className="text-[10px] font-bold uppercase opacity-70 mb-2">📢 Latest Remarks</p>
-                            <p className="text-sm italic">"{project.otherRemarks}"</p>
-                        </div>
-                    )}
-
-                    {/* Remarks History Section */}
-                    {project.ipc && (
-                        <RemarksHistory history={history} loading={historyLoading} />
-                    )}
+                    {/* Project Update Log (Combined Remarks & History) */}
+                    <div className="pt-2">
+                        <RemarksHistory 
+                            history={history} 
+                            loading={historyLoading} 
+                            currentRemarks={project.otherRemarks}
+                        />
+                    </div>
 
                 </div>
 

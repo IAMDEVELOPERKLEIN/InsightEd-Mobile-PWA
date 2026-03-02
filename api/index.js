@@ -128,9 +128,12 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS engineer_id TEXT,
       ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT,
       ADD COLUMN IF NOT EXISTS update_type TEXT,
-      ADD COLUMN IF NOT EXISTS vo_number INTEGER,
+      ADD COLUMN IF NOT EXISTS vo_number TEXT,
       ADD COLUMN IF NOT EXISTS vo_requested_date DATE,
       ADD COLUMN IF NOT EXISTS vo_requested_by TEXT;
+
+      -- ALTER vo_number to TEXT if it's still INTEGER
+      ALTER TABLE engineer_form ALTER COLUMN vo_number TYPE TEXT;
 
       -- Robust Rename/Backfill for Variation Order fields
       DO $$ 
@@ -152,7 +155,9 @@ const initDB = async () => {
       DROP COLUMN IF EXISTS variation_order_amount,
       DROP COLUMN IF EXISTS variation_order_remarks,
       DROP COLUMN IF EXISTS variation_order_no,
-      DROP COLUMN IF EXISTS variation_order_date;
+      DROP COLUMN IF EXISTS variation_order_date,
+      DROP COLUMN IF EXISTS vo_approval_date,
+      DROP COLUMN IF EXISTS vo_approved_by;
     `);
 
     // --- MIGRATION: REMOVE FRAUD DETECTION COLUMNS FROM SCHOOL_PROFILES ---
@@ -4689,7 +4694,7 @@ app.get('/api/schools/:schoolId/health-score', async (req, res) => {
     }
 
     const data = result.rows[0];
-    
+
     const checklist = [
       { module: 'School Profile', status: data.profile_status },
       { module: 'School Head Information', status: data.head_status },
@@ -6021,8 +6026,8 @@ app.post('/api/save-project', async (req, res) => {
       parseIntOrNull(data.numberOfStoreys), // $29
       parseNumberOrNull(data.fundsUtilized), // $30
       valueOrNull(data.variationOrderPdf), // $31
-      valueOrNull(data.update_type) || 'Regular Update', // $32
-      parseIntOrNull(data.vo_number), // $33
+      'Newly Created', // $32
+      valueOrNull(data.vo_number), // $33
       valueOrNull(data.vo_requested_date || data.vo_approval_date), // $34
       valueOrNull(data.vo_requested_by || data.vo_approved_by) // $35
     ];
@@ -6251,8 +6256,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.numberOfSites) || oldData.number_of_sites, // $29
       valueOrNull(data.fundsUtilized) || oldData.funds_utilized, // $30
       (data.variationOrderPdf !== undefined) ? valueOrNull(data.variationOrderPdf) : oldData.variation_order_pdf, // $31
-      valueOrNull(data.update_type) || 'Regular Update', // $32
-      parseIntOrNull(data.vo_number) !== null ? parseIntOrNull(data.vo_number) : oldData.vo_number, // $33
+      valueOrNull(data.update_type) || 'Status Update', // $32: Priority to dynamic tracking
+      valueOrNull(data.vo_number) !== null ? valueOrNull(data.vo_number) : oldData.vo_number, // $33
       valueOrNull(data.vo_requested_date) || oldData.vo_requested_date, // $34
       valueOrNull(data.vo_requested_by) || oldData.vo_requested_by // $35
     ];
@@ -6645,6 +6650,47 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
   }
 });
 
+// --- 11d. DELETE: Delete Project ---
+app.delete('/api/projects/:id', async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  const clientNew = poolNew ? await poolNew.connect() : null;
+
+  try {
+    await client.query('BEGIN');
+    if (clientNew) await clientNew.query('BEGIN');
+
+    // 1. Delete Documents
+    await client.query('DELETE FROM project_documents WHERE project_id = $1', [id]);
+    if (clientNew) await clientNew.query('DELETE FROM project_documents WHERE project_id = $1', [id]);
+
+    // 2. Delete Images
+    await client.query('DELETE FROM engineer_image WHERE project_id = $1', [id]);
+    if (clientNew) await clientNew.query('DELETE FROM engineer_image WHERE project_id = $1', [id]);
+
+    // 3. Delete Project
+    const result = await client.query('DELETE FROM engineer_form WHERE project_id = $1', [id]);
+    if (clientNew) await clientNew.query('DELETE FROM engineer_form WHERE project_id = $1', [id]);
+
+    if (result.rowCount === 0) {
+      throw new Error("Project not found");
+    }
+
+    await client.query('COMMIT');
+    if (clientNew) await clientNew.query('COMMIT');
+
+    res.json({ success: true, message: "Project deleted successfully" });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (clientNew) await clientNew.query('ROLLBACK');
+    console.error("Delete Project Error:", err);
+    res.status(500).json({ message: "Failed to delete project", error: err.message });
+  } finally {
+    client.release();
+    if (clientNew) clientNew.release();
+  }
+});
+
 // --- 11c. POST: Validate Project (School Head) ---
 app.post('/api/validate-project', async (req, res) => {
   const { projectId, status, userUid, userName, remarks } = req.body;
@@ -6717,7 +6763,6 @@ app.get('/api/project-history/:ipc', async (req, res) => {
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
         TO_CHAR(construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
-        TO_CHAR(vo_approval_date, 'YYYY-MM-DD') AS "vo_approval_date",
         created_at
       FROM ${tableName}
       WHERE ipc = $1
@@ -11238,11 +11283,11 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.latitude || null, data.longitude || null
     ];
     await pool.query(query, values);
-    
+
     // Auto-update school_summary instantly
     try {
       if (poolNew) await updateSchoolSummary(data.school_id, poolNew);
-    } catch(e) {}
+    } catch (e) { }
 
     res.json({ success: true, message: "Unit 1 saved successfully!" });
   } catch (err) {
@@ -11255,7 +11300,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
 app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
-  
+
   try {
     const fields = [
       'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',
@@ -11285,11 +11330,11 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
     const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $37`;
 
     await pool.query(query, values);
-    
+
     // Auto-update school_summary instantly
     try {
       if (poolNew) await updateSchoolSummary(schoolId, poolNew);
-    } catch(e) {}
+    } catch (e) { }
 
     res.json({ success: true, message: "Unit 2 Learner data saved successfully!" });
 
@@ -11336,12 +11381,12 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     const values = [
       has_multigrade, detailsJson,
       pInt(data.sections_kinder), pInt(data.size_less_kinder), pInt(data.size_within_kinder), pInt(data.size_above_kinder),
-      pInt(data.sections_g1),     pInt(data.size_less_g1),     pInt(data.size_within_g1),     pInt(data.size_above_g1),
-      pInt(data.sections_g2),     pInt(data.size_less_g2),     pInt(data.size_within_g2),     pInt(data.size_above_g2),
-      pInt(data.sections_g3),     pInt(data.size_less_g3),     pInt(data.size_within_g3),     pInt(data.size_above_g3),
-      pInt(data.sections_g4),     pInt(data.size_less_g4),     pInt(data.size_within_g4),     pInt(data.size_above_g4),
-      pInt(data.sections_g5),     pInt(data.size_less_g5),     pInt(data.size_within_g5),     pInt(data.size_above_g5),
-      pInt(data.sections_g6),     pInt(data.size_less_g6),     pInt(data.size_within_g6),     pInt(data.size_above_g6),
+      pInt(data.sections_g1), pInt(data.size_less_g1), pInt(data.size_within_g1), pInt(data.size_above_g1),
+      pInt(data.sections_g2), pInt(data.size_less_g2), pInt(data.size_within_g2), pInt(data.size_above_g2),
+      pInt(data.sections_g3), pInt(data.size_less_g3), pInt(data.size_within_g3), pInt(data.size_above_g3),
+      pInt(data.sections_g4), pInt(data.size_less_g4), pInt(data.size_within_g4), pInt(data.size_above_g4),
+      pInt(data.sections_g5), pInt(data.size_less_g5), pInt(data.size_within_g5), pInt(data.size_above_g5),
+      pInt(data.sections_g6), pInt(data.size_less_g6), pInt(data.size_within_g6), pInt(data.size_above_g6),
       schoolId // $31
     ];
 
@@ -11350,7 +11395,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     // Auto-update school_summary instantly
     try {
       if (poolNew) await updateSchoolSummary(schoolId, poolNew);
-    } catch(e) {}
+    } catch (e) { }
 
     res.json({ success: true, message: 'Unit 3 Organized Classes data saved successfully!' });
   } catch (err) {
@@ -11413,7 +11458,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
     // Auto-update school_summary instantly
     try {
       if (poolNew) await updateSchoolSummary(schoolId, poolNew);
-    } catch(e) {}
+    } catch (e) { }
 
     res.json({ success: true, message: 'Unit 4 Learner Profile data saved successfully!' });
   } catch (err) {
@@ -11424,69 +11469,69 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
 
 // --- 27e. PUT: Save Unit 5 Shifting & Modalities (Modular Beta) ---
 app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
-    const { schoolId } = req.params;
-    const data = req.body;
-    
-    try {
-      // Base dynamic fields for K-12
-      const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
-      const dynamicFields = [];
-      const values = [];
-      let paramIdx = 1;
+  const { schoolId } = req.params;
+  const data = req.body;
 
-      // Ensure standard check is a boolean
-      const parseBool = (val) => val === true || val === 'true';
+  try {
+    // Base dynamic fields for K-12
+    const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+    const dynamicFields = [];
+    const values = [];
+    let paramIdx = 1;
 
-      dynamicFields.push(`has_standard_shifting = $${paramIdx++}`);
-      values.push(parseBool(data.has_standard_shifting));
+    // Ensure standard check is a boolean
+    const parseBool = (val) => val === true || val === 'true';
 
-      // Push ADM Toggles
-      dynamicFields.push(`adm_mdl = $${paramIdx++}`);
-      values.push(parseBool(data.adm_mdl));
-      
-      dynamicFields.push(`adm_odl = $${paramIdx++}`);
-      values.push(parseBool(data.adm_odl));
-      
-      dynamicFields.push(`adm_tvi = $${paramIdx++}`);
-      values.push(parseBool(data.adm_tvi));
-      
-      dynamicFields.push(`adm_blended = $${paramIdx++}`);
-      values.push(parseBool(data.adm_blended));
+    dynamicFields.push(`has_standard_shifting = $${paramIdx++}`);
+    values.push(parseBool(data.has_standard_shifting));
 
-      // Build out Shift/Mode mappings dynamically based on existing levels
-      for (const lvl of levels) {
-          if (data[`shift_${lvl}`] !== undefined) {
-              dynamicFields.push(`shift_${lvl} = $${paramIdx++}`);
-              values.push(data[`shift_${lvl}`]);
-          }
-          if (data[`mode_${lvl}`] !== undefined) {
-              dynamicFields.push(`mode_${lvl} = $${paramIdx++}`);
-              values.push(data[`mode_${lvl}`]);
-          }
+    // Push ADM Toggles
+    dynamicFields.push(`adm_mdl = $${paramIdx++}`);
+    values.push(parseBool(data.adm_mdl));
+
+    dynamicFields.push(`adm_odl = $${paramIdx++}`);
+    values.push(parseBool(data.adm_odl));
+
+    dynamicFields.push(`adm_tvi = $${paramIdx++}`);
+    values.push(parseBool(data.adm_tvi));
+
+    dynamicFields.push(`adm_blended = $${paramIdx++}`);
+    values.push(parseBool(data.adm_blended));
+
+    // Build out Shift/Mode mappings dynamically based on existing levels
+    for (const lvl of levels) {
+      if (data[`shift_${lvl}`] !== undefined) {
+        dynamicFields.push(`shift_${lvl} = $${paramIdx++}`);
+        values.push(data[`shift_${lvl}`]);
       }
+      if (data[`mode_${lvl}`] !== undefined) {
+        dynamicFields.push(`mode_${lvl} = $${paramIdx++}`);
+        values.push(data[`mode_${lvl}`]);
+      }
+    }
 
-      dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
-      values.push(schoolId); // Last param is the WHERE clause
+    dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
+    values.push(schoolId); // Last param is the WHERE clause
 
-      const query = `
+    const query = `
         UPDATE ph_schools 
         SET ${dynamicFields.join(', ')} 
         WHERE school_id = $${paramIdx}
       `;
-  
-      await pool.query(query, values);
-      
-      // Auto-update school_summary instantly
-      try {
-        if (poolNew) await updateSchoolSummary(schoolId, poolNew);
-      } catch(e) {}
-  
-      res.json({ success: true, message: "Unit 5 Shifting & Modality data saved successfully!" });
-  
-    } catch (err) {
-      console.error("Save Unit 5 Error:", err);
-      res.status(500).json({ error: "Internal Server Error" });
-    }
+
+    await pool.query(query, values);
+
+    // Auto-update school_summary instantly
+    try {
+      if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+    } catch (e) { }
+
+    res.json({ success: true, message: "Unit 5 Shifting & Modality data saved successfully!" });
+
+  } catch (err) {
+    console.error("Save Unit 5 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 export default app;
