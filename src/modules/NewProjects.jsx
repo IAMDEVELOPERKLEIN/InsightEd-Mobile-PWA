@@ -101,14 +101,21 @@ const NewProjects = () => {
     // 1.) Category Choices
     const PROJECT_CATEGORIES = [
         "New Construction",
-        "Electrification",
-        "Health",
-        "QRF",
-        "LMS",
-        "ALS-CLC",
-        "Gabaldon",
-        "Repairs"
+        "Repair and Rehab",
+        "Last Mile Schools", 
+        "Health facilities",
+        "Gabaldon Restoration",
+        "Library Hub",
+        "SpEd Inclusive Learning Resource Centers (ILRC)",
+        "Alternative Learning System - Community Based Learning Centers (ALS-CLC)",
+        "Midrise School Building"
     ];
+
+    // --- NEW: IMPORT PROJECT DATA STATES ---
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [importSearch, setImportSearch] = useState('');
+    const [availableProjects, setAvailableProjects] = useState([]);
+    const [isSearchingProjects, setIsSearchingProjects] = useState(false);
 
 
     
@@ -169,6 +176,7 @@ const NewProjects = () => {
         projectCategory: '',
         scopeOfWork: '',
         constructionStartDate: '',
+
 
         // --- NEW LGU FIELDS ---
         moa_date: '',
@@ -236,6 +244,44 @@ const NewProjects = () => {
             latitude: lat.toFixed(6),
             longitude: lng.toFixed(6)
         }));
+    };
+
+    // --- NEW: IMPORT PROJECT DATA LOGIC ---
+    const searchProjectsToImport = async (query) => {
+        if (!query || query.length < 3) return;
+        setIsSearchingProjects(true);
+        try {
+            // Use existing /api/projects endpoint but we'll filter on frontend or add search param if backend supports it
+            const res = await fetch(`/api/projects?search=${encodeURIComponent(query)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setAvailableProjects(data || []);
+            }
+        } catch (err) {
+            console.error("Search failed:", err);
+        } finally {
+            setIsSearchingProjects(false);
+        }
+    };
+
+    const handleImportProject = (proj) => {
+        setFormData(prev => ({
+            ...prev,
+            projectName: proj.projectName || '',
+            schoolId: proj.schoolId || '',
+            schoolName: proj.schoolName || '',
+            region: proj.region || '',
+            division: proj.division || '',
+            projectAllocation: proj.projectAllocation ? Number(proj.projectAllocation).toLocaleString('en-US') : '',
+            contractorName: proj.contractorName || '',
+            batchOfFunds: proj.batchOfFunds || '',
+            projectCategory: proj.projectCategory || '',
+            scopeOfWork: proj.scopeOfWork || '',
+            latitude: proj.latitude || '',
+            longitude: proj.longitude || ''
+        }));
+        setIsImportModalOpen(false);
+        alert(`✅ Imported data for: ${proj.projectName}`);
     };
 
     // --- NEW: FILE HANDLING FUNCTIONS ---
@@ -413,7 +459,7 @@ const NewProjects = () => {
             if (value.length > 6) value = value.slice(0, 6);
         }
         // Force Uppercase for Contractor Name, Project Name, Project Category, Scope of Work, Batch of Funds
-        if (['contractorName', 'projectName', 'projectCategory', 'scopeOfWork', 'batchOfFunds'].includes(name)) {
+        if (['contractorName', 'projectName', 'scopeOfWork', 'batchOfFunds'].includes(name)) {
             value = value.toUpperCase();
         }
 
@@ -669,14 +715,26 @@ const NewProjects = () => {
         <PageTransition>
             <div className="min-h-screen bg-slate-50 font-sans pb-32">
 
-                <div className="bg-[#004A99] pt-8 pb-16 px-6 rounded-b-[2rem] shadow-xl">
-                    <div className="flex items-center gap-3 text-white mb-4">
-                        <button onClick={() => isDummy ? navigate('/dummy-forms', { state: { type: 'engineer' } }) : navigate(-1)} className="p-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                            </svg>
-                        </button>
-                        <h1 className="text-xl font-bold">New Project Entry</h1>
+                <div className="bg-[#004A99] pt-8 pb-16 px-6 rounded-b-[2rem] shadow-xl relative">
+                    <div className="flex items-center justify-between text-white mb-4">
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => isDummy ? navigate('/dummy-forms', { state: { type: 'engineer' } }) : navigate(-1)} className="p-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                                </svg>
+                            </button>
+                            <h1 className="text-xl font-bold">New Project Entry</h1>
+                        </div>
+                        
+                        {!isDummy && (
+                            <button 
+                                type="button"
+                                onClick={() => setIsImportModalOpen(true)}
+                                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-bold transition-all border border-white/30 backdrop-blur-sm"
+                            >
+                                <span className="text-lg">📥</span> Import Project
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -830,16 +888,17 @@ const NewProjects = () => {
                                 />
                             </div>
 
-                            <div className="flex gap-3">
-                                <div className="flex-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Region</label>
-                                    <input name="region" value={formData.region} readOnly className="w-full p-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-sm focus:outline-none" />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Division</label>
-                                    <input name="division" value={formData.division} readOnly className="w-full p-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-sm focus:outline-none" />
-                                </div>
-                            </div>
+                             <div className="flex gap-3">
+                                 <div className="flex-1">
+                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Region</label>
+                                     <input name="region" value={formData.region} readOnly className="w-full p-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-sm focus:outline-none" />
+                                 </div>
+                                 <div className="flex-1">
+                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Division</label>
+                                     <input name="division" value={formData.division} readOnly className="w-full p-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-sm focus:outline-none" />
+                                 </div>
+                             </div>
+
                         </div>
 
                         <SectionHeader title="Project Location" icon="📍" />
@@ -1159,6 +1218,7 @@ const NewProjects = () => {
                             </div>
                         </div>
 
+
                         <SectionHeader title="Other Remarks" icon="📝" />
                         <div className="mb-4">
                             <textarea
@@ -1240,6 +1300,71 @@ const NewProjects = () => {
                         )}
                     </div>
                 </form>
+
+                {/* --- IMPORT MODAL --- */}
+                {isImportModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/40">
+                        <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 fade-in duration-300">
+                            <div className="p-6 bg-blue-600 text-white flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-lg font-bold">Import Project Data</h3>
+                                    <p className="text-xs text-blue-100 opacity-80">Search existing records to auto-fill</p>
+                                </div>
+                                <button onClick={() => setIsImportModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-all text-xl">✕</button>
+                            </div>
+                            
+                            <div className="p-4 border-b border-slate-100 pb-6">
+                                <div className="relative">
+                                    <input 
+                                        type="text"
+                                        value={importSearch}
+                                        onChange={(e) => {
+                                            setImportSearch(e.target.value);
+                                            searchProjectsToImport(e.target.value);
+                                        }}
+                                        placeholder="Search by ID or Name..."
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 shadow-inner"
+                                    />
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">🔍</span>
+                                </div>
+                                {isSearchingProjects && (
+                                    <div className="mt-2 flex items-center gap-2 text-[10px] text-blue-600 font-bold px-2">
+                                        <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                        Searching Database...
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+                                {availableProjects.length > 0 ? (
+                                    availableProjects.map(proj => (
+                                        <button 
+                                            key={proj.id}
+                                            type="button"
+                                            onClick={() => handleImportProject(proj)}
+                                            className="w-full text-left p-4 bg-white border border-slate-200 rounded-2xl hover:border-blue-500 hover:shadow-md transition-all group active:scale-[0.98]"
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h4 className="font-bold text-slate-800 text-sm group-hover:text-blue-600 transition-colors uppercase truncate flex-1 pr-2">{proj.projectName}</h4>
+                                                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-bold shadow-sm">{proj.ipc}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                                <span>🏫 {proj.schoolName}</span>
+                                                <span>•</span>
+                                                <span>🆔 {proj.schoolId}</span>
+                                            </div>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-3">
+                                        <div className="text-4xl">🔎</div>
+                                        <p className="text-xs text-center px-8">{importSearch.length < 3 ? 'Type at least 3 characters to search infrastructure records...' : 'No matching projects found.'}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="hidden">
                     <input

@@ -34,7 +34,7 @@ const StatCard = ({ icon: Icon, label, value, sub, color, bgColor }) => (
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
         <FiLoader className="w-12 h-12 animate-spin text-blue-400 mb-4" />
-        <p className="font-bold">Loading Masterlist Data...</p>
+        <p className="font-bold">Loading 2026 Infrastructure Priorities Data...</p>
     </div>
 );
 
@@ -45,7 +45,7 @@ const EmptyState = () => (
         </div>
         <h3 className="text-lg font-bold text-slate-600">No Data Yet</h3>
         <p className="text-sm mt-2 max-w-md text-center">
-            The PSIP Masterlist has not been imported yet. Hit <code className="bg-slate-100 px-2 py-1 rounded text-xs">/api/psip/import</code> to load the data.
+            The 2026 Infrastructure Priorities has not been imported yet. Hit <code className="bg-slate-100 px-2 py-1 rounded text-xs">/api/psip/import</code> to load the data.
         </p>
     </div>
 );
@@ -436,7 +436,7 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
     );
 };
 
-const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, onSearch, search, loadData, reloadPartnerships, handleKpiClick }) => {
+const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, onSearch, search, loadData, reloadPartnerships, handleKpiClick, version, setVersion }) => {
     const [activeTab, setActiveTab] = useState('info'); // 'info' | 'details'
     const [currentPage, setCurrentPage] = useState(1);
     const [recordsPerPage, setRecordsPerPage] = useState(10);
@@ -458,7 +458,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
             const res = await fetch(`${API_BASE}/api/deped-infrariorities/assign`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, assigned_to: agency })
+                body: JSON.stringify({ id, assigned_to: agency, version })
             });
             if (res.ok) {
                 loadData(); // Refresh rows
@@ -507,7 +507,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
             <div className="flex items-center gap-2 mb-6 text-sm">
                 <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold transition-colors">Dashboard</button>
                 <FiChevronRight className="text-slate-300" />
-                <span className="text-amber-600 font-black uppercase tracking-widest">DepEd Priorities 2026 Infrastructure</span>
+                <span className="text-amber-600 font-black uppercase tracking-widest">Masterlist</span>
             </div>
 
             <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden flex flex-col flex-1">
@@ -518,16 +518,16 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                             <FiAlertCircle size={24} />
                         </div>
                         <div>
-                            <h3 className="text-white font-black text-2xl">DepEd Priorities 2026 Infrastructure</h3>
+                            <h3 className="text-white font-black text-2xl">Masterlist</h3>
                             <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest">{rows.length} Total Projects Tracked</p>
                         </div>
                     </div>
-                    <div className="flex bg-white/20 rounded-2xl p-1.5 gap-1.5 backdrop-blur-sm">
+                    <div className="flex bg-white/20 rounded-2xl p-1.5 gap-1.5 backdrop-blur-sm shadow-xl">
                         <button onClick={() => setActiveTab('info')} className={`px-6 py-2 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'info' ? 'bg-white text-amber-600 shadow-lg' : 'text-white hover:bg-white/20'}`}>
-                            <FiInfo size={16} /> Summary Information
+                            <FiInfo size={16} /> Summary
                         </button>
                         <button onClick={() => setActiveTab('details')} className={`px-6 py-2 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-white text-amber-600 shadow-lg' : 'text-white hover:bg-white/20'}`}>
-                            <FiList size={16} /> Project details
+                            <FiList size={16} /> Details
                         </button>
                     </div>
                 </div>
@@ -535,6 +535,8 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                 <div className="flex-1 p-8 bg-white">
                     {activeTab === 'info' ? (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {/* [REMOVED] Version Selection */}
+
                             {loading ? (
                                 <div className="text-center py-20 text-slate-400 font-bold">Loading summary statistics…</div>
                             ) : rows.length === 0 ? (
@@ -542,7 +544,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                     <FiDatabase className="mx-auto w-16 h-16 mb-6 opacity-20 text-slate-400" />
                                     <h4 className="text-xl font-bold text-slate-800">No initiatives data found</h4>
                                     <p className="text-slate-500 mt-2 mb-8">Please import the latest CSV file to begin tracking.</p>
-                                    <button onClick={onImport} className="bg-amber-500 text-white font-black px-10 py-4 rounded-2xl hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all active:scale-95">Import Priorities 2026 Infrastructure Data</button>
+                                    <button onClick={onImport} className="bg-amber-500 text-white font-black px-10 py-4 rounded-2xl hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all active:scale-95">Import Masterlist Data</button>
                                 </div>
                             ) : (
                                 <>
@@ -576,8 +578,8 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                      <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 flex items-start gap-4">
                                         <FiInfo className="text-amber-500 shrink-0 mt-1" size={20} />
                                         <div className="text-slate-600 leading-relaxed">
-                                            <p className="font-bold text-slate-800 mb-1">About DepEd Priorities 2026 Infrastructure</p>
-                                            <p className="text-sm italic">DepEd Priorities 2026 Infrastructure represent high-priority school infrastructure projects identified for strategic implementation. These projects are specifically allocated and can be assigned to various implementing agencies for streamlined monitoring and progression. Accurate tracking here ensures that critical infrastructure gaps are addressed efficiently through our partnership network.</p>
+                                            <p className="font-bold text-slate-800 mb-1">About Masterlist</p>
+                                            <p className="text-sm italic">Newcon Priorities represent high-priority school infrastructure projects identified for strategic implementation. These projects are specifically allocated and can be assigned to various implementing agencies for streamlined monitoring and progression. Accurate tracking here ensures that critical infrastructure gaps are addressed efficiently through our partnership network.</p>
                                         </div>
                                     </div>
                                     <p className="text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-widest text-right italic">data displayed is as of February 23, 2026. 5:45 pm</p>
@@ -588,7 +590,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                         <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
                                 <div className="relative flex-1 w-full sm:max-w-md">
-                                    <FiInfo className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                    <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                     <input
                                         type="text"
                                         placeholder="Search by ID, name, region, or district…"
@@ -597,6 +599,9 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                         className="w-full pl-12 pr-4 py-4 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-amber-100 focus:border-amber-400 outline-none transition-all"
                                     />
                                 </div>
+
+                                {/* [REMOVED] Version Selection */}
+
                                 {importMsg && <span className="text-[10px] font-black text-amber-600 bg-amber-100/50 px-3 py-1 rounded-full">{importMsg}</span>}
                             </div>
 
@@ -719,7 +724,8 @@ const HomeView = ({
     getQueryString, drilldownPath, setDrilldownPath, handleBack,
     handlePartnerClick, handlePrototypeClick, filters, setFilters, filterOptions,
     handleKpiClick, setPartnerships, setSelectedPartner, setPartnerSchools,
-    setSelectedPrototype, setPrototypeSchools, handleDrilldown
+    setSelectedPrototype, setPrototypeSchools, handleDrilldown,
+    selectedVersion, setSelectedVersion
 }) => {
     const totalClassrooms = summary ? Number(summary.total_classrooms) : 0;
 
@@ -770,7 +776,7 @@ const HomeView = ({
             drilldown: partnerships.cso || []
         },
         {
-            id: 'FOR_DECISION', title: 'DepEd Priorities 2026 Infrastructure',
+            id: 'FOR_DECISION', title: 'Newcon Priorities',
             icon: <FiAlertCircle className="w-6 h-6" />, color: 'bg-yellow-100 text-yellow-600',
             count: partnerships.forDecision?.length > 0 ? Number(partnerships.forDecision[0].projects) : 0,
             drilldown: partnerships.forDecision || []
@@ -848,6 +854,8 @@ const HomeView = ({
                     fetch(`${API_BASE}/api/masterlist/partnerships${qs}`).then(r=>r.json()).then(d=>setPartnerships(d));
                 }}
                 handleKpiClick={handleKpiClick}
+                version={selectedVersion}
+                setVersion={setSelectedVersion}
             />
 
             {!showCongressView && (
@@ -1537,6 +1545,7 @@ const PSIP = () => {
     const [congressLoading, setCongressLoading] = useState(false);
     const [congressImportMsg, setCongressImportMsg] = useState('');
     const [congressSearch, setCongressSearch] = useState('');
+    const [selectedVersion, setSelectedVersion] = useState('total'); // 'total' | 'v1' | 'v2' | 'v3'
 
     const handleKpiClick = (kpi) => {
         setSelectedKpi(kpi);
@@ -1628,7 +1637,7 @@ const PSIP = () => {
     const loadCongressData = async () => {
         setCongressLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/api/deped-infrariorities`);
+            const res = await fetch(`${API_BASE}/api/deped-infrariorities?version=${selectedVersion}`);
             const data = await res.json();
             setCongressRows(data);
         } catch (err) {
@@ -1637,6 +1646,11 @@ const PSIP = () => {
             setCongressLoading(false);
         }
     };
+
+    // Re-load when version changes
+    useEffect(() => {
+        if (showCongressView) loadCongressData();
+    }, [selectedVersion, showCongressView]);
 
     const handleCongressImport = async () => {
         try {
@@ -1799,6 +1813,8 @@ const PSIP = () => {
                             setSelectedPrototype={setSelectedPrototype}
                             setPrototypeSchools={setPrototypeSchools}
                             handleDrilldown={handleDrilldown}
+                            selectedVersion={selectedVersion}
+                            setSelectedVersion={setSelectedVersion}
                         />}
                         {activeTab === 'data' && <DataView 
                             loading={loading}

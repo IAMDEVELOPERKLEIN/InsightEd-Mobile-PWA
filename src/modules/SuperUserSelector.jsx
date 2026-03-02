@@ -380,7 +380,7 @@ const SuperUserSelector = () => {
                         <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mb-4 text-pink-600">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">Masterlist</h3>
+                        <h3 className="text-xl font-bold text-slate-800 mb-2">2026 Infrastructure Priorities</h3>
                         <p className="text-sm text-slate-500 mb-4 flex-grow">Partnership Projects Prototype</p>
 
                         <div className="mt-auto w-full">
@@ -388,7 +388,7 @@ const SuperUserSelector = () => {
                                 onClick={() => handleSelection('Masterlist')}
                                 className="w-full py-2 bg-pink-600 text-white rounded-lg font-bold hover:bg-pink-700 transition"
                             >
-                                Enter Masterlist View
+                                Enter 2026 Infrastructure Priorities View
                             </button>
                         </div>
                     </motion.div>
