@@ -125,7 +125,34 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
       ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
       ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
-      ADD COLUMN IF NOT EXISTS engineer_id TEXT;
+      ADD COLUMN IF NOT EXISTS engineer_id TEXT,
+      ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT,
+      ADD COLUMN IF NOT EXISTS update_type TEXT,
+      ADD COLUMN IF NOT EXISTS vo_number INTEGER,
+      ADD COLUMN IF NOT EXISTS vo_requested_date DATE,
+      ADD COLUMN IF NOT EXISTS vo_requested_by TEXT;
+
+      -- Robust Rename/Backfill for Variation Order fields
+      DO $$ 
+      BEGIN 
+        -- 1. Backfill vo_requested_date if vo_approval_date exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='vo_approval_date') THEN
+          UPDATE engineer_form SET vo_requested_date = vo_approval_date WHERE vo_requested_date IS NULL;
+        END IF;
+
+        -- 2. Backfill vo_requested_by if vo_approved_by exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='vo_approved_by') THEN
+          UPDATE engineer_form SET vo_requested_by = vo_approved_by WHERE vo_requested_by IS NULL;
+        END IF;
+      END $$;
+
+      -- Cleanup redundant VO columns
+      ALTER TABLE engineer_form
+      DROP COLUMN IF EXISTS has_variation_order,
+      DROP COLUMN IF EXISTS variation_order_amount,
+      DROP COLUMN IF EXISTS variation_order_remarks,
+      DROP COLUMN IF EXISTS variation_order_no,
+      DROP COLUMN IF EXISTS variation_order_date;
     `);
 
     // --- MIGRATION: REMOVE FRAUD DETECTION COLUMNS FROM SCHOOL_PROFILES ---
@@ -236,17 +263,35 @@ const initDB = async () => {
     console.log("✅ DB Init: Engineer Image IPC column verified and backfilled.");
 
 
-    // --- MIGRATION: ADD MISSING COLUMNS (CLASSROOMS, SITES, STOREYS, FUNDS) ---
+    // --- MIGRATION: ADD MISSING COLUMNS TO LGU FORMS ---
+    await pool.query(`
+      ALTER TABLE lgu_forms 
+      ADD COLUMN IF NOT EXISTS project_category TEXT,
+      ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1;
+    `);
+
+    // --- MIGRATION: ADD MISSING COLUMNS (CLASSROOMS, SITES, STOREYS, FUNDS) TO ENGINEER_FORM ---
     await pool.query(`
       ALTER TABLE engineer_form 
       ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
       ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1,
-        ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS internal_description TEXT,
-              ADD COLUMN IF NOT EXISTS external_description TEXT;
+      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS internal_description TEXT,
+      ADD COLUMN IF NOT EXISTS external_description TEXT;
     `);
-    console.log("✅ DB Init: Engineer Form extra columns verified.");
+
+    // --- MIGRATION: ADD MISSING COLUMNS TO LGU HISTORY ---
+    await pool.query(`
+      ALTER TABLE lgu_projects 
+      ADD COLUMN IF NOT EXISTS project_category TEXT,
+      ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1;
+    `);
+    console.log("✅ DB Init: Extra columns verified.");
 
     // --- MIGRATION: ADD IPC TO ENGINEER_IMAGE (SECONDARY DB) ---
     if (poolNew) {
@@ -1172,6 +1217,47 @@ app.get('/api/masterlist/partnership-schools', async (req, res) => {
 
 // --- DEPED PRIORITIES 2026 INFRASTRUCTURE (formerly Congressional Initiatives) ---
 
+// Helper to check table existence
+const checkTableExists = async (tableName) => {
+  try {
+    const result = await pool.query(
+      "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)",
+      [tableName]
+    );
+    return result.rows[0].exists;
+  } catch (e) {
+    return false;
+  }
+};
+
+// Helper to get the correct table or subquery for initiatives
+const getInitiativesSubquery = async (version) => {
+  const v1Table = 'congressional_initiatives';
+  const v2Table = 'congressional_initiatives_v2';
+  const v3Table = 'congressional_initiatives_v3';
+  const columns = `id, school_id, project_name, school_name, amount, masterlist_status, region, division, legislative_district, ownership_type_preloaded, ownership_type_confirmed, accessibility_rating, buildable_space_dimensions, has_buildable_space, assigned_to`;
+
+  if (version === 'v1') return `(SELECT ${columns}, 'v1' as version_source FROM ${v1Table})`;
+  if (version === 'v2') {
+    const exists = await checkTableExists(v2Table);
+    return exists ? `(SELECT ${columns}, 'v2' as version_source FROM ${v2Table})` : `(SELECT ${columns}, 'v2' as version_source FROM ${v1Table} WHERE 1=0)`;
+  }
+  if (version === 'v3') {
+    const exists = await checkTableExists(v3Table);
+    return exists ? `(SELECT ${columns}, 'v3' as version_source FROM ${v3Table})` : `(SELECT ${columns}, 'v3' as version_source FROM ${v1Table} WHERE 1=0)`;
+  }
+
+  // Default: Total (All versions combined)
+  const existsV2 = await checkTableExists(v2Table);
+  const existsV3 = await checkTableExists(v3Table);
+
+  let parts = [`SELECT ${columns}, 'v1' as version_source FROM ${v1Table}`];
+  if (existsV2) parts.push(`SELECT ${columns}, 'v2' as version_source FROM ${v2Table}`);
+  if (existsV3) parts.push(`SELECT ${columns}, 'v3' as version_source FROM ${v3Table}`);
+
+  return `(${parts.join(' UNION ALL ')})`;
+};
+
 // One-time: import CSV into DB table
 app.post('/api/deped-infrariorities/import', async (req, res) => {
   const client = await pool.connect();
@@ -1280,7 +1366,8 @@ app.post('/api/deped-infrariorities/import', async (req, res) => {
 // GET: Fetch DepEd Priorities 2026 Infrastructure details with optional filters
 app.get('/api/deped-infrariorities', async (req, res) => {
   try {
-    const { region, division, legislative_district, search } = req.query;
+    const { region, division, legislative_district, search, version } = req.query;
+    const tableSubquery = await getInitiativesSubquery(version);
 
     let where = [];
     let params = [];
@@ -1300,23 +1387,8 @@ app.get('/api/deped-infrariorities', async (req, res) => {
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
     const query = `
-      SELECT
-        school_id,
-        school_name,
-        project_name,
-        amount,
-        masterlist_status,
-        region,
-        division,
-        legislative_district,
-        ownership_type_preloaded,
-        ownership_type_confirmed,
-        accessibility_rating,
-        buildable_space_dimensions,
-        has_buildable_space,
-        id,
-        assigned_to
-      FROM congressional_initiatives
+      SELECT *
+      FROM ${tableSubquery} as t
       ${whereClause}
       ORDER BY amount DESC NULLS LAST
     `;
@@ -1332,7 +1404,8 @@ app.get('/api/deped-infrariorities', async (req, res) => {
 // GET: Summary stats for DepEd Priorities 2026 Infrastructure
 app.get('/api/deped-infrariorities/summary', async (req, res) => {
   try {
-    const { region, division, legislative_district } = req.query;
+    const { region, division, legislative_district, version } = req.query;
+    const tableSubquery = await getInitiativesSubquery(version);
 
     let where = [];
     let params = [];
@@ -1353,7 +1426,7 @@ app.get('/api/deped-infrariorities/summary', async (req, res) => {
         COALESCE(SUM(amount), 0) as total_amount,
         COUNT(DISTINCT region) as total_regions,
         COUNT(DISTINCT legislative_district) as total_districts
-      FROM congressional_initiatives
+      FROM ${tableSubquery} as t
       ${whereClause}
     `, params);
 
@@ -1367,7 +1440,8 @@ app.get('/api/deped-infrariorities/summary', async (req, res) => {
 // GET: Distribution stats for DepEd Priorities 2026 Infrastructure (for drilldown)
 app.get('/api/deped-infrariorities/distribution', async (req, res) => {
   try {
-    const { groupBy, region, division, legislative_district } = req.query;
+    const { groupBy, region, division, legislative_district, version } = req.query;
+    const tableSubquery = await getInitiativesSubquery(version);
 
     const validGroupBys = ['region', 'division', 'municipality', 'legislative_district'];
     const groupField = validGroupBys.includes(groupBy) ? groupBy : 'region';
@@ -1389,7 +1463,7 @@ app.get('/api/deped-infrariorities/distribution', async (req, res) => {
         COUNT(*) as projects,
         COALESCE(SUM(amount), 0) as amount,
         COUNT(DISTINCT school_id) as schools
-      FROM congressional_initiatives
+      FROM ${tableSubquery} as t
       ${whereClause}
       ${whereClause ? 'AND' : 'WHERE'} "${groupField}" IS NOT NULL
       GROUP BY "${groupField}"
@@ -1407,7 +1481,8 @@ app.get('/api/deped-infrariorities/distribution', async (req, res) => {
 // GET: Specific projects for DepEd Priorities 2026 Infrastructure (for drilldown list)
 app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
   try {
-    const { region, division, legislative_district, limit = 50, offset = 0 } = req.query;
+    const { region, division, legislative_district, limit = 50, offset = 0, version } = req.query;
+    const tableSubquery = await getInitiativesSubquery(version);
 
     let where = [];
     let params = [];
@@ -1421,7 +1496,7 @@ app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     const finalQuery = `
-      SELECT * FROM congressional_initiatives
+      SELECT * FROM ${tableSubquery} as t
       ${whereClause}
       ORDER BY amount DESC
       LIMIT $${pIdx++} OFFSET $${pIdx++}
@@ -1431,7 +1506,7 @@ app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
     const result = await pool.query(finalQuery, finalParams);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ DepEd Priorities 2026 Infrastructure Projects Fetch Error:', err);
+    console.error('❌ Newcon Priorities Projects Fetch Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1439,11 +1514,15 @@ app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
 // Post: Assign a deped-infrariorities project to an agency
 app.post('/api/deped-infrariorities/assign', async (req, res) => {
   try {
-    const { id, assigned_to } = req.body;
+    const { id, assigned_to, version } = req.body;
     if (!id) return res.status(400).json({ error: 'id is required' });
 
+    let tableName = 'congressional_initiatives';
+    if (version === 'v2') tableName = 'congressional_initiatives_v2';
+    else if (version === 'v3') tableName = 'congressional_initiatives_v3';
+
     await pool.query(
-      `UPDATE congressional_initiatives SET assigned_to = $1 WHERE id = $2`,
+      `UPDATE ${tableName} SET assigned_to = $1 WHERE id = $2`,
       [assigned_to || null, id]
     );
 
@@ -5864,7 +5943,12 @@ app.post('/api/save-project', async (req, res) => {
       parseIntOrNull(data.numberOfClassrooms), // $27
       parseIntOrNull(data.numberOfSites), // $28
       parseIntOrNull(data.numberOfStoreys), // $29
-      parseNumberOrNull(data.fundsUtilized) // $30
+      parseNumberOrNull(data.fundsUtilized), // $30
+      valueOrNull(data.variationOrderPdf), // $31
+      valueOrNull(data.update_type) || 'Regular Update', // $32
+      parseIntOrNull(data.vo_number), // $33
+      valueOrNull(data.vo_requested_date || data.vo_approval_date), // $34
+      valueOrNull(data.vo_requested_by || data.vo_approved_by) // $35
     ];
 
     const projectQuery = `
@@ -5876,8 +5960,10 @@ app.post('/api/save-project', async (req, res) => {
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
-        number_of_classrooms, number_of_sites, number_of_storeys, funds_utilized
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        number_of_classrooms, number_of_sites, number_of_storeys, funds_utilized,
+        variation_order_pdf, update_type,
+        vo_number, vo_requested_date, vo_requested_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -5900,14 +5986,6 @@ app.post('/api/save-project', async (req, res) => {
 
         await client.query(imageQuery, [newProjectId, imgData, data.uid, category, newIpc]);
       }
-    } else {
-      // DEFAULT RECORD (Empty string for image_data to avoid NOT NULL issues)
-      console.log("ℹ️ No images uploaded. Creating default tracking record.");
-      const defaultImageQuery = `
-            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
-            VALUES ($1, '', $2, 'Default', $3)
-        `;
-      await client.query(defaultImageQuery, [newProjectId, data.uid, newIpc]);
     }
 
     // 5. NO External Document Table Insert needed (Stored in engineer_form)
@@ -5919,12 +5997,29 @@ app.post('/api/save-project', async (req, res) => {
       try {
         console.log("ðŸ”„ Dual-Write: Replaying Project Creation...");
 
-        // Ensure Schema Sync on Secondary (Quick check)
+        // Ensure Schema Sync on Secondary (Comprehensive check)
         await clientNew.query(`
           ALTER TABLE engineer_form 
           ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
           ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
-          ADD COLUMN IF NOT EXISTS contract_pdf TEXT;
+          ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
+          ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT,
+          ADD COLUMN IF NOT EXISTS update_type TEXT;
+
+          ALTER TABLE engineer_form
+          DROP COLUMN IF EXISTS has_variation_order,
+          DROP COLUMN IF EXISTS variation_order_amount,
+          DROP COLUMN IF EXISTS variation_order_remarks,
+          DROP COLUMN IF EXISTS variation_order_no,
+          DROP COLUMN IF EXISTS variation_order_date;
+
+          ALTER TABLE lgu_projects 
+          ADD COLUMN IF NOT EXISTS has_variation_order BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS variation_order_amount NUMERIC DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS variation_order_remarks TEXT,
+          ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT,
+          ADD COLUMN IF NOT EXISTS variation_order_no TEXT,
+          ADD COLUMN IF NOT EXISTS variation_order_date TEXT;
         `).catch(() => { });
 
         // 1. Insert Project (Using SAME IPC and Data)
@@ -5942,13 +6037,6 @@ app.post('/api/save-project', async (req, res) => {
             const category = typeof imgItem === 'object' ? imgItem.category : 'Internal';
             await clientNew.query(imageQuery, [newProjIdSecondary, imgData, data.uid, category, newIpc]);
           }
-        } else {
-          // DEFAULT RECORD (Secondary - Empty string)
-          const defaultImageQuery = `
-                INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
-                VALUES ($1, '', $2, 'Default', $3)
-            `;
-          await clientNew.query(defaultImageQuery, [newProjIdSecondary, data.uid, newIpc]);
         }
 
         await clientNew.query('COMMIT');
@@ -6085,7 +6173,12 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.numberOfClassrooms) || oldData.number_of_classrooms, // $27
       valueOrNull(data.numberOfStoreys) || oldData.number_of_storeys, // $28
       valueOrNull(data.numberOfSites) || oldData.number_of_sites, // $29
-      valueOrNull(data.fundsUtilized) || oldData.funds_utilized // $30
+      valueOrNull(data.fundsUtilized) || oldData.funds_utilized, // $30
+      (data.variationOrderPdf !== undefined) ? valueOrNull(data.variationOrderPdf) : oldData.variation_order_pdf, // $31
+      valueOrNull(data.update_type) || 'Regular Update', // $32
+      parseIntOrNull(data.vo_number) !== null ? parseIntOrNull(data.vo_number) : oldData.vo_number, // $33
+      valueOrNull(data.vo_requested_date) || oldData.vo_requested_date, // $34
+      valueOrNull(data.vo_requested_by) || oldData.vo_requested_by // $35
     ];
 
     const insertQuery = `
@@ -6097,8 +6190,10 @@ app.put('/api/update-project/:id', async (req, res) => {
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
-        number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
+        variation_order_pdf, update_type,
+        vo_number, vo_requested_date, vo_requested_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
       RETURNING *;
     `;
 
@@ -6175,7 +6270,143 @@ app.put('/api/update-project/:id', async (req, res) => {
   }
 });
 
-// --- 10. GET: Get Projects (Filtered by Engineer) ---
+// --- 10. REALIGNMENT ROUTES ---
+app.get('/api/projects/realignment-candidates/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // 1. Get source project's geographic attributes from 'schools' table
+    const sourceRes = await pool.query(`
+      SELECT 
+        e.project_category, s.district, s.region
+      FROM engineer_form e
+      LEFT JOIN schools s ON e.school_id = s.school_id
+      WHERE e.project_id = $1
+    `, [id]);
+
+    if (sourceRes.rows.length === 0) return res.status(404).json({ message: "Project not found" });
+
+    const { project_category, district, region } = sourceRes.rows[0];
+
+    // 2. Find eligible candidate projects strictly matching DepEd realignment requirements
+    // Must match Category, Region, and District
+    const candidatesRes = await pool.query(`
+      SELECT DISTINCT ON (e.ipc) 
+        e.project_id AS id, e.ipc, e.project_name AS "projectName", e.school_name AS "schoolName", 
+        e.project_allocation AS "projectAllocation", s.district
+      FROM engineer_form e
+      JOIN schools s ON e.school_id = s.school_id
+      WHERE 
+        e.project_category = $1 AND 
+        s.region = $2 AND 
+        (s.district = $3 OR ($3 IS NULL AND s.district IS NULL)) AND
+        e.project_id != $4
+      ORDER BY e.ipc, e.project_id DESC
+    `, [project_category, region, district, id]);
+
+    res.json(candidatesRes.rows);
+  } catch (err) {
+    console.error("Candidates Fetch Error:", err);
+    res.status(500).json({ message: "Candidates error", error: err.message });
+  }
+});
+
+app.post('/api/projects/realign', async (req, res) => {
+  const { sourceProjectId, targetIpc } = req.body;
+  const realignmentDate = new Date();
+
+  let client;
+  let clientNew = null;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    if (poolNew) {
+      try {
+        clientNew = await poolNew.connect();
+        await clientNew.query('BEGIN');
+      } catch (e) { console.warn("Secondary DB Conn Failed during realignment", e.message); }
+    }
+
+    // 1. Get source project current data
+    const sourceRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [sourceProjectId]);
+    const sourceData = sourceRes.rows[0];
+
+    // 2. Get target project latest data
+    const targetRes = await client.query('SELECT * FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1', [targetIpc]);
+    const targetData = targetRes.rows[0];
+
+    if (!sourceData || !targetData) throw new Error("Source or Target project not found");
+
+    const amount = sourceData.project_allocation;
+    const sourceRemarks = `Realignment: Full allocation of ₱${Number(amount).toLocaleString()} transferred to ${targetData.school_name}.`;
+    const targetRemarks = `Realignment: Received ₱${Number(amount).toLocaleString()} from ${sourceData.school_name} (Full Project Transfer).`;
+
+    const insertSql = `
+      INSERT INTO engineer_form (
+        project_name, school_name, school_id, region, division,
+        status, accomplishment_percentage, status_as_of,
+        target_completion_date, actual_completion_date, notice_to_proceed,
+        contractor_name, project_allocation, batch_of_funds, other_remarks,
+        engineer_id, ipc, engineer_name, latitude, longitude,
+        pow_pdf, dupa_pdf, contract_pdf,
+        construction_start_date, project_category, scope_of_work,
+        number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
+        update_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+    `;
+
+    // 3. Insert NEW record for Source Project (Reduced Allocation)
+    const newSourceAllocation = Number(sourceData.project_allocation) - Number(amount);
+    const sourceVals = [
+      sourceData.project_name, sourceData.school_name, sourceData.school_id, sourceData.region, sourceData.division,
+      sourceData.status, sourceData.accomplishment_percentage, realignmentDate,
+      sourceData.target_completion_date, sourceData.actual_completion_date, sourceData.notice_to_proceed,
+      sourceData.contractor_name, newSourceAllocation, sourceData.batch_of_funds, sourceRemarks,
+      sourceData.engineer_id, sourceData.ipc, sourceData.engineer_name, sourceData.latitude, sourceData.longitude,
+      sourceData.pow_pdf, sourceData.dupa_pdf, sourceData.contract_pdf,
+      sourceData.construction_start_date, sourceData.project_category, sourceData.scope_of_work,
+      sourceData.number_of_classrooms, sourceData.number_of_storeys, sourceData.number_of_sites, sourceData.funds_utilized,
+      'Realignment (Source)'
+    ];
+    await client.query(insertSql, sourceVals);
+    if (clientNew) await clientNew.query(insertSql, sourceVals);
+
+    // 4. Insert NEW record for Target Project (Inherits Source Metadata + New Allocation)
+    // Target fields preserved: school_name, school_id, ipc, region, division, latitude, longitude
+    // Source fields inherited: project_name, project_category, scope_of_work, number_of_classrooms, number_of_storeys, 
+    //                          number_of_sites, contractor_name, batch_of_funds, notice_to_proceed, construction_start_date, 
+    //                          pow_pdf, dupa_pdf, contract_pdf
+    const newTargetAllocation = Number(targetData.project_allocation) + Number(amount);
+    const targetVals = [
+      sourceData.project_name, targetData.school_name, targetData.school_id, targetData.region, targetData.division,
+      targetData.status, targetData.accomplishment_percentage, realignmentDate,
+      sourceData.target_completion_date, sourceData.actual_completion_date, sourceData.notice_to_proceed,
+      sourceData.contractor_name, newTargetAllocation, sourceData.batch_of_funds, targetRemarks,
+      targetData.engineer_id, targetData.ipc, targetData.engineer_name, targetData.latitude, targetData.longitude,
+      sourceData.pow_pdf, sourceData.dupa_pdf, sourceData.contract_pdf,
+      sourceData.construction_start_date, sourceData.project_category, sourceData.scope_of_work,
+      sourceData.number_of_classrooms, sourceData.number_of_storeys, sourceData.number_of_sites, targetData.funds_utilized,
+      'Realignment (Target)'
+    ];
+    await client.query(insertSql, targetVals);
+    if (clientNew) await clientNew.query(insertSql, targetVals);
+
+    await client.query('COMMIT');
+    if (clientNew) await clientNew.query('COMMIT');
+
+    res.json({ message: "Realignment successful" });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK');
+    if (clientNew) await clientNew.query('ROLLBACK');
+    console.error("Realignment Error:", err);
+    res.status(500).json({ message: "Realignment failed", error: err.message });
+  } finally {
+    if (client) client.release();
+    if (clientNew) clientNew.release();
+  }
+});
+
+// --- 11. GET: Get Projects (Filtered by Engineer) ---
 app.get('/api/projects', async (req, res) => {
   try {
     // We catch the engineer_id sent from EngineerDashboard.jsx
@@ -6191,11 +6422,12 @@ app.get('/api/projects', async (req, res) => {
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-            pow_pdf, dupa_pdf, contract_pdf
+            pow_pdf, dupa_pdf, contract_pdf,
+            variation_order_pdf, update_type
           FROM engineer_form
           ORDER BY ipc, project_id DESC
       )
-      SELECT 
+      SELECT
         p.project_id AS "id", p.school_name AS "schoolName", p.project_name AS "projectName",
         p.school_id AS "schoolId", p.division, p.region, p.status, p.ipc, p.engineer_name AS "engineerName",
         p.accomplishment_percentage AS "accomplishmentPercentage",
@@ -6210,7 +6442,11 @@ app.get('/api/projects', async (req, res) => {
         p.number_of_classrooms AS "numberOfClassrooms", p.number_of_storeys AS "numberOfStoreys",
         p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
         p.pow_pdf, p.dupa_pdf, p.contract_pdf,
-        p.latitude, p.longitude
+        p.latitude, p.longitude,
+        (p.variation_order_pdf IS NOT NULL) AS "hasVariationOrder",
+        p.variation_order_pdf AS "variationOrderPdf",
+        p.update_type AS "updateType",
+        (p.update_type LIKE 'Realignment%') AS "isRealigned"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
@@ -6278,7 +6514,14 @@ app.get('/api/projects/:id', async (req, res) => {
         number_of_classrooms AS "numberOfClassrooms", number_of_storeys AS "numberOfStoreys",
         number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
         pow_pdf, dupa_pdf, contract_pdf,
-        latitude, longitude
+        latitude, longitude,
+        (variation_order_pdf IS NOT NULL) AS "hasVariationOrder",
+        variation_order_pdf AS "variationOrderPdf",
+        vo_number AS "vo_number",
+        TO_CHAR(vo_requested_date, 'YYYY-MM-DD') AS "vo_requested_date",
+        vo_requested_by AS "vo_requested_by",
+        update_type AS "updateType",
+        (update_type IS NOT NULL AND update_type LIKE 'Realignment%') AS "isRealigned"
       FROM "engineer_form" WHERE project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -6309,7 +6552,12 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         number_of_classrooms AS "numberOfClassrooms", number_of_storeys AS "numberOfStoreys",
         number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
         pow_pdf, dupa_pdf, contract_pdf,
-        latitude, longitude
+        latitude, longitude,
+        (variation_order_pdf IS NOT NULL) AS "hasVariationOrder",
+        variation_order_pdf AS "variationOrderPdf",
+        vo_number AS "vo_number",
+        TO_CHAR(vo_requested_date, 'YYYY-MM-DD') AS "vo_requested_date",
+        vo_requested_by AS "vo_requested_by"
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;
     `;
@@ -6373,11 +6621,27 @@ app.get('/api/project-history/:ipc', async (req, res) => {
 
     const query = `
       SELECT 
+        *,
         ${idColumn} AS "id", 
         other_remarks AS "remarks", 
         ${nameColumn} AS "engineerName", 
         ${statusCol} AS "status", 
+        project_name AS "projectName",
+        project_category AS "projectCategory",
+        scope_of_work AS "scopeOfWork",
+        project_allocation AS "projectAllocation",
+        batch_of_funds AS "batchOfFunds",
+        contractor_name AS "contractorName",
+        number_of_classrooms AS "numberOfClassrooms",
+        number_of_storeys AS "numberOfStoreys",
+        number_of_sites AS "numberOfSites",
+        funds_utilized AS "fundsUtilized",
         TO_CHAR(${statusAsOfCol}, 'YYYY-MM-DD') AS "statusAsOfDate",
+        TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
+        TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
+        TO_CHAR(construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
+        TO_CHAR(vo_approval_date, 'YYYY-MM-DD') AS "vo_approval_date",
         created_at
       FROM ${tableName}
       WHERE ipc = $1
@@ -7668,12 +7932,12 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 spec_tle_major=$16, spec_tle_teaching=$17,
                 spec_guidance=$18, spec_librarian=$19,
                 spec_ict_coord=$20, spec_drrm_coord=$21,
-                spec_general_teaching=$22,
-                spec_ece_teaching=$23,
-                spec_bio_sci_major=$24, spec_bio_sci_teaching=$25,
-                spec_phys_sci_major=$26, spec_phys_sci_teaching=$27,
-                spec_agri_fishery_major=$28, spec_agri_fishery_teaching=$29,
-                spec_others_major=$30, spec_others_teaching=$31,
+                spec_general_major=$22, spec_general_teaching=$23,
+                spec_ece_major=$24, spec_ece_teaching=$25,
+                spec_bio_sci_major=$26, spec_bio_sci_teaching=$27,
+                spec_phys_sci_major=$28, spec_phys_sci_teaching=$29,
+                spec_agri_fishery_major=$30, spec_agri_fishery_teaching=$31,
+                spec_others_major=$32, spec_others_teaching=$33,
                 updated_at = CURRENT_TIMESTAMP
             WHERE submitted_by = $1;
         `;
@@ -9685,13 +9949,50 @@ app.get('/api/migrate-schema', async (req, res) => {
       results.push("Added funds_utilized");
     } catch (e) { results.push(`Failed funds_utilized: ${e.message}`); }
 
-    // 4. Add head_sex to school_profiles -- REMOVED
-    // try {
-    //   await client.query('ALTER TABLE "school_profiles" ADD COLUMN IF NOT EXISTS head_sex TEXT');
-    //   results.push("Added head_sex to school_profiles");
-    // } catch (e) { results.push(`Failed head_sex: ${e.message}`); }
+    // 8. Add variation_order_pdf
+    try {
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT');
+      results.push("Added variation_order_pdf");
+    } catch (e) { results.push(`Failed variation_order_pdf: ${e.message}`); }
+
+    // 9. Add update_type
+    try {
+      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS update_type TEXT');
+      results.push("Added update_type");
+    } catch (e) { results.push(`Failed update_type: ${e.message}`); }
 
     client.release();
+
+    // --- SECONDARY DB MIGRATION ---
+    if (poolNew) {
+      try {
+        const clientNew = await poolNew.connect();
+        const resultsNew = [];
+        const cols = [
+          'construction_start_date TEXT',
+          'project_category TEXT',
+          'scope_of_work TEXT',
+          'number_of_classrooms INTEGER DEFAULT 0',
+          'number_of_sites INTEGER DEFAULT 1',
+          'number_of_storeys INTEGER DEFAULT 0',
+          'funds_utilized NUMERIC DEFAULT 0',
+          'variation_order_pdf TEXT',
+          'update_type TEXT'
+        ];
+        for (const colDef of cols) {
+          const colName = colDef.split(' ')[0];
+          try {
+            await clientNew.query(`ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS ${colDef}`);
+            resultsNew.push(`Added ${colName} to ICTS`);
+          } catch (e) { resultsNew.push(`Failed ${colName} on ICTS: ${e.message}`); }
+        }
+        clientNew.release();
+        results.push(...resultsNew);
+      } catch (err) {
+        results.push(`ICTS Connection Failed: ${err.message}`);
+      }
+    }
+
     res.json({ message: "Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -9920,9 +10221,14 @@ app.post('/api/lgu/save-project', async (req, res) => {
       valueOrNull(data.philgeps_ref_no), // 50
       valueOrNull(data.pcab_license_no), // 51
       valueOrNull(data.date_contract_signing), // 52
-      parseNumberOrNull(data.bid_amount), // 53
-      valueOrNull(data.nature_of_delay), // 54
-      valueOrNull(data.date_notice_of_award) // 55
+      parseNumberOrNull(data.bid_amount),      // 53
+      valueOrNull(data.nature_of_delay),       // 54
+      valueOrNull(data.date_notice_of_award),  // 55
+      valueOrNull(data.variationOrderPdf),      // 56
+      valueOrNull(data.projectCategory),        // 57
+      parseIntOrNull(data.numberOfClassrooms),  // 58
+      parseIntOrNull(data.numberOfStoreys),     // 59
+      parseIntOrNull(data.numberOfSites)         // 60
     ];
 
     const projectQuery = `
@@ -9944,11 +10250,15 @@ app.post('/api/lgu/save-project', async (req, res) => {
         source_agency, lsb_resolution_no, moa_ref_no, validity_period,
         contract_duration, date_approved_pow, fund_release_schedule,
         mode_of_procurement, philgeps_ref_no, pcab_license_no,
-        date_contract_signing, bid_amount, nature_of_delay, date_notice_of_award
+        date_contract_signing, bid_amount, nature_of_delay, date_notice_of_award,
+        variation_order_pdf,
+        -- PROJECT SPECS (VO COMPAT)
+        project_category, number_of_classrooms, number_of_storeys, number_of_sites
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
         $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41,
-        $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55
+        $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56,
+        $57, $58, $59, $60
       )
       RETURNING project_id, project_name, ipc;
     `;
@@ -10282,7 +10592,13 @@ app.get('/api/lgu/projects', async (req, res) => {
 app.get('/api/lgu/project/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const query = `SELECT * FROM lgu_projects WHERE lgu_project_id = $1`;
+    const query = `
+      SELECT 
+        *,
+        (variation_order_pdf IS NOT NULL) AS "hasVariationOrder",
+        variation_order_pdf AS "variationOrderPdf"
+      FROM lgu_projects WHERE lgu_project_id = $1
+    `;
     const result = await pool.query(query, [id]);
 
     if (result.rows.length === 0) {
@@ -10313,7 +10629,9 @@ app.post('/api/lgu/project/update', async (req, res) => {
       "pcab_license_no", "date_contract_signing", "date_notice_of_award", "bid_amount",
       "latitude", "longitude", "pow_pdf", "dupa_pdf", "contract_pdf",
       "project_status", "accomplishment_percentage", "status_as_of_date",
-      "amount_utilized", "nature_of_delay", "root_project_id", "municipality", "other_remarks"
+      "amount_utilized", "nature_of_delay", "root_project_id", "municipality", "other_remarks",
+      "variation_order_pdf",
+      "project_category", "number_of_classrooms", "number_of_storeys", "number_of_sites"
     ];
 
     const numericCols = [
@@ -10423,9 +10741,16 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
                 date_contract_signing = COALESCE($40, date_contract_signing),
                 bid_amount = COALESCE($41, bid_amount),
                 nature_of_delay = COALESCE($42, nature_of_delay),
-                date_notice_of_award = COALESCE($43, date_notice_of_award)
+                date_notice_of_award = COALESCE($43, date_notice_of_award),
+                variation_order_pdf = COALESCE($44, variation_order_pdf),
 
-            WHERE project_id = $44
+                -- PROJECT SPECS (VO COMPAT)
+                project_category = COALESCE($45, project_category),
+                number_of_classrooms = COALESCE($46, number_of_classrooms),
+                number_of_storeys = COALESCE($47, number_of_storeys),
+                number_of_sites = COALESCE($48, number_of_sites)
+
+            WHERE project_id = $49
             RETURNING *;
         `;
 
@@ -10459,6 +10784,13 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
       parseNumberOrNull(data.bid_amount),
       valueOrNull(data.nature_of_delay),
       valueOrNull(data.date_notice_of_award),
+      valueOrNull(data.variationOrderPdf),
+
+      // Project Specs
+      valueOrNull(data.projectCategory),
+      parseIntOrNull(data.numberOfClassrooms),
+      parseIntOrNull(data.numberOfStoreys),
+      parseIntOrNull(data.numberOfSites),
 
       id
     ];

@@ -154,6 +154,22 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                         <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">ID</span>
                         <span className="text-[9px] font-bold font-mono text-slate-600 dark:text-slate-300">{p.schoolId}</span>
                       </div>
+
+                      {/* Variation Order Badge */}
+                      {p.hasVariationOrder && (
+                        <div className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800 transition-colors shadow-sm" title="Variation Order Active">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+                          <span className="text-[8px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">VO</span>
+                        </div>
+                      )}
+
+                      {/* Realignment Badge */}
+                      {p.isRealigned && (
+                        <div className="flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-800 transition-colors shadow-sm" title={p.updateType}>
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
+                          <span className="text-[8px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">RE</span>
+                        </div>
+                      )}
                     </div>
                   </td>
 
@@ -240,9 +256,15 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
 
                       <button
                         onClick={() => onView(p)}
-                        className="w-full py-1.5 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-[10px] font-bold rounded-lg border border-slate-100 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-600 hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
+                        className={`w-full py-1.5 text-[10px] font-bold rounded-lg border transition-all active:scale-95 flex items-center justify-center gap-1 ${p.hasVariationOrder 
+                          ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 shadow-sm shadow-amber-900/10" 
+                          : "bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-100 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-600 hover:shadow-md"}`}
                       >
-                        VIEW <FiChevronRight size={12} />
+                        {p.hasVariationOrder ? (
+                          <>VIEW <span className="bg-amber-100 text-amber-700 px-1 rounded-sm text-[8px] font-black">VO</span></>
+                        ) : (
+                          <>VIEW <FiChevronRight size={12} /></>
+                        )}
                       </button>
                       <button
                         onClick={() => navigate(`/project-gallery/${p.id}`)}
@@ -420,7 +442,9 @@ const EngineerProjects = () => {
                 batchOfFunds: item.batchOfFunds,
                 pow_pdf: item.pow_pdf,
                 dupa_pdf: item.dupa_pdf,
-                contract_pdf: item.contract_pdf
+                contract_pdf: item.contract_pdf,
+                hasVariationOrder: item.hasVariationOrder,
+                variationOrderPdf: item.variationOrderPdf
               }));
 
               // Update Cache on success
@@ -477,9 +501,19 @@ const EngineerProjects = () => {
     const user = auth.currentUser;
     if (!user) return;
 
-    // CHECK: Mandatory Photo Upload (Skipped for Docs Only)
-    if (modalMode !== 'docs_only' && internalFiles.length === 0 && externalFiles.length === 0) {
-      alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project update.");
+    // OPTIMIZATION: Check if progress changed
+    const originalProject = projects.find(p => p.id === updatedProject.id);
+    const isProgressUpdated = originalProject && (
+      originalProject.status !== updatedProject.status || 
+      Number(originalProject.accomplishmentPercentage) !== Number(updatedProject.accomplishmentPercentage)
+    );
+
+    // CHECK: Mandatory Photo Upload (For any progressive update: Ongoing, Final Inspection, or Completed)
+    const progressiveStatuses = [ProjectStatus.Ongoing, ProjectStatus.ForFinalInspection, ProjectStatus.Completed];
+    const isProgressiveUpdate = progressiveStatuses.includes(updatedProject.status);
+
+    if (modalMode !== 'docs_only' && isProgressiveUpdate && internalFiles.length === 0 && externalFiles.length === 0) {
+      alert(`⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for projects in "${updatedProject.status}" status.`);
       return;
     }
 
