@@ -539,10 +539,13 @@ const NewProjects = () => {
             return;
         }
 
+        // DOCUMENT VALIDATION REMOVED PER USER REQUEST (Consideration for early stage projects)
+        /*
         if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
             alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
             return;
         }
+        */
 
         // CONDITIONAL PHOTO VALIDATION
         if (!['Not Yet Started', 'Under Procurement'].includes(formData.status)) {
@@ -569,6 +572,11 @@ const NewProjects = () => {
         ];
 
         for (const field of requiredFields) {
+            const isEarlyStage = ['Not Yet Started', 'Under Procurement'].includes(formData.status);
+            const isTimelineField = ['targetCompletionDate', 'statusAsOfDate'].includes(field.key);
+            
+            if (isEarlyStage && isTimelineField) continue; // Skip these for early stages
+
             if (!formData[field.key]) {
                 alert(`⚠️ MISSING FIELD\n\nPlease enter the ${field.label}. All fields are mandatory.`);
                 return;
@@ -602,6 +610,7 @@ const NewProjects = () => {
                 uid: auth.currentUser?.uid,
                 modifiedBy: auth.currentUser?.displayName || 'Engineer',
                 images: compressedImages,
+                update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString()
             };
@@ -726,6 +735,7 @@ const NewProjects = () => {
                             <h1 className="text-xl font-bold">New Project Entry</h1>
                         </div>
                         
+                        {/* 
                         {!isDummy && (
                             <button 
                                 type="button"
@@ -735,6 +745,7 @@ const NewProjects = () => {
                                 <span className="text-lg">📥</span> Import Project
                             </button>
                         )}
+                        */}
                     </div>
                 </div>
 
@@ -1081,24 +1092,53 @@ const NewProjects = () => {
                                 </select>
                             </div>
                             {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
-                                <div>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
-                                        {!isDummy && (
-                                            <div className="flex gap-1">
-                                                <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
-                                                <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
-                                            </div>
-                                        )}
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date</label>
+                                        <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} max={new Date().toISOString().split('T')[0]} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                                     </div>
-                                    <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
+                                            {!isDummy && (
+                                                <div className="flex gap-1">
+                                                    <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
+                                                    <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                    </div>
                                 </div>
                             )}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date</label>
-                                <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} max={new Date().toISOString().split('T')[0]} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
                         </div>
+
+                        {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
+                            <>
+                                <SectionHeader title="Timelines" icon="📅" />
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed Date</label>
+                                        <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                    </div>
+                                    {/* Start of Construction (New) */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Start of Construction</label>
+                                        <input type="date" name="constructionStartDate" value={formData.constructionStartDate || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion Date</label>
+                                        <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                    </div>
+                                    {formData.status === 'Completed' && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion Date</label>
+                                            <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
 
                         {/* --- SITE PHOTOS SECTION (Conditional) --- */}
                         {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
@@ -1175,29 +1215,6 @@ const NewProjects = () => {
                             </div>
                         )}
 
-                        <SectionHeader title="Timelines" icon="📅" />
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed Date</label>
-                                <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            {/* Start of Construction (New) */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Start of Construction</label>
-                                <input type="date" name="constructionStartDate" value={formData.constructionStartDate || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion Date</label>
-                                <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            {formData.status === 'Completed' && (
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion Date</label>
-                                    <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                                </div>
-                            )}
-                        </div>
-
                         <SectionHeader title="Funds and Contractor" icon="💰" />
                         <div className="space-y-4">
                             <div>
@@ -1245,7 +1262,7 @@ const NewProjects = () => {
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                {label} <span className="text-red-500">*</span>
+                                                {label}
                                             </p>
                                             {documents[key] ? (
                                                 <p className="text-[10px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">

@@ -18,6 +18,28 @@ const DOC_TYPES = {
     CONTRACT: "Signed Contract"
 };
 
+const PROJECT_CATEGORIES = [
+    "New Construction",
+    "Repair and Rehab",
+    "Last Mile Schools",
+    "Health facilities",
+    "Gabaldon Restoration",
+    "Library Hub",
+    "SpEd Inclusive Learning Resource Centers (ILRC)",
+    "Alternative Learning System - Community Based Learning Centers (ALS-CLC)",
+    "Midrise School Building"
+];
+
+const formatWithCommas = (val) => {
+    if (val === null || val === undefined || val === '') return '';
+    let stringVal = String(val).replace(/,/g, '');
+    let parts = stringVal.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join('.');
+};
+
+const stripCommas = (val) => String(val).replace(/,/g, '');
+
 const formatDateShort = (dateString) => {
     if (!dateString) return "TBD";
     const date = new Date(dateString);
@@ -113,7 +135,9 @@ const EditProjectModal = ({
                 // New VO Fields
                 vo_number: project.vo_number || '',
                 vo_requested_date: (project.vo_requested_date || project.vo_approval_date) ? (project.vo_requested_date || project.vo_approval_date).split('T')[0] : '',
-                vo_requested_by: project.vo_requested_by || project.vo_approved_by || ''
+                vo_requested_by: project.vo_requested_by || project.vo_approved_by || '',
+                // New Tab State
+                isProjectDetailsUpdate: false
             });
             setDocuments({ POW: null, DUPA: null, CONTRACT: null });
         }
@@ -171,6 +195,15 @@ const EditProjectModal = ({
             // Force Uppercase for Scope of Work & Batch of Funds
             if (['scopeOfWork', 'batchOfFunds'].includes(name)) {
                 newData[name] = value.toUpperCase();
+            }
+
+            // Handle Numeric Fields with Commas
+            const numericFields = [
+                'numberOfClassrooms', 'numberOfStoreys', 'numberOfSites', 
+                'projectAllocation', 'fundsUtilized', 'tranches_count', 'tranche_amount'
+            ];
+            if (numericFields.includes(name)) {
+                newData[name] = stripCommas(value);
             }
 
             if (name === "accomplishmentPercentage") {
@@ -293,7 +326,21 @@ const EditProjectModal = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Category</label>
-                    <input name="projectCategory" value={formData.projectCategory} onChange={handleChange} disabled={readOnly} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs ${readOnly ? 'bg-slate-100' : ''}`} />
+                    {formData.hasVariationOrder ? (
+                        <select
+                            name="projectCategory"
+                            value={formData.projectCategory}
+                            onChange={handleChange}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                        >
+                            <option value="">Select Category...</option>
+                            {PROJECT_CATEGORIES.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <input name="projectCategory" value={formData.projectCategory} onChange={handleChange} disabled={readOnly} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs ${readOnly ? 'bg-slate-100' : ''}`} />
+                    )}
                 </div>
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Project Name</label>
@@ -311,15 +358,15 @@ const EditProjectModal = ({
             <div className="grid grid-cols-3 gap-3">
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Classrooms</label>
-                    <input type="number" name="numberOfClassrooms" value={formData.numberOfClassrooms} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    <input type="text" name="numberOfClassrooms" value={formatWithCommas(formData.numberOfClassrooms)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                 </div>
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Storeys</label>
-                    <input type="number" name="numberOfStoreys" value={formData.numberOfStoreys} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    <input type="text" name="numberOfStoreys" value={formatWithCommas(formData.numberOfStoreys)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                 </div>
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sites</label>
-                    <input type="number" name="numberOfSites" value={formData.numberOfSites} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    <input type="text" name="numberOfSites" value={formatWithCommas(formData.numberOfSites)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                 </div>
             </div>
 
@@ -339,7 +386,9 @@ const EditProjectModal = ({
 
     const renderTimelineAndFunds = () => (
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Timeline & Funds</h3>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                {formData.isProjectDetailsUpdate ? 'Project Timelines' : 'Timeline & Funds'}
+            </h3>
 
             <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -360,20 +409,22 @@ const EditProjectModal = ({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Allocation</label>
-                    <input type="number" name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+            {!formData.isProjectDetailsUpdate && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-slate-100 pt-3">
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Allocation</label>
+                        <input type="text" name="projectAllocation" value={formatWithCommas(formData.projectAllocation)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                        <input type="text" name="fundsUtilized" value={formatWithCommas(formData.fundsUtilized)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Batch</label>
+                        <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
-                    <input type="number" name="fundsUtilized" value={formData.fundsUtilized} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
-                </div>
-                <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Batch</label>
-                    <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
-                </div>
-            </div>
+            )}
         </div>
     );
 
@@ -383,28 +434,36 @@ const EditProjectModal = ({
         return (
             <div className="flex p-1 bg-slate-100 rounded-2xl mb-4">
                 <button
-                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: false }))}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${(!formData.hasVariationOrder && !formData.isRealignment) 
+                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: false, isProjectDetailsUpdate: false }))}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${(!formData.hasVariationOrder && !formData.isRealignment && !formData.isProjectDetailsUpdate) 
                         ? 'bg-white text-blue-600 shadow-sm' 
                         : 'text-slate-500 hover:bg-white/50'}`}
                 >
-                    Regular Status Update
+                    Status Update
                 </button>
                 <button
-                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: true, isRealignment: false }))}
+                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: false, isProjectDetailsUpdate: true }))}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.isProjectDetailsUpdate 
+                        ? 'bg-blue-600 text-white shadow-md' 
+                        : 'text-slate-500 hover:bg-white/50'}`}
+                >
+                    Details Update
+                </button>
+                <button
+                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: true, isRealignment: false, isProjectDetailsUpdate: false }))}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.hasVariationOrder 
                         ? 'bg-amber-500 text-white shadow-md' 
                         : 'text-slate-500 hover:bg-white/50'}`}
                 >
-                    Variation Order
+                    VO
                 </button>
                 <button
-                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: true }))}
+                    onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: true, isProjectDetailsUpdate: false }))}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.isRealignment 
                         ? 'bg-purple-600 text-white shadow-md' 
                         : 'text-slate-500 hover:bg-white/50'}`}
                 >
-                    Realignment
+                    Realign
                 </button>
             </div>
         );
@@ -429,7 +488,7 @@ const EditProjectModal = ({
                         <div>
                             <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">VO Number</label>
                             <input
-                                type="number"
+                                type="text"
                                 name="vo_number"
                                 value={formData.vo_number}
                                 onChange={handleChange}
@@ -624,11 +683,11 @@ const EditProjectModal = ({
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <label className="block text-[9px] font-bold text-blue-700 uppercase mb-1">No. of Tranches</label>
-                        <input type="number" name="tranches_count" value={formData.tranches_count || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-50 rounded-lg text-xs" />
+                        <input type="text" name="tranches_count" value={formatWithCommas(formData.tranches_count)} onChange={handleChange} className="w-full p-2 bg-white border border-blue-50 rounded-lg text-xs" />
                     </div>
                     <div>
                         <label className="block text-[9px] font-bold text-blue-700 uppercase mb-1">Amt per Tranche</label>
-                        <input name="tranche_amount" value={formData.tranche_amount || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-50 rounded-lg text-xs" />
+                        <input type="text" name="tranche_amount" value={formatWithCommas(formData.tranche_amount)} onChange={handleChange} className="w-full p-2 bg-white border border-blue-50 rounded-lg text-xs" />
                     </div>
                 </div>
             </div>
@@ -705,7 +764,7 @@ const EditProjectModal = ({
         // For Quick Mode: Standalone Funds Utilized input
         <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Funds Utilized</label>
-            <input type="number" name="fundsUtilized" value={formData.fundsUtilized} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input type="text" name="fundsUtilized" value={formatWithCommas(formData.fundsUtilized)} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none" />
         </div>
     );
 
@@ -884,11 +943,19 @@ const EditProjectModal = ({
                     {renderTabs()}
 
                     {/* IF REGULAR UPDATE: Show status/progress/photos */}
-                    {!formData.hasVariationOrder && !formData.isRealignment && (
+                    {/* IF REGULAR UPDATE: Show status/progress/photos */}
+                    {!formData.hasVariationOrder && !formData.isRealignment && !formData.isProjectDetailsUpdate && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             {renderStatusAndProgress()}
                             {renderFundsUtilized()}
                             {renderSitePhotos()}
+                        </div>
+                    )}
+
+                    {/* IF PROJECT DETAILS UPDATE: Show timelines and documents */}
+                    {!formData.hasVariationOrder && !formData.isRealignment && formData.isProjectDetailsUpdate && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {renderTimelineAndFunds()}
                             {renderDocumentUploads()}
                         </div>
                     )}
@@ -899,7 +966,7 @@ const EditProjectModal = ({
                             {renderVariationOrderHeader()}
                             <div className="space-y-6">
                                 {renderProjectDetails()}
-                                {renderStatusAndProgress()}
+                                {/* {renderStatusAndProgress()} */}
                                 {renderFundsUtilized()}
                                 {renderDocumentUploads()}
 
@@ -1042,11 +1109,12 @@ const EditProjectModal = ({
                                     }
                                 }
 
-                                // Mandate Photos for Ongoing/Completed statuses
+                                // Mandate Photos for Ongoing/Completed statuses (Exempt VO and Realignment)
                                 const isRequiredStatus = [ProjectStatus.Ongoing, ProjectStatus.ForFinalInspection, ProjectStatus.Completed].includes(formData.status);
-                                const hasPhotos = (internalPreviews?.length || 0) > 0 || (externalPreviews?.length || 0) > 0;
+                                 const hasPhotos = (internalPreviews?.length || 0) > 0 || (externalPreviews?.length || 0) > 0;
+                                 const canSkipPhotos = formData.hasVariationOrder || formData.isRealignment || formData.isProjectDetailsUpdate;
                                 
-                                if (isRequiredStatus && !hasPhotos) {
+                                if (isRequiredStatus && !hasPhotos && !canSkipPhotos) {
                                     alert(`⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for projects in ${formData.status} status.`);
                                     return;
                                 }
@@ -1061,7 +1129,13 @@ const EditProjectModal = ({
                                 // Set update_type based on VO status
                                 finalData.update_type = formData.hasVariationOrder ? 'Variation Order' : 'Regular Update';
 
-                                onSave(finalData);
+                                 // Determine Update Type for tracking
+                                 let updateType = 'Status Update';
+                                 if (formData.isProjectDetailsUpdate) updateType = 'Details Update';
+                                 if (formData.hasVariationOrder) updateType = 'Variation Order';
+                                 if (formData.isRealignment) updateType = 'Realignment';
+
+                                 onSave({ ...finalData, update_type: updateType });
                             }}
                             disabled={isUploading || isSubmittingRealignment}
                             className="flex-[2] py-4 text-white font-black text-xs uppercase tracking-widest bg-gradient-to-r from-[#004A99] to-[#003366] rounded-2xl shadow-xl shadow-blue-900/20 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
