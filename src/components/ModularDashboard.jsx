@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiHome, FiUsers, FiBox, FiBookOpen, FiArrowLeft, FiGrid } from "react-icons/fi";
+import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiChevronRight, FiClock } from "react-icons/fi";
 
 import { motion } from "framer-motion";
 import { getUnit1Draft } from "../db";
@@ -87,15 +87,29 @@ const ModularDashboard = () => {
         },
         {
             id: 4,
-            title: "Personnel",
+            title: "Learner Profile",
             icon: <FiBookOpen className="w-7 h-7" />,
-            path: "/teaching-personnel",
+            path: "/modular/unit-4",
             locked: !questProgress.completedUnits.includes(3),
+        },
+        {
+            id: 5,
+            title: "Shifting & Modality",
+            icon: <FiClock className="w-7 h-7" />,
+            path: "/modular/unit-5",
+            locked: !questProgress.completedUnits.includes(4),
+        },
+        {
+            id: 6,
+            title: "Physical Facilities",
+            icon: <FiBookOpen className="w-7 h-7" />, // or use a different icon if available
+            path: "/modular/unit-6",
+            locked: !questProgress.completedUnits.includes(5),
         },
     ];
 
     // Alternating margins for winding path
-    const pathOffsets = ["ml-0", "-ml-16", "ml-16", "ml-0"];
+    const pathOffsets = ["ml-0", "-ml-16", "ml-16", "-ml-16", "ml-16", "ml-0"];
 
     const handleModuleClick = (mod) => {
         if (mod.locked) return;
@@ -105,11 +119,12 @@ const ModularDashboard = () => {
     // Determine mascot message based on progress
     const getMascotMessage = () => {
         const completed = questProgress.completedUnits.length;
-        if (completed === 0) return "Start with the School Profile module! 🏫";
+        if (completed === 0) return "Start with the School Profile module! 🏢";
         if (completed === 1) return "Great job! Try testing Enrollment next!";
-        if (completed === 2) return "You're on fire! Facilities is next! 🔥";
-        if (completed === 3) return "Almost there! One more module to go!";
-        return "You've completed all modules! 🎉";
+        if (completed === 2) return "Excellent progress! Scheduling is next! 📈";
+        if (completed === 3) return "Halfway there! Let's check shifting models!";
+        if (completed === 4) return "Almost done! Facilities is the final stretch!";
+        return "You've completed all modules! 🏆";
     };
 
     return (
@@ -134,7 +149,7 @@ const ModularDashboard = () => {
                     <div className="flex items-center gap-3">
                         {/* Streak */}
                         <div className="flex items-center gap-1">
-                            <span className="text-base">🔥</span>
+                            <span className="text-base">⚡</span>
                             <span className="text-sm font-bold text-orange-500">1</span>
                         </div>
                         {/* Gems */}

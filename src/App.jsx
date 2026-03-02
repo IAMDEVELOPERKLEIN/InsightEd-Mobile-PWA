@@ -73,6 +73,9 @@ import ModularDashboard from './components/ModularDashboard';
 import Unit1SchoolIdentity from './components/modular/Unit1SchoolIdentity';
 import Unit2Learners from './components/modular/Unit2Learners';
 import Unit3OrganizedClasses from './components/modular/Unit3OrganizedClasses';
+import Unit4LearnerProfile from './components/modular/Unit4LearnerProfile';
+import Unit5ShiftingModality from './components/modular/Unit5ShiftingModality';
+import Unit6PhysicalFacilities from './components/modular/Unit6PhysicalFacilities';
 
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
@@ -179,6 +182,30 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
               <Unit3OrganizedClasses />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-4"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit4LearnerProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-5"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit5ShiftingModality />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-6"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit6PhysicalFacilities />
             </ProtectedRoute>
           }
         />

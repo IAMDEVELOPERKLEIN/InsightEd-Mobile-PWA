@@ -10737,6 +10737,7 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
   }
 });
 
+
 // ==================================================================
 //               MODULAR BETA ENDPOINTS (PH_SCHOOLS)
 // ==================================================================
@@ -10745,7 +10746,10 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query('SELECT total_enrollment, enroll_kinder, has_multigrade FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const result = await pool.query(
+      'SELECT total_enrollment, enroll_kinder, has_multigrade, selected_learner_groups FROM ph_schools WHERE school_id = $1',
+      [schoolId]
+    );
 
     let completedUnits = [];
     let xp = 0;
@@ -10762,6 +10766,10 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       if (row.has_multigrade !== null) {
         completedUnits.push(3);
         xp += 200;
+      }
+      if (row.selected_learner_groups !== null) {
+        completedUnits.push(4);
+        xp += 250;
       }
     }
 
@@ -10937,6 +10945,136 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     console.error('Save Unit 3 Error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
   }
+});
+
+// --- 31. PUT: Save Unit 4 Learner Profile (Modular Beta) ---
+app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  const data = req.body;
+  const { selected_learner_groups = [] } = data;
+
+  const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
+
+  try {
+    const groupsJson = JSON.stringify(selected_learner_groups);
+    const setClauses = [];
+    const values = [];
+    let vCount = 1;
+
+    setClauses.push(`selected_learner_groups = $${vCount++}::jsonb`);
+    values.push(groupsJson);
+
+    // Health / BMI
+    const bmiCols = ['bmi_severely_wasted', 'bmi_wasted', 'bmi_overweight_obese', 'bmi_normal'];
+    for (const b of bmiCols) {
+      if (data[b] !== undefined) {
+        setClauses.push(`${b} = $${vCount++}`);
+        values.push(pInt(data[b]));
+      }
+    }
+
+    // Dynamic Category x Grade columns
+    const grades = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+    const categories = ['als', 'muslim', 'ip', 'lwd', 'displaced', 'overage', 'sned', 'dropout', 'repeater'];
+
+    for (const cat of categories) {
+      for (const grade of grades) {
+        const colName = `${cat}_${grade}`;
+        if (data[colName] !== undefined) {
+          setClauses.push(`${colName} = $${vCount++}`);
+          values.push(pInt(data[colName]));
+        }
+      }
+    }
+
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(schoolId);
+
+    const query = `
+      UPDATE ph_schools
+      SET ${setClauses.join(', ')}
+      WHERE school_id = $${vCount}
+    `;
+
+    await pool.query(query, values);
+
+    // Auto-update school_summary instantly
+    try {
+      if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+    } catch(e) {}
+
+    res.json({ success: true, message: 'Unit 4 Learner Profile data saved successfully!' });
+  } catch (err) {
+    console.error('Save Unit 4 Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// --- 27e. PUT: Save Unit 5 Shifting & Modalities (Modular Beta) ---
+app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
+    const { schoolId } = req.params;
+    const data = req.body;
+    
+    try {
+      // Base dynamic fields for K-12
+      const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+      const dynamicFields = [];
+      const values = [];
+      let paramIdx = 1;
+
+      // Ensure standard check is a boolean
+      const parseBool = (val) => val === true || val === 'true';
+
+      dynamicFields.push(`has_standard_shifting = $${paramIdx++}`);
+      values.push(parseBool(data.has_standard_shifting));
+
+      // Push ADM Toggles
+      dynamicFields.push(`adm_mdl = $${paramIdx++}`);
+      values.push(parseBool(data.adm_mdl));
+      
+      dynamicFields.push(`adm_odl = $${paramIdx++}`);
+      values.push(parseBool(data.adm_odl));
+      
+      dynamicFields.push(`adm_tvi = $${paramIdx++}`);
+      values.push(parseBool(data.adm_tvi));
+      
+      dynamicFields.push(`adm_blended = $${paramIdx++}`);
+      values.push(parseBool(data.adm_blended));
+
+      // Build out Shift/Mode mappings dynamically based on existing levels
+      for (const lvl of levels) {
+          if (data[`shift_${lvl}`] !== undefined) {
+              dynamicFields.push(`shift_${lvl} = $${paramIdx++}`);
+              values.push(data[`shift_${lvl}`]);
+          }
+          if (data[`mode_${lvl}`] !== undefined) {
+              dynamicFields.push(`mode_${lvl} = $${paramIdx++}`);
+              values.push(data[`mode_${lvl}`]);
+          }
+      }
+
+      dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
+      values.push(schoolId); // Last param is the WHERE clause
+
+      const query = `
+        UPDATE ph_schools 
+        SET ${dynamicFields.join(', ')} 
+        WHERE school_id = $${paramIdx}
+      `;
+  
+      await pool.query(query, values);
+      
+      // Auto-update school_summary instantly
+      try {
+        if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+      } catch(e) {}
+  
+      res.json({ success: true, message: "Unit 5 Shifting & Modality data saved successfully!" });
+  
+    } catch (err) {
+      console.error("Save Unit 5 Error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
 });
 
 export default app;

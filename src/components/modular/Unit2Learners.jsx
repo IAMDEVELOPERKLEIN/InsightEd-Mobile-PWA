@@ -600,7 +600,7 @@ const Unit2Learners = () => {
 
                     {currentStep === TOTAL_STEPS ? (
                         <button onClick={handleNext} disabled={loading || !isCurrentStepValid()} className="flex-1 py-4 rounded-2xl text-white font-bold text-lg text-center bg-green-500 border-b-[6px] border-green-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 shadow-lg">
-                            {loading ? "Syncing..." : "Submit Verification ⭐"}
+                            {loading ? "Saving..." : "Submit Setup"}
                         </button>
                     ) : (
                         <button onClick={handleNext} disabled={!isCurrentStepValid()} className="flex-1 py-4 rounded-2xl text-white font-bold text-lg text-center bg-blue-500 border-b-[6px] border-blue-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 shadow-lg">
@@ -614,7 +614,7 @@ const Unit2Learners = () => {
             <SuccessModal
                 isOpen={showSuccess}
                 onClose={() => setShowSuccess(false)}
-                message="Unit 2 completed! The next objective is unlocked."
+                message="Learner Setup Saved! You can now proceed to organize classes."
                 redirectUrl="/modular-dashboard"
             />
         </div>

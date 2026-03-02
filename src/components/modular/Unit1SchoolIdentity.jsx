@@ -905,7 +905,7 @@ const Unit1SchoolIdentity = () => {
             <SuccessModal
                 isOpen={showSuccess}
                 onClose={() => setShowSuccess(false)}
-                message="Unit 1 completed! Moving on to the next objective."
+                message="School Identity profile setup is complete! ✓"
                 redirectUrl="/modular-dashboard"
             />
 

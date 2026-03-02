@@ -834,7 +834,7 @@ const Unit3OrganizedClasses = () => {
                     {currentStep === 3 && (
                         <button onClick={handleSubmit} disabled={loading || !isStep3Valid}
                             className="flex-1 py-4 rounded-2xl text-white font-black text-lg bg-green-500 border-b-[6px] border-green-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 shadow-lg shadow-green-200">
-                            {loading ? "Saving..." : "Submit Data ⭐"}
+                            {loading ? "Saving..." : "Submit Classes"}
                         </button>
                     )}
                 </div>
@@ -843,7 +843,7 @@ const Unit3OrganizedClasses = () => {
             <SuccessModal
                 isOpen={showSuccess}
                 onClose={() => setShowSuccess(false)}
-                message="Unit 3 complete! Organized classes data saved. 🏫"
+                message="Classes have been organized successfully! ✓"
                 redirectUrl="/modular-dashboard"
             />
         </div>
