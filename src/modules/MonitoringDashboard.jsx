@@ -59,6 +59,7 @@ const MonitoringDashboard = () => {
     const [schoolSort, setSchoolSort] = useState('pct-desc'); // Sort state for schools
     const [schoolSearch, setSchoolSearch] = useState(''); // NEW: Search state
     const [schoolPage, setSchoolPage] = useState(1); // NEW: Pagination state
+    const [schoolLimit, setSchoolLimit] = useState(10); // NEW: Pagination limit state
 
     // NEW: Store Aggregated CSV Totals
     const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
@@ -2118,23 +2119,32 @@ const MonitoringDashboard = () => {
                                                     return <div className="p-8 text-center text-slate-400 animate-pulse">Loading schools...</div>;
                                                 }
 
-                                                // Calculate Accomplishment Percentage for ALL Schools
-                                                const schoolsWithStats = districtSchools.map(s => {
-                                                    const checks = [
-                                                        s.profile_status, s.head_status, s.enrollment_status,
-                                                        s.classes_status, s.personnel_status, s.specialization_status,
-                                                        s.resources_status, s.shifting_status, s.learner_stats_status,
-                                                        s.facilities_status
-                                                    ];
+                                                // PRE-PROCESS FOR FILTERING & SORTING ONLY (Use raw API data directly to save memory/CPU)
+                                                const filteredSchools = districtSchools.filter(s =>
+                                                    s.school_name?.toLowerCase().includes(schoolSearch.toLowerCase()) ||
+                                                    s.school_id?.includes(schoolSearch)
+                                                );
 
-                                                    // REFACTOR: Use backend 'completion_percentage' directly as requested by user.
-                                                    // This ensures a 1:1 match with the DB state.
+                                                const sortedSchools = [...filteredSchools].sort((a, b) => {
+                                                    const pctA = parseInt(a.completion_percentage || 0);
+                                                    const pctB = parseInt(b.completion_percentage || 0);
+                                                    if (schoolSort === 'name-asc') return a.school_name.localeCompare(b.school_name);
+                                                    if (schoolSort === 'pct-desc') return pctB - pctA;
+                                                    if (schoolSort === 'pct-asc') return pctA - pctB;
+                                                    return 0;
+                                                });
+
+                                                // PAGINATION
+                                                const totalPages = Math.ceil(sortedSchools.length / schoolLimit);
+                                                const startIndex = (schoolPage - 1) * schoolLimit;
+                                                const rawPaginatedSchools = sortedSchools.slice(startIndex, startIndex + schoolLimit);
+
+                                                // RUN HEAVY VALIDATION LOGIC ONLY ON VIEWABLE SCHOOLS
+                                                const paginatedSchools = rawPaginatedSchools.map(s => {
                                                     let percentage = 0;
                                                     if (s.completion_percentage !== undefined && s.completion_percentage !== null) {
                                                         percentage = parseInt(s.completion_percentage);
                                                     }
-                                                    // Fallback REMOVED to strictly follow "project into the progress bar the completion_percentage"
-                                                    // If DB is 0 or null (handled by API as 0), it shows 0.
 
                                                     // Identify missing for tooltip/subtitle if needed
                                                     const missing = [];
@@ -2151,35 +2161,6 @@ const MonitoringDashboard = () => {
 
                                                     return { ...s, percentage, missing };
                                                 });
-
-                                                // Sort State (Local to this block? No, better to be at component level, but for now lets default and allow toggle)
-                                                // Since we are inside a render function (bad practice usually, but following existing pattern), 
-                                                // we will use a simple sort based on a variable we can't easily change via state without moving specific state up.
-                                                // Ideally, `sortOption` should be a state variable in the main component. 
-                                                // I'll add `sortOption` to the main component state in a separate edit if needed, 
-                                                // but to be safe and clean, I should declare `sortOption` at the top. 
-                                                // FOR NOW: I'll assume I can add the state in the next step or use a default sort here and add UI controls.
-                                                // Actually, the user asked for a sort feature. I must add state.
-                                                // I will use a ref or just hardcode a default for this step and then add the state variable in `MonitoringDashboard` top level.
-
-                                                // FILTER & SORT
-                                                const filteredSchools = schoolsWithStats.filter(s =>
-                                                    s.school_name?.toLowerCase().includes(schoolSearch.toLowerCase()) ||
-                                                    s.school_id?.includes(schoolSearch)
-                                                );
-
-                                                const sortedSchools = [...filteredSchools].sort((a, b) => {
-                                                    if (schoolSort === 'name-asc') return a.school_name.localeCompare(b.school_name);
-                                                    if (schoolSort === 'pct-desc') return b.percentage - a.percentage;
-                                                    if (schoolSort === 'pct-asc') return a.percentage - b.percentage;
-                                                    return 0;
-                                                });
-
-                                                // PAGINATION
-                                                const ITEMS_PER_PAGE = 10;
-                                                const totalPages = Math.ceil(sortedSchools.length / ITEMS_PER_PAGE);
-                                                const startIndex = (schoolPage - 1) * ITEMS_PER_PAGE;
-                                                const paginatedSchools = sortedSchools.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
                                                 return (
                                                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -2209,29 +2190,46 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                 </div>
 
-                                                                {/* Sort Controls */}
-                                                                <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
-                                                                    <button
-                                                                        onClick={() => setSchoolSort('name-asc')}
-                                                                        className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'name-asc' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-400'}`}
-                                                                        title="Sort A-Z"
-                                                                    >
-                                                                        A-Z
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => setSchoolSort('pct-desc')}
-                                                                        className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-desc' ? 'bg-white dark:bg-slate-600 shadow text-emerald-600 dark:text-emerald-300' : 'text-slate-400'}`}
-                                                                        title="Sort % High-Low"
-                                                                    >
-                                                                        % High
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => setSchoolSort('pct-asc')}
-                                                                        className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-asc' ? 'bg-white dark:bg-slate-600 shadow text-rose-600 dark:text-rose-300' : 'text-slate-400'}`}
-                                                                        title="Sort % Low-High"
-                                                                    >
-                                                                        % Low
-                                                                    </button>
+                                                                {/* Pagination & Sort Controls */}
+                                                                <div className="flex items-center gap-2">
+                                                                    {/* Show Controls */}
+                                                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 items-center">
+                                                                        <span className="text-xs font-bold text-slate-500 mx-1">Show:</span>
+                                                                        {[10, 20, 50, 100].map(num => (
+                                                                            <button
+                                                                                key={num}
+                                                                                onClick={() => { setSchoolLimit(num); setSchoolPage(1); }}
+                                                                                className={`p-1.5 rounded-md text-xs font-bold transition ${schoolLimit === num ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                                                                            >
+                                                                                {num}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+
+                                                                    {/* Sort Controls */}
+                                                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                                                                        <button
+                                                                            onClick={() => setSchoolSort('name-asc')}
+                                                                            className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'name-asc' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-400'}`}
+                                                                            title="Sort A-Z"
+                                                                        >
+                                                                            A-Z
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setSchoolSort('pct-desc')}
+                                                                            className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-desc' ? 'bg-white dark:bg-slate-600 shadow text-emerald-600 dark:text-emerald-300' : 'text-slate-400'}`}
+                                                                            title="Sort % High-Low"
+                                                                        >
+                                                                            % High
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setSchoolSort('pct-asc')}
+                                                                            className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-asc' ? 'bg-white dark:bg-slate-600 shadow text-rose-600 dark:text-rose-300' : 'text-slate-400'}`}
+                                                                            title="Sort % Low-High"
+                                                                        >
+                                                                            % Low
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
