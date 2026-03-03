@@ -9511,15 +9511,20 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
 
 // --- 26. GET: List Schools in Jurisdiction (Paginated) ---
 app.get('/api/monitoring/schools', async (req, res) => {
-  const { region, division, page, limit, search } = req.query;
+  const { region, division, page, limit, search, unregistered } = req.query;
   try {
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
     const offset = (pageNum - 1) * limitNum;
 
     // Base WHERE using schools table (source of truth)
-    let whereClauses = [`TRIM(s.region) = TRIM($1)`];
-    let params = [region];
+    let whereClauses = [];
+    let params = [];
+
+    if (region) {
+      whereClauses.push(`TRIM(s.region) = TRIM($${params.length + 1})`);
+      params.push(region);
+    }
 
     if (division) {
       whereClauses.push(`TRIM(s.division) = TRIM($${params.length + 1})`);
@@ -9534,6 +9539,10 @@ app.get('/api/monitoring/schools', async (req, res) => {
     if (search) {
       whereClauses.push(`(s.school_name ILIKE $${params.length + 1} OR s.school_id ILIKE $${params.length + 1})`);
       params.push(`%${search}%`);
+    }
+
+    if (unregistered === 'true') {
+      whereClauses.push(`sp.school_id IS NULL`);
     }
 
     // common SELECT fields with SAFE casting
@@ -9564,13 +9573,15 @@ app.get('/api/monitoring/schools', async (req, res) => {
       ss.issues as data_quality_issues
     `;
 
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
     // COUNT Query (Count from schools table)
     const countQuery = `
       SELECT COUNT(*) as total 
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE ${whereClauses.join(' AND ')}
+      ${whereSql}
     `;
     const countRes = await pool.query(countQuery, params);
     const totalItems = parseInt(countRes.rows[0].total);
@@ -9581,7 +9592,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE ${whereClauses.join(' AND ')}
+      ${whereSql}
       ORDER BY s.school_name ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
@@ -11213,6 +11224,258 @@ app.get('/api/facility-repairs/:iern', async (req, res) => {
   }
 });
 
+
+// --- GET: Data Health & Compliance Report ---
+app.get('/api/reports/data-health', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    let whereClause = "1=1";
+    let phWhereClause = "1=1";
+    let params = [];
+    
+    if (region) {
+      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region) 
+         ? region 
+         : `Region ${region}`;
+      const shortRegion = formattedRegion.replace(/region\s+/i, '').trim();
+
+      params.push(formattedRegion);
+      params.push(shortRegion);
+      
+      whereClause += ` AND (s.region = $${params.length - 1} OR s.region = $${params.length})`;
+      phWhereClause += ` AND (p.region = $${params.length - 1} OR p.region = $${params.length})`;
+    }
+    // Strict parsing to ignore strings like "null" and "undefined" commonly sent by frontends
+    if (division && division !== 'All Divisions' && division !== 'All' && division !== 'null' && division !== 'undefined') {
+      params.push(division);
+      whereClause += ` AND s.division = $${params.length}`;
+      phWhereClause += ` AND p.division = $${params.length}`;
+    }
+
+    // 1. Expected Schools (from ph_schools)
+    const expectedQuery = `SELECT COUNT(*) as total FROM ph_schools p WHERE ${phWhereClause}`;
+    const expectedRes = await pool.query(expectedQuery, params);
+    const expected_schools = parseInt(expectedRes.rows[0].total) || 0;
+
+    // 2. All Schools Status (Registered vs Unregistered)
+    const allSchoolsQuery = `
+      SELECT 
+        p.school_id, 
+        p.school_name, 
+        p.district,
+        CASE WHEN s.school_id IS NOT NULL THEN 'Registered' ELSE 'Unregistered' END as registration_status,
+        COALESCE(s.completion_percentage, 0) as completion_rate,
+        CASE 
+          WHEN s.school_id IS NOT NULL THEN 
+            GREATEST(0, (
+              100 
+              - CASE WHEN s.total_enrollment IS NULL OR s.total_enrollment = 0 THEN 30 ELSE 0 END
+              - CASE WHEN s.latitude IS NULL OR s.longitude IS NULL THEN 20 ELSE 0 END
+              - CASE WHEN s.updated_at IS NULL OR s.updated_at < NOW() - INTERVAL '90 days' THEN 15 ELSE 0 END
+            ))
+          ELSE NULL 
+        END as data_health_score,
+        s.updated_at as last_updated
+      FROM ph_schools p
+      LEFT JOIN school_profiles s ON p.school_id = s.school_id
+      WHERE ${phWhereClause}
+      ORDER BY p.school_name ASC
+    `;
+    const allSchoolsRes = await pool.query(allSchoolsQuery, params);
+    const all_schools_status = allSchoolsRes.rows;
+
+    const unregistered_schools = all_schools_status.filter(s => s.registration_status === 'Unregistered');
+
+    // 3. Stale Schools (updated_at is NULL or older than 90 days)
+    const staleQuery = `
+      SELECT s.school_id, s.school_name, s.updated_at as last_updated
+      FROM school_profiles s
+      WHERE ${whereClause}
+      AND (s.updated_at IS NULL OR s.updated_at < NOW() - INTERVAL '90 days')
+    `;
+    const staleRes = await pool.query(staleQuery, params);
+    const stale_schools = staleRes.rows;
+
+    // 4. Anomalies (Red Flags)
+    const anomaliesQuery = `
+      SELECT s.school_id, s.school_name, s.total_enrollment, s.latitude, s.longitude
+      FROM school_profiles s
+      WHERE ${whereClause}
+      AND (
+        s.total_enrollment IS NULL 
+        OR s.total_enrollment = 0 
+        OR s.latitude IS NULL 
+        OR s.longitude IS NULL
+      )
+    `;
+    const anomaliesRes = await pool.query(anomaliesQuery, params);
+    const anomalies = anomaliesRes.rows;
+
+    // Registered Schools Count
+    const registeredQuery = `SELECT COUNT(*) as total FROM school_profiles s WHERE ${whereClause}`;
+    const registeredRes = await pool.query(registeredQuery, params);
+    const registered_schools = parseInt(registeredRes.rows[0].total) || 0;
+
+    // Calculate overall health score simply: 100 - relative deduction %
+    let healthScore = 100;
+    if (expected_schools > 0) {
+       const deduction = ((unregistered_schools.length + stale_schools.length + anomalies.length) / expected_schools) * 100;
+       healthScore = Math.max(0, 100 - deduction).toFixed(1);
+    } else if (registered_schools > 0) {
+       const deduction = ((stale_schools.length + anomalies.length) / registered_schools) * 100;
+       healthScore = Math.max(0, 100 - deduction).toFixed(1);
+    }
+
+    // 5. Registered Schools Detailed Health Metrics
+    const registeredHealthQuery = `
+      SELECT 
+        s.school_id, 
+        s.school_name,
+        p.district,
+        COALESCE(s.completion_percentage, 0) as completion_rate,
+        s.updated_at as last_updated,
+        GREATEST(0, (
+          100 
+          - CASE WHEN s.total_enrollment IS NULL OR s.total_enrollment = 0 THEN 30 ELSE 0 END
+          - CASE WHEN s.latitude IS NULL OR s.longitude IS NULL THEN 20 ELSE 0 END
+          - CASE WHEN s.updated_at IS NULL OR s.updated_at < NOW() - INTERVAL '90 days' THEN 15 ELSE 0 END
+        )) as data_health_score,
+        NULLIF(
+          CONCAT_WS(', ',
+            CASE WHEN s.total_enrollment IS NULL OR s.total_enrollment = 0 THEN 'Missing/Zero Enrollment' ELSE NULL END,
+            CASE WHEN s.latitude IS NULL OR s.longitude IS NULL THEN 'Missing GPS' ELSE NULL END,
+            CASE WHEN s.updated_at IS NULL OR s.updated_at < NOW() - INTERVAL '90 days' THEN 'Stale Profile (>90 Days)' ELSE NULL END
+          ), 
+          ''
+        ) as issues_detected
+      FROM school_profiles s
+      LEFT JOIN ph_schools p ON s.school_id = p.school_id
+      WHERE ${whereClause}
+      ORDER BY data_health_score ASC
+    `;
+    const registeredHealthRes = await pool.query(registeredHealthQuery, params);
+    const registered_health_data = registeredHealthRes.rows;
+
+    res.json({
+      success: true,
+      jurisdiction: (division && division !== 'null' && division !== 'undefined' && division !== 'All Divisions') ? `SDO ${division}` : (region ? `Region ${region}` : 'National'),
+      summary: {
+        totalExpected: expected_schools,
+        registered: registered_schools,
+        unregistered: unregistered_schools.length,
+        overallHealthScore: parseFloat(healthScore)
+      },
+      datasets: {
+        all_schools_status: all_schools_status,
+        stale: stale_schools,
+        anomalies: anomalies,
+        registered_health: registered_health_data
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ Data Health Report Error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// --- GET: Master Dataset Export ---
+app.get('/api/reports/insights/master', async (req, res) => {
+  const { region, division } = req.query;
+
+  try {
+    let whereClause = "1=1";
+    let params = [];
+
+    if (region && region !== 'null' && region !== 'undefined' && region !== 'All') {
+      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region) 
+         ? region 
+         : `Region ${region}`;
+      const shortRegion = formattedRegion.replace(/region\s+/i, '').trim();
+
+      params.push(formattedRegion);
+      params.push(shortRegion);
+      whereClause += ` AND (s.region = $${params.length - 1} OR s.region = $${params.length})`;
+    }
+    if (division && division !== 'All Divisions' && division !== 'null' && division !== 'undefined' && division !== 'All') {
+      params.push(division);
+      whereClause += ` AND s.division = $${params.length}`;
+    }
+
+    // Select all columns from school_profiles and the classification columns from ph_schools
+    const query = `
+      SELECT 
+        s.*, 
+        p.district
+      FROM school_profiles s
+      LEFT JOIN ph_schools p ON s.school_id = p.school_id
+      WHERE ${whereClause}
+      ORDER BY s.school_name ASC
+    `;
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      jurisdiction: region ? (division ? `${region} - ${division}` : `Region ${region}`) : 'National',
+      data: result.rows
+    });
+  } catch (err) {
+    console.error("❌ Master Dataset Export Error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- GET: Insights Contextual Report ---
+app.get('/api/reports/insights', async (req, res) => {
+  const { region, division, district } = req.query;
+
+  try {
+    let whereClause = "1=1";
+    let params = [];
+
+    if (region && region !== 'null' && region !== 'undefined' && region !== 'All') {
+      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region) 
+         ? region 
+         : `Region ${region}`;
+      const shortRegion = formattedRegion.replace(/region\s+/i, '').trim();
+
+      params.push(formattedRegion);
+      params.push(shortRegion);
+      whereClause += ` AND (s.region = $${params.length - 1} OR s.region = $${params.length})`;
+    }
+    if (division && division !== 'All Divisions' && division !== 'null' && division !== 'undefined' && division !== 'All') {
+      params.push(division);
+      whereClause += ` AND s.division = $${params.length}`;
+    }
+    if (district && district !== 'null' && district !== 'undefined' && district !== 'All') {
+      params.push(district);
+      whereClause += ` AND p.district = $${params.length}`;
+    }
+
+    const query = `
+      SELECT s.*, p.district as derived_district, p.division as derived_division, p.region as derived_region
+      FROM school_profiles s
+      LEFT JOIN ph_schools p ON s.school_id = p.school_id
+      WHERE ${whereClause}
+      ORDER BY s.school_name ASC
+    `;
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      jurisdiction: region ? (division ? `${region} - ${division}` : `Region ${region}`) : 'National',
+      datasets: {
+        insights: result.rows
+      }
+    });
+  } catch (err) {
+    console.error("❌ Insights Report Error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Force start for PM2 (since isMainModule is false in PM2 fork mode)
 
