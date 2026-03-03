@@ -1512,7 +1512,8 @@ const MonitoringDashboard = () => {
                                                         <tr className="text-[10px] uppercase font-black text-slate-400 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
                                                             <th className="p-5 min-w-[180px] sticky left-0 bg-white dark:bg-slate-800 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Region</th>
                                                             <th className="p-5 text-center min-w-[100px]">Projects</th>
-                                                            <th className="p-5 text-center min-w-[140px]">Total Allocation</th>
+                                                            <th className="p-5 text-center min-w-[140px]">Approved Budget (ABC)</th>
+                                                            <th className="p-5 text-center min-w-[140px]">Contract Amount</th>
                                                             <th className="p-5 text-center text-slate-400 min-w-[100px]">Not Started</th>
                                                             <th className="p-5 text-center text-orange-400 min-w-[120px]">Under Proc.</th>
                                                             <th className="p-5 text-center text-blue-500 min-w-[100px]">Ongoing</th>
@@ -1529,6 +1530,9 @@ const MonitoringDashboard = () => {
                                                                 <td className="p-5 text-center text-base">{reg.total_projects}</td>
                                                                 <td className="p-5 text-center font-mono text-slate-500 text-[11px]">
                                                                     ₱{parseInt(reg.total_allocation || 0).toLocaleString()}
+                                                                </td>
+                                                                <td className="p-5 text-center font-mono text-slate-500 text-[11px]">
+                                                                    ₱{parseInt(reg.total_contract_amount || 0).toLocaleString()}
                                                                 </td>
                                                                 <td className="p-2 text-center">
                                                                     <button
@@ -1951,12 +1955,26 @@ const MonitoringDashboard = () => {
                                     {(activeTab === 'infra') && (
                                         <div className={`p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl ${activeTab === 'infra' ? 'col-span-2' : ''}`}>
                                             <div className="flex flex-col h-full justify-center">
-                                                <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.total_projects || 0}</span>
-                                                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">Infra Projects</p>
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.total_projects || 0}</span>
+                                                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">Infra Projects</p>
+                                                    </div>
+                                                    <div className="text-right space-y-1">
+                                                        <div className="bg-white/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-xl border border-emerald-100 dark:border-emerald-800">
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase leading-none">Total ABC</p>
+                                                            <p className="text-sm font-black text-emerald-700 dark:text-emerald-300 antialiased tracking-tight">₱{Number(engStats?.total_allocation || 0).toLocaleString()}</p>
+                                                        </div>
+                                                        <div className="bg-white/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-xl border border-emerald-100 dark:border-emerald-800">
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase leading-none">Total Contract</p>
+                                                            <p className="text-sm font-black text-blue-700 dark:text-blue-300 antialiased tracking-tight">₱{Number(engStats?.total_contract_amount || 0).toLocaleString()}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
 
                                                 {/* Completed Projects % */}
                                                 {engStats?.total_projects > 0 && (
-                                                    <div className="mt-2 text-[10px] font-bold text-emerald-700/70 dark:text-emerald-300/70">
+                                                    <div className="mt-4 text-[10px] font-bold text-emerald-700/70 dark:text-emerald-300/70">
                                                         {Math.round(((engStats.completed_count || 0) / engStats.total_projects) * 100)}% Completed
                                                     </div>
                                                 )}

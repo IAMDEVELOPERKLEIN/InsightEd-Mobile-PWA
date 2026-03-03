@@ -31,6 +31,7 @@ const getDashboardPath = (role) => {
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
         'Beta Tester': '/modular-dashboard',
+        'EFD': '/efd-dashboard',
     };
     return roleMap[role] || '/';
 };

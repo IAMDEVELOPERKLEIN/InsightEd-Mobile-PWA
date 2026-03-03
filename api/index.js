@@ -125,29 +125,7 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
       ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
       ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
-      ADD COLUMN IF NOT EXISTS engineer_id TEXT,
-      ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT,
-      ADD COLUMN IF NOT EXISTS update_type TEXT,
-      ADD COLUMN IF NOT EXISTS vo_number TEXT,
-      ADD COLUMN IF NOT EXISTS vo_requested_date DATE,
-      ADD COLUMN IF NOT EXISTS vo_requested_by TEXT;
-
-      -- ALTER vo_number to TEXT if it's still INTEGER
-      ALTER TABLE engineer_form ALTER COLUMN vo_number TYPE TEXT;
-
-      -- Robust Rename/Backfill for Variation Order fields
-      DO $$ 
-      BEGIN 
-        -- 1. Backfill vo_requested_date if vo_approval_date exists
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='vo_approval_date') THEN
-          UPDATE engineer_form SET vo_requested_date = vo_approval_date WHERE vo_requested_date IS NULL;
-        END IF;
-
-        -- 2. Backfill vo_requested_by if vo_approved_by exists
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='vo_approved_by') THEN
-          UPDATE engineer_form SET vo_requested_by = vo_approved_by WHERE vo_requested_by IS NULL;
-        END IF;
-      END $$;
+      ADD COLUMN IF NOT EXISTS engineer_id TEXT;
 
       -- Cleanup redundant VO columns
       ALTER TABLE engineer_form
@@ -156,8 +134,65 @@ const initDB = async () => {
       DROP COLUMN IF EXISTS variation_order_remarks,
       DROP COLUMN IF EXISTS variation_order_no,
       DROP COLUMN IF EXISTS variation_order_date,
-      DROP COLUMN IF EXISTS vo_approval_date,
-      DROP COLUMN IF EXISTS vo_approved_by;
+      DROP COLUMN IF EXISTS vo_approved_by,
+      DROP COLUMN IF EXISTS variation_order_pdf,
+      DROP COLUMN IF EXISTS vo_number,
+      DROP COLUMN IF EXISTS vo_requested_date,
+      DROP COLUMN IF EXISTS vo_requested_by;
+      
+      -- Ensure funds_utilized exists since it was accidentally dropped
+      ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
+      
+      -- Add savings column
+      ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
+
+      -- Rename update_type column to actions safely (checks if actions already exists)
+      DO $$ 
+      BEGIN 
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='update_type') THEN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='actions') THEN
+            ALTER TABLE engineer_form RENAME COLUMN update_type TO actions;
+          ELSE
+            -- If 'actions' exists, we can drop 'update_type' because we don't need two columns
+            ALTER TABLE engineer_form DROP COLUMN update_type;
+          END IF;
+        END IF;
+      END $$;
+
+      CREATE TABLE IF NOT EXISTS variation_orders (
+          id SERIAL PRIMARY KEY,
+          project_id INTEGER NOT NULL,
+          ipc TEXT,
+          vo_number TEXT,
+          requested_date DATE,
+          requested_by TEXT,
+          original_contract_amount NUMERIC,
+          vo_amount NUMERIC,
+          revised_contract_amount NUMERIC,
+          original_target_completion_date DATE,
+          revised_target_completion_date DATE,
+          justification TEXT,
+          status TEXT DEFAULT 'Pending',
+          document_url TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_by TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS realignments (
+          id SERIAL PRIMARY KEY,
+          source_project_id INTEGER,
+          target_project_id INTEGER,
+          source_ipc TEXT,
+          target_ipc TEXT,
+          realignment_amount NUMERIC,
+          request_date DATE,
+          justification TEXT,
+          approving_authority TEXT,
+          status TEXT DEFAULT 'Pending',
+          document_url TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_by TEXT
+      );
     `);
 
     // --- MIGRATION: REMOVE FRAUD DETECTION COLUMNS FROM SCHOOL_PROFILES ---
@@ -3903,7 +3938,7 @@ app.post('/api/sdo/upload-document', async (req, res) => {
 // GET - SDO Retrieve Document (Base64)
 app.get('/api/sdo/document/:id/:type', async (req, res) => {
   const { id, type } = req.params;
-  
+
   try {
     // Robust query: Look up by either school_id OR pending_id 
     // to prevent Document Not Found errors if the front-end confuses them.
@@ -6008,28 +6043,26 @@ app.post('/api/save-project', async (req, res) => {
       data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
-      valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+      valueOrNull(data.contractorName), parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation),
+      parseNumberOrNull(data.contract_amount),
       valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
       data.uid,
-      newIpc, // $17
-      resolvedEngineerName, // $18
-      valueOrNull(data.latitude), // $19
-      valueOrNull(data.longitude), // $20
-      powDoc, // $21
-      dupaDoc, // $22
-      contractDoc, // $23
-      valueOrNull(data.constructionStartDate), // $24
-      valueOrNull(data.projectCategory), // $25
-      valueOrNull(data.scopeOfWork), // $26
-      parseIntOrNull(data.numberOfClassrooms), // $27
-      parseIntOrNull(data.numberOfSites), // $28
-      parseIntOrNull(data.numberOfStoreys), // $29
-      parseNumberOrNull(data.fundsUtilized), // $30
-      valueOrNull(data.variationOrderPdf), // $31
+      newIpc, // $18
+      resolvedEngineerName, // $19
+      valueOrNull(data.latitude), // $20
+      valueOrNull(data.longitude), // $21
+      powDoc, // $22
+      dupaDoc, // $23
+      contractDoc, // $24
+      valueOrNull(data.constructionStartDate), // $25
+      valueOrNull(data.projectCategory), // $26
+      valueOrNull(data.scopeOfWork), // $27
+      parseIntOrNull(data.numberOfClassrooms), // $28
+      parseIntOrNull(data.numberOfSites), // $29
+      parseIntOrNull(data.numberOfStoreys), // $30
+      parseNumberOrNull(data.fundsUtilized), // $31
       'Newly Created', // $32
-      valueOrNull(data.vo_number), // $33
-      valueOrNull(data.vo_requested_date || data.vo_approval_date), // $34
-      valueOrNull(data.vo_requested_by || data.vo_approved_by) // $35
+      parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation) - parseNumberOrNull(data.contract_amount) // $33 (Savings)
     ];
 
     const projectQuery = `
@@ -6037,14 +6070,13 @@ app.post('/api/save-project', async (req, res) => {
         project_name, school_name, school_id, region, division,
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
-        contractor_name, project_allocation, batch_of_funds, other_remarks,
+        contractor_name, approved_budget_for_contract, contract_amount, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
         number_of_classrooms, number_of_sites, number_of_storeys, funds_utilized,
-        variation_order_pdf, update_type,
-        vo_number, vo_requested_date, vo_requested_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+        actions, savings
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -6084,23 +6116,23 @@ app.post('/api/save-project', async (req, res) => {
           ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
           ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
           ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
-          ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT,
-          ADD COLUMN IF NOT EXISTS update_type TEXT;
+          ADD COLUMN IF NOT EXISTS actions TEXT;
 
           ALTER TABLE engineer_form
           DROP COLUMN IF EXISTS has_variation_order,
           DROP COLUMN IF EXISTS variation_order_amount,
           DROP COLUMN IF EXISTS variation_order_remarks,
           DROP COLUMN IF EXISTS variation_order_no,
-          DROP COLUMN IF EXISTS variation_order_date;
+          DROP COLUMN IF EXISTS variation_order_date,
+          DROP COLUMN IF EXISTS variation_order_pdf,
+          DROP COLUMN IF EXISTS vo_number,
+          DROP COLUMN IF EXISTS vo_requested_date,
+          DROP COLUMN IF EXISTS vo_requested_by;
 
           ALTER TABLE lgu_projects 
           ADD COLUMN IF NOT EXISTS has_variation_order BOOLEAN DEFAULT FALSE,
           ADD COLUMN IF NOT EXISTS variation_order_amount NUMERIC DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS variation_order_remarks TEXT,
-          ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT,
-          ADD COLUMN IF NOT EXISTS variation_order_no TEXT,
-          ADD COLUMN IF NOT EXISTS variation_order_date TEXT;
+          ADD COLUMN IF NOT EXISTS variation_order_remarks TEXT;
         `).catch(() => { });
 
         // 1. Insert Project (Using SAME IPC and Data)
@@ -6237,7 +6269,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       newActualDate,
       valueOrNull(data.noticeToProceed) || oldData.notice_to_proceed, // Allow update
       valueOrNull(data.contractorName) || oldData.contractor_name, // Allow update
-      valueOrNull(data.projectAllocation) || oldData.project_allocation, // Allow update
+      valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation, // Allow update
+      valueOrNull(data.contract_amount) || oldData.contract_amount, // Allow update
       valueOrNull(data.batchOfFunds) || oldData.batch_of_funds, // Allow update
       newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
@@ -6255,11 +6288,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.numberOfStoreys) || oldData.number_of_storeys, // $28
       valueOrNull(data.numberOfSites) || oldData.number_of_sites, // $29
       valueOrNull(data.fundsUtilized) || oldData.funds_utilized, // $30
-      (data.variationOrderPdf !== undefined) ? valueOrNull(data.variationOrderPdf) : oldData.variation_order_pdf, // $31
-      valueOrNull(data.update_type) || 'Status Update', // $32: Priority to dynamic tracking
-      valueOrNull(data.vo_number) !== null ? valueOrNull(data.vo_number) : oldData.vo_number, // $33
-      valueOrNull(data.vo_requested_date) || oldData.vo_requested_date, // $34
-      valueOrNull(data.vo_requested_by) || oldData.vo_requested_by // $35
+      valueOrNull(data.update_type) || 'Status Update', // $31: Priority to dynamic tracking
+      Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation) - Number(valueOrNull(data.contract_amount) || oldData.contract_amount) // $32: Savings
     ];
 
     const insertQuery = `
@@ -6267,14 +6297,13 @@ app.put('/api/update-project/:id', async (req, res) => {
         project_name, school_name, school_id, region, division,
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
-        contractor_name, project_allocation, batch_of_funds, other_remarks,
+        contractor_name, approved_budget_for_contract, contract_amount, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
         number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-        variation_order_pdf, update_type,
-        vo_number, vo_requested_date, vo_requested_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
+        actions, savings
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
       RETURNING *;
     `;
 
@@ -6373,7 +6402,9 @@ app.get('/api/projects/realignment-candidates/:id', async (req, res) => {
     const candidatesRes = await pool.query(`
       SELECT DISTINCT ON (e.ipc) 
         e.project_id AS id, e.ipc, e.project_name AS "projectName", e.school_name AS "schoolName", 
-        e.project_allocation AS "projectAllocation", s.district
+        e.approved_budget_for_contract AS "approved_budget_for_contract",
+        e.contract_amount AS "contract_amount",
+        s.district
       FROM engineer_form e
       JOIN schools s ON e.school_id = s.school_id
       WHERE 
@@ -6418,7 +6449,7 @@ app.post('/api/projects/realign', async (req, res) => {
 
     if (!sourceData || !targetData) throw new Error("Source or Target project not found");
 
-    const amount = sourceData.project_allocation;
+    const amount = sourceData.approved_budget_for_contract;
     const sourceRemarks = `Realignment: Full allocation of ₱${Number(amount).toLocaleString()} transferred to ${targetData.school_name}.`;
     const targetRemarks = `Realignment: Received ₱${Number(amount).toLocaleString()} from ${sourceData.school_name} (Full Project Transfer).`;
 
@@ -6427,27 +6458,28 @@ app.post('/api/projects/realign', async (req, res) => {
         project_name, school_name, school_id, region, division,
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
-        contractor_name, project_allocation, batch_of_funds, other_remarks,
+        contractor_name, approved_budget_for_contract, contract_amount, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
         number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-        update_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+        actions, savings
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
     `;
 
     // 3. Insert NEW record for Source Project (Reduced Allocation)
-    const newSourceAllocation = Number(sourceData.project_allocation) - Number(amount);
+    const newSourceAllocation = Number(sourceData.approved_budget_for_contract) - Number(amount);
     const sourceVals = [
       sourceData.project_name, sourceData.school_name, sourceData.school_id, sourceData.region, sourceData.division,
       sourceData.status, sourceData.accomplishment_percentage, realignmentDate,
       sourceData.target_completion_date, sourceData.actual_completion_date, sourceData.notice_to_proceed,
-      sourceData.contractor_name, newSourceAllocation, sourceData.batch_of_funds, sourceRemarks,
+      sourceData.contractor_name, newSourceAllocation, sourceData.contract_amount, sourceData.batch_of_funds, sourceRemarks,
       sourceData.engineer_id, sourceData.ipc, sourceData.engineer_name, sourceData.latitude, sourceData.longitude,
       sourceData.pow_pdf, sourceData.dupa_pdf, sourceData.contract_pdf,
       sourceData.construction_start_date, sourceData.project_category, sourceData.scope_of_work,
       sourceData.number_of_classrooms, sourceData.number_of_storeys, sourceData.number_of_sites, sourceData.funds_utilized,
-      'Realignment (Source)'
+      'Realignment (Source)',
+      Number(newSourceAllocation) - Number(sourceData.contract_amount) // savings
     ];
     await client.query(insertSql, sourceVals);
     if (clientNew) await clientNew.query(insertSql, sourceVals);
@@ -6457,17 +6489,18 @@ app.post('/api/projects/realign', async (req, res) => {
     // Source fields inherited: project_name, project_category, scope_of_work, number_of_classrooms, number_of_storeys, 
     //                          number_of_sites, contractor_name, batch_of_funds, notice_to_proceed, construction_start_date, 
     //                          pow_pdf, dupa_pdf, contract_pdf
-    const newTargetAllocation = Number(targetData.project_allocation) + Number(amount);
+    const newTargetAllocation = Number(targetData.approved_budget_for_contract) + Number(amount);
     const targetVals = [
       sourceData.project_name, targetData.school_name, targetData.school_id, targetData.region, targetData.division,
       targetData.status, targetData.accomplishment_percentage, realignmentDate,
       sourceData.target_completion_date, sourceData.actual_completion_date, sourceData.notice_to_proceed,
-      sourceData.contractor_name, newTargetAllocation, sourceData.batch_of_funds, targetRemarks,
+      sourceData.contractor_name, newTargetAllocation, targetData.contract_amount, sourceData.batch_of_funds, targetRemarks,
       targetData.engineer_id, targetData.ipc, targetData.engineer_name, targetData.latitude, targetData.longitude,
       sourceData.pow_pdf, sourceData.dupa_pdf, sourceData.contract_pdf,
       sourceData.construction_start_date, sourceData.project_category, sourceData.scope_of_work,
       sourceData.number_of_classrooms, sourceData.number_of_storeys, sourceData.number_of_sites, targetData.funds_utilized,
-      'Realignment (Target)'
+      'Realignment (Target)',
+      Number(newTargetAllocation) - Number(targetData.contract_amount) // savings
     ];
     await client.query(insertSql, targetVals);
     if (clientNew) await clientNew.query(insertSql, targetVals);
@@ -6499,12 +6532,12 @@ app.get('/api/projects', async (req, res) => {
       WITH LatestProjects AS (
           SELECT DISTINCT ON (ipc) 
             project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name, engineer_id,
-            accomplishment_percentage, project_allocation, batch_of_funds, contractor_name, other_remarks,
+            accomplishment_percentage, approved_budget_for_contract, contract_amount, batch_of_funds, contractor_name, other_remarks,
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
             pow_pdf, dupa_pdf, contract_pdf,
-            variation_order_pdf, update_type
+            actions, savings
           FROM engineer_form
           ORDER BY ipc, project_id DESC
       )
@@ -6512,7 +6545,9 @@ app.get('/api/projects', async (req, res) => {
         p.project_id AS "id", p.school_name AS "schoolName", p.project_name AS "projectName",
         p.school_id AS "schoolId", p.division, p.region, p.status, p.ipc, p.engineer_name AS "engineerName",
         p.accomplishment_percentage AS "accomplishmentPercentage",
-        p.project_allocation AS "projectAllocation", p.batch_of_funds AS "batchOfFunds",
+        p.approved_budget_for_contract AS "projectAllocation", 
+        p.contract_amount AS "contractAmount", p.contract_amount AS "contract_amount",
+        p.batch_of_funds AS "batchOfFunds",
         p.contractor_name AS "contractorName", p.other_remarks AS "otherRemarks",
         TO_CHAR(p.status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(p.target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
@@ -6524,10 +6559,9 @@ app.get('/api/projects', async (req, res) => {
         p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
         p.pow_pdf, p.dupa_pdf, p.contract_pdf,
         p.latitude, p.longitude,
-        (p.variation_order_pdf IS NOT NULL) AS "hasVariationOrder",
-        p.variation_order_pdf AS "variationOrderPdf",
-        p.update_type AS "updateType",
-        (p.update_type LIKE 'Realignment%') AS "isRealigned"
+        p.actions AS "updateType",
+        (p.actions LIKE 'Realignment%') AS "isRealigned",
+        p.savings
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
@@ -6575,6 +6609,60 @@ app.get('/api/projects', async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+// --- 11f. GET: List Engineers (For EFD Assignment) ---
+app.get('/api/engineers', async (req, res) => {
+  try {
+    const query = `
+      SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
+      FROM users 
+      WHERE role = 'Division Engineer'
+      ORDER BY first_name ASC;
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Engineers Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// --- 11g. POST: Assign Project to Engineer (EFD) ---
+app.post('/api/assign-project', async (req, res) => {
+  const { projectId, engineerId, engineerName } = req.body;
+
+  if (!projectId || !engineerId || !engineerName) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  try {
+    const query = `
+      UPDATE engineer_form 
+      SET engineer_id = $1, engineer_name = $2
+      WHERE project_id = $3
+      RETURNING project_id;
+    `;
+    const result = await pool.query(query, [engineerId, engineerName, projectId]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    // --- DUAL WRITE: ASSIGN PROJECT ---
+    if (poolNew) {
+      try {
+        await poolNew.query(query, [engineerId, engineerName, projectId]);
+      } catch (dwErr) {
+        console.error("Dual-Write Error (Assign Project):", dwErr.message);
+      }
+    }
+
+    res.json({ success: true, message: "Project assigned successfully" });
+  } catch (err) {
+    console.error("Assign Project Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // --- 11. GET: Get Single Project ---
 app.get('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
@@ -6584,7 +6672,9 @@ app.get('/api/projects/:id', async (req, res) => {
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
         school_id AS "schoolId", division, region, status, ipc,
         accomplishment_percentage AS "accomplishmentPercentage",
-        project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
+        approved_budget_for_contract AS "projectAllocation",
+        contract_amount AS "contractAmount", contract_amount AS "contract_amount",
+        batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
@@ -6596,13 +6686,9 @@ app.get('/api/projects/:id', async (req, res) => {
         number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
         pow_pdf, dupa_pdf, contract_pdf,
         latitude, longitude,
-        (variation_order_pdf IS NOT NULL) AS "hasVariationOrder",
-        variation_order_pdf AS "variationOrderPdf",
-        vo_number AS "vo_number",
-        TO_CHAR(vo_requested_date, 'YYYY-MM-DD') AS "vo_requested_date",
-        vo_requested_by AS "vo_requested_by",
-        update_type AS "updateType",
-        (update_type IS NOT NULL AND update_type LIKE 'Realignment%') AS "isRealigned"
+        actions AS "updateType",
+        (actions IS NOT NULL AND actions LIKE 'Realignment%') AS "isRealigned",
+        savings
       FROM "engineer_form" WHERE project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -6622,7 +6708,9 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         school_id AS "schoolId", division, region, status, validation_status, ipc,
         validation_remarks AS "validationRemarks", validated_by AS "validatedBy",
         accomplishment_percentage AS "accomplishmentPercentage",
-        project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
+        approved_budget_for_contract AS "approved_budget_for_contract",
+        contract_amount AS "contract_amount", contract_amount AS "contractAmount",
+        batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
@@ -6634,11 +6722,8 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
         pow_pdf, dupa_pdf, contract_pdf,
         latitude, longitude,
-        (variation_order_pdf IS NOT NULL) AS "hasVariationOrder",
-        variation_order_pdf AS "variationOrderPdf",
-        vo_number AS "vo_number",
-        TO_CHAR(vo_requested_date, 'YYYY-MM-DD') AS "vo_requested_date",
-        vo_requested_by AS "vo_requested_by"
+        actions AS "updateType",
+        savings
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;
     `;
@@ -6660,26 +6745,36 @@ app.delete('/api/projects/:id', async (req, res) => {
     await client.query('BEGIN');
     if (clientNew) await clientNew.query('BEGIN');
 
-    // 1. Delete Documents
-    await client.query('DELETE FROM project_documents WHERE project_id = $1', [id]);
-    if (clientNew) await clientNew.query('DELETE FROM project_documents WHERE project_id = $1', [id]);
-
-    // 2. Delete Images
-    await client.query('DELETE FROM engineer_image WHERE project_id = $1', [id]);
-    if (clientNew) await clientNew.query('DELETE FROM engineer_image WHERE project_id = $1', [id]);
-
-    // 3. Delete Project
-    const result = await client.query('DELETE FROM engineer_form WHERE project_id = $1', [id]);
-    if (clientNew) await clientNew.query('DELETE FROM engineer_form WHERE project_id = $1', [id]);
-
-    if (result.rowCount === 0) {
+    // 0. Get the IPC of the project to delete ALL history rows
+    const ipcRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [id]);
+    if (ipcRes.rows.length === 0) {
       throw new Error("Project not found");
     }
+    const targetIpc = ipcRes.rows[0].ipc;
+
+    // 1. Delete Documents (by project_id or ipc? project_documents usually uses project_id, but better delete for all related)
+    // To be safe, delete docs and images linked to any project_id with this ipc
+    const idsRes = await client.query('SELECT project_id FROM engineer_form WHERE ipc = $1', [targetIpc]);
+    const projectIds = idsRes.rows.map(r => r.project_id);
+
+    if (projectIds.length > 0) {
+      // 1. Delete Documents
+      await client.query('DELETE FROM project_documents WHERE project_id = ANY($1::int[])', [projectIds]);
+      if (clientNew) await clientNew.query('DELETE FROM project_documents WHERE project_id = ANY($1::int[])', [projectIds]);
+
+      // 2. Delete Images
+      await client.query('DELETE FROM engineer_image WHERE project_id = ANY($1::int[]) OR ipc = $2', [projectIds, targetIpc]);
+      if (clientNew) await clientNew.query('DELETE FROM engineer_image WHERE project_id = ANY($1::int[]) OR ipc = $2', [projectIds, targetIpc]);
+    }
+
+    // 3. Delete Project (All history rows)
+    const result = await client.query('DELETE FROM engineer_form WHERE ipc = $1', [targetIpc]);
+    if (clientNew) await clientNew.query('DELETE FROM engineer_form WHERE ipc = $1', [targetIpc]);
 
     await client.query('COMMIT');
     if (clientNew) await clientNew.query('COMMIT');
 
-    res.json({ success: true, message: "Project deleted successfully" });
+    res.json({ success: true, message: "Project and all its history deleted successfully" });
   } catch (err) {
     await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK');
@@ -6751,7 +6846,8 @@ app.get('/api/project-history/:ipc', async (req, res) => {
         project_name AS "projectName",
         project_category AS "projectCategory",
         scope_of_work AS "scopeOfWork",
-        project_allocation AS "projectAllocation",
+        ${isLgu ? 'project_allocation' : 'approved_budget_for_contract'} AS "projectAllocation",
+        ${isLgu ? 'NULL' : 'contract_amount'} AS "contractAmount", ${isLgu ? 'NULL' : 'contract_amount'} AS "contract_amount",
         batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName",
         number_of_classrooms AS "numberOfClassrooms",
@@ -9530,7 +9626,9 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
         AVG(e.accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
         COUNT(CASE WHEN e.status = 'Completed' THEN 1 END) as completed_count,
         COUNT(CASE WHEN e.status = 'Ongoing' THEN 1 END) as ongoing_count,
-        COUNT(CASE WHEN e.status = 'Delayed' THEN 1 END) as delayed_count
+        COUNT(CASE WHEN e.status = 'Delayed' THEN 1 END) as delayed_count,
+        COALESCE(SUM(e.approved_budget_for_contract), 0) as total_allocation,
+        COALESCE(SUM(e.contract_amount), 0) as total_contract_amount
       FROM engineer_form e
       JOIN school_profiles sp ON e.school_id = sp.school_id
       WHERE TRIM(sp.region) = TRIM($1)
@@ -9562,7 +9660,9 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
     let query = `
       SELECT
         e.project_id as id, e.project_name as "projectName", e.school_id as "schoolId", e.school_name as "schoolName",
-        e.accomplishment_percentage as "accomplishmentPercentage", e.status, e.contract_amount as "projectAllocation",
+        e.accomplishment_percentage as "accomplishmentPercentage", e.status, 
+        e.approved_budget_for_contract as "projectAllocation",
+        e.contract_amount as "contractAmount",
         e.validation_status as "validation_status", e.status_as_of as "statusAsOfDate"
       FROM engineer_form e
       LEFT JOIN school_profiles sp ON e.school_id = sp.school_id
@@ -9698,16 +9798,52 @@ app.get('/api/leaderboard', async (req, res) => {
 app.get('/api/monitoring/regions', async (req, res) => {
   try {
     const query = `
-      SELECT 
-          region as name,
+      WITH school_stats AS (
+        SELECT 
+          region,
+          COUNT(*) as total_schools,
           CAST(AVG(completion_percentage) AS DECIMAL(10,1)) as avg_completion,
           SUM(forms_completed_count) as total_forms_completed,
-          COUNT(*) as total_schools,
           COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools
-      FROM school_profiles
-      WHERE region IS NOT NULL
-      GROUP BY region
-      ORDER BY avg_completion DESC
+        FROM school_profiles
+        GROUP BY region
+      ),
+      project_stats AS (
+        SELECT 
+          region,
+          COUNT(*) as total_projects,
+          COALESCE(SUM(approved_budget_for_contract), 0) as total_allocation,
+          COALESCE(SUM(contract_amount), 0) as total_contract_amount,
+          AVG(accomplishment_percentage) as avg_accomplishment,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Ongoing' THEN 1 END) as ongoing_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Not Yet Started' THEN 1 END) as not_yet_started_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE '%Under Procurement%' THEN 1 END) as under_procurement_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Completed' THEN 1 END) as completed_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Delayed' THEN 1 END) as delayed_projects
+        FROM engineer_form
+        GROUP BY region
+      )
+      SELECT 
+        s.region,
+        s.region as name,
+        COALESCE(s.total_schools, 0) as total_schools,
+        COALESCE(s.avg_completion, 0) as avg_completion,
+        COALESCE(s.total_forms_completed, 0) as total_forms_completed,
+        COALESCE(s.completed_schools, 0) as completed_schools,
+        
+        COALESCE(p.total_projects, 0) as total_projects,
+        COALESCE(p.total_allocation, 0) as total_allocation,
+        COALESCE(p.total_contract_amount, 0) as total_contract_amount,
+        COALESCE(p.avg_accomplishment, 0)::NUMERIC(10,1) as avg_accomplishment,
+        COALESCE(p.ongoing_projects, 0) as ongoing_projects,
+        COALESCE(p.not_yet_started_projects, 0) as not_yet_started_projects,
+        COALESCE(p.under_procurement_projects, 0) as under_procurement_projects,
+        COALESCE(p.completed_projects, 0) as completed_projects,
+        COALESCE(p.delayed_projects, 0) as delayed_projects
+      FROM school_stats s
+      FULL OUTER JOIN project_stats p ON s.region = p.region
+      WHERE s.region IS NOT NULL OR p.region IS NOT NULL
+      ORDER BY s.region ASC;
     `;
 
     const result = await pool.query(query);
@@ -10080,18 +10216,6 @@ app.get('/api/migrate-schema', async (req, res) => {
       await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC');
       results.push("Added funds_utilized");
     } catch (e) { results.push(`Failed funds_utilized: ${e.message}`); }
-
-    // 8. Add variation_order_pdf
-    try {
-      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS variation_order_pdf TEXT');
-      results.push("Added variation_order_pdf");
-    } catch (e) { results.push(`Failed variation_order_pdf: ${e.message}`); }
-
-    // 9. Add update_type
-    try {
-      await client.query('ALTER TABLE "engineer_form" ADD COLUMN IF NOT EXISTS update_type TEXT');
-      results.push("Added update_type");
-    } catch (e) { results.push(`Failed update_type: ${e.message}`); }
 
     client.release();
 

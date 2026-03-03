@@ -313,7 +313,8 @@ const runMigrations = async (client, dbLabel) => {
                 actual_completion_date TIMESTAMP,
                 notice_to_proceed TIMESTAMP,
                 contractor_name TEXT,
-                project_allocation NUMERIC,
+                approved_budget_for_contract NUMERIC,
+                contract_amount NUMERIC,
                 batch_of_funds TEXT,
                 other_remarks TEXT,
                 engineer_id TEXT,
@@ -349,6 +350,24 @@ const runMigrations = async (client, dbLabel) => {
         } catch (imgErr) {
             console.error(`❌ [${dbLabel}] Failed to migrate engineer_image:`, imgErr.message);
         }
+        // --- 8c. ENGINEER FORM REFACTOR ---
+        try {
+            // Rename project_allocation if it exists
+            await client.query(`
+                DO $$ 
+                BEGIN 
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='project_allocation') THEN
+                        ALTER TABLE engineer_form RENAME COLUMN project_allocation TO approved_budget_for_contract;
+                    END IF;
+                END $$;
+            `);
+            // Add contract_amount if it doesn't exist
+            await client.query(`ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS contract_amount NUMERIC;`);
+            console.log(`✅ [${dbLabel}] Engineer Form Column Refactor Completed`);
+        } catch (refactorErr) {
+            console.error(`❌ [${dbLabel}] Failed to refactor engineer_form columns:`, refactorErr.message);
+        }
+
         await client.query(`
           ALTER TABLE engineer_form 
           DROP CONSTRAINT IF EXISTS engineer_form_ipc_key; 

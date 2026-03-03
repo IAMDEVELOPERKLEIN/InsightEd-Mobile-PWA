@@ -613,6 +613,67 @@ const initOtpTable = async () => {
         console.error('❌ Failed to init system_settings table:', tableErr.message);
       }
 
+      // --- MIGRATION: CLEAN ENGINEER FORM AND CREATE VO/REALIGNMENT TABLES ---
+      try {
+        await client.query(`
+          ALTER TABLE engineer_form
+          DROP COLUMN IF EXISTS funds_utilized,
+          DROP COLUMN IF EXISTS variation_order_pdf,
+          DROP COLUMN IF EXISTS vo_number,
+          DROP COLUMN IF EXISTS vo_requested_date,
+          DROP COLUMN IF EXISTS vo_requested_by,
+          DROP COLUMN IF EXISTS has_variation_order,
+          DROP COLUMN IF EXISTS variation_order_amount,
+          DROP COLUMN IF EXISTS variation_order_remarks,
+          DROP COLUMN IF EXISTS variation_order_no,
+          DROP COLUMN IF EXISTS variation_order_date;
+        `);
+        console.log('✅ Cleaned engineer_form (Dropped VO & Funds Utilized legacy columns)');
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS variation_orders (
+              id SERIAL PRIMARY KEY,
+              project_id INTEGER NOT NULL,
+              ipc TEXT,
+              vo_number TEXT,
+              requested_date DATE,
+              requested_by TEXT,
+              original_contract_amount NUMERIC,
+              vo_amount NUMERIC,
+              revised_contract_amount NUMERIC,
+              original_target_completion_date DATE,
+              revised_target_completion_date DATE,
+              justification TEXT,
+              status TEXT DEFAULT 'Pending',
+              document_url TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              created_by TEXT
+          );
+        `);
+        console.log('✅ Checked/Created variation_orders table');
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS realignments (
+              id SERIAL PRIMARY KEY,
+              source_project_id INTEGER,
+              target_project_id INTEGER,
+              source_ipc TEXT,
+              target_ipc TEXT,
+              realignment_amount NUMERIC,
+              request_date DATE,
+              justification TEXT,
+              approving_authority TEXT,
+              status TEXT DEFAULT 'Pending',
+              document_url TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              created_by TEXT
+          );
+        `);
+        console.log('✅ Checked/Created realignments table');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate VO and Realignment tables:', migErr.message);
+      }
+
     } finally {
       client.release();
     }
@@ -1019,7 +1080,7 @@ app.get('/api/schools/:schoolId/health-score', async (req, res) => {
     }
 
     const data = result.rows[0];
-    
+
     const checklist = [
       { module: 'School Profile', status: data.profile_status },
       { module: 'School Head Information', status: data.head_status },
@@ -3347,7 +3408,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP;
     `;
     const values = [
-      data.school_id, data.iern || null, data.school_name, 
+      data.school_id, data.iern || null, data.school_name,
       data.region, data.division, data.district, data.curricular_offering
     ];
     await pool.query(query, values);
@@ -3362,7 +3423,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
 app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
-  
+
   try {
     const fields = [
       'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',

@@ -39,6 +39,10 @@ import LguForms from './modules/LguForms'; // Import newly created LguForms
 import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
 import PSIP from './modules/PSIP'; // Import PSIP
 import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRoute
+import EFDHome from './modules/EFDHome';
+import EFDMonitoring from './modules/EFDMonitoring';
+import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
+
 
 
 // Forms
@@ -144,6 +148,9 @@ const AnimatedRoutes = () => {
         <Route path="/hr-dashboard" element={<HRDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
+        <Route path="/efd-dashboard" element={<EFDHome />} />
+        <Route path="/efd-monitoring" element={<EFDMonitoring />} />
+        <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />
         <Route path="/school-management" element={<SchoolManagement />} />
         <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
         <Route path="/school-audit" element={<SchoolAuditView />} />
