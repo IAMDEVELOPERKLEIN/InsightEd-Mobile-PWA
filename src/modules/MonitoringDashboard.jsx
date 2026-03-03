@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiPieChart } from 'react-icons/fi';
-import { TbTrophy, TbSchool, TbChartBar } from 'react-icons/tb';
+import { TbTrophy, TbSchool, TbChartBar, TbFileDownload } from 'react-icons/tb';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
 import Papa from 'papaparse';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import locationData from '../locations.json';
 
 
@@ -88,6 +90,501 @@ const MonitoringDashboard = () => {
     const [insightsToiletType, setInsightsToiletType] = useState('common'); // NEW: Toilet Type
 
     const [projectListModal, setProjectListModal] = useState({ isOpen: false, title: '', projects: [], isLoading: false });
+    const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(null); // 'pdf', 'unregistered', 'inactive', 'anomalies'
+
+    // --- REPORT GENERATION HELPERS & API LOGIC ---
+    const downloadCSV = (dataArray, filename) => {
+        if (!dataArray || dataArray.length === 0) {
+            alert('No data available to export based on current parameters.');
+            return;
+        }
+
+        const headers = Object.keys(dataArray[0]);
+        const csvContent = [
+            headers.join(','),
+            ...dataArray.map(row => 
+                headers.map(fieldName => {
+                    let cellData = row[fieldName] === null || row[fieldName] === undefined ? '' : row[fieldName];
+                    const stringData = String(cellData).replace(/"/g, '""');
+                    if (stringData.search(/("|,|\n)/g) >= 0) return `"${stringData}"`;
+                    return stringData;
+                }).join(',')
+            )
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const fetchReportData = async (type) => {
+        try {
+            setIsGeneratingReport(type);
+            const params = new URLSearchParams();
+            if (effectiveRegion) {
+                const formattedRegion = effectiveRegion.toString().toLowerCase().includes('region') 
+                    ? effectiveRegion 
+                    : `Region ${effectiveRegion}`;
+                params.append('region', formattedRegion);
+            }
+            if (effectiveRole === 'School Division Office') {
+                const division = effectiveDivision || userData?.division;
+                if (division) params.append('division', division);
+            }
+            
+            const res = await fetch(`/api/reports/data-health?${params.toString()}`);
+            if (!res.ok) throw new Error('Failed to fetch data');
+            const data = await res.json();
+            return data;
+        } catch (error) {
+            console.error('Error fetching report:', error);
+            alert('Encountered an error fetching report data.');
+            return null;
+        } finally {
+            setIsGeneratingReport(null);
+            setIsReportMenuOpen(false);
+        }
+    };
+
+    const handleGeneratePDF = async () => {
+        const data = await fetchReportData('pdf');
+        if (!data) return;
+
+        const doc = new jsPDF('p', 'pt', 'a4');
+        const jurisdiction = data.jurisdiction || (effectiveDivision || userData?.division || effectiveRegion || 'National');
+        const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        
+        // PAGE 1: EXECUTIVE SUMMARY
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text("InsightEd Data Health & Compliance Report", 40, 60);
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Jurisdiction: ${jurisdiction}`, 40, 85);
+        doc.text(`Data As Of: ${dateStr}`, 40, 100);
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text("Executive Summary", 40, 140);
+        
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Total Expected Schools: ${data.summary?.totalExpected || 0}`, 40, 165);
+        doc.text(`Registered Schools: ${data.summary?.registered || 0}`, 40, 185);
+        doc.text(`Overall Health Score: ${data.summary?.overallHealthScore || 0}%`, 40, 205);
+
+        // PAGE 2+: DATASET AUTO-TABLES
+        if (data.datasets) {
+            let currentY = 240;
+
+            // TABLE 1: TOP 20 CRITICAL ANOMALIES
+            const anomaliesData = data.datasets.anomalies?.slice(0, 20) || [];
+            if (anomaliesData.length > 0) {
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text("Top Critical Anomalies", 40, currentY);
+                currentY += 15;
+
+                autoTable(doc, {
+                    startY: currentY,
+                    head: [['School ID', 'School Name', 'Enrollment']],
+                    body: anomaliesData.map(item => [item.school_id, item.school_name, item.total_enrollment || 'Missing']),
+                    theme: 'striped',
+                    headStyles: { fillColor: [75, 85, 99] }, // slate-600
+                    styles: { fontSize: 9 },
+                    margin: { top: 40, bottom: 40 }
+                });
+                currentY = doc.lastAutoTable.finalY + 40;
+            }
+
+            // TABLE 2: UNREGISTERED SCHOOLS
+            const unregisteredData = data.datasets.unregistered || [];
+            if (unregisteredData.length > 0) {
+                // Determine if we need a page break before starting the next table title
+                if (currentY > 700) { doc.addPage(); currentY = 60; }
+
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text("Unregistered Schools List", 40, currentY);
+                currentY += 15;
+
+                autoTable(doc, {
+                    startY: currentY,
+                    head: [['School ID', 'School Name', 'District']],
+                    body: unregisteredData.map(item => [item.school_id, item.school_name, item.district || '']),
+                    theme: 'grid',
+                    headStyles: { fillColor: [245, 158, 11] }, // amber-500
+                    styles: { fontSize: 9 },
+                    margin: { top: 40, bottom: 40 }
+                });
+                currentY = doc.lastAutoTable.finalY + 40;
+            }
+
+            // TABLE 3: INACTIVE / STALE ACCOUNTS
+            const staleData = data.datasets.stale || [];
+            if (staleData.length > 0) {
+                 // Determine if we need a page break
+                 if (currentY > 700) { doc.addPage(); currentY = 60; }
+
+                 doc.setFontSize(12);
+                 doc.setFont('helvetica', 'bold');
+                 doc.text("Inactive/Stale Accounts", 40, currentY);
+                 currentY += 15;
+ 
+                 autoTable(doc, {
+                     startY: currentY,
+                     head: [['School ID', 'School Name', 'Last Updated']],
+                     body: staleData.map(item => {
+                         const updatedDate = item.last_updated ? new Date(item.last_updated).toLocaleDateString() : 'Missing';
+                         return [item.school_id, item.school_name, updatedDate];
+                     }),
+                     theme: 'grid',
+                     headStyles: { fillColor: [225, 29, 72] }, // rose-600
+                     styles: { fontSize: 9 },
+                     margin: { top: 40, bottom: 40 }
+                 });
+            }
+        }
+
+        const formattedJurisdiction = jurisdiction.toString().replace(/\s+/g, '');
+        const filenameDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        doc.save(`${formattedJurisdiction}_ExecutiveReport_${filenameDate}.pdf`);
+    };
+
+    const handleExportMasterCSV = async () => {
+        setIsGeneratingReport('master_csv');
+        try {
+            const params = new URLSearchParams();
+            if (effectiveRegion) params.append('region', effectiveRegion);
+            const division = effectiveDivision || userData?.division || coDivision;
+            if (division) params.append('division', division);
+
+            const res = await fetch(`/api/reports/insights/master?${params.toString()}`);
+            if (!res.ok) throw new Error('Failed to fetch master dataset');
+            const result = await res.json();
+
+            if (result.success && result.data) {
+                const jurisdiction = result.jurisdiction || 'National';
+                const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                const filename = `${jurisdiction.replace(/\s+/g, '')}_MasterDataset_${dateStr}.csv`;
+                downloadCSV(result.data, filename);
+            }
+        } catch (error) {
+            console.error('Error exporting master dataset:', error);
+            alert('Encountered an error fetching master dataset.');
+        } finally {
+            setIsGeneratingReport(null);
+        }
+    };
+
+    const handleExportInsightsCSV = async () => {
+        setIsGeneratingReport('insights_csv');
+        try {
+            const params = new URLSearchParams();
+            if (effectiveRegion) params.append('region', effectiveRegion);
+            const division = effectiveDivision || userData?.division || coDivision;
+            if (division) params.append('division', division);
+            if (coDistrict) params.append('district', coDistrict);
+
+            const res = await fetch(`/api/reports/insights?${params.toString()}`);
+            if (!res.ok) throw new Error('Failed to fetch insights data');
+            const result = await res.json();
+
+            if (result.success && result.datasets && result.datasets.insights) {
+                const rawData = result.datasets.insights;
+                
+                const mappedData = rawData.map(item => {
+                    let metricValue = 0;
+                    let metricKeyName = 'Value';
+
+                    if (insightsMetric === 'enrolment') {
+                        const key = insightsSubMetric === 'total' ? 'total_enrollment' : insightsSubMetric;
+                        metricValue = item[key];
+                        metricKeyName = insightsSubMetric === 'total' ? 'Total Enrolment' : insightsSubMetric.replace('grade_', 'Grade ').replace('_', ' ');
+                    } else if (insightsMetric === 'aral') {
+                        metricValue = item[`aral_${insightsAralSubject}_${insightsAralGrade}`];
+                        const subj = insightsAralSubject === 'math' ? 'Math' : insightsAralSubject === 'sci' ? 'Science' : 'Reading';
+                        metricKeyName = `ARAL ${subj} (Grade ${insightsAralGrade.replace('g','')})`;
+                    } else if (insightsMetric === 'organized_classes') {
+                        metricValue = item[insightsClassesGrade];
+                        metricKeyName = `Classes: ${insightsClassesGrade.replace('classes_grade_', 'Grade ').replace('classes_kinder', 'Kindergarten')}`;
+                    } else if (insightsMetric === 'class_size') {
+                        const key = `size_${insightsClassSizeCategory}_${insightsClassSizeGrade.replace('classes_', '')}`;
+                        metricValue = item[key];
+                        metricKeyName = `Class Size ${insightsClassSizeCategory} (${insightsClassSizeGrade.replace('classes_grade_', 'G').replace('classes_kinder', 'K')})`;
+                    } else if (insightsMetric === 'teachers') {
+                        const key = insightsTeacherGrade === 'total' ? 'total_teachers' : `teachers_${insightsTeacherGrade}`;
+                        metricValue = item[key];
+                        metricKeyName = `Teachers: ${insightsTeacherGrade}`;
+                    } else {
+                        metricValue = item.total_enrollment || 0;
+                        metricKeyName = `Reference Enrolment`;
+                    }
+
+                    return {
+                        "School ID": item.school_id,
+                        "School Name": item.school_name,
+                        "District": item.derived_district || item.district || '',
+                        "Division": item.derived_division || division || '',
+                        [metricKeyName]: parseInt(metricValue || 0)
+                    };
+                });
+
+                const jurisdiction = (coDistrict || division || effectiveRegion || 'National').toString().replace(/\s+/g, '');
+                const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                const filename = `${jurisdiction}_Insights_${insightsMetric}_${dateStr}.csv`;
+                downloadCSV(mappedData, filename);
+            }
+        } catch (error) {
+            console.error('Error exporting insights CSV:', error);
+            alert('Encountered an error fetching insights data.');
+        } finally {
+            setIsGeneratingReport(null);
+        }
+    };
+
+    const handleGenerateInsightsPDF = async () => {
+        setIsGeneratingReport('insights_pdf');
+        try {
+            const chartElement = document.getElementById('insight-charts-container');
+            if (!chartElement) {
+                alert('Chart container not found. Make sure the chart is completely rendered.');
+                setIsGeneratingReport(null);
+                return;
+            }
+
+            // Dynamically import html2canvas so it only loads when button is clicked
+            const html2canvas = (await import('html2canvas')).default;
+
+            const canvas = await html2canvas(chartElement, {
+                scale: 2, // Higher resolution
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const doc = new jsPDF('p', 'pt', 'a4'); // Using portrait A4
+            
+            const division = effectiveDivision || userData?.division || coDivision;
+            const jurisdiction = coDistrict || division || effectiveRegion || 'National';
+            const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            
+            // 1. Formal Header
+            doc.setFontSize(22);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 41, 59); // slate-800
+            doc.text("InsightEd - Executive Analytics Brief", 40, 60);
+
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139); // slate-500
+            
+            // Subtitle with active filters
+            const activeFilters = `Jurisdiction: ${jurisdiction} | Metric: ${insightsMetric.toUpperCase()}`;
+            doc.text(`Filters Applied: ${activeFilters}`, 40, 85);
+            doc.text(`Date Generated: ${dateStr}`, 40, 105);
+
+            // 2. Embed the captured chart image
+            const pdfWidth = doc.internal.pageSize.getWidth();
+            const margin = 40;
+            const imgWidth = pdfWidth - (margin * 2);
+            // Calculate height proportional to the original canvas size
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            doc.addImage(imgData, 'PNG', margin, 130, imgWidth, imgHeight);
+
+            // 3. Save the file
+            const filenameDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            doc.save(`${jurisdiction.replace(/\s+/g, '')}_ExecutiveBrief_${filenameDate}.pdf`);
+
+            // Optional: Show success toast to user here if implemented
+            
+        } catch (error) {
+            console.error('Error generating visual insights PDF:', error);
+            alert('Encountered an error generating the PDF snapshot.');
+        } finally {
+            setIsGeneratingReport(null);
+        }
+    };
+
+    const handleExportRegisteredHealthCSV = async () => {
+        const data = await fetchReportData('registered_health');
+        if (data && data.datasets && data.datasets.registered_health) {
+            const jurisdiction = (effectiveDivision || userData?.division || effectiveRegion || 'National').toString().replace(/\s+/g, '');
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            
+            // Map the data to clean CSV columns
+            const mappedData = data.datasets.registered_health.map(item => ({
+                "School ID": item.school_id,
+                "School Name": item.school_name,
+                "District": item.district || '',
+                "Completion Rate (%)": `${parseFloat(item.completion_rate).toFixed(1)}%`,
+                "Data Health Score (%)": `${parseFloat(item.data_health_score).toFixed(1)}%`,
+                "Issues Detected": item.issues_detected || 'None',
+                "Last Updated": item.last_updated ? new Date(item.last_updated).toLocaleDateString() : 'Missing'
+            }));
+
+            downloadCSV(mappedData, `${jurisdiction}_RegisteredSchoolsHealth_${dateStr}.csv`);
+        }
+    };
+
+    const handleExportAllSchoolsStatusCSV = async () => {
+        // Show a loading indicator if you have one, e.g., setIsExporting(true);
+        console.log("Starting Masterlist Export...");
+        setIsGeneratingReport('all_schools_status'); // Re-added the existing loading state indicator
+        
+        try {
+          // 1. Determine Scope based on user role (handles RO, SDO, and CO drill-down)
+          const isSuperUser = userData?.role === 'Super User';
+          const impersonatedRole = sessionStorage.getItem('impersonatedRole');
+          const role = (isSuperUser && impersonatedRole) ? impersonatedRole : userData?.role;
+          
+          let targetRegion = (isSuperUser) ? (sessionStorage.getItem('impersonatedRegion') || sessionStorage.getItem('impersonatedLocation') || userData?.region) : userData?.region;
+          let targetDivision = (isSuperUser && role === 'School Division Office') ? sessionStorage.getItem('impersonatedLocation') : userData?.division;
+    
+          // If Central Office is logged in, use their active dropdown filters
+          if (role === 'Central Office') {
+             targetRegion = coRegion;
+             targetDivision = coDivision;
+          }
+    
+          if (!targetRegion) {
+            alert("Please wait for data to load or select a Region first.");
+            return;
+          }
+    
+          // Helper: Cleans text (e.g. turns "MIMAROPA Region" and "MIMAROPA" into just "mimaropa")
+          const cleanString = (str) => String(str || '').toLowerCase().replace(/region|division|city|of/gi, '').replace(/[-_]/g, ' ').trim();
+    
+          // 2. Fetch Both Registered and Unregistered Schools from the Database API
+          const queryParams = new URLSearchParams();
+          if (targetRegion && targetRegion !== 'All Regions') {
+              // The schools table strictly uses "Region I", "Region V", "MIMAROPA", "NCR"
+              const needsPrefix = !targetRegion.toLowerCase().startsWith('region') && !['NCR', 'CAR', 'BARMM', 'CARAGA', 'NIR', 'MIMAROPA'].includes(targetRegion.toUpperCase());
+              const formattedRegion = needsPrefix ? `Region ${targetRegion}` : targetRegion;
+              queryParams.append('region', formattedRegion);
+          }
+          if (targetDivision && targetDivision !== 'All Divisions') {
+              queryParams.append('division', targetDivision);
+          }
+          queryParams.append('limit', '100000');
+
+          console.log("Fetching API with params:", queryParams.toString());
+
+          // Fetch Registered
+          const registeredRes = await fetch(`/api/monitoring/schools?${queryParams.toString()}`);
+          if (!registeredRes.ok) throw new Error('Failed to fetch registered schools');
+          const registeredData = await registeredRes.json();
+          const apiSchools = Array.isArray(registeredData.data) ? registeredData.data : [];
+          console.log("Fetched Registered Schools count:", apiSchools.length);
+
+          // Fetch Unregistered
+          queryParams.append('unregistered', 'true');
+          console.log("Fetching Unregistered with params:", queryParams.toString());
+          const unregisteredRes = await fetch(`/api/monitoring/schools?${queryParams.toString()}`);
+          if (!unregisteredRes.ok) throw new Error('Failed to fetch unregistered schools');
+          const unregisteredData = await unregisteredRes.json();
+          const unregisteredSchools = Array.isArray(unregisteredData.data) ? unregisteredData.data : [];
+          console.log("Fetched Unregistered Schools count:", unregisteredSchools.length);
+
+          if (apiSchools.length === 0 && unregisteredSchools.length === 0) {
+            alert("No schools found in the database for this jurisdiction.");
+            return;
+          }
+
+          // 3. Merge Both Datasets
+          const csvRows = [];
+
+          // Process Registered
+          apiSchools.forEach(apiMatch => {
+              let completedModules = 0;
+              if (apiMatch.profile_status) completedModules++;
+              if (apiMatch.head_status) completedModules++;
+              if (apiMatch.enrollment_status) completedModules++;
+              if (apiMatch.classes_status) completedModules++;
+              if (apiMatch.personnel_status) completedModules++;
+              if (apiMatch.facilities_status) completedModules++;
+              
+              const completionRate = `${Math.round((completedModules / 6) * 100)}%`;
+
+              csvRows.push({
+                  "School ID": apiMatch.school_id,
+                  "School Name": apiMatch.school_name,
+                  "Region": apiMatch.region || targetRegion,
+                  "Division": apiMatch.division || targetDivision,
+                  "District": apiMatch.district || '',
+                  "Status": "Registered",
+                  "Completion Rate": completionRate,
+                  "Last Updated": apiMatch.updated_at ? new Date(apiMatch.updated_at).toLocaleDateString() : "N/A"
+              });
+          });
+
+          // Process Unregistered
+          unregisteredSchools.forEach(unreg => {
+              csvRows.push({
+                  "School ID": unreg.school_id,
+                  "School Name": unreg.school_name,
+                  "Region": unreg.region || targetRegion,
+                  "Division": unreg.division || targetDivision,
+                  "District": unreg.district || '',
+                  "Status": "Unregistered",
+                  "Completion Rate": "N/A",
+                  "Last Updated": "N/A"
+              });
+          });
+    
+          // 6. Generate and Trigger CSV Download
+          const headers = Object.keys(csvRows[0]);
+          const csvContent = [
+              headers.join(','),
+              ...csvRows.map(row => headers.map(h => `"${(row[h] || '').toString().replace(/"/g, '""')}"`).join(','))
+          ].join('\n');
+    
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          
+          const jurisdictionName = targetDivision ? targetDivision : targetRegion;
+          link.setAttribute("download", `${jurisdictionName.replace(/\s+/g, '_')}_Masterlist_Status.csv`);
+          
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+    
+        } catch (error) {
+          console.error("Export Error:", error);
+          alert("Failed to generate export. Please check the console.");
+        } finally {
+          setIsGeneratingReport(null);
+        }
+      };
+
+    const handleExportInactiveCSV = async () => {
+        const data = await fetchReportData('inactive');
+        if (data && data.datasets && data.datasets.stale) {
+            const jurisdiction = (effectiveDivision || userData?.division || effectiveRegion || 'National').toString().replace(/\s+/g, '');
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            downloadCSV(data.datasets.stale, `${jurisdiction}_InactiveAccounts_${dateStr}.csv`);
+        }
+    };
+
+    const handleExportAnomaliesCSV = async () => {
+        const data = await fetchReportData('anomalies');
+        if (data && data.datasets && data.datasets.anomalies) {
+            const jurisdiction = (effectiveDivision || userData?.division || effectiveRegion || 'National').toString().replace(/\s+/g, '');
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            downloadCSV(data.datasets.anomalies, `${jurisdiction}_DataAnomalies_${dateStr}.csv`);
+        }
+    };
 
     // --- SUPER USER EFFECTIVE ROLE ---
     // Calculate derived role/region for rendering
@@ -1180,7 +1677,7 @@ const MonitoringDashboard = () => {
                     </div>
                 )}
                 {/* Header */}
-                <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-6 pb-20 rounded-b-[3rem] shadow-xl text-white relative overflow-hidden">
+                <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-6 pb-20 rounded-b-[3rem] shadow-xl text-white relative z-[60]">
                     {/* REMOVED BACKGROUND ICON as per user request */}
 
 
@@ -1234,8 +1731,97 @@ const MonitoringDashboard = () => {
                                         }
                                     </span>
                                 </div>
-                                <h1 className="text-3xl font-black tracking-tight">Monitoring</h1>
-                                <p className="text-blue-100/70 text-sm mt-1">Status of schools & infrastructure.</p>
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h1 className="text-3xl font-black tracking-tight">Monitoring</h1>
+                                        <p className="text-blue-100/70 text-sm mt-1">Status of schools & infrastructure.</p>
+                                    </div>
+                                    {(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') && (
+                                        <div className="relative">
+                                            <button 
+                                                onClick={() => setIsReportMenuOpen(!isReportMenuOpen)}
+                                                className="flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-sm font-bold transition-all border border-white/10 shadow-lg text-white"
+                                            >
+                                                <FiFileText size={16} />
+                                                Generate Reports
+                                            </button>
+                                            
+                                            {isReportMenuOpen && (
+                                                <>
+                                                    <div 
+                                                        className="fixed inset-0 z-40" 
+                                                        onClick={() => setIsReportMenuOpen(false)}
+                                                    ></div>
+                                                    <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 origin-top-right text-left text-slate-800 dark:text-white">
+                                                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+                                                            <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                                                                <TbChartBar className="text-blue-500" size={16} />
+                                                                Data Health & Compliance
+                                                            </h3>
+                                                        </div>
+                                                        
+                                                        <div className="p-2 space-y-1">
+                                                            <div className="px-3 py-2">
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Section A: Executive Reports</p>
+                                                                <button 
+                                                                    onClick={handleGeneratePDF}
+                                                                    disabled={isGeneratingReport !== null}
+                                                                    className={`w-full text-left p-3 rounded-xl group transition-colors border border-transparent ${isGeneratingReport === 'pdf' ? 'bg-blue-50 dark:bg-blue-900/20 opacity-70 cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-100 dark:hover:border-blue-800'}`}
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                                                                            {isGeneratingReport === 'pdf' ? <FiRefreshCw className="animate-spin" size={16} /> : <FiFileText size={16} />}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                                                                                {isGeneratingReport === 'pdf' ? 'Generating PDF...' : 'Generate Executive Summary (PDF)'}
+                                                                            </p>
+                                                                            <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">A visual compliance report for the Superintendent/Regional Director.</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
+                                                            </div>
+                                                            
+                                                            <div className="h-px bg-slate-100 dark:bg-slate-700 my-1 mx-3"></div>
+                                                            
+                                                            <div className="px-3 py-2">
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Section B: Actionable Datasets</p>
+                                                                
+                                                                <button 
+                                                                    onClick={handleExportRegisteredHealthCSV}
+                                                                    disabled={isGeneratingReport !== null}
+                                                                    className={`w-full text-left p-2.5 rounded-lg group transition-colors flex items-center gap-3 ${isGeneratingReport === 'registered_health' ? 'bg-slate-50 dark:bg-slate-700/50 opacity-70 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                                                                >
+                                                                    {isGeneratingReport === 'registered_health' ? <FiRefreshCw className="text-emerald-500 animate-spin" size={14} /> : <FiFileText className="text-slate-400 group-hover:text-emerald-500" size={14} />}
+                                                                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white">
+                                                                        {isGeneratingReport === 'registered_health' ? 'Compiling data...' : 'Download Registered Schools Health (.csv)'}
+                                                                    </span>
+                                                                </button>
+
+                                                                <button 
+                                                                    onClick={handleExportAllSchoolsStatusCSV}
+                                                                    disabled={isGeneratingReport !== null}
+                                                                    className={`w-full text-left p-2.5 rounded-lg group transition-colors flex items-start gap-3 ${isGeneratingReport === 'all_schools_status' ? 'bg-slate-50 dark:bg-slate-700/50 opacity-70 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                                                                >
+                                                                    <div className="mt-0.5">
+                                                                        {isGeneratingReport === 'all_schools_status' ? <FiRefreshCw className="text-amber-500 animate-spin" size={14} /> : <FiFileText className="text-slate-400 group-hover:text-amber-500" size={14} />}
+                                                                    </div>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white leading-tight">
+                                                                            {isGeneratingReport === 'all_schools_status' ? 'Gathering dataset...' : 'Download List of Schools (Registration Status) (.csv)'}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-slate-400 mt-1 font-normal leading-tight">Includes both registered & unregistered schools.</span>
+                                                                    </div>
+                                                                </button>
+
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </>
                         )}
 
@@ -1953,10 +2539,22 @@ const MonitoringDashboard = () => {
                     {(activeTab === 'insights') && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                <div className="flex items-center gap-4">
+                                <div className="flex flex-wrap items-center gap-4">
                                     <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
                                         <TbChartBar className="text-purple-500" size={18} /> Regional Insights
                                     </h2>
+
+                                    {/* EXPORT BUTTONS FOR INSIGHTS (Header Level - currently only PDF) */}
+                                    <div className="flex items-center gap-2 ml-4">
+                                        <button
+                                            onClick={handleGenerateInsightsPDF}
+                                            disabled={isGeneratingReport !== null}
+                                            className="p-1.5 bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 dark:bg-slate-800 dark:hover:bg-rose-900/30 rounded-lg transition-colors shadow-sm"
+                                            title="Generate Contextual Report (PDF)"
+                                        >
+                                            {isGeneratingReport === 'insights_pdf' ? <FiRefreshCw className="animate-spin" size={14} /> : <TbFileDownload size={14} />}
+                                        </button>
+                                    </div>
 
                                     <div className="flex items-center gap-2">
                                         {/* Drilldown Type Selector */}
@@ -1985,10 +2583,11 @@ const MonitoringDashboard = () => {
                                         )}
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Selector for Metric - Designated Area */}
-                                <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 flex-wrap">
-                                    <div className="flex items-center gap-2 pl-2">
+                            {/* Selector for Metric - Designated Area */}
+                            <div className="relative z-50 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 flex-wrap">
+                                <div className="flex items-center gap-2 pl-2">
                                         <div className="bg-slate-200 dark:bg-slate-700 p-1.5 rounded-full">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 dark:text-slate-400"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                                         </div>
@@ -2566,11 +3165,37 @@ const MonitoringDashboard = () => {
                                             </div>
                                         </>
                                     )}
+
+                                    {/* EXPORT BUTTONS (Filters Level) */}
+                                    <div className="ml-auto flex items-center gap-2">
+                                        <button
+                                            onClick={handleExportInsightsCSV}
+                                            disabled={isGeneratingReport !== null}
+                                            className="p-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 rounded-lg transition-colors shadow-sm flex items-center gap-2 border border-emerald-100 dark:border-emerald-800"
+                                            title="Export Current Filtered Data (CSV)"
+                                        >
+                                            {isGeneratingReport === 'insights_csv' ? <FiRefreshCw className="animate-spin text-emerald-500" size={14} /> : <>
+                                                <FiFileText size={14} />
+                                                <span className="text-[10px] uppercase font-bold tracking-widest hidden sm:inline">Filtered CSV</span>
+                                            </>}
+                                        </button>
+                                        
+                                        <button
+                                            onClick={handleExportMasterCSV}
+                                            disabled={isGeneratingReport !== null}
+                                            className="p-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-400 rounded-lg transition-colors shadow-sm flex items-center gap-2 border border-indigo-100 dark:border-indigo-800"
+                                            title="Download Complete Master Dataset (CSV) - Unfiltered"
+                                        >
+                                            {isGeneratingReport === 'master_csv' ? <FiRefreshCw className="animate-spin text-indigo-500" size={14} /> : <>
+                                                <TbFileDownload size={14} /> 
+                                                <span className="text-[10px] uppercase font-bold tracking-widest hidden sm:inline">Master Dataset</span>
+                                            </>}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
 
                             {/* Chart Container */}
-                            <div key={drilldownType + (coDistrict ? '-list' : '-chart')} className={`bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden ${isMobile ? 'h-[500px] overflow-y-auto' : ''}`}>
+                            <div id="insight-charts-container" key={drilldownType + (coDistrict ? '-list' : '-chart')} className={`bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden ${isMobile ? 'h-[500px] overflow-y-auto' : ''}`}>
                                 <div className="animate-in fade-in slide-in-from-left-4 duration-300">
                                     {insightsMetric === 'enrolment' && (
                                         <>
