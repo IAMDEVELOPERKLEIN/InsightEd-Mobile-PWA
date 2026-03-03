@@ -135,7 +135,8 @@ const NewProjects = () => {
                 actualCompletionDate: '',
                 noticeToProceed: '2023-08-01',
                 contractorName: 'XYZ Construction Corp.',
-                projectAllocation: '12,500,000',
+                approved_budget_for_contract: '12,500,000',
+                contract_amount: '12,000,000',
                 batchOfFunds: 'Batch 2',
                 otherRemarks: 'On schedule. Foundation complete. This is a sample entry.'
             });
@@ -162,7 +163,8 @@ const NewProjects = () => {
 
         // Contractors & Funds
         contractorName: '',
-        projectAllocation: '',
+        approved_budget_for_contract: '',
+        contract_amount: '',
         batchOfFunds: '',
 
         // Remarks
@@ -272,7 +274,8 @@ const NewProjects = () => {
             schoolName: proj.schoolName || '',
             region: proj.region || '',
             division: proj.division || '',
-            projectAllocation: proj.projectAllocation ? Number(proj.projectAllocation).toLocaleString('en-US') : '',
+            approved_budget_for_contract: proj.approved_budget_for_contract ? Number(proj.approved_budget_for_contract).toLocaleString('en-US') : (proj.projectAllocation ? Number(proj.projectAllocation).toLocaleString('en-US') : ''),
+            contract_amount: proj.contract_amount ? Number(proj.contract_amount).toLocaleString('en-US') : '',
             contractorName: proj.contractorName || '',
             batchOfFunds: proj.batchOfFunds || '',
             projectCategory: proj.projectCategory || '',
@@ -463,8 +466,8 @@ const NewProjects = () => {
             value = value.toUpperCase();
         }
 
-        // Auto-comma for Project Allocation and Funds Utilized
-        if (['projectAllocation', 'fundsUtilized'].includes(name)) {
+        // Auto-comma for Approved Budget, Contract Amount, and Funds Utilized
+        if (['approved_budget_for_contract', 'contract_amount', 'fundsUtilized'].includes(name)) {
             const raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
             if (!raw) {
                 value = '';
@@ -566,7 +569,8 @@ const NewProjects = () => {
             { key: 'statusAsOfDate', label: 'Status Date' },
             { key: 'targetCompletionDate', label: 'Target Completion Date' },
             { key: 'contractorName', label: 'Contractor Name' },
-            { key: 'projectAllocation', label: 'Project Allocation' },
+            { key: 'approved_budget_for_contract', label: 'Approved Budget for Contract (ABC)' },
+            { key: 'contract_amount', label: 'Contract Amount' },
             { key: 'batchOfFunds', label: 'Batch of Funds' }
             // { key: 'otherRemarks', label: 'Remarks' } // REMOVED: Now Optional
         ];
@@ -581,6 +585,14 @@ const NewProjects = () => {
                 alert(`⚠️ MISSING FIELD\n\nPlease enter the ${field.label}. All fields are mandatory.`);
                 return;
             }
+        }
+
+        // CONTRACT AMOUNT VALIDATION
+        const abcAmt = Number(formData.approved_budget_for_contract?.toString().replace(/,/g, '') || 0);
+        const contractAmt = Number(formData.contract_amount?.toString().replace(/,/g, '') || 0);
+        if (contractAmt > abcAmt) {
+            alert("⚠️ INVALID AMOUNT\n\nContract Amount must be equal to or less than the Approved Budget for Contract (ABC).");
+            return;
         }
 
         setIsSubmitting(true);
@@ -606,7 +618,8 @@ const NewProjects = () => {
             // C. Construct Payload
             const projectBody = {
                 ...formData,
-                projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0),
+                approved_budget_for_contract: Number(formData.approved_budget_for_contract?.toString().replace(/,/g, '') || 0),
+                contract_amount: Number(formData.contract_amount?.toString().replace(/,/g, '') || 0),
                 uid: auth.currentUser?.uid,
                 modifiedBy: auth.currentUser?.displayName || 'Engineer',
                 images: compressedImages,
@@ -1218,8 +1231,12 @@ const NewProjects = () => {
                         <SectionHeader title="Funds and Contractor" icon="💰" />
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Allocation (PHP)</label>
-                                <input type="text" name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 15,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Approved Budget for Contract (ABC) (PHP)</label>
+                                <input type="text" name="approved_budget_for_contract" value={formData.approved_budget_for_contract} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 15,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount (PHP)</label>
+                                <input type="text" name="contract_amount" value={formData.contract_amount} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 14,500,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funds Utilized (As of Current Date)</label>

@@ -37,7 +37,8 @@ const AUTHORIZATION_CODES = {
     'Beta Tester': 'B3TA-T3ST', // Added for beta testers
     'Super User': 'SUP3R-US3R', // Added for testing
     // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
-    'Admin': 'A3M6-Y1K8'
+    'Admin': 'A3M6-Y1K8',
+    'EFD': 'EFD8-C1D9'
 };
 
 import locationData from './locations.json';
@@ -45,6 +46,7 @@ import locationData from './locations.json';
 const getDashboardPath = (role) => {
     const roleMap = {
         'Division Engineer': '/engineer-dashboard',
+        'EFD': '/efd-dashboard',
         'Local Government Unit': '/lgu-dashboard',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
@@ -651,6 +653,7 @@ const Register = () => {
                                         <option value="School Division Office">SDO Personnel</option>
                                         <option value="School Head">School Head</option>
                                         <option value="Division Engineer">Division Engineer</option>
+                                        <option value="EFD">EFD (Engineering Facilities Division)</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         <option value="Central Office Finance">Central Office Finance</option>
                                         {/* <option value="Beta Tester">Beta Tester</option> */}
@@ -1053,8 +1056,8 @@ const Register = () => {
                                         </div>
                                     )}
 
-                                    {/* DIVISION ENGINEER FIELDS */}
-                                    {formData.role === 'Division Engineer' && (
+                                    {/* DIVISION ENGINEER & EFD FIELDS */}
+                                    {(formData.role === 'Division Engineer' || formData.role === 'EFD') && (
                                         <div className="space-y-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
                                             <h3 className="text-sm font-bold text-teal-800 uppercase flex items-center gap-2">
                                                 <span className="bg-teal-100 text-teal-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>

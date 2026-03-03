@@ -84,7 +84,8 @@ const VOComparison = ({ current, previous }) => {
         { key: 'projectName', label: 'Project Name' },
         { key: 'projectCategory', label: 'Category' },
         { key: 'scopeOfWork', label: 'Scope of Work' },
-        { key: 'projectAllocation', label: 'Allocation', isMoney: true },
+        { key: 'approved_budget_for_contract', label: 'Approved Budget for Contract (ABC)', isMoney: true },
+        { key: 'contract_amount', label: 'Contract Amount', isMoney: true },
         { key: 'batchOfFunds', label: 'Batch' },
         { key: 'contractorName', label: 'Contractor' },
         { key: 'numberOfClassrooms', label: 'Classrooms' },
@@ -179,7 +180,8 @@ const RealignmentComparison = ({ current, previous, remarks }) => {
         { key: 'projectName', label: 'Project Name' },
         { key: 'projectCategory', label: 'Category' },
         { key: 'scopeOfWork', label: 'Scope of Work' },
-        { key: 'projectAllocation', label: 'Allocation', isMoney: true },
+        { key: 'approved_budget_for_contract', label: 'Approved Budget for Contract (ABC)', isMoney: true },
+        { key: 'contract_amount', label: 'Contract Amount', isMoney: true },
         { key: 'numberOfClassrooms', label: 'Classrooms' },
         { key: 'numberOfStoreys', label: 'Storeys' },
         { key: 'numberOfSites', label: 'Sites' },
@@ -707,15 +709,15 @@ const DetailedProjInfo = () => {
                             <DetailItem label="Scope of Work" value={project.scopeOfWork} />
                             <div className="grid grid-cols-2 gap-3">
                                 <DetailItem 
-                                    label="Original Allocation" 
-                                    value={history.length > 0 ? (history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : (project.projectAllocation || 0)} 
+                                    label="Approved Budget for Contract (ABC)" 
+                                    value={history.length > 0 ? (history[history.length - 1].approved_budget_for_contract || history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : (project.projectAllocation || project.approved_budget_for_contract || 0)} 
                                     isMoney 
                                 />
-                                <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
+                                <DetailItem label="Contract Amount" value={project.contractAmount || project.contract_amount} isMoney />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <DetailItem label="Funds Utilized" value={project.fundsUtilized} isMoney />
-                                <DetailItem label="Funds Released" value={project.fundReleased} isMoney />
+                                <DetailItem label="Savings" value={project.savings !== undefined && project.savings !== null ? project.savings : (Number(history.length > 0 ? (history[history.length - 1].approved_budget_for_contract || history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : (project.projectAllocation || project.approved_budget_for_contract || 0)) - Number(project.contractAmount || project.contract_amount || 0))} isMoney />
+                                <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
                             </div>
                             <DetailItem label="Remarks" value={project.otherRemarks} />
 
@@ -737,28 +739,28 @@ const DetailedProjInfo = () => {
                                         </div>
                                     </div>
                                     {(() => {
-                                        const originalAlloc = Number(history.length > 0 ? (history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : project.projectAllocation || 0);
-                                        const revisedTotal = Number(project.projectAllocation || 0);
-                                        const voAdded = revisedTotal - originalAlloc;
+                                        const originalABC = Number(history.length > 0 ? (history[history.length - 1].approved_budget_for_contract || history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : project.approved_budget_for_contract || project.projectAllocation || 0);
+                                        const revisedABC = Number(project.approved_budget_for_contract || project.projectAllocation || 0);
+                                        const voAdded = revisedABC - originalABC;
 
                                         return (
                                             <>
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div className="bg-white/50 p-2 rounded-lg border border-amber-100">
-                                                        <p className="text-[9px] uppercase font-black text-amber-600 mb-0.5">VO Amount (Added)</p>
+                                                        <p className="text-[9px] uppercase font-black text-amber-600 mb-0.5">VO Amount (Added to ABC)</p>
                                                         <p className="text-sm font-black text-amber-900">
                                                             ₱{voAdded.toLocaleString()}
                                                         </p>
                                                     </div>
                                                     <div className="bg-amber-500 p-2 rounded-lg shadow-inner">
-                                                        <p className="text-[9px] uppercase font-black text-white/80 mb-0.5">Revised Total</p>
+                                                        <p className="text-[9px] uppercase font-black text-white/80 mb-0.5">Revised ABC</p>
                                                         <p className="text-sm font-black text-white drop-shadow-sm">
-                                                            ₱{revisedTotal.toLocaleString()}
+                                                            ₱{revisedABC.toLocaleString()}
                                                         </p>
                                                     </div>
                                                 </div>
                                                 <div className="text-[9px] text-amber-600 italic font-medium mt-1">
-                                                    Original Allocation: ₱{originalAlloc.toLocaleString()}
+                                                    Original ABC: ₱{originalABC.toLocaleString()}
                                                 </div>
                                             </>
                                         );

@@ -137,9 +137,19 @@ const UserProfile = () => {
     const getDashboardPath = (role) => {
         const roleMap = {
             'Division Engineer': '/engineer-dashboard',
+            'Engineer': '/engineer-dashboard',
+            'Local Government Unit': '/lgu-dashboard',
             'School Head': '/schoolhead-dashboard',
             'Human Resource': '/hr-dashboard',
+            'Regional Office': '/monitoring-dashboard',
+            'School Division Office': '/monitoring-dashboard',
             'Admin': '/admin-dashboard',
+            'Super Admin': '/super-admin',
+            'Central Office': '/monitoring-dashboard',
+            'Central Office Finance': '/finance-dashboard',
+            'Super User': '/super-user-selector',
+            'Beta Tester': '/modular-dashboard',
+            'EFD': '/efd-dashboard',
         };
         return roleMap[role] || '/';
     };

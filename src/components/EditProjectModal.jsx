@@ -121,8 +121,9 @@ const EditProjectModal = ({
                 noticeToProceed: project.noticeToProceed || '',
                 constructionStartDate: project.constructionStartDate || '',
                 contractorName: project.contractorName || '',
-                projectAllocation: project.projectAllocation || '',
+                approved_budget_for_contract: project.approved_budget_for_contract || project.projectAllocation || '',
                 batchOfFunds: project.batchOfFunds || '',
+                contract_amount: project.contract_amount || '',
                 fundsUtilized: project.fundsUtilized || '',
                 statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0], // Default to today if missing
                 accomplishmentPercentage: project.accomplishmentPercentage || 0,
@@ -200,7 +201,7 @@ const EditProjectModal = ({
             // Handle Numeric Fields with Commas
             const numericFields = [
                 'numberOfClassrooms', 'numberOfStoreys', 'numberOfSites', 
-                'projectAllocation', 'fundsUtilized', 'tranches_count', 'tranche_amount'
+                'approved_budget_for_contract', 'contract_amount', 'fundsUtilized', 'tranches_count', 'tranche_amount'
             ];
             if (numericFields.includes(name)) {
                 newData[name] = stripCommas(value);
@@ -409,12 +410,17 @@ const EditProjectModal = ({
                 </div>
             </div>
 
-            {!formData.isProjectDetailsUpdate && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-slate-100 pt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Allocation</label>
-                        <input type="text" name="projectAllocation" value={formatWithCommas(formData.projectAllocation)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Approved Budget for Contract (ABC)</label>
+                        <input type="text" name="approved_budget_for_contract" value={formatWithCommas(formData.approved_budget_for_contract)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                     </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
+                        <input type="text" name="contract_amount" value={formatWithCommas(formData.contract_amount)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
                     <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
                         <input type="text" name="fundsUtilized" value={formatWithCommas(formData.fundsUtilized)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
@@ -424,7 +430,6 @@ const EditProjectModal = ({
                         <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                     </div>
                 </div>
-            )}
         </div>
     );
 
@@ -1085,6 +1090,14 @@ const EditProjectModal = ({
                                     } finally {
                                         setIsSubmittingRealignment(false);
                                     }
+                                    return;
+                                }
+
+                                // CONTRACT AMOUNT VALIDATION
+                                const abcAmt = Number(formData.approved_budget_for_contract?.toString().replace(/,/g, '') || 0);
+                                const contractAmt = Number(formData.contract_amount?.toString().replace(/,/g, '') || 0);
+                                if (contractAmt > abcAmt) {
+                                    alert("⚠️ INVALID AMOUNT\n\nContract Amount must be equal to or less than the Approved Budget for Contract (ABC).");
                                     return;
                                 }
 

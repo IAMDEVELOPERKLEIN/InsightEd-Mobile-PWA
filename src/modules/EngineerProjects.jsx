@@ -238,10 +238,18 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
                       </div>
                       <div className="flex flex-col">
                         <span className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                          <LuDollarSign size={10} /> Budget
+                          <LuDollarSign size={10} /> Approved Budget (ABC)
                         </span>
                         <span className="font-mono font-bold text-[#004A99] dark:text-blue-400">
                           {formatAllocation(p.projectAllocation)}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <LuDollarSign size={10} /> Contract Amount
+                        </span>
+                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {formatAllocation(p.contractAmount)}
                         </span>
                       </div>
                     </div>
@@ -453,7 +461,8 @@ const EngineerProjects = () => {
                 dupa_pdf: item.dupa_pdf,
                 contract_pdf: item.contract_pdf,
                 hasVariationOrder: item.hasVariationOrder,
-                variationOrderPdf: item.variationOrderPdf
+                variationOrderPdf: item.variationOrderPdf,
+                contractAmount: item.contractAmount
               }));
 
               // Update Cache on success

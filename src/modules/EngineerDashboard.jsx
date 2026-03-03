@@ -54,16 +54,28 @@ const StatsOverview = ({ projects }) => {
       (acc, curr) => acc + (Number(curr.projectAllocation) || 0),
       0
     ),
+    totalContract: projects.reduce(
+      (acc, curr) => acc + (Number(curr.contractAmount) || 0),
+      0
+    ),
   };
 
   return (
-    <div className="grid grid-cols-3 gap-2">
-      <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
-        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
-          Allocation
+    <div className="grid grid-cols-4 gap-2">
+      <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+        <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">
+          ABC
         </p>
-        <p className="text-sm font-bold text-[#004A99] dark:text-blue-400 mt-1">
+        <p className="text-[11px] font-black text-[#004A99] dark:text-blue-400 mt-0.5 antialiased">
           {formatAllocation(stats.totalAllocation)}
+        </p>
+      </div>
+      <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+        <p className="text-[9px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-tight">
+          Contract
+        </p>
+        <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 mt-0.5 antialiased">
+          {formatAllocation(stats.totalContract)}
         </p>
       </div>
       <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
@@ -246,6 +258,7 @@ const EngineerDashboard = () => {
               status: item.status,
               accomplishmentPercentage: item.accomplishmentPercentage,
               projectAllocation: item.projectAllocation,
+              contractAmount: item.contractAmount,
               targetCompletionDate: item.targetCompletionDate,
               projects_count: 1,
               // Additional fields for charts

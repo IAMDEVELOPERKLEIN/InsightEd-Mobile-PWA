@@ -79,6 +79,13 @@ const BottomNav = ({ userRole }) => {
             { label: 'Data', path: '/psip', state: { activeTab: 'data' }, icon: TbChartBar },
             { label: 'Settings', path: '/profile', state: { activeTab: 'settings' }, icon: FiSettings },
         ],
+        'EFD': [
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Deployment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+
 
     };
 
