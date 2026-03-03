@@ -52,7 +52,8 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // --- DATABASE CONNECTION ---
 // Robust .env parsing for UTF-16LE support
@@ -145,6 +146,25 @@ const initDB = async () => {
       
       -- Add savings column
       ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
+
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='status') THEN
+          ALTER TABLE engineer_form RENAME COLUMN status TO status_of_construction_phase;
+        END IF;
+      END $$;
+
+      ALTER TABLE engineer_form 
+      ADD COLUMN IF NOT EXISTS status_design_phase TEXT,
+      ADD COLUMN IF NOT EXISTS contract_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS date_notice_of_award DATE,
+      ADD COLUMN IF NOT EXISTS issuance_of_invitation_to_bid DATE,
+      ADD COLUMN IF NOT EXISTS pre_bid_conference DATE,
+      ADD COLUMN IF NOT EXISTS opening_of_technical_proposal DATE,
+      ADD COLUMN IF NOT EXISTS opening_of_financial_proposal DATE,
+      ADD COLUMN IF NOT EXISTS request_for_quotation DATE,
+      ADD COLUMN IF NOT EXISTS negotiation DATE,
+      ADD COLUMN IF NOT EXISTS opening_of_quotation DATE;
 
       -- Rename update_type column to actions safely (checks if actions already exists)
       DO $$ 
@@ -6040,7 +6060,7 @@ app.post('/api/save-project', async (req, res) => {
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId,
       valueOrNull(data.region), valueOrNull(data.division),
-      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+      data.statusOfConstructionPhase || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation),
@@ -6062,21 +6082,34 @@ app.post('/api/save-project', async (req, res) => {
       parseIntOrNull(data.numberOfStoreys), // $30
       parseNumberOrNull(data.fundsUtilized), // $31
       'Newly Created', // $32
-      parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation) - parseNumberOrNull(data.contract_amount) // $33 (Savings)
+      parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation) - parseNumberOrNull(data.contract_amount), // $33 (Savings)
+      valueOrNull(data.statusDesignPhase), // $34
+      valueOrNull(data.contractId), // $35
+      valueOrNull(data.dateNoticeOfAward), // $36
+      valueOrNull(data.issuanceOfInvitationToBid), // $37
+      valueOrNull(data.preBidConference), // $38
+      valueOrNull(data.openingOfTechnicalProposal), // $39
+      valueOrNull(data.openingOfFinancialProposal), // $40
+      valueOrNull(data.requestForQuotation), // $41
+      valueOrNull(data.negotiation), // $42
+      valueOrNull(data.openingOfQuotation) // $43
     ];
 
     const projectQuery = `
       INSERT INTO "engineer_form" (
         project_name, school_name, school_id, region, division,
-        status, accomplishment_percentage, status_as_of,
+        status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, approved_budget_for_contract, contract_amount, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
         number_of_classrooms, number_of_sites, number_of_storeys, funds_utilized,
-        actions, savings
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+        actions, savings,
+        status_design_phase, contract_id, date_notice_of_award,
+        issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
+        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -6252,7 +6285,7 @@ app.put('/api/update-project/:id', async (req, res) => {
     if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
 
     // Merge new data with old data (Snapshot concept)
-    const newStatus = data.status || oldData.status;
+    const newStatus = data.statusOfConstructionPhase || oldData.status_of_construction_phase;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
@@ -6289,21 +6322,34 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.numberOfSites) || oldData.number_of_sites, // $29
       valueOrNull(data.fundsUtilized) || oldData.funds_utilized, // $30
       valueOrNull(data.update_type) || 'Status Update', // $31: Priority to dynamic tracking
-      Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation) - Number(valueOrNull(data.contract_amount) || oldData.contract_amount) // $32: Savings
+      Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation) - Number(valueOrNull(data.contract_amount) || oldData.contract_amount), // $32: Savings
+      valueOrNull(data.statusDesignPhase) || oldData.status_design_phase, // $34
+      valueOrNull(data.contractId) || oldData.contract_id, // $35
+      valueOrNull(data.dateNoticeOfAward) || oldData.date_notice_of_award, // $36
+      valueOrNull(data.issuanceOfInvitationToBid) || oldData.issuance_of_invitation_to_bid, // $37
+      valueOrNull(data.preBidConference) || oldData.pre_bid_conference, // $38
+      valueOrNull(data.openingOfTechnicalProposal) || oldData.opening_of_technical_proposal, // $39
+      valueOrNull(data.openingOfFinancialProposal) || oldData.opening_of_financial_proposal, // $40
+      valueOrNull(data.requestForQuotation) || oldData.request_for_quotation, // $41
+      valueOrNull(data.negotiation) || oldData.negotiation, // $42
+      valueOrNull(data.openingOfQuotation) || oldData.opening_of_quotation // $43
     ];
 
     const insertQuery = `
       INSERT INTO "engineer_form" (
         project_name, school_name, school_id, region, division,
-        status, accomplishment_percentage, status_as_of,
+        status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, approved_budget_for_contract, contract_amount, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
         number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-        actions, savings
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+        actions, savings,
+        status_design_phase, contract_id, date_notice_of_award,
+        issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
+        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
       RETURNING *;
     `;
 
@@ -6339,7 +6385,7 @@ app.put('/api/update-project/:id', async (req, res) => {
 
     // 3. Track Changes (History)
     const changes = [];
-    if (oldData.status !== newData.status) changes.push(`Status: '${oldData.status}' -> '${newData.status}'`);
+    if (oldData.status_of_construction_phase !== newData.status_of_construction_phase) changes.push(`Status: '${oldData.status_of_construction_phase}' -> '${newData.status_of_construction_phase}'`);
     if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
     if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
 
@@ -6349,7 +6395,7 @@ app.put('/api/update-project/:id', async (req, res) => {
       ipc: newData.ipc,
       changes: changes, // List of human-readable changes
       snapshot: { // Save key metrics
-        status: newData.status,
+        status_of_construction_phase: newData.status_of_construction_phase,
         accomplishment: newData.accomplishment_percentage,
         date: new Date().toISOString()
       }
@@ -6404,7 +6450,7 @@ app.get('/api/projects/realignment-candidates/:id', async (req, res) => {
         e.project_id AS id, e.ipc, e.project_name AS "projectName", e.school_name AS "schoolName", 
         e.approved_budget_for_contract AS "approved_budget_for_contract",
         e.contract_amount AS "contract_amount",
-        s.district
+        s.district, e.status_of_construction_phase AS status
       FROM engineer_form e
       JOIN schools s ON e.school_id = s.school_id
       WHERE 
@@ -6456,22 +6502,25 @@ app.post('/api/projects/realign', async (req, res) => {
     const insertSql = `
       INSERT INTO engineer_form (
         project_name, school_name, school_id, region, division,
-        status, accomplishment_percentage, status_as_of,
+        status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, approved_budget_for_contract, contract_amount, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
         number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-        actions, savings
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+        actions, savings,
+        status_design_phase, contract_id, date_notice_of_award,
+        issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
+        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
     `;
 
     // 3. Insert NEW record for Source Project (Reduced Allocation)
     const newSourceAllocation = Number(sourceData.approved_budget_for_contract) - Number(amount);
     const sourceVals = [
       sourceData.project_name, sourceData.school_name, sourceData.school_id, sourceData.region, sourceData.division,
-      sourceData.status, sourceData.accomplishment_percentage, realignmentDate,
+      sourceData.status_of_construction_phase, sourceData.accomplishment_percentage, realignmentDate,
       sourceData.target_completion_date, sourceData.actual_completion_date, sourceData.notice_to_proceed,
       sourceData.contractor_name, newSourceAllocation, sourceData.contract_amount, sourceData.batch_of_funds, sourceRemarks,
       sourceData.engineer_id, sourceData.ipc, sourceData.engineer_name, sourceData.latitude, sourceData.longitude,
@@ -6479,20 +6528,19 @@ app.post('/api/projects/realign', async (req, res) => {
       sourceData.construction_start_date, sourceData.project_category, sourceData.scope_of_work,
       sourceData.number_of_classrooms, sourceData.number_of_storeys, sourceData.number_of_sites, sourceData.funds_utilized,
       'Realignment (Source)',
-      Number(newSourceAllocation) - Number(sourceData.contract_amount) // savings
+      Number(newSourceAllocation) - Number(sourceData.contract_amount), // savings
+      sourceData.status_design_phase, sourceData.contract_id, sourceData.date_notice_of_award,
+      sourceData.issuance_of_invitation_to_bid, sourceData.pre_bid_conference, sourceData.opening_of_technical_proposal,
+      sourceData.opening_of_financial_proposal, sourceData.request_for_quotation, sourceData.negotiation, sourceData.opening_of_quotation
     ];
     await client.query(insertSql, sourceVals);
     if (clientNew) await clientNew.query(insertSql, sourceVals);
 
     // 4. Insert NEW record for Target Project (Inherits Source Metadata + New Allocation)
-    // Target fields preserved: school_name, school_id, ipc, region, division, latitude, longitude
-    // Source fields inherited: project_name, project_category, scope_of_work, number_of_classrooms, number_of_storeys, 
-    //                          number_of_sites, contractor_name, batch_of_funds, notice_to_proceed, construction_start_date, 
-    //                          pow_pdf, dupa_pdf, contract_pdf
     const newTargetAllocation = Number(targetData.approved_budget_for_contract) + Number(amount);
     const targetVals = [
       sourceData.project_name, targetData.school_name, targetData.school_id, targetData.region, targetData.division,
-      targetData.status, targetData.accomplishment_percentage, realignmentDate,
+      targetData.status_of_construction_phase, targetData.accomplishment_percentage, realignmentDate,
       sourceData.target_completion_date, sourceData.actual_completion_date, sourceData.notice_to_proceed,
       sourceData.contractor_name, newTargetAllocation, targetData.contract_amount, sourceData.batch_of_funds, targetRemarks,
       targetData.engineer_id, targetData.ipc, targetData.engineer_name, targetData.latitude, targetData.longitude,
@@ -6500,7 +6548,10 @@ app.post('/api/projects/realign', async (req, res) => {
       sourceData.construction_start_date, sourceData.project_category, sourceData.scope_of_work,
       sourceData.number_of_classrooms, sourceData.number_of_storeys, sourceData.number_of_sites, targetData.funds_utilized,
       'Realignment (Target)',
-      Number(newTargetAllocation) - Number(targetData.contract_amount) // savings
+      Number(newTargetAllocation) - Number(targetData.contract_amount), // savings
+      sourceData.status_design_phase, sourceData.contract_id, sourceData.date_notice_of_award,
+      sourceData.issuance_of_invitation_to_bid, sourceData.pre_bid_conference, sourceData.opening_of_technical_proposal,
+      sourceData.opening_of_financial_proposal, sourceData.request_for_quotation, sourceData.negotiation, sourceData.opening_of_quotation
     ];
     await client.query(insertSql, targetVals);
     if (clientNew) await clientNew.query(insertSql, targetVals);
@@ -6531,7 +6582,7 @@ app.get('/api/projects', async (req, res) => {
     let sql = `
       WITH LatestProjects AS (
           SELECT DISTINCT ON (ipc) 
-            project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name, engineer_id,
+            project_id, school_name, project_name, school_id, division, region, status_of_construction_phase AS status, ipc, engineer_name, engineer_id,
             accomplishment_percentage, approved_budget_for_contract, contract_amount, batch_of_funds, contractor_name, other_remarks,
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
@@ -6670,7 +6721,7 @@ app.get('/api/projects/:id', async (req, res) => {
     const query = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status, ipc,
+        school_id AS "schoolId", division, region, status_of_construction_phase AS "status", ipc,
         accomplishment_percentage AS "accomplishmentPercentage",
         approved_budget_for_contract AS "projectAllocation",
         contract_amount AS "contractAmount", contract_amount AS "contract_amount",
@@ -6688,7 +6739,16 @@ app.get('/api/projects/:id', async (req, res) => {
         latitude, longitude,
         actions AS "updateType",
         (actions IS NOT NULL AND actions LIKE 'Realignment%') AS "isRealigned",
-        savings
+        savings,
+        status_design_phase, contract_id, 
+        TO_CHAR(date_notice_of_award, 'YYYY-MM-DD') AS "date_notice_of_award",
+        TO_CHAR(issuance_of_invitation_to_bid, 'YYYY-MM-DD') AS "issuance_of_invitation_to_bid",
+        TO_CHAR(pre_bid_conference, 'YYYY-MM-DD') AS "pre_bid_conference",
+        TO_CHAR(opening_of_technical_proposal, 'YYYY-MM-DD') AS "opening_of_technical_proposal",
+        TO_CHAR(opening_of_financial_proposal, 'YYYY-MM-DD') AS "opening_of_financial_proposal",
+        TO_CHAR(request_for_quotation, 'YYYY-MM-DD') AS "request_for_quotation",
+        TO_CHAR(negotiation, 'YYYY-MM-DD') AS "negotiation",
+        TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation"
       FROM "engineer_form" WHERE project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -6705,7 +6765,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
     const query = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status, validation_status, ipc,
+        school_id AS "schoolId", division, region, status_of_construction_phase AS "status", validation_status, ipc,
         validation_remarks AS "validationRemarks", validated_by AS "validatedBy",
         accomplishment_percentage AS "accomplishmentPercentage",
         approved_budget_for_contract AS "approved_budget_for_contract",
@@ -6723,7 +6783,16 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         pow_pdf, dupa_pdf, contract_pdf,
         latitude, longitude,
         actions AS "updateType",
-        savings
+        savings,
+        status_design_phase, contract_id,
+        TO_CHAR(date_notice_of_award, 'YYYY-MM-DD') AS "date_notice_of_award",
+        TO_CHAR(issuance_of_invitation_to_bid, 'YYYY-MM-DD') AS "issuance_of_invitation_to_bid",
+        TO_CHAR(pre_bid_conference, 'YYYY-MM-DD') AS "pre_bid_conference",
+        TO_CHAR(opening_of_technical_proposal, 'YYYY-MM-DD') AS "opening_of_technical_proposal",
+        TO_CHAR(opening_of_financial_proposal, 'YYYY-MM-DD') AS "opening_of_financial_proposal",
+        TO_CHAR(request_for_quotation, 'YYYY-MM-DD') AS "request_for_quotation",
+        TO_CHAR(negotiation, 'YYYY-MM-DD') AS "negotiation",
+        TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation"
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;
     `;
@@ -6833,7 +6902,7 @@ app.get('/api/project-history/:ipc', async (req, res) => {
     const tableName = isLgu ? "lgu_projects" : "engineer_form";
     const nameColumn = isLgu ? "lgu_name" : "engineer_name";
     const idColumn = isLgu ? "lgu_project_id" : "project_id";
-    const statusCol = isLgu ? "project_status" : "status";
+    const statusCol = isLgu ? "project_status" : "status_of_construction_phase";
     const statusAsOfCol = isLgu ? "status_as_of_date" : "status_as_of";
 
     const query = `
@@ -6859,6 +6928,15 @@ app.get('/api/project-history/:ipc', async (req, res) => {
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
         TO_CHAR(construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
+        status_design_phase, contract_id,
+        TO_CHAR(date_notice_of_award, 'YYYY-MM-DD') AS "date_notice_of_award",
+        TO_CHAR(issuance_of_invitation_to_bid, 'YYYY-MM-DD') AS "issuance_of_invitation_to_bid",
+        TO_CHAR(pre_bid_conference, 'YYYY-MM-DD') AS "pre_bid_conference",
+        TO_CHAR(opening_of_technical_proposal, 'YYYY-MM-DD') AS "opening_of_technical_proposal",
+        TO_CHAR(opening_of_financial_proposal, 'YYYY-MM-DD') AS "opening_of_financial_proposal",
+        TO_CHAR(request_for_quotation, 'YYYY-MM-DD') AS "request_for_quotation",
+        TO_CHAR(negotiation, 'YYYY-MM-DD') AS "negotiation",
+        TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation",
         created_at
       FROM ${tableName}
       WHERE ipc = $1

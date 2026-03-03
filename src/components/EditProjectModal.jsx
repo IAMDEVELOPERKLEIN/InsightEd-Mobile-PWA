@@ -125,9 +125,20 @@ const EditProjectModal = ({
                 batchOfFunds: project.batchOfFunds || '',
                 contract_amount: project.contract_amount || '',
                 fundsUtilized: project.fundsUtilized || '',
+                // NEW FIELDS
+                statusDesignPhase: project.status_design_phase || project.statusDesignPhase || '',
+                contractId: project.contract_id || project.contractId || '',
+                dateNoticeOfAward: project.date_notice_of_award || project.dateNoticeOfAward || '',
+                issuanceOfInvitationToBid: project.issuance_of_invitation_to_bid || project.issuanceOfInvitationToBid || '',
+                preBidConference: project.pre_bid_conference || project.preBidConference || '',
+                openingOfTechnicalProposal: project.opening_of_technical_proposal || project.openingOfTechnicalProposal || '',
+                openingOfFinancialProposal: project.opening_of_financial_proposal || project.openingOfFinancialProposal || '',
+                requestForQuotation: project.request_for_quotation || project.requestForQuotation || '',
+                negotiation: project.negotiation || project.negotiation || '',
+                openingOfQuotation: project.opening_of_quotation || project.openingOfQuotation || '',
                 statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0], // Default to today if missing
                 accomplishmentPercentage: project.accomplishmentPercentage || 0,
-                status: project.status || ProjectStatus.NotYetStarted,
+                status: project.status_of_construction_phase || project.status || ProjectStatus.NotYetStarted,
                 otherRemarks: project.otherRemarks || '',
                 // Tab Modes
                 hasVariationOrder: project.hasVariationOrder || project.has_variation_order || false,
@@ -407,6 +418,10 @@ const EditProjectModal = ({
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contractor</label>
                     <input name="contractorName" value={formData.contractorName} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contract ID</label>
+                    <input name="contractId" value={formData.contractId || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
                 </div>
             </div>
 
@@ -702,14 +717,52 @@ const EditProjectModal = ({
                 <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Procurement Stage</label>
                 <select name="procurement_stage" value={formData.procurement_stage || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs">
                     <option value="">Select Stage...</option>
-                    <option value="Pre-Procurement">Pre-Procurement</option>
-                    <option value="Advertisement">Advertisement</option>
-                    <option value="Pre-Bid Conference">Pre-Bid Conference</option>
-                    <option value="Opening of Bids">Opening of Bids</option>
-                    <option value="Bid Evaluation">Bid Evaluation</option>
-                    <option value="Post Qualification">Post Qualification</option>
-                    <option value="Awarded">Awarded</option>
+                    <option value="Not Yet Started">Not Yet Started</option>
+                    <option value="Under Procurement">Under Procurement</option>
+                    <option value="Ongoing">Ongoing</option>
+                    <option value="For Final Inspection">For Final Inspection</option>
+                    <option value="Completed">Completed</option>
                 </select>
+            </div>
+        </div>
+    );
+
+    const renderProcurementMilestones = () => (
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2"><span>⚖️</span> Procurement Milestones</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Invitation to Bid</label>
+                    <input type="date" name="issuanceOfInvitationToBid" value={formData.issuanceOfInvitationToBid || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Pre-Bid Conference</label>
+                    <input type="date" name="preBidConference" value={formData.preBidConference || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Opening of Tech. Proposal</label>
+                    <input type="date" name="openingOfTechnicalProposal" value={formData.openingOfTechnicalProposal || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Opening of Fin. Proposal</label>
+                    <input type="date" name="openingOfFinancialProposal" value={formData.openingOfFinancialProposal || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Request for Quotation</label>
+                    <input type="date" name="requestForQuotation" value={formData.requestForQuotation || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Negotiation</label>
+                    <input type="date" name="negotiation" value={formData.negotiation || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Opening of Quotation</label>
+                    <input type="date" name="openingOfQuotation" value={formData.openingOfQuotation || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Notice of Award</label>
+                    <input type="date" name="dateNoticeOfAward" value={formData.dateNoticeOfAward || ''} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
             </div>
         </div>
     );
@@ -718,22 +771,44 @@ const EditProjectModal = ({
         // Show status fields even for VO
         
         return (
-            <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Current Status</label>
-                <div className="relative">
-                    <select
-                        name="status"
-                        value={formData.status}
-                        onChange={handleChange}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
-                    >
-                        {Object.values(ProjectStatus).map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                        <FiSettings className="text-slate-400" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status Design Phase</label>
+                    <div className="relative">
+                        <select
+                            name="statusDesignPhase"
+                            value={formData.statusDesignPhase || ''}
+                            onChange={handleChange}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                        >
+                            <option value="Not Yet Started">Not Yet Started</option>
+                            <option value="Under Procurement">Under Procurement</option>
+                            <option value="Ongoing">Ongoing</option>
+                            <option value="For Final Inspection">For Final Inspection</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                            <FiSettings className="text-slate-400" />
+                        </div>
+                    </div>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status of Construction Phase</label>
+                    <div className="relative">
+                        <select
+                            name="status"
+                            value={formData.status}
+                            onChange={handleChange}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                        >
+                            {Object.values(ProjectStatus).map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
+                        </select>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                            <FiSettings className="text-slate-400" />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -961,6 +1036,7 @@ const EditProjectModal = ({
                     {!formData.hasVariationOrder && !formData.isRealignment && formData.isProjectDetailsUpdate && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             {renderTimelineAndFunds()}
+                            {renderProcurementMilestones()}
                             {renderDocumentUploads()}
                         </div>
                     )}
@@ -976,6 +1052,7 @@ const EditProjectModal = ({
                                 {renderDocumentUploads()}
 
                                 {renderTimelineAndFunds()}
+                                {renderProcurementMilestones()}
                                 {renderLocation()}
                                 {(formData.province || formData.municipality || formData.userRole === 'Local Government Unit') && renderLguDetails()}
                             </div>

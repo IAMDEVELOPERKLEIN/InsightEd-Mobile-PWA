@@ -153,8 +153,19 @@ const NewProjects = () => {
 
         // Status & Progress
         status: 'Not Yet Started',
+        statusDesignPhase: '',
         accomplishmentPercentage: 0,
         statusAsOfDate: '',
+
+        // Procurement Milestones
+        issuanceOfInvitationToBid: '',
+        preBidConference: '',
+        openingOfTechnicalProposal: '',
+        openingOfFinancialProposal: '',
+        requestForQuotation: '',
+        negotiation: '',
+        openingOfQuotation: '',
+        dateNoticeOfAward: '',
 
         // Timelines
         targetCompletionDate: '',
@@ -162,6 +173,7 @@ const NewProjects = () => {
         noticeToProceed: '',
 
         // Contractors & Funds
+        contractId: '',
         contractorName: '',
         approved_budget_for_contract: '',
         contract_amount: '',
@@ -618,6 +630,7 @@ const NewProjects = () => {
             // C. Construct Payload
             const projectBody = {
                 ...formData,
+                statusOfConstructionPhase: formData.status,
                 approved_budget_for_contract: Number(formData.approved_budget_for_contract?.toString().replace(/,/g, '') || 0),
                 contract_amount: Number(formData.contract_amount?.toString().replace(/,/g, '') || 0),
                 uid: auth.currentUser?.uid,
@@ -1095,7 +1108,18 @@ const NewProjects = () => {
                         <SectionHeader title="Status and Progress" icon="📊" />
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Initial Status</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status Design Phase</label>
+                                <select name="statusDesignPhase" value={formData.statusDesignPhase || ''} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
+                                    <option value="">Select Design Phase Status...</option>
+                                    <option value="Not Yet Started">Not Yet Started</option>
+                                    <option value="Under Procurement">Under Procurement</option>
+                                    <option value="Ongoing">Ongoing</option>
+                                    <option value="For Final Inspection">For Final Inspection</option>
+                                    <option value="Completed">Completed</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status of Construction Phase</label>
                                 <select name="status" value={formData.status} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
                                     <option value="Not Yet Started">Not Yet Started</option>
                                     <option value="Under Procurement">Under Procurement</option>
@@ -1125,6 +1149,45 @@ const NewProjects = () => {
                                 </div>
                             )}
                         </div>
+
+                    <SectionHeader title="Procurement Milestones" icon="⚖️" />
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
+                        <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Procurement Dates</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Issuance of Invitation to Bid</label>
+                                <input type="date" name="issuanceOfInvitationToBid" value={formData.issuanceOfInvitationToBid || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pre-Bid Conference</label>
+                                <input type="date" name="preBidConference" value={formData.preBidConference || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Technical Proposal</label>
+                                <input type="date" name="openingOfTechnicalProposal" value={formData.openingOfTechnicalProposal || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Financial Proposal</label>
+                                <input type="date" name="openingOfFinancialProposal" value={formData.openingOfFinancialProposal || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Request for Quotation</label>
+                                <input type="date" name="requestForQuotation" value={formData.requestForQuotation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Negotiation</label>
+                                <input type="date" name="negotiation" value={formData.negotiation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Quotation</label>
+                                <input type="date" name="openingOfQuotation" value={formData.openingOfQuotation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Notice of Award</label>
+                                <input type="date" name="dateNoticeOfAward" value={formData.dateNoticeOfAward || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                        </div>
+                    </div>
 
                         {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
                             <>
@@ -1245,6 +1308,10 @@ const NewProjects = () => {
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch of Funds</label>
                                 <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} readOnly={isDummy} placeholder="e.g. Batch 1" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract ID</label>
+                                <input name="contractId" value={formData.contractId || ''} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 23B0001" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contractor Name</label>

@@ -662,14 +662,22 @@ const DetailedProjInfo = () => {
                 <div className="px-5 -mt-8 relative z-10 space-y-4">
 
                     {/* Status Card */}
-                    <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-blue-500 flex justify-between items-center">
-                        <div>
-                            <p className="text-xs text-slate-500 font-bold uppercase">Current Status</p>
-                            <p className="text-lg font-bold text-[#004A99]">{project.status}</p>
+                    <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-blue-500 mb-4">
+                        <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
+                            <div>
+                                <p className="text-xs text-slate-500 font-bold uppercase">Status of Construction Phase</p>
+                                <p className="text-lg font-bold text-[#004A99]">{project.status_of_construction_phase || project.status}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-3xl font-bold text-slate-200">{project.accomplishmentPercentage}%</p>
+                                <p className="text-[10px] text-slate-400">Completion</p>
+                            </div>
                         </div>
-                        <div className="text-right">
-                            <p className="text-3xl font-bold text-slate-200">{project.accomplishmentPercentage}%</p>
-                            <p className="text-[10px] text-slate-400">Completion</p>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">Status Design Phase</p>
+                                <p className="text-sm font-semibold text-slate-700">{project.status_design_phase || project.statusDesignPhase || 'N/A'}</p>
+                            </div>
                         </div>
                     </div>
 
@@ -705,7 +713,10 @@ const DetailedProjInfo = () => {
                     <div>
                         <h3 className="text-slate-700 font-bold text-sm mb-2 ml-1">Project Details</h3>
                         <div className="space-y-3">
-                            <DetailItem label="Contractor" value={project.contractorName} />
+                            <div className="grid grid-cols-2 gap-3">
+                                <DetailItem label="Contractor" value={project.contractorName} />
+                                <DetailItem label="Contract ID" value={project.contract_id || project.contractId} />
+                            </div>
                             <DetailItem label="Scope of Work" value={project.scopeOfWork} />
                             <div className="grid grid-cols-2 gap-3">
                                 <DetailItem 
@@ -720,6 +731,47 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
                             </div>
                             <DetailItem label="Remarks" value={project.otherRemarks} />
+
+                    {/* Procurement Milestones Section */}
+                    <div className="mt-6 mb-6">
+                        <h3 className="text-slate-700 font-bold text-sm mb-2 ml-1 flex items-center gap-2"><span>⚖️</span> Procurement Milestones</h3>
+                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Issuance of Invitation to Bid</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.issuance_of_invitation_to_bid || project.issuanceOfInvitationToBid || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Pre-Bid Conference</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.pre_bid_conference || project.preBidConference || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Opening of Tech. Proposal</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.opening_of_technical_proposal || project.openingOfTechnicalProposal || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Opening of Fin. Proposal</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.opening_of_financial_proposal || project.openingOfFinancialProposal || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Request for Quotation</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.request_for_quotation || project.requestForQuotation || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Negotiation</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.negotiation || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Opening of Quotation</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.opening_of_quotation || project.openingOfQuotation || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Notice of Award</p>
+                                    <p className="text-xs font-semibold text-slate-700">{project.date_notice_of_award || project.dateNoticeOfAward || 'N/A'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                             {/* --- VARIATION ORDER DISPLAY --- */}
                             {project.hasVariationOrder && (
