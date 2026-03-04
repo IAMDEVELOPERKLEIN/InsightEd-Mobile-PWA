@@ -1,0 +1,70 @@
+[
+  {
+    "column_name": "Unnamed: 0",
+    "data_type": "bigint"
+  },
+  {
+    "column_name": "school.id",
+    "data_type": "bigint"
+  },
+  {
+    "column_name": "school.name",
+    "data_type": "text"
+  },
+  {
+    "column_name": "region",
+    "data_type": "text"
+  },
+  {
+    "column_name": "old.region",
+    "data_type": "text"
+  },
+  {
+    "column_name": "division",
+    "data_type": "text"
+  },
+  {
+    "column_name": "district",
+    "data_type": "text"
+  },
+  {
+    "column_name": "modified.coc",
+    "data_type": "text"
+  },
+  {
+    "column_name": "control_num",
+    "data_type": "text"
+  },
+  {
+    "column_name": "tin",
+    "data_type": "text"
+  },
+  {
+    "column_name": "first",
+    "data_type": "text"
+  },
+  {
+    "column_name": "middle",
+    "data_type": "text"
+  },
+  {
+    "column_name": "last",
+    "data_type": "text"
+  },
+  {
+    "column_name": "position",
+    "data_type": "text"
+  },
+  {
+    "column_name": "position_group",
+    "data_type": "text"
+  },
+  {
+    "column_name": "corrected.degree",
+    "data_type": "text"
+  },
+  {
+    "column_name": "specialization.final",
+    "data_type": "text"
+  }
+]

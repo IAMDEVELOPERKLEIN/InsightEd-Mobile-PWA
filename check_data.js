@@ -1,6 +1,5 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
-import fs from 'fs';
 dotenv.config();
 
 const pool = new pg.Pool({
@@ -10,11 +9,9 @@ const pool = new pg.Pool({
 
 async function run() {
   const result = await pool.query(`
-    SELECT column_name, data_type 
-    FROM information_schema.columns 
-    WHERE table_name = 'teachers_list';
+    SELECT * FROM teachers_list LIMIT 1;
   `);
-  fs.writeFileSync('schema_out.json', JSON.stringify(result.rows, null, 2));
+  console.log(JSON.stringify(result.rows, null, 2));
   process.exit(0);
 }
 run();

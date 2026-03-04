@@ -1,6 +1,5 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
-import fs from 'fs';
 dotenv.config();
 
 const pool = new pg.Pool({
@@ -10,11 +9,12 @@ const pool = new pg.Pool({
 
 async function run() {
   const result = await pool.query(`
-    SELECT column_name, data_type 
-    FROM information_schema.columns 
-    WHERE table_name = 'teachers_list';
+    SELECT table_name 
+    FROM information_schema.tables 
+    WHERE table_schema = 'public'
+      AND table_name LIKE '%teacher%';
   `);
-  fs.writeFileSync('schema_out.json', JSON.stringify(result.rows, null, 2));
+  console.log("Tables matching 'teacher':", result.rows.map(r => r.table_name));
   process.exit(0);
 }
 run();

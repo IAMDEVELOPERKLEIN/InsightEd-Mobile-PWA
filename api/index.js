@@ -519,6 +519,65 @@ const initDB = async () => {
     `);
     console.log("✅ DB Init: Teaching Personnel schema verified.");
 
+    // --- New: Individual Teachers List (Unit 6 / Unit 7) ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_teachers_list (
+        id SERIAL PRIMARY KEY,
+        iern VARCHAR(50),
+        school_id VARCHAR(50),
+        school_name VARCHAR(255),
+        region VARCHAR(50),
+        division VARCHAR(100),
+        district VARCHAR(100),
+        control_num VARCHAR(100),
+        tin VARCHAR(50),
+        first_name VARCHAR(100),
+        middle_name VARCHAR(100),
+        last_name VARCHAR(100),
+        position VARCHAR(100),
+        position_group VARCHAR(100),
+        corrected_degree VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("✅ DB Init: Teachers List schema verified.");
+
+    // --- New: Workload columns (Simplified) ---
+    const workloadCols = ['workload_hrs', 'workload_mins'];
+    for (const col of workloadCols) {
+      await pool.query(`ALTER TABLE ph_teachers_list ADD COLUMN IF NOT EXISTS ${col} INT DEFAULT 0;`);
+    }
+
+    // Migration: Rename old instructional columns to workload if they exist
+    try {
+      await pool.query(`ALTER TABLE ph_teachers_list RENAME COLUMN instructional_hrs TO workload_hrs;`);
+      console.log("Renamed instructional_hrs to workload_hrs");
+    } catch (e) { /* already renamed or doesn't exist */ }
+    
+    try {
+      await pool.query(`ALTER TABLE ph_teachers_list RENAME COLUMN instructional_mins TO workload_mins;`);
+      console.log("Renamed instructional_mins to workload_mins");
+    } catch (e) { /* already renamed or doesn't exist */ }
+
+    // Drop defunct columns if they exist
+    const defunctCols = ['ancillary_hrs', 'ancillary_mins'];
+    for (const col of defunctCols) {
+        try {
+            await pool.query(`ALTER TABLE ph_teachers_list DROP COLUMN IF EXISTS ${col};`);
+        } catch (e) { /* already dropped or busy */ }
+    }
+    console.log("✅ DB Init: Workload columns simplified on ph_teachers_list.");
+
+    // --- Add individual grade deployment columns to teaching_personnel ---
+    const gradeDeployCols = [
+      'deploy_k', 'deploy_g1', 'deploy_g2', 'deploy_g3', 'deploy_g4', 'deploy_g5', 'deploy_g6',
+      'deploy_g7', 'deploy_g8', 'deploy_g9', 'deploy_g10', 'deploy_g11', 'deploy_g12'
+    ];
+    for (const col of gradeDeployCols) {
+      await pool.query(`ALTER TABLE teaching_personnel ADD COLUMN IF NOT EXISTS ${col} INT DEFAULT 0;`);
+    }
+    console.log("✅ DB Init: Grade-level deploy columns verified on teaching_personnel.");
+
     // --- Ensure Unit 5 Shifting & Modality columns exist on ph_schools ---
     const shiftModeCols = [
       'has_standard_shifting BOOLEAN DEFAULT FALSE',
@@ -12242,6 +12301,22 @@ app.put('/api/ph_schools/unit6/:schoolId', async (req, res) => {
   }
 });
 
+// --- 27g-GET: Fetch Unit 7 Teaching Personnel Data ---
+app.get('/api/ph_schools/unit7/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM teaching_personnel WHERE school_id = $1', [schoolId]);
+    if (result.rows.length > 0) {
+      res.json({ exists: true, data: result.rows[0] });
+    } else {
+      res.json({ exists: false, data: null });
+    }
+  } catch (err) {
+    console.error("Fetch Teaching Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 // --- 27g. PUT: Save Unit 7 Teaching Personnel (Modular Beta) ---
 app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
@@ -12256,6 +12331,8 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
         school_id,
         fund_deped, fund_lgu, fund_others,
         deploy_kinder, deploy_elem, deploy_jhs, deploy_shs, deploy_sned, non_advisory,
+        deploy_k, deploy_g1, deploy_g2, deploy_g3, deploy_g4, deploy_g5, deploy_g6,
+        deploy_g7, deploy_g8, deploy_g9, deploy_g10, deploy_g11, deploy_g12,
         mg_1_2, mg_3_4, mg_5_6, mg_has_3_plus, mg_3_plus_count,
         dept_english, dept_filipino, dept_science, dept_math, dept_ap, dept_mapeh, dept_tle, dept_values, dept_gened, dept_ece, dept_others,
         exp_0_1, exp_2_5, exp_6_10, exp_11_15, exp_16_20, exp_21_25, exp_26_30, exp_31_35, exp_36_40, exp_40_45,
@@ -12264,17 +12341,21 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
         $1,
         $2,$3,$4,
         $5,$6,$7,$8,$9,$10,
-        $11,$12,$13,$14,$15,
-        $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
-        $27,$28,$29,$30,$31,$32,$33,$34,$35,$36,
+        $11,$12,$13,$14,$15,$16,$17,
+        $18,$19,$20,$21,$22,$23,
+        $24,$25,$26,$27,$28,
+        $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,
+        $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,
         CURRENT_TIMESTAMP
       )
       ON CONFLICT (school_id) DO UPDATE SET
         fund_deped=$2, fund_lgu=$3, fund_others=$4,
         deploy_kinder=$5, deploy_elem=$6, deploy_jhs=$7, deploy_shs=$8, deploy_sned=$9, non_advisory=$10,
-        mg_1_2=$11, mg_3_4=$12, mg_5_6=$13, mg_has_3_plus=$14, mg_3_plus_count=$15,
-        dept_english=$16, dept_filipino=$17, dept_science=$18, dept_math=$19, dept_ap=$20, dept_mapeh=$21, dept_tle=$22, dept_values=$23, dept_gened=$24, dept_ece=$25, dept_others=$26,
-        exp_0_1=$27, exp_2_5=$28, exp_6_10=$29, exp_11_15=$30, exp_16_20=$31, exp_21_25=$32, exp_26_30=$33, exp_31_35=$34, exp_36_40=$35, exp_40_45=$36,
+        deploy_k=$11, deploy_g1=$12, deploy_g2=$13, deploy_g3=$14, deploy_g4=$15, deploy_g5=$16, deploy_g6=$17,
+        deploy_g7=$18, deploy_g8=$19, deploy_g9=$20, deploy_g10=$21, deploy_g11=$22, deploy_g12=$23,
+        mg_1_2=$24, mg_3_4=$25, mg_5_6=$26, mg_has_3_plus=$27, mg_3_plus_count=$28,
+        dept_english=$29, dept_filipino=$30, dept_science=$31, dept_math=$32, dept_ap=$33, dept_mapeh=$34, dept_tle=$35, dept_values=$36, dept_gened=$37, dept_ece=$38, dept_others=$39,
+        exp_0_1=$40, exp_2_5=$41, exp_6_10=$42, exp_11_15=$43, exp_16_20=$44, exp_21_25=$45, exp_26_30=$46, exp_31_35=$47, exp_36_40=$48, exp_40_45=$49,
         updated_at=CURRENT_TIMESTAMP
     `;
 
@@ -12282,6 +12363,8 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
       schoolId,
       pInt(d.fund_deped), pInt(d.fund_lgu), pInt(d.fund_others),
       pInt(d.deploy_kinder), pInt(d.deploy_elem), pInt(d.deploy_jhs), pInt(d.deploy_shs), pInt(d.deploy_sned), pInt(d.non_advisory),
+      pInt(d.deploy_k), pInt(d.deploy_g1), pInt(d.deploy_g2), pInt(d.deploy_g3), pInt(d.deploy_g4), pInt(d.deploy_g5), pInt(d.deploy_g6),
+      pInt(d.deploy_g7), pInt(d.deploy_g8), pInt(d.deploy_g9), pInt(d.deploy_g10), pInt(d.deploy_g11), pInt(d.deploy_g12),
       pInt(d.mg_1_2), pInt(d.mg_3_4), pInt(d.mg_5_6), !!d.mg_has_3_plus, pInt(d.mg_3_plus_count),
       pInt(d.dept_english), pInt(d.dept_filipino), pInt(d.dept_science), pInt(d.dept_math), pInt(d.dept_ap), pInt(d.dept_mapeh), pInt(d.dept_tle), pInt(d.dept_values), pInt(d.dept_gened), pInt(d.dept_ece), pInt(d.dept_others),
       pInt(d.exp_0_1), pInt(d.exp_2_5), pInt(d.exp_6_10), pInt(d.exp_11_15), pInt(d.exp_16_20), pInt(d.exp_21_25), pInt(d.exp_26_30), pInt(d.exp_31_35), pInt(d.exp_36_40), pInt(d.exp_40_45),
@@ -12300,6 +12383,226 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
     res.json({ success: true, message: "Unit 7 Teaching Personnel data saved successfully!" });
   } catch (err) {
     console.error("Save Unit 7 Teaching Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// ==========================================
+// UNIT 8: PERSONNEL REGISTRY ENDPOINTS
+// ==========================================
+
+// --- GET: Fetch all personnel for a school (with Auto-Seeding) ---
+app.get('/api/personnel/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    // 1. Check if ph_teachers_list is empty for this school
+    const existing = await pool.query('SELECT * FROM ph_teachers_list WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
+
+    if (existing.rows.length === 0) {
+      // 2. Auto-seed from existing teachers_list table
+      const legacyTeachers = await pool.query('SELECT * FROM teachers_list WHERE CAST("school.id" AS TEXT) = $1', [schoolId]);
+      
+      if (legacyTeachers.rows.length > 0) {
+        // Fetch school basic info for the new records
+        const schoolRes = await pool.query('SELECT school_name, region, division, district FROM ph_schools WHERE school_id = $1', [schoolId]);
+        const schoolInfo = schoolRes.rows[0] || { school_name: '', region: '', division: '', district: '' };
+
+        for (const t of legacyTeachers.rows) {
+          await pool.query(`
+            INSERT INTO ph_teachers_list (
+              school_id, school_name, region, division, district,
+              control_num, tin, first_name, middle_name, last_name,
+              position, position_group, corrected_degree,
+              workload_hrs, workload_mins
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, 0)
+          `, [
+            schoolId,
+            schoolInfo.school_name,
+            schoolInfo.region,
+            schoolInfo.division,
+            schoolInfo.district,
+            t.control_num || null,
+            t.tin || null,
+            t.first || null,
+            t.middle || null,
+            t.last || null,
+            t.position || null,
+            t.position_group || 'Teaching',
+            t['corrected.degree'] || null
+          ]);
+        }
+        
+        // Refetch after seeding
+        const newlySeeded = await pool.query('SELECT * FROM ph_teachers_list WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
+        return res.json({ success: true, data: newlySeeded.rows, seeded: true });
+      }
+    }
+
+    res.json({ success: true, data: existing.rows, seeded: false });
+  } catch (err) {
+    console.error("Fetch Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- POST: Add new personnel to a school ---
+app.post('/api/personnel', async (req, res) => {
+  const { schoolId, data } = req.body;
+  try {
+    // 1. Fetch school details from ph_schools to auto-populate the registry
+    const schoolRes = await pool.query('SELECT school_name, region, division, district FROM ph_schools WHERE school_id = $1', [schoolId]);
+    
+    if (schoolRes.rows.length === 0) {
+      return res.status(404).json({ error: "School not found" });
+    }
+
+    const schoolInfo = schoolRes.rows[0];
+
+    // 2. Insert into ph_teachers_list
+    const insertQuery = `
+      INSERT INTO ph_teachers_list (
+        school_id, school_name, region, division, district,
+        control_num, tin, first_name, middle_name, last_name,
+        position, position_group, corrected_degree,
+        workload_hrs, workload_mins
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *;
+    `;
+    
+    const values = [
+      schoolId,
+      schoolInfo.school_name,
+      schoolInfo.region,
+      schoolInfo.division,
+      schoolInfo.district,
+      data.control_num || null,
+      data.tin || null,
+      data.first_name || null,
+      data.middle_name || null,
+      data.last_name || null,
+      data.position || null,
+      data.position_group || 'Teaching', // Default based on user typical entry
+      data.corrected_degree || null,
+      data.workload_hrs ? parseInt(data.workload_hrs) : 0,
+      data.workload_mins ? parseInt(data.workload_mins) : 0
+    ];
+
+    const result = await pool.query(insertQuery, values);
+    
+    // 3. Mark unit8_completed flag in ph_schools (Optional/Future proofing)
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query(`UPDATE ph_schools SET unit8_completed = TRUE WHERE school_id = $1`, [schoolId]);
+
+    res.json({ success: true, data: result.rows[0], message: "Personnel added successfully!" });
+  } catch (err) {
+    console.error("Add Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- DELETE: Remove personnel ---
+app.delete('/api/personnel/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM ph_teachers_list WHERE id = $1 RETURNING *', [id]);
+    if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Personnel record not found" });
+    }
+    res.json({ success: true, message: "Personnel removed successfully!" });
+  } catch (err) {
+    console.error("Delete Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+// --- PUT: Edit personnel ---
+app.put('/api/personnel/:id', async (req, res) => {
+  const { id } = req.params;
+  const { data } = req.body;
+  try {
+    const updateQuery = `
+      UPDATE ph_teachers_list 
+      SET 
+        control_num = $1, 
+        tin = $2, 
+        first_name = $3, 
+        middle_name = $4, 
+        last_name = $5,
+        position = $6, 
+        position_group = $7, 
+        corrected_degree = $8,
+        workload_hrs = $9,
+        workload_mins = $10
+      WHERE id = $11
+      RETURNING *;
+    `;
+    const values = [
+      data.control_num || null,
+      data.tin || null,
+      data.first_name || null,
+      data.middle_name || null,
+      data.last_name || null,
+      data.position || null,
+      data.position_group || 'Teaching',
+      data.corrected_degree || null,
+      data.instructional_hrs ? parseInt(data.instructional_hrs) : 0,
+      data.instructional_mins ? parseInt(data.instructional_mins) : 0,
+      data.ancillary_hrs ? parseInt(data.ancillary_hrs) : 0,
+      data.ancillary_mins ? parseInt(data.ancillary_mins) : 0,
+      id
+    ];
+    
+    const result = await pool.query(updateQuery, values);
+    if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Personnel record not found" });
+    }
+    res.json({ success: true, data: result.rows[0], message: "Personnel updated successfully!" });
+  } catch (err) {
+    console.error("Update Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- PUT: Quick Edit Personnel Workload (Inline) ---
+app.put('/api/personnel/:id/workload', async (req, res) => {
+  const { id } = req.params;
+  const { workload_hrs, workload_mins } = req.body;
+  try {
+    const updateQuery = `
+      UPDATE ph_teachers_list 
+      SET 
+        workload_hrs = $1,
+        workload_mins = $2
+      WHERE id = $3
+      RETURNING *;
+    `;
+    const values = [
+      workload_hrs ? parseInt(workload_hrs) : 0,
+      workload_mins ? parseInt(workload_mins) : 0,
+      id
+    ];
+    
+    const result = await pool.query(updateQuery, values);
+    if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Personnel record not found" });
+    }
+    res.json({ success: true, data: result.rows[0], message: "Workload updated successfully!" });
+  } catch (err) {
+    console.error("Update Personnel Workload Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- POST: Finalize Unit 8 ---
+app.post('/api/ph_schools/unit8/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    // Mark unit8_completed flag in ph_schools
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query(`UPDATE ph_schools SET unit8_completed = TRUE WHERE school_id = $1`, [schoolId]);
+
+    res.json({ success: true, message: "Unit 8 Personnel Registry finalized!" });
+  } catch (err) {
+    console.error("Finalize Unit 8 Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
