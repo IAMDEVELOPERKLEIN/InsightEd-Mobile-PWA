@@ -603,8 +603,11 @@ const Register = () => {
             // STEP D: Success
             if ((formData.role === 'School Head' || formData.role === 'Beta Tester') && regData?.iern) {
                 setRegisteredIern(regData.iern);
-                // Set role in localStorage for immediate access by Dashboard/BottomNav when the user clicks 'Continue'
+                // Set role and schoolId in localStorage for immediate access by Dashboard/BottomNav/Modular Units
                 localStorage.setItem('userRole', formData.role);
+                if (selectedSchool?.school_id) {
+                    localStorage.setItem('schoolId', selectedSchool.school_id);
+                }
                 setShowSuccessModal(true);
             } else {
                 // Set role in localStorage for immediate access by Dashboard/BottomNav
@@ -657,7 +660,7 @@ const Register = () => {
                                         <option value="EFD">EFD (Engineering Facilities Division)</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         <option value="Central Office Finance">Central Office Finance</option>
-                                        {/* <option value="Beta Tester">Beta Tester</option> */}
+                                        <option value="Beta Tester">Beta Tester</option>
                                         {/* <option value="Super User" hidden>Super User</option> */}
                                         {/* Super User hidden from registration - managed internally */}
                                         {/* {<option value="Admin">Admin</option>} */}

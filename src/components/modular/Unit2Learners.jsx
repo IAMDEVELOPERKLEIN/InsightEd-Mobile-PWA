@@ -20,6 +20,7 @@ const Unit2Learners = () => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
     const [isReviewMode, setIsReviewMode] = useState(false);
+    const [curricularOffering, setCurricularOffering] = useState("");
 
     // Form State
     const [formData, setFormData] = useState({
@@ -71,8 +72,12 @@ const Unit2Learners = () => {
                 const res = await fetch(`/api/ph_schools/${storedId}`);
                 if (res.ok) {
                     const saved = await res.json();
-                    if (saved.exists && saved.data && saved.data.enroll_kinder !== null) {
+                    if (saved.exists && saved.data) {
                         const d = saved.data;
+                        setCurricularOffering(d.curricular_offering || "");
+
+                        if (!d.unit2_completed) return; // No saved Unit 2 data yet
+
                         // Pre-fill all form fields from saved data
                         setFormData(prev => ({
                             ...prev,
@@ -132,6 +137,27 @@ const Unit2Learners = () => {
         setFormData((prev) => ({ ...prev, [name]: value }));
     };
 
+    // --- DYNAMIC GRADE LOGIC ---
+    const visibleGrades = useMemo(() => {
+        const co = (curricularOffering || "").toLowerCase();
+        if (co.includes("purely elementary")) {
+            return ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+        } else if (co.includes("purely junior")) {
+            return ['g7', 'g8', 'g9', 'g10'];
+        } else if (co.includes("purely senior")) {
+            return ['g11', 'g12'];
+        } else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) {
+            return ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (co.includes("elementary school and junior high school")) {
+            return ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+        } else {
+            // Fallback for All Offering (K to 12) or undefined
+            return ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        }
+    }, [curricularOffering]);
+
+    const hasElementary = visibleGrades.some(g => ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'].includes(g));
+
     // --- MAGIC MATH LOGIC ---
     // sum base enrollment
     const totalEnrollment = useMemo(() => {
@@ -157,25 +183,25 @@ const Unit2Learners = () => {
 
 
     const handleBack = () => {
-        if (currentStep > 1) {
-            setCurrentStep(currentStep - 1);
-        } else {
-            navigate(-1);
-        }
+        let prevStep = currentStep - 1;
+        if (prevStep === 3 && !hasElementary) prevStep = 2;
+
+        if (prevStep >= 1) setCurrentStep(prevStep);
+        else navigate(-1);
     };
 
     const handleNext = () => {
-        if (currentStep < TOTAL_STEPS) {
-            setCurrentStep(currentStep + 1);
-        } else {
-            handleSubmit();
-        }
+        let nextStep = currentStep + 1;
+        if (nextStep === 3 && !hasElementary) nextStep = 4;
+
+        if (nextStep <= TOTAL_STEPS) setCurrentStep(nextStep);
+        else handleSubmit();
     };
 
     // ---------- Validation per step ----------
     const isStep1Valid = totalEnrollment > 0;
     const isStep2Valid = formData.hasSned !== null && formData.hasNonGraded !== null;
-    const isStep3Valid = formData.hasAralMath !== null && formData.hasAralRead !== null && formData.hasAralSci !== null;
+    const isStep3Valid = !hasElementary ? true : (formData.hasAralMath !== null && formData.hasAralRead !== null && formData.hasAralSci !== null);
     const isStep4Valid = formData.male_enrollment !== "" && parseInt(formData.male_enrollment) <= totalEnrollment;
     const isStep5Valid = formData.verified_as_of === true;
 
@@ -235,7 +261,9 @@ const Unit2Learners = () => {
         }
     };
 
-    const progressPercentage = (currentStep / TOTAL_STEPS) * 100;
+    const activeTotalSteps = hasElementary ? 5 : 4;
+    const displayStep = (!hasElementary && currentStep > 3) ? currentStep - 1 : currentStep;
+    const progressPercentage = (displayStep / activeTotalSteps) * 100;
 
     // Slide animation direction
     const slideVariants = {
@@ -365,7 +393,7 @@ const Unit2Learners = () => {
                                         },
                                     ].filter(g => g.has && g.total > 0);
 
-                                    if (aralGroups.length === 0) return null;
+                                    if (aralGroups.length === 0 || !hasElementary) return null;
                                     return (
                                         <div className="pt-2 space-y-2">
                                             <p className="text-xs font-bold uppercase tracking-wider text-gray-300">ARAL Learners</p>
@@ -422,7 +450,7 @@ const Unit2Learners = () => {
                                 </div>
 
                                 <div className="space-y-4">
-                                    {['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'].map((grade) => (
+                                    {visibleGrades.map((grade) => (
                                         <div key={grade} className="flex items-center gap-4">
                                             <label className="w-20 text-sm font-bold uppercase tracking-wider text-gray-400">
                                                 {grade === 'kinder' ? 'Kinder' : grade.toUpperCase()}

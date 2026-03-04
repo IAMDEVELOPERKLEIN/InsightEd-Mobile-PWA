@@ -1,0 +1,14 @@
+﻿[dotenv@17.2.3] injecting env (4) from .env -- tip: ≡ƒöÉ prevent committing .env to code: https://dotenvx.com/precommit
+{
+  "id": 1,
+  "iern": "2026-00001",
+  "SchoolID": "134295",
+  "Region": "Region IX",
+  "Division": "Sulu",
+  "District": "Indanan",
+  "School_Name": "Badjao Elementary school",
+  "Barangay": "BATO-BATO",
+  "Latitude": "6.028646",
+  "Longitude": "120.9503435",
+  "Curricular_Offering": null
+}

@@ -88,12 +88,7 @@ const Unit3OrganizedClasses = () => {
                 const res = await fetch(`/api/ph_schools/${storedId}`);
                 if (res.ok) {
                     const saved = await res.json();
-                    if (
-                        saved.exists &&
-                        saved.data &&
-                        saved.data.has_multigrade !== null &&
-                        saved.data.has_multigrade !== undefined
-                    ) {
+                    if (saved.exists && saved.data && saved.data.unit3_completed) {
                         const d = saved.data;
                         setSavedData(d);
 

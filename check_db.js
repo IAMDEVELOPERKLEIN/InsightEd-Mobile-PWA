@@ -1,18 +1,20 @@
-const { Pool } = require('pg');
-const dbUrl = 'postgres://postgres:TRIDEINSIGHTED2026@localhost:5432/insighted';
-const pool = new Pool({
-    connectionString: dbUrl
+import pg from 'pg';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
-async function check() {
-    try {
-        const res = await pool.query('SELECT assigned_to, COUNT(*) FROM congressional_initiatives GROUP BY assigned_to');
-        console.log('Assignment Summary:', JSON.stringify(res.rows, null, 2));
-    } catch (err) {
-        console.error('Error:', err.message);
-    } finally {
-        pool.end();
-    }
+async function run() {
+  const result = await pool.query(`
+    SELECT table_name 
+    FROM information_schema.tables 
+    WHERE table_schema = 'public'
+      AND table_name LIKE '%teacher%';
+  `);
+  console.log("Tables matching 'teacher':", result.rows.map(r => r.table_name));
+  process.exit(0);
 }
-
-check();
+run();

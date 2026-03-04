@@ -1,0 +1,369 @@
+﻿
+  api\index.js:5063:   
+ }
+  api\index.js:5064:
+> api\index.js:5065:   
+ // 3. HYDRATE 
+PH_SCHOOLS ONLY (Skip 
+school_profiles)
+  api\index.js:5066:   
+ const insertQuery = `
+> api\index.js:5067:   
+   INSERT INTO 
+ph_schools (
+  api\index.js:5068:   
+     school_id, 
+school_name, region, 
+province, 
+municipality, 
+division, district, 
+leg_district, 
+curricular_offering, 
+latitude, longitude, 
+barangay, iern, 
+updated_at
+  api\index.js:5069:   
+   ) VALUES ($1, $2, 
+$3, $4, $5, $6, $7, 
+$8, $9, $10, $11, $12, 
+$13, CURRENT_TIMESTAMP)
+  api\index.js:11443:  
+  }
+  api\index.js:11444:
+> api\index.js:11445:  
+  // 1. Expected 
+Schools (from 
+ph_schools)
+> api\index.js:11446:  
+  const expectedQuery 
+= `SELECT COUNT(*) as 
+total FROM ph_schools 
+p WHERE 
+${phWhereClause}`;
+  api\index.js:11447:  
+  const expectedRes = 
+await pool.query(expect
+edQuery, params);
+  api\index.js:11448:  
+  const 
+expected_schools = pars
+eInt(expectedRes.rows[0
+].total) || 0;
+  api\index.js:11467:  
+      END as 
+data_health_score,
+  api\index.js:11468:  
+      s.updated_at as 
+last_updated
+> api\index.js:11469:  
+    FROM ph_schools p
+  api\index.js:11470:  
+    LEFT JOIN 
+school_profiles s ON 
+p.school_id = 
+s.school_id
+  api\index.js:11471:  
+    WHERE 
+${phWhereClause}
+  api\index.js:11540:  
+      ) as 
+issues_detected
+  api\index.js:11541:  
+    FROM 
+school_profiles s
+> api\index.js:11542:  
+    LEFT JOIN 
+ph_schools p ON 
+s.school_id = 
+p.school_id
+  api\index.js:11543:  
+    WHERE 
+${whereClause}
+  api\index.js:11544:  
+    ORDER BY 
+data_health_score ASC
+  api\index.js:11594:  
+  }
+  api\index.js:11595:
+> api\index.js:11596:  
+  // Select all 
+columns from 
+school_profiles and 
+the classification 
+columns from ph_schools
+  api\index.js:11597:  
+  const query = `
+  api\index.js:11598:  
+    SELECT 
+  api\index.js:11600:  
+      p.district
+  api\index.js:11601:  
+    FROM 
+school_profiles s
+> api\index.js:11602:  
+    LEFT JOIN 
+ph_schools p ON 
+s.school_id = 
+p.school_id
+  api\index.js:11603:  
+    WHERE 
+${whereClause}
+  api\index.js:11604:  
+    ORDER BY 
+s.school_name ASC
+  api\index.js:11648:  
+    SELECT s.*, 
+p.district as 
+derived_district, 
+p.division as 
+derived_division, 
+p.region as 
+derived_region
+  api\index.js:11649:  
+    FROM 
+school_profiles s
+> api\index.js:11650:  
+    LEFT JOIN 
+ph_schools p ON 
+s.school_id = 
+p.school_id
+  api\index.js:11651:  
+    WHERE 
+${whereClause}
+  api\index.js:11652:  
+    ORDER BY 
+s.school_name ASC
+  api\index.js:11772:
+  
+api\index.js:11773:// =
+=======================
+=======================
+===================
+> 
+api\index.js:11774://  
+             MODULAR 
+BETA ENDPOINTS 
+(PH_SCHOOLS)
+  
+api\index.js:11775:// =
+=======================
+=======================
+===================
+  api\index.js:11776:
+  
+api\index.js:11777:// 
+--- 28. GET: Fetch 
+Quest Progress 
+(Modular Beta) ---
+> api\index.js:11778:ap
+p.get('/api/ph_schools/
+progress/:schoolId', 
+async (req, res) => {
+  api\index.js:11779:  
+const { schoolId } = 
+req.params;
+  api\index.js:11780:  
+try {
+  api\index.js:11781:  
+  const result = await 
+pool.query(
+> api\index.js:11782:  
+    'SELECT 
+total_enrollment, 
+enroll_kinder, 
+has_multigrade, selecte
+d_learner_groups, 
+curricular_offering 
+FROM ph_schools WHERE 
+school_id = $1',
+  api\index.js:11783:  
+    [schoolId]
+  api\index.js:11784:  
+  );
+  
+api\index.js:11815:});
+  api\index.js:11816:
+> 
+api\index.js:11817:// 
+--- 29a. GET: Fetch 
+Saved Ph_Schools Data 
+(for Review Mode 
+pre-fill) ---
+> api\index.js:11818:ap
+p.get('/api/ph_schools/
+:schoolId', async 
+(req, res) => {
+  api\index.js:11819:  
+const { schoolId } = 
+req.params;
+  api\index.js:11820:  
+try {
+> api\index.js:11821:  
+  const result = await 
+pool.query('SELECT * 
+FROM ph_schools WHERE 
+school_id = $1', 
+[schoolId]);
+  api\index.js:11822:  
+  if 
+(result.rows.length > 
+0) {
+  api\index.js:11823:  
+    res.json({ exists: 
+true, data: 
+result.rows[0] });
+  api\index.js:11826:  
+  }
+  api\index.js:11827:  
+} catch (err) {
+> api\index.js:11828:  
+  console.error("Fetch 
+ph_schools Error:", 
+err);
+  api\index.js:11829:  
+  
+res.status(500).json({ 
+error: "Internal 
+Server Error" });
+  api\index.js:11830:  
+}
+  api\index.js:11832:
+  
+api\index.js:11833:// 
+--- 29. POST: Save 
+Unit 1 School Identity 
+Data (Modular Beta) ---
+> api\index.js:11834:ap
+p.post('/api/ph_schools
+/unit1', async (req, 
+res) => {
+  api\index.js:11835:  
+const data = req.body;
+  api\index.js:11836:  
+try {
+  api\index.js:11837:  
+  const query = `
+> api\index.js:11838:  
+    INSERT INTO 
+ph_schools (
+  api\index.js:11839:  
+      school_id, iern, 
+school_name, region, 
+province, 
+municipality, barangay,
+  api\index.js:11840:  
+      division, 
+district, 
+leg_district, 
+curricular_offering, 
+latitude, longitude
+  api\index.js:11877:
+  
+api\index.js:11878:// 
+--- 27. PUT: Save Unit 
+2 Learner Data 
+(Modular Beta) ---
+> api\index.js:11879:ap
+p.put('/api/ph_schools/
+unit2/:schoolId', 
+async (req, res) => {
+  api\index.js:11880:  
+const { schoolId } = 
+req.params;
+  api\index.js:11881:  
+const data = req.body;
+  api\index.js:11907:  
+  ];
+  api\index.js:11908:
+> api\index.js:11909:  
+  const query = 
+`UPDATE ph_schools SET 
+${fields.join(', ')} 
+WHERE school_id = $37`;
+  api\index.js:11910:
+  api\index.js:11911:  
+  await 
+pool.query(query, 
+values);
+  api\index.js:11926:
+  
+api\index.js:11927:// 
+--- 30. PUT: Save Unit 
+3 Organized Classes 
+Data (Modular Beta) ---
+> api\index.js:11928:ap
+p.put('/api/ph_schools/
+unit3/:schoolId', 
+async (req, res) => {
+  api\index.js:11929:  
+const { schoolId } = 
+req.params;
+  api\index.js:11930:  
+const data = req.body;
+  api\index.js:11943:
+  api\index.js:11944:  
+  const query = `
+> api\index.js:11945:  
+    UPDATE ph_schools
+  api\index.js:11946:  
+    SET
+  api\index.js:11947:  
+      has_multigrade   
+   = $1,
+  api\index.js:11985:
+  
+api\index.js:11986:// 
+--- 31. PUT: Save Unit 
+4 Learner Profile 
+(Modular Beta) ---
+> api\index.js:11987:ap
+p.put('/api/ph_schools/
+unit4/:schoolId', 
+async (req, res) => {
+  api\index.js:11988:  
+const { schoolId } = 
+req.params;
+  api\index.js:11989:  
+const data = req.body;
+  api\index.js:12028:
+  api\index.js:12029:  
+  const query = `
+> api\index.js:12030:  
+    UPDATE ph_schools
+  api\index.js:12031:  
+    SET 
+${setClauses.join(', 
+')}
+  api\index.js:12032:  
+    WHERE school_id = 
+$${vCount}
+  api\index.js:12048:
+  
+api\index.js:12049:// 
+--- 27e. PUT: Save 
+Unit 5 Shifting & 
+Modalities (Modular 
+Beta) ---
+> api\index.js:12050:ap
+p.put('/api/ph_schools/
+unit5/:schoolId', 
+async (req, res) => {
+  api\index.js:12051:  
+const { schoolId } = 
+req.params;
+  api\index.js:12052:  
+const data = req.body;
+  api\index.js:12094:
+  api\index.js:12095:  
+  const query = `
+> api\index.js:12096:  
+      UPDATE 
+ph_schools 
+  api\index.js:12097:  
+      SET ${dynamicFiel
+ds.join(', ')} 
+  api\index.js:12098:  
+      WHERE school_id 
+= $${paramIdx}
+
+
