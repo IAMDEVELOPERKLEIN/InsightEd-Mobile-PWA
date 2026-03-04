@@ -258,45 +258,53 @@ const initDB = async () => {
       );
     `);
 
-    await pool.query(`
-        ALTER TABLE lgu_forms
-        ADD COLUMN IF NOT EXISTS moa_date TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS tranches_count INTEGER,
-        ADD COLUMN IF NOT EXISTS tranche_amount NUMERIC,
-        ADD COLUMN IF NOT EXISTS fund_source TEXT,
-        ADD COLUMN IF NOT EXISTS province TEXT,
-        ADD COLUMN IF NOT EXISTS city TEXT,
-        ADD COLUMN IF NOT EXISTS municipality TEXT,
-        ADD COLUMN IF NOT EXISTS legislative_district TEXT,
-        ADD COLUMN IF NOT EXISTS scope_of_works TEXT,
-        ADD COLUMN IF NOT EXISTS contract_amount NUMERIC,
-        ADD COLUMN IF NOT EXISTS bid_opening_date TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS resolution_award_date TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS procurement_stage TEXT,
-        ADD COLUMN IF NOT EXISTS bidding_date TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS awarding_date TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
-        ADD COLUMN IF NOT EXISTS funds_downloaded NUMERIC,
-        ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
-    `);
+    try {
+      await pool.query(`
+          ALTER TABLE lgu_forms
+          ADD COLUMN IF NOT EXISTS moa_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS tranches_count INTEGER,
+          ADD COLUMN IF NOT EXISTS tranche_amount NUMERIC,
+          ADD COLUMN IF NOT EXISTS fund_source TEXT,
+          ADD COLUMN IF NOT EXISTS province TEXT,
+          ADD COLUMN IF NOT EXISTS city TEXT,
+          ADD COLUMN IF NOT EXISTS municipality TEXT,
+          ADD COLUMN IF NOT EXISTS legislative_district TEXT,
+          ADD COLUMN IF NOT EXISTS scope_of_works TEXT,
+          ADD COLUMN IF NOT EXISTS contract_amount NUMERIC,
+          ADD COLUMN IF NOT EXISTS bid_opening_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS resolution_award_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS procurement_stage TEXT,
+          ADD COLUMN IF NOT EXISTS bidding_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS awarding_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS funds_downloaded NUMERIC,
+          ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
+      `);
+    } catch(err) {
+      console.log("⚠️ DB Init Notice: lgu_forms update skipped (table may not exist).");
+    }
 
-    await pool.query(`
-        ALTER TABLE lgu_forms
-        ADD COLUMN IF NOT EXISTS source_agency TEXT,
-        ADD COLUMN IF NOT EXISTS lsb_resolution_no TEXT,
-        ADD COLUMN IF NOT EXISTS moa_ref_no TEXT,
-        ADD COLUMN IF NOT EXISTS validity_period TEXT,
-        ADD COLUMN IF NOT EXISTS contract_duration TEXT,
-        ADD COLUMN IF NOT EXISTS date_approved_pow DATE,
-        ADD COLUMN IF NOT EXISTS fund_release_schedule TEXT,
-        ADD COLUMN IF NOT EXISTS mode_of_procurement TEXT,
-        ADD COLUMN IF NOT EXISTS philgeps_ref_no TEXT,
-        ADD COLUMN IF NOT EXISTS pcab_license_no TEXT,
-        ADD COLUMN IF NOT EXISTS date_contract_signing DATE,
-        ADD COLUMN IF NOT EXISTS bid_amount NUMERIC,
-        ADD COLUMN IF NOT EXISTS nature_of_delay TEXT,
-        ADD COLUMN IF NOT EXISTS date_notice_of_award DATE;
-    `);
+    try {
+      await pool.query(`
+          ALTER TABLE lgu_forms
+          ADD COLUMN IF NOT EXISTS source_agency TEXT,
+          ADD COLUMN IF NOT EXISTS lsb_resolution_no TEXT,
+          ADD COLUMN IF NOT EXISTS moa_ref_no TEXT,
+          ADD COLUMN IF NOT EXISTS validity_period TEXT,
+          ADD COLUMN IF NOT EXISTS contract_duration TEXT,
+          ADD COLUMN IF NOT EXISTS date_approved_pow DATE,
+          ADD COLUMN IF NOT EXISTS fund_release_schedule TEXT,
+          ADD COLUMN IF NOT EXISTS mode_of_procurement TEXT,
+          ADD COLUMN IF NOT EXISTS philgeps_ref_no TEXT,
+          ADD COLUMN IF NOT EXISTS pcab_license_no TEXT,
+          ADD COLUMN IF NOT EXISTS date_contract_signing DATE,
+          ADD COLUMN IF NOT EXISTS bid_amount NUMERIC,
+          ADD COLUMN IF NOT EXISTS nature_of_delay TEXT,
+          ADD COLUMN IF NOT EXISTS date_notice_of_award DATE;
+      `);
+    } catch(err) {
+      // Already logged above
+    }
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS lgu_image (
@@ -324,13 +332,17 @@ const initDB = async () => {
 
 
     // --- MIGRATION: ADD MISSING COLUMNS TO LGU FORMS ---
-    await pool.query(`
-      ALTER TABLE lgu_forms 
-      ADD COLUMN IF NOT EXISTS project_category TEXT,
-      ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1;
-    `);
+    try {
+      await pool.query(`
+        ALTER TABLE lgu_forms 
+        ADD COLUMN IF NOT EXISTS project_category TEXT,
+        ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1;
+      `);
+    } catch(err) {
+      // Table likely missing
+    }
 
     // --- MIGRATION: ADD MISSING COLUMNS (CLASSROOMS, SITES, STOREYS, FUNDS) TO ENGINEER_FORM ---
     await pool.query(`
@@ -3902,7 +3914,7 @@ app.post('/api/sdo/submit-school', async (req, res) => {
           latitude, longitude, submitted_by, submitted_by_name, special_order
         ]);
 
-        console.log(`✅ School resubmitted for approval: ${school_name} (${school_id})`);
+        console.log(`[OK] School resubmitted for approval: ${school_name} (${school_id})`);
         return res.json({ success: true, pending_id: updateResult.rows[0].pending_id });
       }
     }
@@ -5025,7 +5037,7 @@ app.post('/api/register-beta', async (req, res) => {
       return res.status(404).json({ error: "Not an authorized Beta Testing School. Please check your school ID." });
     }
     const iernData = iernResult.rows[0];
-    const foundIern = iernData.SchoolID; // IERN is SchoolID
+    const foundIern = iernData.iern; // IERN is actually 'iern' column
 
     // 2. CREATE USER
     try {
@@ -5034,16 +5046,15 @@ app.post('/api/register-beta', async (req, res) => {
         `INSERT INTO users (
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
-            region, division, province, city, iern
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11)
+            region, division, province, city
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
             region = EXCLUDED.region,
             division = EXCLUDED.division,
             province = EXCLUDED.province,
-            city = EXCLUDED.city,
-            iern = EXCLUDED.iern;`,
+            city = EXCLUDED.city;`,
         [
           uid,
           email,
@@ -5054,8 +5065,7 @@ app.post('/api/register-beta', async (req, res) => {
           schoolData.region || null,
           schoolData.division || null,
           schoolData.province || null,
-          schoolData.municipality || null,
-          foundIern
+          schoolData.municipality || null
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -5067,8 +5077,8 @@ app.post('/api/register-beta', async (req, res) => {
     // 3. HYDRATE PH_SCHOOLS ONLY (Skip school_profiles)
     const insertQuery = `
       INSERT INTO ph_schools (
-        school_id, school_name, region, province, municipality, division, district, leg_district, curricular_offering
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        school_id, school_name, region, province, municipality, division, district, leg_district, curricular_offering, latitude, longitude, barangay, iern, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
       ON CONFLICT (school_id) DO UPDATE SET
         school_name = EXCLUDED.school_name,
         region = EXCLUDED.region,
@@ -5077,18 +5087,27 @@ app.post('/api/register-beta', async (req, res) => {
         division = EXCLUDED.division,
         district = EXCLUDED.district,
         leg_district = EXCLUDED.leg_district,
-        curricular_offering = EXCLUDED.curricular_offering
+        curricular_offering = EXCLUDED.curricular_offering,
+        latitude = EXCLUDED.latitude,
+        longitude = EXCLUDED.longitude,
+        barangay = EXCLUDED.barangay,
+        iern = EXCLUDED.iern,
+        updated_at = CURRENT_TIMESTAMP
     `;
     const values = [
-      iernData.SchoolID, 
-      iernData.SchoolName, 
-      iernData.Region, 
-      iernData.Province, 
-      iernData.Municipality, 
-      iernData.Division, 
-      iernData.District, 
-      iernData.LegLegDistrict || iernData.LegDistrict || null, 
-      iernData.CurricularOffering || null 
+      schoolData.school_id, 
+      schoolData.school_name, 
+      schoolData.region || null, 
+      schoolData.province || iernData.Province || null, 
+      schoolData.municipality || iernData.Municipality || null, 
+      schoolData.division || null, 
+      schoolData.district || iernData.District || null, 
+      schoolData.legislative_district || schoolData.legislative || iernData.LegLegDistrict || iernData.LegDistrict || null, 
+      schoolData.curricular_offering || iernData.Curricular_Offering || null,
+      iernData.Latitude || null,
+      iernData.Longitude || null,
+      iernData.Barangay || null,
+      foundIern
     ];
 
     await client.query(insertQuery, values);
@@ -11746,8 +11765,9 @@ if (isMainModule || process.env.START_SERVER || true) {
 app.get('/api/schools_iern/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // The table uses "SchoolID" (exact mixed-case column name from CSV import)
-    const result = await pool.query('SELECT * FROM "schools_IERN" WHERE "SchoolID" = $1', [schoolId]);
+    // Unified fetch from enriched schools_IERN table (synced from CSV)
+    const query = 'SELECT * FROM "schools_IERN" WHERE "SchoolID" = $1';
+    const result = await pool.query(query, [schoolId]);
 
     if (result.rows.length > 0) {
       res.json({ exists: true, data: result.rows[0] });

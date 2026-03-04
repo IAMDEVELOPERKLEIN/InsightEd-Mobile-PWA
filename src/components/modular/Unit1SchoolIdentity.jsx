@@ -58,7 +58,20 @@ const Unit1SchoolIdentity = () => {
                 try {
                     const savedRes = await fetch(`/api/ph_schools/${storedSchoolId}`);
                     if (savedRes.ok) {
-                        const savedData = await savedRes.json();
+                        const savedText = await savedRes.text();
+                        if (!savedText) {
+                             console.warn("ph_schools fetch returned empty body");
+                             setIsModeLoading(false);
+                             return;
+                        }
+                        let savedData;
+                        try {
+                            savedData = JSON.parse(savedText);
+                        } catch(e) {
+                            console.error("Failed to parse ph_schools JSON:", savedText.substring(0, 100));
+                            setIsModeLoading(false);
+                            return;
+                        }
                         if (savedData.exists && savedData.data?.school_name) {
                             // Pre-fill form with existing data
                             const d = savedData.data;
@@ -148,6 +161,48 @@ const Unit1SchoolIdentity = () => {
                                 }
                             }
 
+                            // --- NEW: FORCE BACKFILL FROM SCHOOLS_IERN FOR ALL MISSING FIELDS ---
+                            // If any critical field is missing, query schools_IERN directly
+                            if (!resolvedBarangay || !resolvedLegDistrict || !d.latitude || !d.longitude || !d.curricular_offering) {
+                                try {
+                                    const iernC = await fetch(`/api/schools_iern/${d.school_id || storedSchoolId}`);
+                                    if (iernC.ok) {
+                                        const iernCData = await iernC.json();
+                                        if (iernCData.exists && iernCData.data) {
+                                            resolvedIern = resolvedIern || iernCData.data.iern;
+                                            resolvedBarangay = resolvedBarangay || iernCData.data.Barangay || iernCData.data.school_barangay;
+                                            resolvedLegDistrict = resolvedLegDistrict || iernCData.data.leg_district || iernCData.data.Legislative_District;
+                                            resolvedProvince = resolvedProvince || iernCData.data.province || iernCData.data.Province;
+                                            resolvedMunicipality = resolvedMunicipality || iernCData.data.municipality || iernCData.data.Municipality;
+                                            d.curricular_offering = d.curricular_offering || iernCData.data.Curricular_Offering || iernCData.data.CurricularOffering;
+                                            d.latitude = d.latitude || iernCData.data.Latitude || iernCData.data.school_latitude;
+                                            d.longitude = d.longitude || iernCData.data.Longitude || iernCData.data.school_longitude;
+                                            
+                                            // Silently sync local improvements back to db
+                                            fetch('/api/ph_schools/unit1', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    school_id: d.school_id || storedSchoolId,
+                                                    iern: resolvedIern,
+                                                    school_name: d.school_name,
+                                                    region: d.region,
+                                                    province: resolvedProvince,
+                                                    municipality: resolvedMunicipality,
+                                                    barangay: resolvedBarangay,
+                                                    division: d.division,
+                                                    district: d.district,
+                                                    leg_district: resolvedLegDistrict,
+                                                    curricular_offering: d.curricular_offering,
+                                                    latitude: d.latitude,
+                                                    longitude: d.longitude,
+                                                })
+                                            }).catch(() => {});
+                                        }
+                                    }
+                                } catch(e) {}
+                            }
+
                             setFormData(prev => ({
                                 ...prev,
                                 school_id: d.school_id || storedSchoolId,
@@ -211,6 +266,9 @@ const Unit1SchoolIdentity = () => {
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
             } else if (storedSchoolId) {
+                // Instantly inject the ID into the UI form state so the user doesn't have to type it
+                setFormData(prev => ({ ...prev, school_id: storedSchoolId }));
+                // Fetch the rest of the metadata to flesh out the fields automatically
                 handleFetchData(storedSchoolId);
             }
             setIsModeLoading(false);
@@ -318,19 +376,35 @@ const Unit1SchoolIdentity = () => {
             // First, attempt to fetch from the new IERN endpoint
             const iernRes = await fetch(`/api/schools_iern/${idToFetch}`);
             if (iernRes.ok) {
-                const iernData = await iernRes.json();
+                const iernText = await iernRes.text();
+                if (!iernText) {
+                    setLoading(false);
+                    return;
+                }
+                let iernData;
+                try {
+                    iernData = JSON.parse(iernText);
+                } catch(e) {
+                    console.error("IERN API returned invalid JSON:", iernText.substring(0, 50));
+                    setLoading(false);
+                    return;
+                }
                 if (iernData.exists && iernData.data) {
                     const row = iernData.data;
                     setFormData(prev => ({
                         ...prev,
                         school_id: idToFetch,
-                        school_name: row.School_Name || prev.school_name,
-                        region: row.Region || prev.region,
-                        division: row.Division || prev.division,
-                        district: row.District || prev.district,
-                        barangay: row.Barangay || prev.barangay,
-                        latitude: row.Latitude || prev.latitude,
-                        longitude: row.Longitude || prev.longitude,
+                        school_name: row.School_Name || row.school_name || prev.school_name,
+                        region: row.Region || row.region || prev.region,
+                        province: row.Province || row.province || prev.province,
+                        municipality: row.Municipality || row.municipality || row.City || row.city || prev.municipality,
+                        barangay: row.Barangay || row.barangay || prev.barangay,
+                        division: row.Division || row.division || prev.division,
+                        district: row.District || row.district || prev.district,
+                        leg_district: row.Legislative_District || row.leg_district || row.legislative_district || prev.leg_district,
+                        curricular_offering: row.Curricular_Offering || row.curricular_offering || prev.curricular_offering,
+                        latitude: row.Latitude || row.latitude || prev.latitude,
+                        longitude: row.Longitude || row.longitude || prev.longitude,
                         iern: row.iern || "",
                     }));
                     setFetchedIern(row.iern || "");
@@ -627,6 +701,7 @@ const Unit1SchoolIdentity = () => {
                                         name="school_id"
                                         value={formData.school_id}
                                         onChange={handleChange}
+                                        onBlur={() => { if (formData.school_id.length >= 6) handleFetchData(formData.school_id); }}
                                         placeholder="e.g. 101010"
                                         maxLength={6}
                                         className={chunkyInput}

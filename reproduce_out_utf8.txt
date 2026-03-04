@@ -1,0 +1,43 @@
+﻿Testing ID: 134299
+Status: 200 OK
+Body (raw): "{"exists":true,"data":{"id":4,"iern":"2026-00004","SchoolID":"134299","Region":"Region IX","Division":"Sulu","District":"Indanan","School_Name":"Bwansa Elementary School","Barangay":"BUANZA","Latitude":"6.031796","Longitude":"120.971191","Curricular_Offering":"Purely ES","Street_Address":"LAWM AD","Mother_School_ID":"NA","Province":"SULU","Municipality":"INDANAN","Legislative_District":"1st District"}}"
+JSON: {"exists":true,"data":{"id":4,"iern":"2026-00004","SchoolID":"134299","Region":"Region IX","Division":"Sulu","District":"Indanan","School_Name":"Bwansa Elementary School","Barangay":"BUANZA","Latitude":"6.031796","Longitude":"120.971191","Curricular_Offering":"Purely ES","Street_Address":"LAWM AD","Mother_School_ID":"NA","Province":"SULU","Municipality":"INDANAN","Legislative_District":"1st District"}}
+---
+Testing ID: 999999
+Status: 404 Not Found
+Body (raw): "{"exists":false,"error":"IERN data not found for this school ID."}"
+JSON: {"exists":false,"error":"IERN data not found for this school ID."}
+---
+Testing ID: 
+Status: 404 Not Found
+Body (raw): "<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/schools_iern/</pre>
+</body>
+</html>
+"
+---
+node : Fetch failed: 
+Unexpected token '<', 
+"<!DOCTYPE "... is not 
+valid JSON
+At line:1 char:1
++ node e:\InsightEd-Mobile-
+PWA\reproduce_json_error.js
+ > e:\InsightEd-M ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (Fet  
+  ch failed: U... not va   
+ lid JSON:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
