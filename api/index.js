@@ -5000,7 +5000,112 @@ app.post('/api/register-school', async (req, res) => {
   }
 });
 
-// --- 3e. POST: Register Generic User (Engineer, RO, SDO) ---
+// --- 3e. POST: Register Beta Tester (One-Shot matching schools_IERN) ---
+app.post('/api/register-beta', async (req, res) => {
+  const { uid, email, schoolData, contactNumber } = req.body;
+
+  if (!uid || !schoolData || !schoolData.school_id) {
+    return res.status(400).json({ error: "Missing required registration data." });
+  }
+
+  console.log("✅ BETA REGISTRATION DATA:", {
+    uid,
+    school: schoolData.school_name,
+    role: 'Beta Tester'
+  });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Verify against schools_IERN
+    const iernResult = await client.query('SELECT * FROM "schools_IERN" WHERE "SchoolID" = $1', [schoolData.school_id]);
+    if (iernResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: "Not an authorized Beta Testing School. Please check your school ID." });
+    }
+    const iernData = iernResult.rows[0];
+    const foundIern = iernData.SchoolID; // IERN is SchoolID
+
+    // 2. CREATE USER
+    try {
+      await client.query('SAVEPOINT user_creation');
+      await client.query(
+        `INSERT INTO users (
+            uid, email, role, created_at, contact_number,
+            first_name, last_name, 
+            region, division, province, city, iern
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (uid) DO UPDATE SET 
+            role = EXCLUDED.role,
+            contact_number = EXCLUDED.contact_number,
+            region = EXCLUDED.region,
+            division = EXCLUDED.division,
+            province = EXCLUDED.province,
+            city = EXCLUDED.city,
+            iern = EXCLUDED.iern;`,
+        [
+          uid,
+          email,
+          'Beta Tester',
+          contactNumber || null,
+          'Beta Tester', 
+          schoolData.school_id, 
+          schoolData.region || null,
+          schoolData.division || null,
+          schoolData.province || null,
+          schoolData.municipality || null,
+          foundIern
+        ]
+      );
+      await client.query('RELEASE SAVEPOINT user_creation');
+    } catch (e) {
+      await client.query('ROLLBACK TO SAVEPOINT user_creation');
+      console.warn("User table insert failed, continuing...", e.message);
+    }
+
+    // 3. HYDRATE PH_SCHOOLS ONLY (Skip school_profiles)
+    const insertQuery = `
+      INSERT INTO ph_schools (
+        school_id, school_name, region, province, municipality, division, district, leg_district, curricular_offering
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (school_id) DO UPDATE SET
+        school_name = EXCLUDED.school_name,
+        region = EXCLUDED.region,
+        province = EXCLUDED.province,
+        municipality = EXCLUDED.municipality,
+        division = EXCLUDED.division,
+        district = EXCLUDED.district,
+        leg_district = EXCLUDED.leg_district,
+        curricular_offering = EXCLUDED.curricular_offering
+    `;
+    const values = [
+      iernData.SchoolID, 
+      iernData.SchoolName, 
+      iernData.Region, 
+      iernData.Province, 
+      iernData.Municipality, 
+      iernData.Division, 
+      iernData.District, 
+      iernData.LegLegDistrict || iernData.LegDistrict || null, 
+      iernData.CurricularOffering || null 
+    ];
+
+    await client.query(insertQuery, values);
+    await client.query('COMMIT');
+
+    res.json({ success: true, iern: foundIern, message: "Beta Tester Registered Successfully" });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Register Beta Error:", err);
+    res.status(500).json({ error: "Registration failed: " + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// --- 3f. POST: Register Generic User (Engineer, RO, SDO) ---
 app.post('/api/register-user', async (req, res) => {
   const { uid, email, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail } = req.body;
 
@@ -11654,6 +11759,8 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+
 
 
 // ==================================================================

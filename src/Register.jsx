@@ -522,7 +522,8 @@ const Register = () => {
 
                 console.log("SENDING FINAL REGISTRATION DATA:", finalSchoolData);
 
-                const regRes = await fetch('/api/register-school', {
+                const endpoint = formData.role === 'Beta Tester' ? '/api/register-beta' : '/api/register-school';
+                const regRes = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
