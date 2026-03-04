@@ -493,8 +493,8 @@ const DetailedProjInfo = () => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        // Limit removed
-        const validFiles = files.filter(file => file.size <= 5 * 1024 * 1024);
+        // Limit to 100MB
+        const validFiles = files.filter(file => file.size <= 100 * 1024 * 1024);
         const newPreviews = validFiles.map(file => URL.createObjectURL(file));
 
         if (activeCategory === 'Internal') {
