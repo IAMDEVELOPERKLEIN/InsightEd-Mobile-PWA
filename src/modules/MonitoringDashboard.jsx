@@ -2192,48 +2192,46 @@ const MonitoringDashboard = () => {
                                                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                                                         {/* Header with Back Button */}
                                                         <div className="flex flex-col gap-4">
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-3">
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            if (effectiveRole === 'Regional Office') {
-                                                                                handleDivisionChange(''); // Back to Division List
-                                                                            } else if (effectiveRole === 'Central Office') {
-                                                                                handleDivisionChange(''); // Back to Division List for CO
-                                                                            } else {
-                                                                                handleDistrictChange(''); // Back to District List
-                                                                            }
-                                                                        }}
-                                                                        className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition"
-                                                                    >
-                                                                        <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
-                                                                    </button>
-                                                                    <div>
-                                                                        <h3 className="font-black text-xl text-slate-800 dark:text-white">
-                                                                            {effectiveRole === 'Regional Office' || effectiveRole === 'Central Office' ? coDivision : coDistrict}
-                                                                        </h3>
-                                                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{sortedSchools.length} Schools</p>
-                                                                    </div>
-                                                                </div>
+                                                                <div className="flex items-start justify-between">
+                                                                    <div className="flex items-start gap-3">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                if (effectiveRole === 'Regional Office') {
+                                                                                    handleDivisionChange(''); // Back to Division List
+                                                                                } else if (effectiveRole === 'Central Office') {
+                                                                                    handleDivisionChange(''); // Back to Division List for CO
+                                                                                } else {
+                                                                                    handleDistrictChange(''); // Back to District List
+                                                                                }
+                                                                            }}
+                                                                            className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition mt-0.5"
+                                                                        >
+                                                                            <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
+                                                                        </button>
+                                                                        <div>
+                                                                            <h3 className="font-black text-xl text-slate-800 dark:text-white leading-tight">
+                                                                                {effectiveRole === 'Regional Office' || effectiveRole === 'Central Office' ? coDivision : coDistrict}
+                                                                            </h3>
+                                                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 mb-3">{sortedSchools.length} Schools</p>
 
-                                                                {/* Pagination & Sort Controls */}
-                                                                <div className="flex items-center gap-2">
-                                                                    {/* Show Controls */}
-                                                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 items-center">
-                                                                        <span className="text-xs font-bold text-slate-500 mx-1">Show:</span>
-                                                                        {[10, 20, 50, 100].map(num => (
-                                                                            <button
-                                                                                key={num}
-                                                                                onClick={() => { setSchoolLimit(num); setSchoolPage(1); }}
-                                                                                className={`p-1.5 rounded-md text-xs font-bold transition ${schoolLimit === num ? 'bg-white dark:bg-slate-600 shadow text-slate-800 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-                                                                            >
-                                                                                {num}
-                                                                            </button>
-                                                                        ))}
+                                                                            {/* Show Controls - Moved beneath Division Name */}
+                                                                            <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 items-center w-max">
+                                                                                <span className="text-xs font-black text-slate-500 mx-2 uppercase tracking-wide">Show:</span>
+                                                                                {[10, 20, 50, 100].map(num => (
+                                                                                    <button
+                                                                                        key={num}
+                                                                                        onClick={() => { setSchoolLimit(num); setSchoolPage(1); }}
+                                                                                        className={`px-3 py-1 rounded-md text-xs font-bold transition ${schoolLimit === num ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-800 dark:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                                                                                    >
+                                                                                        {num}
+                                                                                    </button>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
 
                                                                     {/* Sort Controls */}
-                                                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                                                                    <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1 self-start mt-0.5">
                                                                         <button
                                                                             onClick={() => setSchoolSort('name-asc')}
                                                                             className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'name-asc' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-400'}`}
@@ -2257,9 +2255,8 @@ const MonitoringDashboard = () => {
                                                                         </button>
                                                                     </div>
                                                                 </div>
-                                                            </div>
 
-                                                            {/* Search Box */}
+                                                                {/* Search Box */}
                                                             <div className="relative">
                                                                 <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                                                                 <input

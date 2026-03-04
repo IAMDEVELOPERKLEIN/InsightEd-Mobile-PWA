@@ -9702,9 +9702,9 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
       SELECT 
         COUNT(*) as total_projects,
         AVG(e.accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
-        COUNT(CASE WHEN e.status = 'Completed' THEN 1 END) as completed_count,
-        COUNT(CASE WHEN e.status = 'Ongoing' THEN 1 END) as ongoing_count,
-        COUNT(CASE WHEN e.status = 'Delayed' THEN 1 END) as delayed_count,
+        COUNT(CASE WHEN e.status_of_construction_phase = 'Completed' THEN 1 END) as completed_count,
+        COUNT(CASE WHEN e.status_of_construction_phase = 'Ongoing' THEN 1 END) as ongoing_count,
+        COUNT(CASE WHEN e.status_of_construction_phase = 'Delayed' THEN 1 END) as delayed_count,
         COALESCE(SUM(e.approved_budget_for_contract), 0) as total_allocation,
         COALESCE(SUM(e.contract_amount), 0) as total_contract_amount
       FROM engineer_form e
@@ -9738,7 +9738,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
     let query = `
       SELECT
         e.project_id as id, e.project_name as "projectName", e.school_id as "schoolId", e.school_name as "schoolName",
-        e.accomplishment_percentage as "accomplishmentPercentage", e.status, 
+        e.accomplishment_percentage as "accomplishmentPercentage", e.status_of_construction_phase as status, 
         e.approved_budget_for_contract as "projectAllocation",
         e.contract_amount as "contractAmount",
         e.validation_status as "validation_status", e.status_as_of as "statusAsOfDate"
@@ -9893,11 +9893,11 @@ app.get('/api/monitoring/regions', async (req, res) => {
           COALESCE(SUM(approved_budget_for_contract), 0) as total_allocation,
           COALESCE(SUM(contract_amount), 0) as total_contract_amount,
           AVG(accomplishment_percentage) as avg_accomplishment,
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Ongoing' THEN 1 END) as ongoing_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Not Yet Started' THEN 1 END) as not_yet_started_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE '%Under Procurement%' THEN 1 END) as under_procurement_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Completed' THEN 1 END) as completed_projects,
-          COUNT(CASE WHEN TRIM(status) ILIKE 'Delayed' THEN 1 END) as delayed_projects
+          COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Ongoing' THEN 1 END) as ongoing_projects,
+          COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Not Yet Started' THEN 1 END) as not_yet_started_projects,
+          COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE '%Under Procurement%' THEN 1 END) as under_procurement_projects,
+          COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Completed' THEN 1 END) as completed_projects,
+          COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Delayed' THEN 1 END) as delayed_projects
         FROM engineer_form
         GROUP BY region
       )

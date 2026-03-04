@@ -19,14 +19,9 @@ const pool = new Pool({
 (async () => {
     try {
         const res = await pool.query("SELECT * FROM engineer_form LIMIT 1");
-        if (res.rows.length > 0) {
-            console.log("COLUMNS:", Object.keys(res.rows[0]).join(', '));
-        } else {
-            // Even if no rows, we can get columns from query results fields
-            console.log("FIELDS:", res.fields.map(f => f.name).join(', '));
-        }
+        fs.writeFileSync('cols.txt', res.fields.map(f => f.name).join(', '));
     } catch (e) {
-        console.error("ERROR:", e.message);
+        fs.writeFileSync('cols.txt', "ERROR: " + e.message);
     } finally {
         pool.end();
     }
