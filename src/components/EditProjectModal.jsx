@@ -184,9 +184,9 @@ const EditProjectModal = ({
                 alert("⚠️ INVALID FORMAT\n\nPlease upload a valid PDF file.");
                 return;
             }
-            // Limit to 25MB (Safety buffer for 50MB payload limit)
-            if (file.size > 25 * 1024 * 1024) {
-                alert("⚠️ FILE TOO LARGE\n\nMaximum file size is 25MB per document.");
+            // Limit to 100MB (Safety buffer for payload limit)
+            if (file.size > 100 * 1024 * 1024) {
+                alert("⚠️ FILE TOO LARGE\n\nMaximum file size is 100MB per document.");
                 return;
             }
             setDocuments(prev => ({ ...prev, [type]: file }));
