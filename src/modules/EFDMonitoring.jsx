@@ -13,6 +13,7 @@ const EFDMonitoring = () => {
     const [selectedEngineer, setSelectedEngineer] = useState('');
     const [isAssigning, setIsAssigning] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
+    const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -35,13 +36,24 @@ const EFDMonitoring = () => {
     }, []);
 
     const filteredProjects = useMemo(() => {
-        return projects.filter(p => 
-            p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.schoolId?.toString().includes(searchTerm) ||
-            p.engineerName?.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [projects, searchTerm]);
+        let filtered = projects;
+
+        if (showUnassignedOnly) {
+            filtered = filtered.filter(p => !p.engineerName);
+        }
+
+        if (searchTerm) {
+            const search = searchTerm.toLowerCase();
+            filtered = filtered.filter(p => 
+                p.projectName?.toLowerCase().includes(search) ||
+                p.schoolName?.toLowerCase().includes(search) ||
+                p.schoolId?.toString().includes(search) ||
+                p.engineerName?.toLowerCase().includes(search)
+            );
+        }
+
+        return filtered;
+    }, [projects, searchTerm, showUnassignedOnly]);
 
     const handleAssign = async () => {
         if (!selectedProject || !selectedEngineer) return;
@@ -101,8 +113,8 @@ const EFDMonitoring = () => {
                     </p>
                 </div>
 
-                {/* Search */}
-                <div className="px-5 mb-6">
+                {/* Search & Filters */}
+                <div className="px-5 mb-6 space-y-3">
                     <div className="relative">
                         <input 
                             type="text"
@@ -112,6 +124,15 @@ const EFDMonitoring = () => {
                             className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
                         />
                         <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 size={20}" />
+                    </div>
+                    
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setShowUnassignedOnly(!showUnassignedOnly)}
+                            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border ${showUnassignedOnly ? 'bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/30' : 'bg-white border-slate-200 text-slate-500'}`}
+                        >
+                            <FiAlertCircle /> {showUnassignedOnly ? 'Showing Unassigned' : 'Filter Unassigned'}
+                        </button>
                     </div>
                 </div>
 
@@ -127,11 +148,13 @@ const EFDMonitoring = () => {
 
                 {/* Projects List */}
                 <div className="px-5 space-y-3">
-                    {filteredProjects.map((p) => (
-                        <div 
-                            key={p.id}
-                            className={`bg-white p-4 rounded-3xl border transition-all ${selectedProject?.id === p.id ? 'border-blue-500 ring-4 ring-blue-500/10' : 'border-slate-100'}`}
-                        >
+                    {filteredProjects.map((p) => {
+                        const isUnassigned = !p.engineerName;
+                        return (
+                            <div 
+                                key={p.id}
+                                className={`bg-white p-4 rounded-3xl border transition-all ${selectedProject?.id === p.id ? 'border-blue-500 ring-4 ring-blue-500/10' : isUnassigned ? 'border-orange-200 bg-orange-50/30' : 'border-slate-100'}`}
+                            >
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <h4 className="text-sm font-black text-slate-800 tracking-tight">{p.projectName}</h4>
@@ -150,8 +173,8 @@ const EFDMonitoring = () => {
                                     <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-[10px] font-black text-slate-500">
                                         {p.engineerName?.[0] || '?'}
                                     </div>
-                                    <span className="text-[10px] font-bold text-slate-600 italic">
-                                        Deployment: {p.engineerName || 'Unassigned'}
+                                    <span className={`text-[10px] font-bold ${isUnassigned ? 'text-orange-600' : 'text-slate-600 italic'}`}>
+                                        Deployment: {p.engineerName || 'No Engineer Assigned'}
                                     </span>
                                 </div>
                                 <span className="text-[8px] font-black text-slate-400 uppercase bg-slate-50 px-2 py-1 rounded-md">
@@ -159,13 +182,13 @@ const EFDMonitoring = () => {
                                 </span>
                             </div>
                         </div>
-                    ))}
+                    );})}
                 </div>
 
                 {/* Assignment Modal/Overlay */}
                 {selectedProject && (
                     <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
-                        <div className="bg-white w-full max-w-xl rounded-t-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-500">
+                        <div className="bg-white w-full max-w-xl rounded-t-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-500 max-h-[90vh] flex flex-col">
                             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
                             
                             <div className="mb-6">
@@ -175,7 +198,7 @@ const EFDMonitoring = () => {
 
                             <div className="space-y-4 mb-8">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Active Engineer</label>
-                                <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="grid grid-cols-1 gap-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar flex-1">
                                     {engineers.map((eng) => (
                                         <button
                                             key={eng.uid}
