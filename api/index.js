@@ -475,8 +475,72 @@ const initDB = async () => {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_inventory_iern ON facility_inventory(iern); `);
     console.log("✅ DB Init: Facility Inventory schema verified.");
 
+    // --- Teaching Personnel Table ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS teaching_personnel (
+        school_id TEXT PRIMARY KEY,
+        fund_deped INT DEFAULT 0,
+        fund_lgu INT DEFAULT 0,
+        fund_others INT DEFAULT 0,
+        deploy_kinder INT DEFAULT 0,
+        deploy_elem INT DEFAULT 0,
+        deploy_jhs INT DEFAULT 0,
+        deploy_shs INT DEFAULT 0,
+        deploy_sned INT DEFAULT 0,
+        non_advisory INT DEFAULT 0,
+        mg_1_2 INT DEFAULT 0,
+        mg_3_4 INT DEFAULT 0,
+        mg_5_6 INT DEFAULT 0,
+        mg_has_3_plus BOOLEAN DEFAULT FALSE,
+        mg_3_plus_count INT DEFAULT 0,
+        dept_english INT DEFAULT 0,
+        dept_filipino INT DEFAULT 0,
+        dept_science INT DEFAULT 0,
+        dept_math INT DEFAULT 0,
+        dept_ap INT DEFAULT 0,
+        dept_mapeh INT DEFAULT 0,
+        dept_tle INT DEFAULT 0,
+        dept_values INT DEFAULT 0,
+        dept_gened INT DEFAULT 0,
+        dept_ece INT DEFAULT 0,
+        dept_others INT DEFAULT 0,
+        exp_0_1 INT DEFAULT 0,
+        exp_2_5 INT DEFAULT 0,
+        exp_6_10 INT DEFAULT 0,
+        exp_11_15 INT DEFAULT 0,
+        exp_16_20 INT DEFAULT 0,
+        exp_21_25 INT DEFAULT 0,
+        exp_26_30 INT DEFAULT 0,
+        exp_31_35 INT DEFAULT 0,
+        exp_36_40 INT DEFAULT 0,
+        exp_40_45 INT DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("✅ DB Init: Teaching Personnel schema verified.");
+
+    // --- Ensure Unit 5 Shifting & Modality columns exist on ph_schools ---
+    const shiftModeCols = [
+      'has_standard_shifting BOOLEAN DEFAULT FALSE',
+      'adm_mdl BOOLEAN DEFAULT FALSE', 'adm_odl BOOLEAN DEFAULT FALSE',
+      'adm_tvi BOOLEAN DEFAULT FALSE', 'adm_blended BOOLEAN DEFAULT FALSE',
+    ];
+    const levels = ['kinder','g1','g2','g3','g4','g5','g6','g7','g8','g9','g10','g11','g12'];
+    for (const lvl of levels) {
+      shiftModeCols.push(`shift_${lvl} TEXT`);
+      shiftModeCols.push(`mode_${lvl} TEXT`);
+    }
+    for (const col of shiftModeCols) {
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col};`);
+    }
+    console.log("✅ DB Init: Unit 5 shift/mode/ADM columns verified.");
+
+    // Ensure unit7_completed flag exists on ph_schools
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
+    console.log("✅ DB Init: unit7_completed column verified.");
+
   } catch (err) {
-    console.error("âŒ DB Init Error:", err);
+    console.error("❌ DB Init Error:", err);
   }
 };
 // initDB(); // Moved to awaited startup
@@ -11792,7 +11856,7 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const result = await pool.query(
-      'SELECT total_enrollment, enroll_kinder, has_multigrade, selected_learner_groups, curricular_offering FROM ph_schools WHERE school_id = $1',
+      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, curricular_offering FROM ph_schools WHERE school_id = $1',
       [schoolId]
     );
 
@@ -11801,23 +11865,16 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
 
     let curricular_offering = null;
     if (result.rows.length > 0) {
-      curricular_offering = result.rows[0].curricular_offering;
-      completedUnits.push(1);
-      xp += 150;
-
       const row = result.rows[0];
-      if (row.enroll_kinder !== null) {
-        completedUnits.push(2);
-        xp += 200;
-      }
-      if (row.has_multigrade !== null) {
-        completedUnits.push(3);
-        xp += 200;
-      }
-      if (row.selected_learner_groups !== null) {
-        completedUnits.push(4);
-        xp += 250;
-      }
+      curricular_offering = row.curricular_offering;
+
+      if (row.unit1_completed) { completedUnits.push(1); xp += 150; }
+      if (row.unit2_completed) { completedUnits.push(2); xp += 200; }
+      if (row.unit3_completed) { completedUnits.push(3); xp += 200; }
+      if (row.unit4_completed) { completedUnits.push(4); xp += 250; }
+      if (row.unit5_completed) { completedUnits.push(5); xp += 300; }
+      if (row.unit6_completed) { completedUnits.push(6); xp += 300; }
+      if (row.unit7_completed) { completedUnits.push(7); xp += 350; }
     }
 
     res.json({ success: true, progress: { completedUnits, xp, curricular_offering } });
@@ -11850,8 +11907,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     const query = `
       INSERT INTO ph_schools (
         school_id, iern, school_name, region, province, municipality, barangay,
-        division, district, leg_district, curricular_offering, latitude, longitude
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        division, district, leg_district, curricular_offering, latitude, longitude, unit1_completed
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -11865,6 +11922,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         curricular_offering = EXCLUDED.curricular_offering,
         latitude = EXCLUDED.latitude,
         longitude = EXCLUDED.longitude,
+        unit1_completed = TRUE,
         updated_at = CURRENT_TIMESTAMP;
     `;
     const values = [
@@ -11902,7 +11960,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
       'aral_math_g1 = $17', 'aral_math_g2 = $18', 'aral_math_g3 = $19', 'aral_math_g4 = $20', 'aral_math_g5 = $21', 'aral_math_g6 = $22',
       'aral_read_g1 = $23', 'aral_read_g2 = $24', 'aral_read_g3 = $25', 'aral_read_g4 = $26', 'aral_read_g5 = $27', 'aral_read_g6 = $28',
       'aral_sci_g1 = $29', 'aral_sci_g2 = $30', 'aral_sci_g3 = $31', 'aral_sci_g4 = $32', 'aral_sci_g5 = $33', 'aral_sci_g6 = $34',
-      'male_enrollment = $35', 'female_enrollment = $36', 'verified_as_of = CURRENT_TIMESTAMP'
+      'male_enrollment = $35', 'female_enrollment = $36', 'unit2_completed = TRUE', 'verified_as_of = CURRENT_TIMESTAMP'
     ];
 
     const parseVal = (val) => (val === "" || val === null || val === undefined || isNaN(parseInt(val))) ? 0 : parseInt(val);
@@ -11966,6 +12024,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
         sections_g4         = $19, size_less_g4        = $20, size_within_g4      = $21, size_above_g4      = $22,
         sections_g5         = $23, size_less_g5        = $24, size_within_g5      = $25, size_above_g5      = $26,
         sections_g6         = $27, size_less_g6        = $28, size_within_g6      = $29, size_above_g6      = $30,
+        unit3_completed     = TRUE,
         updated_at          = CURRENT_TIMESTAMP
       WHERE school_id = $31
     `;
@@ -12036,6 +12095,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
       }
     }
 
+    setClauses.push(`unit4_completed = TRUE`);
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(schoolId);
 
@@ -12102,6 +12162,7 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
       }
     }
 
+    dynamicFields.push(`unit5_completed = TRUE`);
     dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
     values.push(schoolId); // Last param is the WHERE clause
 
@@ -12119,9 +12180,126 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
     } catch (e) { }
 
     res.json({ success: true, message: "Unit 5 Shifting & Modality data saved successfully!" });
-
   } catch (err) {
     console.error("Save Unit 5 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- 27f. PUT: Save Unit 6 Physical Facilities (Modular Beta) ---
+app.put('/api/ph_schools/unit6/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  const data = req.body;
+
+  try {
+    const query = `
+      UPDATE ph_schools
+      SET
+        has_electricity       = $1,
+        has_internet          = $2,
+        water_source          = $3,
+        classrooms_total      = $4,
+        classrooms_good       = $5,
+        classrooms_repair     = $6,
+        classrooms_condemned  = $7,
+        toilets_male          = $8,
+        toilets_female        = $9,
+        toilets_pwd           = $10,
+        handwashing_stations  = $11,
+        unit6_completed       = TRUE,
+        updated_at            = CURRENT_TIMESTAMP
+      WHERE school_id = $12
+    `;
+
+    const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
+
+    const values = [
+      data.has_electricity,
+      data.has_internet,
+      data.water_source,
+      pInt(data.classrooms_total),
+      pInt(data.classrooms_good),
+      pInt(data.classrooms_repair),
+      pInt(data.classrooms_condemned),
+      pInt(data.toilets_male),
+      pInt(data.toilets_female),
+      pInt(data.toilets_pwd),
+      pInt(data.handwashing_stations),
+      schoolId
+    ];
+
+    await pool.query(query, values);
+
+    // Auto-update school_summary instantly
+    try {
+      if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+    } catch (e) { }
+
+    res.json({ success: true, message: "Unit 6 Physical Facilities data saved successfully!" });
+  } catch (err) {
+    console.error("Save Unit 6 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- 27g. PUT: Save Unit 7 Teaching Personnel (Modular Beta) ---
+app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  const d = req.body;
+
+  const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
+
+  try {
+    // 1. Upsert into teaching_personnel table
+    const upsertQuery = `
+      INSERT INTO teaching_personnel (
+        school_id,
+        fund_deped, fund_lgu, fund_others,
+        deploy_kinder, deploy_elem, deploy_jhs, deploy_shs, deploy_sned, non_advisory,
+        mg_1_2, mg_3_4, mg_5_6, mg_has_3_plus, mg_3_plus_count,
+        dept_english, dept_filipino, dept_science, dept_math, dept_ap, dept_mapeh, dept_tle, dept_values, dept_gened, dept_ece, dept_others,
+        exp_0_1, exp_2_5, exp_6_10, exp_11_15, exp_16_20, exp_21_25, exp_26_30, exp_31_35, exp_36_40, exp_40_45,
+        updated_at
+      ) VALUES (
+        $1,
+        $2,$3,$4,
+        $5,$6,$7,$8,$9,$10,
+        $11,$12,$13,$14,$15,
+        $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
+        $27,$28,$29,$30,$31,$32,$33,$34,$35,$36,
+        CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (school_id) DO UPDATE SET
+        fund_deped=$2, fund_lgu=$3, fund_others=$4,
+        deploy_kinder=$5, deploy_elem=$6, deploy_jhs=$7, deploy_shs=$8, deploy_sned=$9, non_advisory=$10,
+        mg_1_2=$11, mg_3_4=$12, mg_5_6=$13, mg_has_3_plus=$14, mg_3_plus_count=$15,
+        dept_english=$16, dept_filipino=$17, dept_science=$18, dept_math=$19, dept_ap=$20, dept_mapeh=$21, dept_tle=$22, dept_values=$23, dept_gened=$24, dept_ece=$25, dept_others=$26,
+        exp_0_1=$27, exp_2_5=$28, exp_6_10=$29, exp_11_15=$30, exp_16_20=$31, exp_21_25=$32, exp_26_30=$33, exp_31_35=$34, exp_36_40=$35, exp_40_45=$36,
+        updated_at=CURRENT_TIMESTAMP
+    `;
+
+    const values = [
+      schoolId,
+      pInt(d.fund_deped), pInt(d.fund_lgu), pInt(d.fund_others),
+      pInt(d.deploy_kinder), pInt(d.deploy_elem), pInt(d.deploy_jhs), pInt(d.deploy_shs), pInt(d.deploy_sned), pInt(d.non_advisory),
+      pInt(d.mg_1_2), pInt(d.mg_3_4), pInt(d.mg_5_6), !!d.mg_has_3_plus, pInt(d.mg_3_plus_count),
+      pInt(d.dept_english), pInt(d.dept_filipino), pInt(d.dept_science), pInt(d.dept_math), pInt(d.dept_ap), pInt(d.dept_mapeh), pInt(d.dept_tle), pInt(d.dept_values), pInt(d.dept_gened), pInt(d.dept_ece), pInt(d.dept_others),
+      pInt(d.exp_0_1), pInt(d.exp_2_5), pInt(d.exp_6_10), pInt(d.exp_11_15), pInt(d.exp_16_20), pInt(d.exp_21_25), pInt(d.exp_26_30), pInt(d.exp_31_35), pInt(d.exp_36_40), pInt(d.exp_40_45),
+    ];
+
+    await pool.query(upsertQuery, values);
+
+    // 2. Mark unit7_completed on ph_schools
+    await pool.query(`UPDATE ph_schools SET unit7_completed = TRUE WHERE school_id = $1`, [schoolId]);
+
+    // 3. Auto-update school_summary
+    try {
+      if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+    } catch (e) { }
+
+    res.json({ success: true, message: "Unit 7 Teaching Personnel data saved successfully!" });
+  } catch (err) {
+    console.error("Save Unit 7 Teaching Personnel Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });

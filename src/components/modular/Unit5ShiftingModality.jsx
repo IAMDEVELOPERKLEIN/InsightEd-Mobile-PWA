@@ -7,15 +7,12 @@ import SuccessModal from "../SuccessModal";
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 4; // 1: Gatekeeper, 2: Grade Loop, 3: ADM, 4: Review
 
-const GRADE_LEVELS = [
-    { label: "Kinder", key: "kinder" },
-    { label: "Grade 1", key: "g1" },
-    { label: "Grade 2", key: "g2" },
-    { label: "Grade 3", key: "g3" },
-    { label: "Grade 4", key: "g4" },
-    { label: "Grade 5", key: "g5" },
-    { label: "Grade 6", key: "g6" }
-];
+// Grade label map for display
+const GRADE_LABEL_MAP = {
+    kinder: 'Kinder', g1: 'Grade 1', g2: 'Grade 2', g3: 'Grade 3',
+    g4: 'Grade 4', g5: 'Grade 5', g6: 'Grade 6', g7: 'Grade 7',
+    g8: 'Grade 8', g9: 'Grade 9', g10: 'Grade 10', g11: 'Grade 11', g12: 'Grade 12'
+};
 
 const SHIFT_OPTIONS = [
     { id: "Single Shift", label: "Single Shift" },
@@ -63,7 +60,27 @@ const Unit5ShiftingModality = () => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
     const [isReviewMode, setIsReviewMode] = useState(false);
-    const [activeGrades, setActiveGrades] = useState(GRADE_LEVELS); // Fallback to all elementary grades if can't determine
+    const [curricularOffering, setCurricularOffering] = useState("");
+
+    // ── Dynamic grades based on curricular offering ──────────────────────
+    const activeGrades = useMemo(() => {
+        const co = (curricularOffering || "").toLowerCase();
+        let keys;
+        if (co.includes("purely elementary")) {
+            keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+        } else if (co.includes("purely junior")) {
+            keys = ['g7', 'g8', 'g9', 'g10'];
+        } else if (co.includes("purely senior")) {
+            keys = ['g11', 'g12'];
+        } else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) {
+            keys = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (co.includes("elementary school and junior high school")) {
+            keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+        } else {
+            keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        }
+        return keys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
+    }, [curricularOffering]);
 
     // ── Chapter 1: Standard Setup ───────────────────────────────────────────
     const [hasStandardShifting, setHasStandardShifting] = useState(null);
@@ -95,13 +112,10 @@ const Unit5ShiftingModality = () => {
                     const saved = await res.json();
                     if (saved.exists && saved.data) {
                         const d = saved.data;
-                        
-                        // Parse curricular_offering to dynamically set activeGrades if needed
-                        // For this implementation, we assume K-6 based on the prompt "Loop through the school's offered grades".
-                        // Assuming K-6 is always offered unless otherwise specified.
-                        
-                        // If there is ANY shifting data, jump to review mode
-                        if (d.shift_kinder || d.has_standard_shifting !== null) {
+                        setCurricularOffering(d.curricular_offering || "");
+
+                        // If there is saved Unit 5 data, jump to review mode
+                        if (d.unit5_completed) {
                             setSavedData(d);
                             setHasStandardShifting(d.has_standard_shifting);
                             
@@ -129,7 +143,7 @@ const Unit5ShiftingModality = () => {
             }
         };
         init();
-    }, [activeGrades]);
+    }, []);
 
     // ── Validation ──────────────────────────────────────────────────────────
     const isStep1Valid = hasStandardShifting !== null;

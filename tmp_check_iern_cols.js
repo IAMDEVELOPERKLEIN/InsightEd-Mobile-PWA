@@ -8,8 +8,8 @@ const pool = new Pool({
 });
 async function run() {
   try {
-    const res = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'schools_IERN'");
-    console.log(res.rows.map(r => r.column_name));
+    const res = await pool.query("SELECT column_name, column_default, is_nullable FROM information_schema.columns WHERE table_name = 'ph_schools'");
+    console.log(JSON.stringify(res.rows, null, 2));
   } catch(e) {
     console.error(e);
   } finally {

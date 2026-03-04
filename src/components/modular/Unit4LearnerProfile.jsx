@@ -101,7 +101,7 @@ const Unit4LearnerProfile = () => {
                         // Grab total_enrollment from Unit 2
                         setEnrollmentTotal(parseInt(d.total_enrollment) || 0);
 
-                        if (d.selected_learner_groups !== null) {
+                        if (d.unit4_completed) {
                             // Pres-fill Chapter 1
                             if (Array.isArray(d.selected_learner_groups)) {
                                 setSelectedGroups(d.selected_learner_groups);

@@ -347,6 +347,11 @@ const Login = () => {
                     userData = docSnap.data();
                     role = userData.role;
 
+                    // PERSISTENCE FIX: Save schoolId if it exists in Firestore
+                    if (userData.school_id || userData.schoolId || userData.iern) {
+                        localStorage.setItem('schoolId', userData.school_id || userData.schoolId || userData.iern);
+                    }
+
                     // --- STRICT BACKEND VALIDATION ---
                     try {
                         const valRes = await fetch(`/api/auth/validate/${uid}`);
@@ -392,7 +397,11 @@ const Login = () => {
                             const valData = await valRes.json();
                             if (valData.valid) {
                                 role = valData.role;
-                                userData = { role: valData.role, firstName: 'User' };
+                                userData = { role: valData.role, firstName: 'User', school_id: valData.school_id || valData.iern };
+                                // PERSISTENCE FIX: Save schoolId from Postgres fallback
+                                if (userData.school_id) {
+                                    localStorage.setItem('schoolId', userData.school_id);
+                                }
                             }
                         }
                     } catch (e) {
@@ -506,18 +515,39 @@ const Login = () => {
                 console.log("Navigating for role:", role);
                 // alert(`Login Success! Role: ${role}`); // Temporary Debug
                 if (role === 'School Head' || role === 'Beta Tester') {
-                    // Fetch schoolId FIRST, THEN navigate — so it's ready when unit pages mount
+                    // FULL SYNC: Fetch schoolId + quest progress BEFORE navigating
                     const destPath = role === 'School Head' ? '/schoolhead-dashboard' : getDashboardPath(role);
-                    fetch(`/api/school-by-user/${uid}`)
-                        .then(res => res.json())
-                        .then(result => {
-                            if (result.exists) localStorage.setItem('schoolId', result.data.school_id);
-                        })
-                        .catch(err => console.log("Profile check failed, proceeding anyway"))
-                        .finally(() => {
-                            console.log("Navigating to:", destPath);
-                            navigate(destPath);
-                        });
+
+                    try {
+                        // Step 1: Get the user's school ID
+                        const profileRes = await fetch(`/api/school-by-user/${uid}`);
+                        const profileResult = await profileRes.json();
+                        const userSchoolId = profileResult.exists ? profileResult.data.school_id : null;
+
+                        if (userSchoolId) {
+                            localStorage.setItem('schoolId', userSchoolId);
+                            console.log("Synced schoolId:", userSchoolId);
+
+                            // Step 2: Fetch quest progress from backend
+                            try {
+                                const progressRes = await fetch(`/api/ph_schools/progress/${userSchoolId}`);
+                                if (progressRes.ok) {
+                                    const progressData = await progressRes.json();
+                                    if (progressData.success && progressData.progress) {
+                                        localStorage.setItem('quest_progress', JSON.stringify(progressData.progress));
+                                        console.log("Synced quest_progress:", progressData.progress);
+                                    }
+                                }
+                            } catch (progressErr) {
+                                console.warn("Progress sync failed, proceeding with cached data:", progressErr);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn("Login sync failed, proceeding anyway:", err);
+                    }
+
+                    console.log("Navigating to:", destPath);
+                    navigate(destPath);
                 } else if (role === 'Local Government Unit') {
                     // --- LGU LOGIC: Redirect to LGU Dashboard ---
                     console.log("Redirecting LGU to Dashboard...");

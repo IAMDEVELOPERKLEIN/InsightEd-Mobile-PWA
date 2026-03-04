@@ -120,6 +120,13 @@ const ModularDashboard = () => {
                 path: "/modular/unit-6",
                 locked: !questProgress.completedUnits.includes(5),
             },
+            {
+                id: 7,
+                title: "Teaching Personnel",
+                icon: <FiUsers className="w-7 h-7" />,
+                path: "/modular/unit-7",
+                locked: !questProgress.completedUnits.includes(6),
+            },
         ];
 
         return mods;

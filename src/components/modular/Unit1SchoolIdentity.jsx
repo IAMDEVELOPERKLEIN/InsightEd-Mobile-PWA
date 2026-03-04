@@ -72,7 +72,7 @@ const Unit1SchoolIdentity = () => {
                             setIsModeLoading(false);
                             return;
                         }
-                        if (savedData.exists && savedData.data?.school_name) {
+                        if (savedData.exists && savedData.data?.unit1_completed) {
                             // Pre-fill form with existing data
                             const d = savedData.data;
 
@@ -511,6 +511,8 @@ const Unit1SchoolIdentity = () => {
                 progress.xp += 150;
                 localStorage.setItem('quest_progress', JSON.stringify(progress));
             }
+            // ALWAYS persist schoolId (Fix for Local Storage Amnesia)
+            localStorage.setItem('schoolId', formData.school_id);
 
             setShowSuccess(true);
         } catch (err) {

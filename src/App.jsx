@@ -80,6 +80,7 @@ import Unit3OrganizedClasses from './components/modular/Unit3OrganizedClasses';
 import Unit4LearnerProfile from './components/modular/Unit4LearnerProfile';
 import Unit5ShiftingModality from './components/modular/Unit5ShiftingModality';
 import Unit6PhysicalFacilities from './components/modular/Unit6PhysicalFacilities';
+import Unit6TeachingPersonnel from './components/modular/Unit6TeachingPersonnel';
 
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
@@ -213,6 +214,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
               <Unit6PhysicalFacilities />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-7"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit6TeachingPersonnel />
             </ProtectedRoute>
           }
         />

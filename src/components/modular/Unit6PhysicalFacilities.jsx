@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiChevronLeft } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 
@@ -48,7 +48,7 @@ export default function Unit6PhysicalFacilities() {
                         setSavedData(d);
 
                         // If they have classrooms OR a water source, they already saved this module at least once
-                        if (d.classrooms_total > 0 || d.water_source) {
+                        if (d.unit6_completed) {
                             
                             // Rehydrate state
                             setUtilitiesData({
