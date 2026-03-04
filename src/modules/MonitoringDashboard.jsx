@@ -8,11 +8,11 @@ import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft
 import { TbTrophy, TbSchool, TbChartBar, TbFileDownload } from 'react-icons/tb';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
-import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import locationData from '../locations.json';
-
+import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 
 // Helper for robust name matching (ignoring "Division", "District" suffixes)
 const normalizeLocationName = (name) => {
@@ -59,7 +59,32 @@ const MonitoringDashboard = () => {
     const [schoolSort, setSchoolSort] = useState('pct-desc'); // Sort state for schools
     const [schoolSearch, setSchoolSearch] = useState(''); // NEW: Search state
     const [schoolPage, setSchoolPage] = useState(1); // NEW: Pagination state
-    const [schoolLimit, setSchoolLimit] = useState(10); // NEW: Pagination limit state
+    
+    // NEW: Pagination limit state with LocalStorage persistence
+    const [schoolLimit, setSchoolLimit] = useState(() => {
+        const savedLimit = localStorage.getItem('monitoringSchoolLimit');
+        return savedLimit ? parseInt(savedLimit, 10) : 10;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('monitoringSchoolLimit', schoolLimit);
+    }, [schoolLimit]);
+
+    const [isIssuesModalOpen, setIsIssuesModalOpen] = useState(false); // NEW: Issues Modal state
+    const [selectedSchoolForIssues, setSelectedSchoolForIssues] = useState(null); // NEW: Selected school for issues
+
+    // Prevent background scrolling when Issues Modal is open
+    useEffect(() => {
+        if (isIssuesModalOpen) {
+            document.body.classList.add('overflow-hidden');
+        } else {
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        return () => {
+            document.body.classList.remove('overflow-hidden');
+        };
+    }, [isIssuesModalOpen]);
 
     // NEW: Store Aggregated CSV Totals
     const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
@@ -2315,13 +2340,23 @@ const MonitoringDashboard = () => {
                                                                                 );
                                                                             })()}
 
-                                                                            {/* Data Quality Issues from school_summary */}
-                                                                            {s.data_quality_issues && s.data_quality_issues !== 'None' && s.data_quality_issues.trim() !== '' && (
-                                                                                <div className="mt-1 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg p-2">
-                                                                                    <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-0.5">Issues Detected</p>
-                                                                                    <p className="text-[10px] text-red-600 dark:text-red-300 font-semibold leading-relaxed whitespace-pre-wrap">
-                                                                                        {s.data_quality_issues}
-                                                                                    </p>
+                                                                            {/* Data Quality Issues Badge */}
+                                                                            {s.data_quality_issues && s.data_quality_issues !== 'None' && s.data_quality_issues.trim() !== '' ? (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setSelectedSchoolForIssues(s);
+                                                                                        setIsIssuesModalOpen(true);
+                                                                                    }}
+                                                                                    className="mt-1 flex items-center gap-1.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2.5 py-1 rounded-full text-[10px] font-black uppercase hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors shadow-sm cursor-pointer w-max"
+                                                                                >
+                                                                                    <FiAlertCircle size={12} />
+                                                                                    {s.data_quality_issues.split(';').filter(i => i.trim() !== '').length} Issues
+                                                                                </button>
+                                                                            ) : (
+                                                                                <div className="mt-1 flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-full text-[10px] font-black uppercase w-max">
+                                                                                    <FiCheckCircle size={12} />
+                                                                                    Clean
                                                                                 </div>
                                                                             )}
 
@@ -4778,6 +4813,73 @@ const MonitoringDashboard = () => {
                         </div>
                     </div>
                 </div>
+            )}
+            {/* ISSUES MODAL */}
+            {createPortal(
+                <AnimatePresence>
+                    {isIssuesModalOpen && selectedSchoolForIssues && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 overflow-y-auto p-4"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.95, opacity: 0 }}
+                                className="relative bg-white dark:bg-slate-800 rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                            >
+                                {/* Header */}
+                                <div className="flex justify-between items-start mb-4 border-b border-slate-100 dark:border-slate-700 pb-4">
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight pr-4">
+                                            {selectedSchoolForIssues.school_name}
+                                        </h3>
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
+                                            School ID: {selectedSchoolForIssues.school_id}
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setIsIssuesModalOpen(false);
+                                            setSelectedSchoolForIssues(null);
+                                        }}
+                                        className="w-8 h-8 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center hover:bg-rose-100 hover:text-rose-500 transition-colors shrink-0"
+                                    >
+                                        <FiX />
+                                    </button>
+                                </div>
+
+                                {/* Body */}
+                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
+                                    {selectedSchoolForIssues.data_quality_issues.split(';').filter(i => i.trim() !== '').map((issue, index) => (
+                                        <div key={index} className="flex items-start gap-3 bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-100 dark:border-red-900/30">
+                                            <FiAlertCircle className="text-red-500 shrink-0 mt-0.5" size={16} />
+                                            <p className="text-sm font-semibold text-red-700 dark:text-red-300 leading-relaxed">
+                                                {issue.trim()}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                                    <button
+                                        onClick={() => {
+                                            setIsIssuesModalOpen(false);
+                                            setSelectedSchoolForIssues(null);
+                                        }}
+                                        className="px-5 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body
             )}
         </PageTransition >
     );
