@@ -6686,7 +6686,7 @@ app.get('/api/projects', async (req, res) => {
 
     let sql = `
       WITH LatestProjects AS (
-          SELECT DISTINCT ON (ipc) 
+          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
             project_id, school_name, project_name, school_id, division, region, status_of_construction_phase AS status, ipc, engineer_name, engineer_id,
             accomplishment_percentage, approved_budget_for_contract, contract_amount, batch_of_funds, contractor_name, other_remarks,
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
@@ -6695,7 +6695,7 @@ app.get('/api/projects', async (req, res) => {
             pow_pdf, dupa_pdf, contract_pdf,
             actions, savings
           FROM engineer_form
-          ORDER BY ipc, project_id DESC
+          ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
       SELECT
         p.project_id AS "id", p.school_name AS "schoolName", p.project_name AS "projectName",
@@ -11415,16 +11415,16 @@ app.get('/api/reports/data-health', async (req, res) => {
     let whereClause = "1=1";
     let phWhereClause = "1=1";
     let params = [];
-    
+
     if (region) {
-      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region) 
-         ? region 
-         : `Region ${region}`;
+      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region)
+        ? region
+        : `Region ${region}`;
       const shortRegion = formattedRegion.replace(/region\s+/i, '').trim();
 
       params.push(formattedRegion);
       params.push(shortRegion);
-      
+
       whereClause += ` AND (s.region = $${params.length - 1} OR s.region = $${params.length})`;
       phWhereClause += ` AND (p.region = $${params.length - 1} OR p.region = $${params.length})`;
     }
@@ -11502,11 +11502,11 @@ app.get('/api/reports/data-health', async (req, res) => {
     // Calculate overall health score simply: 100 - relative deduction %
     let healthScore = 100;
     if (expected_schools > 0) {
-       const deduction = ((unregistered_schools.length + stale_schools.length + anomalies.length) / expected_schools) * 100;
-       healthScore = Math.max(0, 100 - deduction).toFixed(1);
+      const deduction = ((unregistered_schools.length + stale_schools.length + anomalies.length) / expected_schools) * 100;
+      healthScore = Math.max(0, 100 - deduction).toFixed(1);
     } else if (registered_schools > 0) {
-       const deduction = ((stale_schools.length + anomalies.length) / registered_schools) * 100;
-       healthScore = Math.max(0, 100 - deduction).toFixed(1);
+      const deduction = ((stale_schools.length + anomalies.length) / registered_schools) * 100;
+      healthScore = Math.max(0, 100 - deduction).toFixed(1);
     }
 
     // 5. Registered Schools Detailed Health Metrics
@@ -11572,9 +11572,9 @@ app.get('/api/reports/insights/master', async (req, res) => {
     let params = [];
 
     if (region && region !== 'null' && region !== 'undefined' && region !== 'All') {
-      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region) 
-         ? region 
-         : `Region ${region}`;
+      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region)
+        ? region
+        : `Region ${region}`;
       const shortRegion = formattedRegion.replace(/region\s+/i, '').trim();
 
       params.push(formattedRegion);
@@ -11619,9 +11619,9 @@ app.get('/api/reports/insights', async (req, res) => {
     let params = [];
 
     if (region && region !== 'null' && region !== 'undefined' && region !== 'All') {
-      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region) 
-         ? region 
-         : `Region ${region}`;
+      const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region)
+        ? region
+        : `Region ${region}`;
       const shortRegion = formattedRegion.replace(/region\s+/i, '').trim();
 
       params.push(formattedRegion);

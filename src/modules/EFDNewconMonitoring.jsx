@@ -4,6 +4,7 @@ import {
     FiChevronRight, FiAlertCircle, FiInfo, FiSearch, 
     FiList, FiDatabase, FiLoader 
 } from 'react-icons/fi';
+import BottomNav from './BottomNav';
 
 const API_BASE = "";
 
@@ -269,6 +270,7 @@ const EFDNewconMonitoring = () => {
                     </div>
                 </motion.div>
             </main>
+            <BottomNav userRole="EFD" />
         </div>
     );
 };

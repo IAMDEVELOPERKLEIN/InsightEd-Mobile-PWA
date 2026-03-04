@@ -147,7 +147,7 @@ const EFDHome = () => {
                             onClick={() => setActiveTab('list')}
                             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${activeTab === 'list' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500'}`}
                         >
-                            <FiList /> Project List
+                            <FiList /> Project Details
                         </button>
                     </div>
                 </div>
@@ -209,7 +209,12 @@ const EFDHome = () => {
                                         <BarChart 
                                             data={regionalData.slice(0, 10)} 
                                             layout="vertical"
-                                            onClick={(data) => data && setSelectedRegion(data.activeLabel)}
+                                            onClick={(data) => {
+                                                if (data && data.activeLabel) {
+                                                    setSelectedRegion(data.activeLabel);
+                                                    setActiveTab('list');
+                                                }
+                                            }}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                             <XAxis type="number" hide />
@@ -243,7 +248,15 @@ const EFDHome = () => {
                                     </h3>
                                     <div className="h-64 w-full">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={divisionData.slice(0, 10)}>
+                                            <BarChart 
+                                                data={divisionData.slice(0, 10)}
+                                                onClick={(data) => {
+                                                    if (data && data.activeLabel) {
+                                                        setSelectedDivision(data.activeLabel);
+                                                        setActiveTab('list');
+                                                    }
+                                                }}
+                                            >
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                                 <XAxis 
                                                     dataKey="name" 
@@ -265,7 +278,7 @@ const EFDHome = () => {
                                         onClick={() => setActiveTab('list')}
                                         className="w-full mt-4 bg-slate-50 hover:bg-slate-100 text-slate-600 py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2"
                                     >
-                                        See {selectedRegion} Project List <FiChevronRight />
+                                        See {selectedRegion} Project Details <FiChevronRight />
                                     </button>
                                 </div>
                             )}
