@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo } from 'react-icons/fi';
 import { auth } from '../firebase';
 import BottomNav from './BottomNav';
@@ -186,10 +187,15 @@ const EFDMonitoring = () => {
                 </div>
 
                 {/* Assignment Modal/Overlay */}
-                {selectedProject && (
-                    <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
-                        <div className="bg-white w-full max-w-xl rounded-t-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-10 duration-500 max-h-[90vh] flex flex-col">
-                            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                {selectedProject && createPortal(
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 px-4">
+                        <div className="bg-white w-full max-w-xl rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col relative px-4 sm:px-8">
+                            <button 
+                                onClick={() => setSelectedProject(null)}
+                                className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
+                            >
+                                <FiX size={20} />
+                            </button>
                             
                             <div className="mb-6">
                                 <h2 className="text-xl font-black text-slate-800">Assign Engineer</h2>
@@ -222,23 +228,24 @@ const EFDMonitoring = () => {
                                 </div>
                             </div>
 
-                            <div className="flex gap-3">
+                            <div className="flex flex-col sm:flex-row gap-3 mt-auto">
                                 <button 
                                     onClick={() => setSelectedProject(null)}
-                                    className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
+                                    className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button 
                                     onClick={handleAssign}
                                     disabled={!selectedEngineer || isAssigning}
-                                    className="flex-[2] py-4 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
+                                    className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
                                 >
                                     {isAssigning ? 'Updating...' : 'Confirm Deployment'}
                                 </button>
                             </div>
                         </div>
-                    </div>
+                    </div>,
+                    document.body
                 )}
 
                 {/* Notification */}

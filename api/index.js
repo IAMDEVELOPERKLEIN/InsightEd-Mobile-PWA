@@ -1298,36 +1298,91 @@ app.get('/api/masterlist/partnerships', async (req, res) => {
           COALESCE(cso_ngo_implemented::int, 0)
         ) > 1 AND (resolved_partnership IS NULL OR resolved_partnership = '') ${whereClause}
       `, params),
-      // New: Count assigned congressional initiatives
-      pool.query(`
-        SELECT assigned_to, COUNT(*) as projects, COALESCE(SUM(amount), 0) as amount
-        FROM congressional_initiatives
-        WHERE assigned_to IS NOT NULL
-        GROUP BY assigned_to
-      `)
+      // New: Count assigned congressional initiatives (Filtered)
+      (() => {
+        let whereArr = [];
+        let pArr = [];
+        let idx = 1;
+        if (region) { whereArr.push(`region = $${idx++}`); pArr.push(region); }
+        if (division) { whereArr.push(`division = $${idx++}`); pArr.push(division); }
+        if (legislative_district) { whereArr.push(`legislative_district = $${idx++}`); pArr.push(legislative_district); }
+        const wStr = whereArr.length > 0 ? `WHERE ${whereArr.join(' AND ')}` : '';
+        return pool.query(`
+          SELECT assigned_to, COUNT(*) as projects, COALESCE(SUM(amount), 0) as amount
+          FROM congressional_initiatives
+          ${wStr ? wStr + ' AND assigned_to IS NOT NULL' : 'WHERE assigned_to IS NOT NULL'}
+          GROUP BY assigned_to
+        `, pArr);
+      })(),
+      // New: Total Readily Implementable Projects (Filtered)
+      (() => {
+        let whereArr = [];
+        let pArr = [];
+        let idx = 1;
+        if (region) { whereArr.push(`region = $${idx++}`); pArr.push(region); }
+        if (division) { whereArr.push(`division = $${idx++}`); pArr.push(division); }
+        if (legislative_district) { whereArr.push(`legislative_district = $${idx++}`); pArr.push(legislative_district); }
+        const wStr = whereArr.length > 0 ? `WHERE ${whereArr.join(' AND ')}` : '';
+        return pool.query(`SELECT COUNT(*) as count FROM congressional_initiatives ${wStr}`, pArr);
+      })()
     ]);
-
-    const [pgoRes, mgoRes, cgoRes, dpwhRes, depedRes, csoRes, forDecisionRes, assignedRes] = resultsArr;
+    const [pgoRes, mgoRes, cgoRes, dpwhRes, depedRes, csoRes, forDecisionRes, assignedRes, totalInitiativesRes] = resultsArr;
     const assignedCounts = assignedRes.rows;
 
-    // Format single-row results (DPWH, DepEd, CSO, For Decision)
-    const formatSingle = (resObj) => {
-      const row = resObj.rows[0];
-      return row && Number(row.projects) > 0 ? [row] : [];
-    };
+    // Calculate totals for the new structure
+    const pgoTotal = pgoRes.rows.reduce((acc, curr) => {
+      acc.projects += Number(curr.projects);
+      acc.classrooms += Number(curr.classrooms);
+      return acc;
+    }, { projects: 0, classrooms: 0 });
+    const mgoTotal = mgoRes.rows.reduce((acc, curr) => {
+      acc.projects += Number(curr.projects);
+      acc.classrooms += Number(curr.classrooms);
+      return acc;
+    }, { projects: 0, classrooms: 0 });
+    const cgoTotal = cgoRes.rows.reduce((acc, curr) => {
+      acc.projects += Number(curr.projects);
+      acc.classrooms += Number(curr.classrooms);
+      return acc;
+    }, { projects: 0, classrooms: 0 });
+    const dpwhTotal = dpwhRes.rows[0] ? { projects: Number(dpwhRes.rows[0].projects), classrooms: Number(dpwhRes.rows[0].classrooms) } : { projects: 0, classrooms: 0 };
+    const depedTotal = depedRes.rows[0] ? { projects: Number(depedRes.rows[0].projects), classrooms: Number(depedRes.rows[0].classrooms) } : { projects: 0, classrooms: 0 };
+    const csoTotal = csoRes.rows[0] ? { projects: Number(csoRes.rows[0].projects), classrooms: Number(csoRes.rows[0].classrooms) } : { projects: 0, classrooms: 0 };
+    const forDecisionTotal = forDecisionRes.rows[0] ? { projects: Number(forDecisionRes.rows[0].projects), classrooms: Number(forDecisionRes.rows[0].classrooms), cost: Number(forDecisionRes.rows[0].cost) } : { projects: 0, classrooms: 0, cost: 0 };
+
+    const assigned_totals = assignedCounts.reduce((acc, row) => {
+      acc[row.assigned_to] = Number(row.projects);
+      return acc;
+    }, {});
+    const totalInitiatives = Number(totalInitiativesRes.rows[0].count);
 
     res.json({
+      pgo: pgoRes.rows,
+      mgo: mgoRes.rows,
+      cgo: cgoRes.rows,
+      dpwh: dpwhRes.rows,
+      deped: depedRes.rows,
+      cso: csoRes.rows,
+      forDecision: forDecisionRes.rows,
+      assigned_totals: assigned_totals,
+      total_initiatives: totalInitiatives,
       totals: {
-        governor_count: pgoRes.rows.length,
-        mayor_count: mgoRes.rows.length + cgoRes.rows.length
-      },
-      pgo: pgoRes.rows.map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'PGO')?.projects || 0) })),
-      mgo: mgoRes.rows.map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'MGO')?.projects || 0) })),
-      cgo: cgoRes.rows.map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'CGO')?.projects || 0) })),
-      dpwh: formatSingle(dpwhRes).map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'DPWH')?.projects || 0) })),
-      deped: formatSingle(depedRes).map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'DEPED')?.projects || 0) })),
-      cso: formatSingle(csoRes).map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'CSO')?.projects || 0) })),
-      forDecision: formatSingle(forDecisionRes)
+        governor_count: pgoTotal.projects,
+        governor_cl: pgoTotal.classrooms,
+        mayor_muni_count: mgoTotal.projects,
+        mayor_muni_cl: mgoTotal.classrooms,
+        mayor_city_count: cgoTotal.projects,
+        mayor_city_cl: cgoTotal.classrooms,
+        dpwh_count: dpwhTotal.projects,
+        dpwh_cl: dpwhTotal.classrooms,
+        deped_count: depedTotal.projects,
+        deped_cl: depedTotal.classrooms,
+        cso_count: csoTotal.projects,
+        cso_cl: csoTotal.classrooms,
+        for_decision_count: forDecisionTotal.projects,
+        for_decision_cl: forDecisionTotal.classrooms,
+        for_decision_cost: forDecisionTotal.cost
+      }
     });
   } catch (err) {
     console.error('❌ Masterlist Partnerships Error:', err);
@@ -1427,30 +1482,8 @@ const checkTableExists = async (tableName) => {
 
 // Helper to get the correct table or subquery for initiatives
 const getInitiativesSubquery = async (version) => {
-  const v1Table = 'congressional_initiatives';
-  const v2Table = 'congressional_initiatives_v2';
-  const v3Table = 'congressional_initiatives_v3';
   const columns = `id, school_id, project_name, school_name, amount, masterlist_status, region, division, legislative_district, ownership_type_preloaded, ownership_type_confirmed, accessibility_rating, buildable_space_dimensions, has_buildable_space, assigned_to`;
-
-  if (version === 'v1') return `(SELECT ${columns}, 'v1' as version_source FROM ${v1Table})`;
-  if (version === 'v2') {
-    const exists = await checkTableExists(v2Table);
-    return exists ? `(SELECT ${columns}, 'v2' as version_source FROM ${v2Table})` : `(SELECT ${columns}, 'v2' as version_source FROM ${v1Table} WHERE 1=0)`;
-  }
-  if (version === 'v3') {
-    const exists = await checkTableExists(v3Table);
-    return exists ? `(SELECT ${columns}, 'v3' as version_source FROM ${v3Table})` : `(SELECT ${columns}, 'v3' as version_source FROM ${v1Table} WHERE 1=0)`;
-  }
-
-  // Default: Total (All versions combined)
-  const existsV2 = await checkTableExists(v2Table);
-  const existsV3 = await checkTableExists(v3Table);
-
-  let parts = [`SELECT ${columns}, 'v1' as version_source FROM ${v1Table}`];
-  if (existsV2) parts.push(`SELECT ${columns}, 'v2' as version_source FROM ${v2Table}`);
-  if (existsV3) parts.push(`SELECT ${columns}, 'v3' as version_source FROM ${v3Table}`);
-
-  return `(${parts.join(' UNION ALL ')})`;
+  return `(SELECT ${columns}, 'v1' as version_source FROM congressional_initiatives)`;
 };
 
 // One-time: import CSV into DB table
@@ -1561,7 +1594,7 @@ app.post('/api/deped-infrariorities/import', async (req, res) => {
 // GET: Fetch DepEd Priorities 2026 Infrastructure details with optional filters
 app.get('/api/deped-infrariorities', async (req, res) => {
   try {
-    const { region, division, legislative_district, search, version } = req.query;
+    const { region, division, legislative_district, search, version, assigned_to } = req.query;
     const tableSubquery = await getInitiativesSubquery(version);
 
     let where = [];
@@ -1572,6 +1605,9 @@ app.get('/api/deped-infrariorities', async (req, res) => {
     if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
     if (legislative_district && legislative_district !== 'undefined') {
       where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
+    }
+    if (assigned_to) {
+      where.push(`assigned_to = $${pIdx++}`); params.push(assigned_to);
     }
     if (search) {
       where.push(`(school_name ILIKE $${pIdx} OR school_id ILIKE $${pIdx} OR project_name ILIKE $${pIdx})`);
@@ -1712,12 +1748,8 @@ app.post('/api/deped-infrariorities/assign', async (req, res) => {
     const { id, assigned_to, version } = req.body;
     if (!id) return res.status(400).json({ error: 'id is required' });
 
-    let tableName = 'congressional_initiatives';
-    if (version === 'v2') tableName = 'congressional_initiatives_v2';
-    else if (version === 'v3') tableName = 'congressional_initiatives_v3';
-
     await pool.query(
-      `UPDATE ${tableName} SET assigned_to = $1 WHERE id = $2`,
+      `UPDATE congressional_initiatives SET assigned_to = $1 WHERE id = $2`,
       [assigned_to || null, id]
     );
 
@@ -5183,8 +5215,8 @@ app.post('/api/register-beta', async (req, res) => {
           email,
           'Beta Tester',
           contactNumber || null,
-          'Beta Tester', 
-          schoolData.school_id, 
+          'Beta Tester',
+          schoolData.school_id,
           schoolData.region || null,
           schoolData.division || null,
           schoolData.province || null,
@@ -6969,6 +7001,7 @@ app.get('/api/projects/:id', async (req, res) => {
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
         school_id AS "schoolId", division, region, status_of_construction_phase AS "status", ipc,
+        engineer_name AS "engineerName",
         accomplishment_percentage AS "accomplishmentPercentage",
         approved_budget_for_contract AS "projectAllocation",
         contract_amount AS "contractAmount", contract_amount AS "contract_amount",
@@ -9946,22 +9979,28 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
   const { region, division } = req.query;
   try {
     let query = `
+      WITH LatestProjects AS (
+        SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+          school_id, accomplishment_percentage, status_of_construction_phase, approved_budget_for_contract, contract_amount, region, division
+        FROM engineer_form
+        ORDER BY COALESCE(ipc, project_id::text), created_at DESC
+      )
       SELECT 
         COUNT(*) as total_projects,
-        AVG(e.accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
-        COUNT(CASE WHEN e.status_of_construction_phase = 'Completed' THEN 1 END) as completed_count,
-        COUNT(CASE WHEN e.status_of_construction_phase = 'Ongoing' THEN 1 END) as ongoing_count,
-        COUNT(CASE WHEN e.status_of_construction_phase = 'Delayed' THEN 1 END) as delayed_count,
-        COALESCE(SUM(e.approved_budget_for_contract), 0) as total_allocation,
-        COALESCE(SUM(e.contract_amount), 0) as total_contract_amount
-      FROM engineer_form e
-      JOIN school_profiles sp ON e.school_id = sp.school_id
-      WHERE TRIM(sp.region) = TRIM($1)
+        AVG(p.accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
+        COUNT(CASE WHEN p.status_of_construction_phase = 'Completed' THEN 1 END) as completed_count,
+        COUNT(CASE WHEN p.status_of_construction_phase = 'Ongoing' THEN 1 END) as ongoing_count,
+        COUNT(CASE WHEN p.status_of_construction_phase = 'Delayed' THEN 1 END) as delayed_count,
+        COALESCE(SUM(p.approved_budget_for_contract), 0) as total_allocation,
+        COALESCE(SUM(p.contract_amount), 0) as total_contract_amount
+      FROM LatestProjects p
+      LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
+      WHERE TRIM(p.region) = TRIM($1)
     `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(sp.division) = TRIM($2)`;
+      query += ` AND TRIM(p.division) = TRIM($2)`;
       params.push(division);
     }
 
@@ -9983,20 +10022,27 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
   const { region, division } = req.query;
   try {
     let query = `
+      WITH LatestProjects AS (
+         SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+            project_id, project_name, school_id, school_name, accomplishment_percentage, status_of_construction_phase, 
+            approved_budget_for_contract, contract_amount, validation_status, status_as_of, region, division, created_at
+         FROM engineer_form
+         ORDER BY COALESCE(ipc, project_id::text), created_at DESC
+      )
       SELECT
-        e.project_id as id, e.project_name as "projectName", e.school_id as "schoolId", e.school_name as "schoolName",
-        e.accomplishment_percentage as "accomplishmentPercentage", e.status_of_construction_phase as status, 
-        e.approved_budget_for_contract as "projectAllocation",
-        e.contract_amount as "contractAmount",
-        e.validation_status as "validation_status", e.status_as_of as "statusAsOfDate"
-      FROM engineer_form e
-      LEFT JOIN school_profiles sp ON e.school_id = sp.school_id
-      WHERE TRIM(e.region) = TRIM($1)
+        p.project_id as id, p.project_name as "projectName", p.school_id as "schoolId", p.school_name as "schoolName",
+        p.accomplishment_percentage as "accomplishmentPercentage", p.status_of_construction_phase as status, 
+        p.approved_budget_for_contract as "projectAllocation",
+        p.contract_amount as "contractAmount",
+        p.validation_status as "validation_status", p.status_as_of as "statusAsOfDate"
+      FROM LatestProjects p
+      LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
+      WHERE TRIM(p.region) = TRIM($1)
     `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(sp.division) = TRIM($2)`;
+      query += ` AND TRIM(p.division) = TRIM($2)`;
       params.push(division);
     }
 
@@ -10005,7 +10051,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
       params.push(req.query.district);
     }
 
-    query += ` ORDER BY created_at DESC`;
+    query += ` ORDER BY p.created_at DESC`;
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -10145,7 +10191,12 @@ app.get('/api/monitoring/regions', async (req, res) => {
           COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE '%Under Procurement%' THEN 1 END) as under_procurement_projects,
           COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Completed' THEN 1 END) as completed_projects,
           COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Delayed' THEN 1 END) as delayed_projects
-        FROM engineer_form
+        FROM (
+          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+            region, approved_budget_for_contract, contract_amount, accomplishment_percentage, status_of_construction_phase
+          FROM engineer_form
+          ORDER BY COALESCE(ipc, project_id::text), created_at DESC
+        ) LatestProjects
         GROUP BY region
       )
       SELECT 
