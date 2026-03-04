@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiChevronRight, FiLayers, FiMap, FiUser, FiTv, FiSettings, FiDatabase, FiTrendingUp, FiDollarSign, FiBarChart2, FiTarget, FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiClock, FiLoader, FiCpu, FiSend, FiX, FiInfo, FiList, FiSearch } from 'react-icons/fi';
+import { FiChevronRight, FiLayers, FiMap, FiUser, FiTv, FiSettings, FiDatabase, FiTrendingUp, FiDollarSign, FiBarChart2, FiTarget, FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiClock, FiLoader, FiCpu, FiSend, FiX, FiInfo, FiList, FiSearch, FiArrowLeft } from 'react-icons/fi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList } from 'recharts';
 import BottomNav from './BottomNav';
 
@@ -350,7 +350,15 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
                                                 <tr>
                                                     <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">School ID</th>
                                                     <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">School Name</th>
-                                                    {kpi.source === 'congress' && <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Project</th>}
+                                                    {kpi.source === 'congress' && (
+                                                        <>
+                                                            <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Project</th>
+                                                            <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Leg. District</th>
+                                                            <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Ownership</th>
+                                                            <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider text-center">Accessible</th>
+                                                            <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider text-center">Buildable</th>
+                                                        </>
+                                                    )}
                                                     <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Region</th>
                                                     <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Division</th>
                                                     <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider text-right">Value</th>
@@ -361,7 +369,23 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
                                                     <tr key={idx} className="hover:bg-blue-50/40 transition-colors group">
                                                         <td className="px-6 py-4 font-mono text-slate-500 group-hover:text-blue-600 transition-colors">{p.school_id}</td>
                                                         <td className="px-6 py-4 font-bold text-slate-800 truncate max-w-[220px]" title={p.school_name}>{p.school_name}</td>
-                                                        {kpi.source === 'congress' && <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-[220px]" title={p.project_name}>{p.project_name}</td>}
+                                                        {kpi.source === 'congress' && (
+                                                            <>
+                                                                <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-[200px]" title={p.project_name}>{p.project_name}</td>
+                                                                <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{p.legislative_district}</td>
+                                                                <td className="px-6 py-4 text-[10px] font-black uppercase text-emerald-600 whitespace-nowrap">{p.ownership_type_confirmed || p.ownership_type_preloaded || '—'}</td>
+                                                                <td className="px-6 py-4 text-center">
+                                                                    <span className={`px-2 py-0.5 rounded-full font-black text-[9px] uppercase ${p.accessibility_rating?.includes('4') ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                                        {p.accessibility_rating || '—'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-center">
+                                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${(p.has_buildable_space||'').toUpperCase() === 'YES' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                                                        {p.has_buildable_space || '—'}
+                                                                    </span>
+                                                                </td>
+                                                            </>
+                                                        )}
                                                         <td className="px-6 py-4 text-slate-500">{p.region}</td>
                                                         <td className="px-6 py-4 text-slate-500">{p.division}</td>
                                                         <td className="px-6 py-4 font-black text-slate-900 text-right">
@@ -736,49 +760,52 @@ const HomeView = ({
         {
             id: 'PGO', title: 'PGO (Provincial Gov)',
             icon: <FiMap className="w-6 h-6" />, color: 'bg-teal-100 text-teal-600',
-            count: partnerships.totals ? Number(partnerships.totals.governor_count) || 0 : partnerships.pgo?.length || 0,
-            assigned_projects: partnerships.pgo?.[0]?.assigned_projects || 0,
-            drilldown: partnerships.pgo || []
+            count: partnerships.assigned_totals?.PGO || 0,
+            partner_count: partnerships.totals ? Number(partnerships.totals.governor_count) || 0 : partnerships.pgo?.length || 0,
+            drilldown: partnerships.pgo || [],
+            isImplementingOffice: true
         },
         {
             id: 'MGO', title: 'MGO (Municipal Gov)',
             icon: <FiUser className="w-6 h-6" />, color: 'bg-blue-100 text-blue-600',
-            count: partnerships.mgo?.length || 0,
-            assigned_projects: partnerships.mgo?.[0]?.assigned_projects || 0,
-            drilldown: partnerships.mgo || []
+            count: partnerships.assigned_totals?.MGO || 0,
+            partner_count: partnerships.totals ? Number(partnerships.totals.mayor_muni_count) || 0 : partnerships.mgo?.length || 0,
+            drilldown: partnerships.mgo || [],
+            isImplementingOffice: true
         },
         {
             id: 'CGO', title: 'CGO (City Gov)',
             icon: <FiTv className="w-6 h-6" />, color: 'bg-purple-100 text-purple-600',
-            count: partnerships.cgo?.length || 0,
-            assigned_projects: partnerships.cgo?.[0]?.assigned_projects || 0,
-            drilldown: partnerships.cgo || []
+            count: partnerships.assigned_totals?.CGO || 0,
+            partner_count: partnerships.totals ? Number(partnerships.totals.mayor_city_count) || 0 : partnerships.cgo?.length || 0,
+            drilldown: partnerships.cgo || [],
+            isImplementingOffice: true
         },
         {
             id: 'DPWH', title: 'DPWH',
             icon: <FiSettings className="w-6 h-6" />, color: 'bg-orange-100 text-orange-600',
-            count: partnerships.dpwh?.length > 0 ? Number(partnerships.dpwh[0].projects) : 0,
-            assigned_projects: partnerships.dpwh?.[0]?.assigned_projects || 0,
-            drilldown: partnerships.dpwh || []
+            count: partnerships.assigned_totals?.DPWH || 0,
+            drilldown: partnerships.dpwh || [],
+            isImplementingOffice: true
         },
         {
             id: 'DEPED', title: 'DepEd',
             icon: <FiCheckCircle className="w-6 h-6" />, color: 'bg-emerald-100 text-emerald-600',
-            count: partnerships.deped?.length > 0 ? Number(partnerships.deped[0].projects) : 0,
-            assigned_projects: partnerships.deped?.[0]?.assigned_projects || 0,
-            drilldown: partnerships.deped || []
+            count: partnerships.assigned_totals?.DEPED || 0,
+            drilldown: partnerships.deped || [],
+            isImplementingOffice: true
         },
         {
             id: 'CSO', title: 'CSO',
             icon: <FiLayers className="w-6 h-6" />, color: 'bg-rose-100 text-rose-600',
-            count: partnerships.cso?.length > 0 ? Number(partnerships.cso[0].projects) : 0,
-            assigned_projects: partnerships.cso?.[0]?.assigned_projects || 0,
-            drilldown: partnerships.cso || []
+            count: partnerships.assigned_totals?.CSO || 0,
+            drilldown: partnerships.cso || [],
+            isImplementingOffice: true
         },
         {
-            id: 'FOR_DECISION', title: 'Newcon Priorities',
+            id: 'FOR_DECISION', title: 'Readily Implementable Projects',
             icon: <FiAlertCircle className="w-6 h-6" />, color: 'bg-yellow-100 text-yellow-600',
-            count: partnerships.forDecision?.length > 0 ? Number(partnerships.forDecision[0].projects) : 0,
+            count: partnerships.total_initiatives || 0,
             drilldown: partnerships.forDecision || []
         },
     ] : [];
@@ -820,7 +847,7 @@ const HomeView = ({
                     )}
                     {currentLevel.drilldown.map((item, idx) => (
                         <div key={idx}
-                            onClick={() => handlePartnerClick(currentLevel.id, item.name)}
+                            onClick={() => handlePartnerClick({ id: currentLevel.id, name: item.name, type: currentLevel.id, isImplementingOffice: currentLevel.isImplementingOffice })}
                             className="min-w-[260px] md:min-w-0 snap-center bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
                             <span className="font-bold text-slate-700 text-base block mb-1 group-hover:text-blue-700">{item.name}</span>
                             <div className="flex items-center gap-4 text-sm text-slate-500 mb-2">
@@ -978,12 +1005,14 @@ const HomeView = ({
                         </h2>
                         <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 overflow-x-auto md:overflow-x-visible pb-6 md:pb-0 gap-6 snap-x snap-mandatory no-scrollbar -mx-2 px-2">
                             {partnershipCards.map((p) => (
-                                <motion.div
+                                <motion.button
                                     key={p.id}
                                     whileHover={{ y: -5 }}
                                     onClick={() => {
                                         if (p.id === 'FOR_DECISION') {
                                             setShowCongressView(true);
+                                        } else if (p.isImplementingOffice) {
+                                            handlePartnerClick({ id: p.id, name: p.title, type: p.id, isImplementingOffice: true });
                                         } else {
                                             handleDrilldown(p);
                                         }
@@ -994,16 +1023,25 @@ const HomeView = ({
                                         <div className={`p-4 rounded-full ${p.color} shrink-0`}>{p.icon}</div>
                                         <div className="text-center sm:text-left">
                                             <h3 className="text-base md:text-lg font-bold text-slate-800">{p.title}</h3>
-                                            <p className="text-xs md:text-sm text-slate-500 mt-1">
-                                                {Number(p.count).toLocaleString()} {p.id === 'FOR_DECISION' ? 'initiatives' : 'partners'}
-                                                {p.assigned_projects > 0 && (
-                                                    <span className="block mt-1 text-blue-600 font-black tracking-widest text-[9px] bg-blue-50 px-1.5 py-0.5 rounded w-fit mx-auto sm:mx-0">+{p.assigned_projects} ASSIGNED</span>
+                                            <div className="flex flex-col mt-1">
+                                                <span className="text-xs md:text-sm font-bold text-blue-600 uppercase tracking-tight">
+                                                    {Number(p.count).toLocaleString()} {p.id === 'FOR_DECISION' ? 'Readily Implementable' : 'Assigned'} {p.count === 1 ? 'Project' : 'Projects'}
+                                                </span>
+                                                {p.partner_count > 0 && (
+                                                    <span className="text-[10px] text-slate-400 font-medium">
+                                                        {Number(p.partner_count).toLocaleString()} Total Partners
+                                                    </span>
                                                 )}
-                                            </p>
+                                                {p.id === 'FOR_DECISION' && (
+                                                    <span className="text-[10px] text-slate-400 font-medium">
+                                                        View Pending Initiatives
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="hidden lg:block"><FiChevronRight className="text-slate-300 group-hover:text-blue-500 transition-colors w-5 h-5" /></div>
-                                </motion.div>
+                                </motion.button>
                             ))}
                         </div>
                     </div>
@@ -1512,9 +1550,192 @@ const MasterlistAIChat = ({ onClose }) => {
     );
 };
 
+// ───────────────────────
+// PARTNER DETAIL VIEW (FULL PAGE)
+// ───────────────────────
+const PartnerDetailView = ({ 
+    partner, schools, search, setSearch, page, setPage, pageSize, 
+    onBack, handleResolve, formatCost 
+}) => {
+    if (!partner) return null;
+
+    const filtered = (schools.data || []).filter(s => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (
+            (s.school_id || '').toLowerCase().includes(q) ||
+            (s.school_name || '').toLowerCase().includes(q) ||
+            (s.project_name || '').toLowerCase().includes(q)
+        );
+    });
+
+    const totalPages = Math.ceil(filtered.length / pageSize);
+    const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+    return (
+        <div className="space-y-6 pb-20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={onBack}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm group"
+                    >
+                        <FiArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                    </button>
+                    <div>
+                        <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-1">
+                            {partner.type} Partner
+                        </div>
+                        <h2 className="text-3xl font-black text-slate-800 tracking-tight">{partner.name}</h2>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all w-full md:w-96">
+                    <FiSearch className="text-slate-400" />
+                    <input 
+                        type="text"
+                        placeholder="Search schools, IDs, or projects..."
+                        className="bg-transparent border-none outline-none text-sm font-medium w-full text-slate-700 placeholder:text-slate-300"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+                <div className="p-0 overflow-x-auto">
+                    {schools.loading ? (
+                        <div className="flex flex-col items-center justify-center py-24 space-y-4">
+                            <FiLoader className="w-10 h-10 text-blue-500 animate-spin" />
+                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching project data...</p>
+                        </div>
+                    ) : (
+                        <table className="w-full text-xs border-separate border-spacing-0">
+                            <thead className="bg-slate-50/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-100">
+                                <tr>
+                                    {['School ID & Name', 'Project Details', 'Amount', 'Status', 'Location & District', 'Ownership', 'Accessibility', 'Buildable Space'].map(h => (
+                                        <th key={h} className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">{h}</th>
+                                    ))}
+                                    {partner.type === 'FOR_DECISION' && <th className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Actions</th>}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {paginated.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={10} className="py-24 text-center">
+                                            <FiMap className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">No matches found</p>
+                                        </td>
+                                    </tr>
+                                ) : paginated.map((school, i) => (
+                                    <tr key={i} className="hover:bg-blue-50/30 transition-colors group">
+                                        <td className="px-6 py-5 border-b border-slate-50 group-hover:bg-blue-50/30 transition-colors whitespace-nowrap bg-white">
+                                            <div className="font-mono text-[10px] text-slate-400 mb-0.5">{school.school_id}</div>
+                                            <div className="font-bold text-slate-800 text-sm truncate max-w-[180px]" title={school.school_name}>{school.school_name}</div>
+                                        </td>
+                                        <td className="px-6 py-5 border-b border-slate-50 italic text-slate-500 font-medium max-w-[200px] truncate" title={school.project_name || 'N/A'}>
+                                            {school.project_name || 'Standard Building'}
+                                        </td>
+                                        <td className="px-6 py-5 border-b border-slate-50">
+                                            <span className="font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl">
+                                                {school.shortage}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                            <span className="px-3 py-1 rounded-lg text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-tight">
+                                                {school.classrooms}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5 border-b border-slate-50">
+                                            <div className="text-[10px] font-bold text-slate-600 truncate max-w-[150px]">
+                                                {school.region} · {school.division}
+                                            </div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{school.legislative_district}</div>
+                                        </td>
+                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                            <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100">
+                                                {school.ownership_type_confirmed || school.ownership_type_preloaded || 'Unknown'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                            <span className={`px-2.5 py-1.5 rounded-full font-black text-[9px] uppercase border ${school.accessibility_rating?.includes('4') ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
+                                                Rating: {school.accessibility_rating || '—'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                            <div className="flex flex-col">
+                                                <div className={`font-black text-[10px] uppercase ${(school.has_buildable_space||'').toUpperCase() === 'YES' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {(school.has_buildable_space || '—').toUpperCase()}
+                                                </div>
+                                                {school.buildable_space_dimensions && (
+                                                    <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{school.buildable_space_dimensions}</div>
+                                                )}
+                                            </div>
+                                        </td>
+                                        {partner.type === 'FOR_DECISION' && (
+                                            <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                                <select
+                                                    className="bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-[10px] font-black text-slate-700 outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer hover:border-amber-200 transition-all shadow-sm"
+                                                    onChange={(e) => handleResolve(school.school_id, e.target.value)}
+                                                    defaultValue=""
+                                                >
+                                                    <option value="" disabled>Resolve to...</option>
+                                                    <option value="PGO">PGO</option>
+                                                    <option value="MGO">MGO</option>
+                                                    <option value="CGO">CGO</option>
+                                                    <option value="DPWH">DPWH</option>
+                                                    <option value="DEPED">DepEd</option>
+                                                    <option value="CSO">CSO</option>
+                                                </select>
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {totalPages > 1 && (
+                    <div className="p-6 bg-white border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of {filtered.length} Projects
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page === 1}
+                                className="p-2 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-all group"
+                            >
+                                <FiChevronRight className="rotate-180 group-active:scale-90 transition-transform" />
+                            </button>
+                            <span className="text-[10px] font-black text-slate-500 bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl shadow-inner">
+                                PAGE {page} OF {totalPages}
+                            </span>
+                            <button 
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                disabled={page === totalPages}
+                                className="p-2 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-all group"
+                            >
+                                <FiChevronRight className="group-active:scale-90 transition-transform" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const PSIP = () => {
     const location = useLocation();
-    const activeTab = location.state?.activeTab || 'home';
+    const [activeTab, setActiveTabInternal] = useState(location.state?.activeTab || 'home');
+
+    useEffect(() => {
+        if (location.state?.activeTab) {
+            setActiveTabInternal(location.state.activeTab);
+        }
+    }, [location.state]);
     const [isAIChatOpen, setIsAIChatOpen] = useState(false);
 
     // ── Home State ──
@@ -1533,6 +1754,8 @@ const PSIP = () => {
     // ── Organization Modal State ──
     const [selectedPartner, setSelectedPartner] = useState(null); // { type: 'PGO', name: 'Gov. Dalipog' }
     const [partnerSchools, setPartnerSchools] = useState({ loading: false, data: [] });
+    const [partnerSearch, setPartnerSearch] = useState('');
+    const [partnerPage, setPartnerPage] = useState(1);
 
     // ── Prototype Modal State ──
     const [selectedPrototype, setSelectedPrototype] = useState(null); // { sty: 1, cl: 2 }
@@ -1569,6 +1792,10 @@ const PSIP = () => {
     const handleBack = () => setDrilldownPath(drilldownPath.slice(0, -1));
 
     useEffect(() => { setDrilldownPath([]); }, [activeTab]);
+
+    useEffect(() => {
+        setPartnerPage(1);
+    }, [partnerSearch, activeTab]);
 
     // ── Helper to build query string ──
     const getQueryString = () => {
@@ -1669,11 +1896,30 @@ const PSIP = () => {
 
     const handlePartnerClick = async (partner) => {
         setSelectedPartner(partner);
+        setActiveTabInternal('partner-detail');
         setPartnerSchools({ loading: true, data: [] });
         try {
+            let res, data;
             const qs = getQueryString();
-            const res = await fetch(`${API_BASE}/api/masterlist/partnership-schools${qs}${qs ? '&' : '?'}type=${partner.type}&name=${encodeURIComponent(partner.name)}`);
-            const data = await res.json();
+            
+            if (partner.isImplementingOffice) {
+                // Fetch from initiatives tracking for implementing offices
+                res = await fetch(`${API_BASE}/api/deped-infrariorities${qs}${qs ? '&' : '?'}assigned_to=${partner.id}`);
+                data = await res.json();
+                // Map initiative fields to the modal's expected fields
+                data = data.map(r => ({
+                    ...r,
+                    shortage: r.amount ? `₱${(Number(r.amount)/1_000_000).toFixed(1)}M` : '—', 
+                    classrooms: r.masterlist_status || 'Assigned',
+                    cost: r.amount || 0,
+                    isInitiative: true
+                }));
+            } else {
+                // Fetch from masterlist for traditional partners
+                res = await fetch(`${API_BASE}/api/masterlist/partnership-schools${qs}${qs ? '&' : '?'}type=${partner.type}&name=${encodeURIComponent(partner.name)}`);
+                data = await res.json();
+            }
+            
             setPartnerSchools({ loading: false, data });
         } catch (err) {
             console.error("Partner Schools Fetch Error:", err);
@@ -1816,6 +2062,20 @@ const PSIP = () => {
                             selectedVersion={selectedVersion}
                             setSelectedVersion={setSelectedVersion}
                         />}
+                        {activeTab === 'partner-detail' && (
+                            <PartnerDetailView 
+                                partner={selectedPartner}
+                                schools={partnerSchools}
+                                search={partnerSearch}
+                                setSearch={setPartnerSearch}
+                                page={partnerPage}
+                                setPage={setPartnerPage}
+                                pageSize={10}
+                                onBack={() => setActiveTabInternal('home')}
+                                handleResolve={handleResolve}
+                                formatCost={formatCost}
+                            />
+                        )}
                         {activeTab === 'data' && <DataView 
                             loading={loading}
                             summary={summary}
@@ -1848,114 +2108,7 @@ const PSIP = () => {
                     )}
                 </AnimatePresence>
 
-                {/* Organization Schools Modal */}
-                <AnimatePresence>
-                    {selectedPartner && (
-                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:px-6">
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95, y: 50 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95, y: 50 }}
-                                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                                className="bg-white w-full sm:max-w-3xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
-                            >
-                                <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-6 relative">
-                                    <button onClick={() => setSelectedPartner(null)} className="absolute top-4 right-4 text-white/70 hover:text-white p-2">
-                                        <FiX size={24} />
-                                    </button>
-                                    <div className="inline-flex items-center gap-2 bg-blue-900/40 px-3 py-1 rounded-full border border-blue-400/30 text-[10px] font-black uppercase text-blue-200 tracking-widest mb-3">
-                                        {selectedPartner.type} Partner
-                                    </div>
-                                    <h2 className="text-2xl font-black text-white">{selectedPartner.name}</h2>
-                                    <p className="text-blue-100/80 text-sm mt-1">Showing all proposed school infrastructure projects handled by this entity.</p>
-                                </div>
 
-                                <div className="p-6 overflow-y-auto bg-slate-50 flex-1">
-                                    {partnerSchools.loading ? (
-                                        <div className="flex flex-col items-center justify-center space-y-4 py-12">
-                                            <FiLoader className="w-8 h-8 text-blue-500 animate-spin" />
-                                            <p className="text-slate-500 font-medium text-sm">Fetching school projects...</p>
-                                        </div>
-                                    ) : partnerSchools.data.length === 0 ? (
-                                        <div className="text-center py-12">
-                                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm text-slate-300">
-                                                <FiMap size={32} />
-                                            </div>
-                                            <p className="text-slate-500 font-medium">No projects found for this organization.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            {partnerSchools.data.map((school, i) => (
-                                                <div key={i} className="bg-white border text-left border-slate-200 p-4 rounded-xl shadow-sm hover:border-blue-300 transition-colors">
-                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                                        <div>
-                                                            <div className="text-xs font-mono font-bold text-slate-400 mb-1">{school.school_id}</div>
-                                                            <h4 className="text-base font-bold text-slate-800 leading-tight">{school.school_name}</h4>
-                                                            {selectedPartner?.type === 'FOR_DECISION' && (
-                                                                <div className="mt-2 flex flex-wrap gap-1">
-                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block w-full mb-1">Implementers:</span>
-                                                                    {[
-                                                                        { key: 'prov_implemented', label: 'PGO', color: 'bg-teal-50 text-teal-600 border-teal-100' },
-                                                                        { key: 'muni_implemented', label: 'MGO', color: 'bg-blue-50 text-blue-600 border-blue-100' },
-                                                                        { key: 'city_implemented', label: 'CGO', color: 'bg-indigo-50 text-indigo-600 border-indigo-100' },
-                                                                        { key: 'dpwh_implemented', label: 'DPWH', color: 'bg-orange-50 text-orange-600 border-orange-100' },
-                                                                        { key: 'deped_implemented', label: 'DepEd', color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-                                                                        { key: 'cso_ngo_implemented', label: 'CSO', color: 'bg-rose-50 text-rose-600 border-rose-100' }
-                                                                    ].filter(imp => school[imp.key]).map(imp => (
-                                                                        <span key={imp.label} className={`px-2 py-0.5 rounded text-[9px] font-black border ${imp.color}`}>
-                                                                            {imp.label}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex gap-4 sm:text-right shrink-0">
-                                                            <div className="bg-amber-50 px-3 py-2 rounded-lg border border-amber-100 flex flex-col justify-center">
-                                                                <span className="text-[10px] uppercase font-bold text-amber-500">Shortage</span>
-                                                                <span className="font-black text-amber-700">{school.shortage}</span>
-                                                            </div>
-                                                            <div className="bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100 flex flex-col justify-center">
-                                                                <span className="text-[10px] uppercase font-bold text-emerald-500">Proposed CL</span>
-                                                                <span className="font-black text-emerald-700">{school.classrooms}</span>
-                                                            </div>
-                                                            <div className="bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 flex flex-col justify-center min-w-[100px]">
-                                                                <span className="text-[10px] uppercase font-bold text-blue-500">Est. Cost</span>
-                                                                <span className="font-black text-blue-700">{formatCost(school.cost)}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    {selectedPartner?.type === 'FOR_DECISION' && (
-                                                        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1"><FiAlertCircle /> Resolve to:</span>
-                                                            <select
-                                                                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 block w-full sm:w-48 cursor-pointer"
-                                                                onChange={(e) => handleResolve(school.school_id, e.target.value)}
-                                                                defaultValue=""
-                                                            >
-                                                                <option value="" disabled>Select Agency...</option>
-                                                                <option value="PGO">PGO (Provincial Gov)</option>
-                                                                <option value="MGO">MGO (Municipal Gov)</option>
-                                                                <option value="CGO">CGO (City Gov)</option>
-                                                                <option value="DPWH">DPWH</option>
-                                                                <option value="DEPED">DepEd</option>
-                                                                <option value="CSO">CSO</option>
-                                                            </select>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                {!partnerSchools.loading && (
-                                    <div className="bg-white border-t border-slate-100 p-4 flex justify-between items-center text-sm">
-                                        <span className="font-bold text-slate-500">{partnerSchools.data.length} Schools Listed</span>
-                                    </div>
-                                )}
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
 
                 {/* Prototype Schools Modal */}
                 <AnimatePresence>

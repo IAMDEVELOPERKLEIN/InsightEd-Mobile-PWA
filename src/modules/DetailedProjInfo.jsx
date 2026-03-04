@@ -730,6 +730,9 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Savings" value={project.savings !== undefined && project.savings !== null ? project.savings : (Number(history.length > 0 ? (history[history.length - 1].approved_budget_for_contract || history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : (project.projectAllocation || project.approved_budget_for_contract || 0)) - Number(project.contractAmount || project.contract_amount || 0))} isMoney />
                                 <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
                             </div>
+                            <div className="grid grid-cols-1 gap-3">
+                                <DetailItem label="Handling Division Engineer" value={project.engineerName ? `Engr. ${project.engineerName}` : 'Unassigned'} />
+                            </div>
                             <DetailItem label="Remarks" value={project.otherRemarks} />
 
                     {/* Procurement Milestones Section */}
