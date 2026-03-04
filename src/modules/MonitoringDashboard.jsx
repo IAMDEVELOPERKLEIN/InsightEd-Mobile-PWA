@@ -8,6 +8,7 @@ import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft
 import { TbTrophy, TbSchool, TbChartBar, TbFileDownload } from 'react-icons/tb';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
+import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import locationData from '../locations.json';
