@@ -3425,30 +3425,55 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
   const data = req.body;
 
   try {
+    // We expect { unit2_simplified_enrollment: { array: [...], questionnaire: {} }, sned_self_contained_count: N }
+    const rawData = data.unit2_simplified_enrollment || {};
+    const simplifiedData = Array.isArray(rawData) ? rawData : (rawData.array || []);
+    
+    let totalM = 0;
+    let totalF = 0;
+    let enrollmentByGrade = {
+        kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
+        g7: 0, g8: 0, g9: 0, g10: 0, g11: 0, g12: 0
+    };
+
+    simplifiedData.forEach(item => {
+        const m = parseInt(item.male) || 0;
+        const f = parseInt(item.female) || 0;
+        const total = parseInt(item.total) || (m + f);
+        totalM += m;
+        totalF += f;
+        if (enrollmentByGrade[item.grade_level] !== undefined) {
+            enrollmentByGrade[item.grade_level] = total;
+        }
+    });
+
+    if (!Array.isArray(rawData) && rawData.questionnaire && rawData.questionnaire.genderTotals) {
+        totalM = parseInt(rawData.questionnaire.genderTotals.male) || 0;
+        totalF = parseInt(rawData.questionnaire.genderTotals.female) || 0;
+    }
+
+    const { sned_self_contained_count } = data;
+    const globalTotal = totalM + totalF + (parseInt(sned_self_contained_count) || 0);
+
     const fields = [
       'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',
       'enroll_g4 = $5', 'enroll_g5 = $6', 'enroll_g6 = $7', 'total_enrollment = $8',
-      'sned_learners = $9', 'non_graded_learners = $10',
-      'aral_math_g1 = $11', 'aral_math_g2 = $12', 'aral_math_g3 = $13', 'aral_math_g4 = $14', 'aral_math_g5 = $15', 'aral_math_g6 = $16',
-      'aral_read_g1 = $17', 'aral_read_g2 = $18', 'aral_read_g3 = $19', 'aral_read_g4 = $20', 'aral_read_g5 = $21', 'aral_read_g6 = $22',
-      'aral_sci_g1 = $23', 'aral_sci_g2 = $24', 'aral_sci_g3 = $25', 'aral_sci_g4 = $26', 'aral_sci_g5 = $27', 'aral_sci_g6 = $28',
-      'male_enrollment = $29', 'female_enrollment = $30', 'verified_as_of = CURRENT_TIMESTAMP'
+      'male_enrollment = $9', 'female_enrollment = $10', 
+      'sned_self_contained_count = $11',
+      'unit2_simplified_enrollment = $12',
+      'verified_as_of = CURRENT_TIMESTAMP'
     ];
-
-    const parseVal = (val) => (val === "" || val === null || val === undefined || isNaN(parseInt(val))) ? 0 : parseInt(val);
 
     const values = [
-      parseVal(data.enroll_kinder), parseVal(data.enroll_g1), parseVal(data.enroll_g2), parseVal(data.enroll_g3),
-      parseVal(data.enroll_g4), parseVal(data.enroll_g5), parseVal(data.enroll_g6), parseVal(data.total_enrollment),
-      parseVal(data.sned_learners), parseVal(data.non_graded_learners),
-      parseVal(data.aral_math_g1), parseVal(data.aral_math_g2), parseVal(data.aral_math_g3), parseVal(data.aral_math_g4), parseVal(data.aral_math_g5), parseVal(data.aral_math_g6),
-      parseVal(data.aral_read_g1), parseVal(data.aral_read_g2), parseVal(data.aral_read_g3), parseVal(data.aral_read_g4), parseVal(data.aral_read_g5), parseVal(data.aral_read_g6),
-      parseVal(data.aral_sci_g1), parseVal(data.aral_sci_g2), parseVal(data.aral_sci_g3), parseVal(data.aral_sci_g4), parseVal(data.aral_sci_g5), parseVal(data.aral_sci_g6),
-      parseVal(data.male_enrollment), parseVal(data.female_enrollment),
-      schoolId // $31
+      enrollmentByGrade.kinder, enrollmentByGrade.g1, enrollmentByGrade.g2, enrollmentByGrade.g3,
+      enrollmentByGrade.g4, enrollmentByGrade.g5, enrollmentByGrade.g6, globalTotal,
+      totalM, totalF,
+      parseInt(sned_self_contained_count) || 0,
+      JSON.stringify(rawData),
+      schoolId // $13
     ];
 
-    const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $31`;
+    const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $13`;
 
     await pool.query(query, values);
     res.json({ success: true, message: "Unit 2 Learner data saved successfully!" });

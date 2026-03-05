@@ -1,664 +1,1221 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2 } from "react-icons/fi";
-import { motion, AnimatePresence } from "framer-motion";
-import SuccessModal from "../SuccessModal";
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import SuccessModal from '../SuccessModal';
 
-const TOTAL_STEPS = 5;
-
-// Shared styling
-const chunkyInput = "w-full p-4 mt-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:bg-blue-50 transition-colors shadow-sm disabled:opacity-50 disabled:bg-gray-100";
-const chunkySelect = "w-full p-4 mt-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:bg-blue-50 transition-colors shadow-sm appearance-none bg-white disabled:opacity-50 disabled:bg-gray-100";
-const toggleBtnBase = "flex-1 py-3 px-4 rounded-xl font-bold border-2 transition-all flex items-center justify-center gap-2";
-const toggleBtnActive = "bg-blue-100 border-blue-500 text-blue-700";
+// --- Shared Styles ---
+const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-gray-200 rounded-2xl text-2xl font-black text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors shadow-sm text-center";
+const toggleBtnBase = "flex-1 py-4 px-6 rounded-2xl font-black text-lg border-2 transition-all flex items-center justify-center gap-2 shadow-sm";
+const toggleBtnActive = "bg-indigo-100 border-indigo-500 text-indigo-700 shadow-indigo-100";
 const toggleBtnInactive = "bg-white border-gray-200 text-gray-400 hover:bg-gray-50";
+
+// --- Data Constants ---
+const ALL_GRADES = [
+    { id: 'kinder', label: 'Kindergarten', type: 'elem' },
+    { id: 'g1', label: 'Grade 1', type: 'elem' },
+    { id: 'g2', label: 'Grade 2', type: 'elem' },
+    { id: 'g3', label: 'Grade 3', type: 'elem' },
+    { id: 'g4', label: 'Grade 4', type: 'elem' },
+    { id: 'g5', label: 'Grade 5', type: 'elem' },
+    { id: 'g6', label: 'Grade 6', type: 'elem' },
+    { id: 'g7', label: 'Grade 7', type: 'jhs' },
+    { id: 'g8', label: 'Grade 8', type: 'jhs' },
+    { id: 'g9', label: 'Grade 9', type: 'jhs' },
+    { id: 'g10', label: 'Grade 10', type: 'jhs' },
+    { id: 'g11', label: 'Grade 11', type: 'shs' },
+    { id: 'g12', label: 'Grade 12', type: 'shs' }
+];
+
+const ELEM_GRADES = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 
 const Unit2Learners = () => {
     const navigate = useNavigate();
-    const [currentStep, setCurrentStep] = useState(1);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
-    const [schoolId, setSchoolId] = useState("");
-    const [isReviewMode, setIsReviewMode] = useState(false);
-    const [curricularOffering, setCurricularOffering] = useState("");
 
-    // Form State
-    const [formData, setFormData] = useState({
-        // Step 1: Base
-        enroll_kinder: "",
-        enroll_g1: "",
-        enroll_g2: "",
-        enroll_g3: "",
-        enroll_g4: "",
-        enroll_g5: "",
-        enroll_g6: "",
-        enroll_g7: "",
-        enroll_g8: "",
-        enroll_g9: "",
-        enroll_g10: "",
-        enroll_g11: "",
-        enroll_g12: "",
+    // --- Wizard State ---
+    const [currentStep, setCurrentStep] = useState(1);
+    const [currentGradeIndex, setCurrentGradeIndex] = useState(0); 
+    const [availableGrades, setAvailableGrades] = useState([]);
+    const [hasKinder, setHasKinder] = useState(false);
+    const [hasElementary, setHasElementary] = useState(false);
+
+    // Step 1: Kinder
+    const [kinderEnrollment, setKinderEnrollment] = useState("");
+
+    // Step 2 & 3: Organization (G1-G6 Only)
+    const [orgType, setOrgType] = useState(null); // 'nano', 'pure_mg', 'mixed'
+    const [mgCombinations, setMgCombinations] = useState([]); // [{ id, grades: [], enrollment }]
+
+    // Step 4: Grade Totals & Availability (Nano/Standalone)
+    const [gradeTotals, setGradeTotals] = useState({});
+    const [gradeAvailability, setGradeAvailability] = useState({});
+    
+    // Step 3: Special Learners (SNED / Non-Graded)
+    const [hasSnedSelfContained, setHasSnedSelfContained] = useState(null);
+    const [sned_self_contained_count, setSnedSelfContainedCount] = useState("");
+    const [snedLanguage, setSnedLanguage] = useState("en"); // "en" | "ph"
+
+    // Step 3: ARAL Program (Conditional)
+    const [hasAralMath, setHasAralMath] = useState(null);
+    const [hasAralReading, setHasAralReading] = useState(null);
+    const [hasAralScience, setHasAralScience] = useState(null);
+    
+    const [aralMath, setAralMath] = useState({});
+    const [aralReading, setAralReading] = useState({});
+    const [aralScience, setAralScience] = useState({});
+
+    // Step 4: Global Gender
+    const [genderTotals, setGenderTotals] = useState({ male: "", female: "" });
+
+    // --- Derived State ---
+    const lockedGrades = useMemo(() => {
+        const locked = new Set();
+        mgCombinations.forEach(c => c.grades.forEach(g => locked.add(g)));
+        return locked;
+    }, [mgCombinations]);
+
+    const activeNanoGrades = useMemo(() => {
+        // Only show grades NOT in combinations and NOT Kinder (handled separately)
+        return availableGrades.filter(g => !lockedGrades.has(g.id) && g.id !== 'kinder');
+    }, [availableGrades, lockedGrades]);
+
+    const grandTotal = useMemo(() => {
+        let sum = 0;
+        // Kinder standalone
+        const isKinderActive = gradeAvailability.kinder !== false;
+        if (isKinderActive) {
+            sum += (parseInt(kinderEnrollment) || 0);
+        }
         
-        // Step 2: Special
-        hasSned: null, // boolean or null
-        sned_learners: "",
-        hasNonGraded: null, // boolean or null
-        non_graded_learners: "",
+        // Nano totals
+        activeNanoGrades.forEach(g => sum += (parseInt(gradeTotals[g.id]) || 0));
+        // MG totals
+        mgCombinations.forEach(c => sum += (parseInt(c.enrollment) || 0));
+        
+        // SNED Self-Contained (Non-Graded)
+        if (hasSnedSelfContained && sned_self_contained_count) {
+            sum += parseInt(sned_self_contained_count) || 0;
+        }
+        return sum;
+    }, [kinderEnrollment, gradeTotals, activeNanoGrades, mgCombinations, hasSnedSelfContained, sned_self_contained_count, gradeAvailability]);
 
-        // Step 3: ARAL
-        hasAralMath: null,
-        hasAralRead: null,
-        hasAralSci: null,
-        aral_math_g1: "", aral_math_g2: "", aral_math_g3: "", aral_math_g4: "", aral_math_g5: "", aral_math_g6: "",
-        aral_read_g1: "", aral_read_g2: "", aral_read_g3: "", aral_read_g4: "", aral_read_g5: "", aral_read_g6: "",
-        aral_sci_g1: "", aral_sci_g2: "", aral_sci_g3: "", aral_sci_g4: "", aral_sci_g5: "", aral_sci_g6: "",
+    const genderSum = useMemo(() => {
+        return (parseInt(genderTotals.male) || 0) + (parseInt(genderTotals.female) || 0);
+    }, [genderTotals]);
 
-        // Step 4: Gender Logic
-        male_enrollment: "",
-        verified_as_of: false
-    });
+    const gradeCapacities = useMemo(() => {
+        const capacities = {};
+        // Default all to 0
+        ELEM_GRADES.forEach(id => capacities[id] = 0);
 
+        // 1. Nano Capacities
+        activeNanoGrades.forEach(g => {
+            capacities[g.id] = parseInt(gradeTotals[g.id]) || 0;
+        });
+
+        // 2. MG Capacities (Each grade in MG shares the combination's enrollment limit)
+        mgCombinations.forEach(c => {
+            const enrollment = parseInt(c.enrollment) || 0;
+            c.grades.forEach(gradeId => {
+                capacities[gradeId] = enrollment;
+            });
+        });
+
+        return capacities;
+    }, [gradeTotals, activeNanoGrades, mgCombinations]);
+
+    const isMathPerfect = genderSum === grandTotal && grandTotal > 0;
+
+    // --- Init / Fetch Data ---
     useEffect(() => {
-        const init = async () => {
+        const initData = async () => {
             const storedId = localStorage.getItem('schoolId');
             if (!storedId) {
-                console.warn("No schoolId found in localStorage");
+                setLoading(false);
                 return;
             }
-            setSchoolId(storedId);
 
-            // Fetch saved data from ph_schools
             try {
                 const res = await fetch(`/api/ph_schools/${storedId}`);
                 if (res.ok) {
-                    const saved = await res.json();
-                    if (saved.exists && saved.data) {
-                        const d = saved.data;
-                        setCurricularOffering(d.curricular_offering || "");
+                    const data = await res.json();
+                    if (data.exists && data.data) {
+                        const d = data.data;
 
-                        if (!d.unit2_completed) return; // No saved Unit 2 data yet
+                        // 1. Determine Available Grades via Unit 1
+                        const offering = d.curricular_offering || "";
+                        let parsedLevels = [];
+                        try {
+                            parsedLevels = JSON.parse(d.grade_levels || "[]");
+                        } catch(e) {}
 
-                        // Pre-fill all form fields from saved data
-                        setFormData(prev => ({
-                            ...prev,
-                            enroll_kinder: d.enroll_kinder ?? "",
-                            enroll_g1: d.enroll_g1 ?? "",
-                            enroll_g2: d.enroll_g2 ?? "",
-                            enroll_g3: d.enroll_g3 ?? "",
-                            enroll_g4: d.enroll_g4 ?? "",
-                            enroll_g5: d.enroll_g5 ?? "",
-                            enroll_g6: d.enroll_g6 ?? "",
-                            enroll_g7: d.enroll_g7 ?? "",
-                            enroll_g8: d.enroll_g8 ?? "",
-                            enroll_g9: d.enroll_g9 ?? "",
-                            enroll_g10: d.enroll_g10 ?? "",
-                            enroll_g11: d.enroll_g11 ?? "",
-                            enroll_g12: d.enroll_g12 ?? "",
-                            sned_learners: d.sned_learners ?? "",
-                            hasSned: d.sned_learners > 0,
-                            non_graded_learners: d.non_graded_learners ?? "",
-                            hasNonGraded: d.non_graded_learners > 0,
-                            hasAralMath: [d.aral_math_g1,d.aral_math_g2,d.aral_math_g3,d.aral_math_g4,d.aral_math_g5,d.aral_math_g6].some(v => v > 0),
-                            hasAralRead: [d.aral_read_g1,d.aral_read_g2,d.aral_read_g3,d.aral_read_g4,d.aral_read_g5,d.aral_read_g6].some(v => v > 0),
-                            hasAralSci: [d.aral_sci_g1,d.aral_sci_g2,d.aral_sci_g3,d.aral_sci_g4,d.aral_sci_g5,d.aral_sci_g6].some(v => v > 0),
-                            aral_math_g1: d.aral_math_g1 ?? "",
-                            aral_math_g2: d.aral_math_g2 ?? "",
-                            aral_math_g3: d.aral_math_g3 ?? "",
-                            aral_math_g4: d.aral_math_g4 ?? "",
-                            aral_math_g5: d.aral_math_g5 ?? "",
-                            aral_math_g6: d.aral_math_g6 ?? "",
-                            aral_read_g1: d.aral_read_g1 ?? "",
-                            aral_read_g2: d.aral_read_g2 ?? "",
-                            aral_read_g3: d.aral_read_g3 ?? "",
-                            aral_read_g4: d.aral_read_g4 ?? "",
-                            aral_read_g5: d.aral_read_g5 ?? "",
-                            aral_read_g6: d.aral_read_g6 ?? "",
-                            aral_sci_g1: d.aral_sci_g1 ?? "",
-                            aral_sci_g2: d.aral_sci_g2 ?? "",
-                            aral_sci_g3: d.aral_sci_g3 ?? "",
-                            aral_sci_g4: d.aral_sci_g4 ?? "",
-                            aral_sci_g5: d.aral_sci_g5 ?? "",
-                            aral_sci_g6: d.aral_sci_g6 ?? "",
-                            male_enrollment: d.male_enrollment ?? "",
-                        }));
-                        setIsReviewMode(true);
-                        return;
+                        let combinedGrades = new Set([...parsedLevels]);
+                        const textOffering = offering.toLowerCase();
+                        if (textOffering.includes("kinder")) combinedGrades.add("kinder");
+                        if (textOffering.includes("elementary") || textOffering.includes("k to 10") || textOffering.includes("k to 12") || textOffering.includes("k-10") || textOffering.includes("k-12")) {
+                            ['1','2','3','4','5','6'].forEach(lvl => combinedGrades.add(`g${lvl}`));
+                        }
+                        if (textOffering.includes("junior high") || textOffering.includes("jhs") || textOffering.includes("k to 10") || textOffering.includes("k to 12") || textOffering.includes("k-10") || textOffering.includes("k-12")) {
+                            ['7','8','9','10'].forEach(lvl => combinedGrades.add(`g${lvl}`));
+                        }
+                        if (textOffering.includes("senior high") || textOffering.includes("shs") || textOffering.includes("k to 12") || textOffering.includes("k-12")) {
+                            ['11','12'].forEach(lvl => combinedGrades.add(`g${lvl}`));
+                        }
+
+                        const gradesArr = Array.from(combinedGrades);
+                        const uniqueObj = ALL_GRADES.filter(g => gradesArr.includes(g.id));
+                        setAvailableGrades(uniqueObj);
+                        setHasKinder(uniqueObj.some(g => g.id === 'kinder'));
+                        setHasElementary(uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder'));
+
+                        // 2. Pre-fill Data if Unit 2 was already saved in the new structure
+                        if (d.unit2_simplified_enrollment) {
+                            try {
+                                const parsed = typeof d.unit2_simplified_enrollment === 'string' 
+                                    ? JSON.parse(d.unit2_simplified_enrollment) 
+                                    : d.unit2_simplified_enrollment;
+                                
+                                // In the new schema, we store an object wrapping both the downstream array and the raw questionnaire data
+                                if (parsed.questionnaire) {
+                                    const q = parsed.questionnaire;
+                                    setKinderEnrollment(q.kinderEnrollment || "");
+                                    setGradeTotals(q.gradeTotals || {});
+                                    setGradeAvailability(q.gradeAvailability || {});
+                                    
+                                    setHasSnedSelfContained(q.hasSnedSelfContained);
+                                    setSnedSelfContainedCount(q.sned_self_contained_count || "");
+
+                                    setHasAralMath(q.hasAralMath);
+                                    setAralMath(q.aralMath || {});
+                                    setHasAralReading(q.hasAralReading);
+                                    setAralReading(q.aralReading || {});
+                                    setHasAralScience(q.hasAralScience);
+                                    setAralScience(q.aralScience || {});
+
+                                    setGenderTotals(q.genderTotals || { male: "", female: "" });
+
+                                    if (q.orgType) setOrgType(q.orgType);
+                                    if (q.mgCombinations) setMgCombinations(q.mgCombinations);
+                                } else if (Array.isArray(parsed)) {
+                                    // Fallback: migrate from the intermediate master-controller array format
+                                    const totals = {};
+                                    const availability = {};
+                                    let gMale = 0; let gFemale = 0;
+                                    parsed.forEach(item => {
+                                        totals[item.grade_level] = item.total || 0;
+                                        availability[item.grade_level] = item.is_active !== false;
+                                        gMale += item.male || 0;
+                                        gFemale += item.female || 0;
+                                    });
+                                    setGradeTotals(totals);
+                                    setGradeAvailability(availability);
+                                    setGenderTotals({ male: gMale, female: gFemale });
+                                }
+                            } catch (e) { console.warn("Parse error", e); }
+                        }
                     }
                 }
             } catch (e) {
-                console.warn("Could not fetch saved Unit 2 data", e);
+                console.error("Error fetching Unit 2 data:", e);
+            } finally {
+                setLoading(false);
             }
         };
-        init();
+        initData();
     }, []);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+    // --- Handlers ---
+    const handleGradeChange = (gradeId, val) => {
+        setGradeTotals(prev => ({ ...prev, [gradeId]: val }));
     };
 
-    // --- DYNAMIC GRADE LOGIC ---
-    const visibleGrades = useMemo(() => {
-        const co = (curricularOffering || "").toLowerCase();
-        if (co.includes("purely elementary")) {
-            return ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-        } else if (co.includes("purely junior")) {
-            return ['g7', 'g8', 'g9', 'g10'];
-        } else if (co.includes("purely senior")) {
-            return ['g11', 'g12'];
-        } else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) {
-            return ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-        } else if (co.includes("elementary school and junior high school")) {
-            return ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+    const toggleAvailability = (gradeId) => {
+        setGradeAvailability(prev => {
+            const newState = !prev[gradeId];
+            if (!newState) {
+                // If turning OFF, force total to 0
+                if (gradeId === 'kinder') {
+                    setKinderEnrollment("0");
+                } else {
+                    setGradeTotals(t => ({ ...t, [gradeId]: "0" }));
+                }
+            }
+            return { ...prev, [gradeId]: newState };
+        });
+    };
+
+    const handleAralChange = (subject, gradeId, val) => {
+        if (subject === 'math') setAralMath(prev => ({ ...prev, [gradeId]: val }));
+        if (subject === 'reading') setAralReading(prev => ({ ...prev, [gradeId]: val }));
+        if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: val }));
+    };
+
+    const handleGenderChange = (field, val) => {
+        const numVal = parseInt(val) || 0;
+        const clampedVal = Math.min(numVal, grandTotal);
+        const remainder = Math.max(0, grandTotal - clampedVal);
+
+        if (field === 'male') {
+            setGenderTotals({ 
+                male: clampedVal.toString(), 
+                female: remainder.toString() 
+            });
         } else {
-            // Fallback for All Offering (K to 12) or undefined
-            return ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+            setGenderTotals({ 
+                female: clampedVal.toString(), 
+                male: remainder.toString() 
+            });
         }
-    }, [curricularOffering]);
-
-    const hasElementary = visibleGrades.some(g => ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'].includes(g));
-
-    // --- MAGIC MATH LOGIC ---
-    // sum base enrollment
-    const totalEnrollment = useMemo(() => {
-        const fields = [
-            'enroll_kinder', 'enroll_g1', 'enroll_g2', 'enroll_g3', 'enroll_g4', 'enroll_g5', 
-            'enroll_g6', 'enroll_g7', 'enroll_g8', 'enroll_g9', 'enroll_g10', 'enroll_g11', 'enroll_g12'
-        ];
-        return fields.reduce((sum, field) => {
-            const val = parseInt(formData[field]) || 0;
-            return sum + val;
-        }, 0);
-    }, [
-        formData.enroll_kinder, formData.enroll_g1, formData.enroll_g2, 
-        formData.enroll_g3, formData.enroll_g4, formData.enroll_g5, formData.enroll_g6,
-        formData.enroll_g7, formData.enroll_g8, formData.enroll_g9, formData.enroll_g10, formData.enroll_g11, formData.enroll_g12
-    ]);
-
-    // derive female
-    const femaleEnrollment = useMemo(() => {
-        const male = parseInt(formData.male_enrollment) || 0;
-        return Math.max(0, totalEnrollment - male); // prevent negative visually
-    }, [totalEnrollment, formData.male_enrollment]);
-
-
-    const handleBack = () => {
-        let prevStep = currentStep - 1;
-        if (prevStep === 3 && !hasElementary) prevStep = 2;
-
-        if (prevStep >= 1) setCurrentStep(prevStep);
-        else navigate(-1);
     };
 
     const handleNext = () => {
-        let nextStep = currentStep + 1;
-        if (nextStep === 3 && !hasElementary) nextStep = 4;
-
-        if (nextStep <= TOTAL_STEPS) setCurrentStep(nextStep);
-        else handleSubmit();
-    };
-
-    // ---------- Validation per step ----------
-    const isStep1Valid = totalEnrollment > 0;
-    const isStep2Valid = formData.hasSned !== null && formData.hasNonGraded !== null;
-    const isStep3Valid = !hasElementary ? true : (formData.hasAralMath !== null && formData.hasAralRead !== null && formData.hasAralSci !== null);
-    const isStep4Valid = formData.male_enrollment !== "" && parseInt(formData.male_enrollment) <= totalEnrollment;
-    const isStep5Valid = formData.verified_as_of === true;
-
-    const isCurrentStepValid = () => {
-        if (currentStep === 1) return isStep1Valid;
-        if (currentStep === 2) return isStep2Valid;
-        if (currentStep === 3) return isStep3Valid;
-        if (currentStep === 4) return isStep4Valid;
-        if (currentStep === 5) return isStep5Valid;
-        return false;
-    };
-
-    const handleSubmit = async () => {
-        if (!schoolId) {
-            alert("No school ID found. Cannot save.");
+        // Step 1: Kindergarten
+        if (currentStep === 1) {
+            if (hasElementary) {
+                setCurrentStep(2);
+            } else {
+                setOrgType('nano');
+                setCurrentStep(4);
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
 
-        try {
-            setLoading(true);
+        // Step 2: Org Gatekeeper
+        if (currentStep === 2) {
+            if (!orgType) return;
+            if (orgType === 'pure_mg' || orgType === 'mixed') {
+                setCurrentStep(3); // Go to MG Builder
+            } else {
+                setCurrentStep(4); // Go to Nano Pages
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
 
-            // Prepare payload
-            const payload = {
-                ...formData,
-                total_enrollment: totalEnrollment,
-                female_enrollment: femaleEnrollment
+        // Step 3: MG Builder
+        if (currentStep === 3) {
+            if (orgType === 'pure_mg') {
+                setCurrentStep(5); // Skip Nano Pages, go to SNED
+            } else {
+                setCurrentStep(4); // Mixed: Go to Nano Pages
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+
+        // Step 4: Grade-by-Grade (Nano/Standalone)
+        if (currentStep === 4) {
+            if (activeNanoGrades.length === 0) {
+                setCurrentStep(5);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            if (currentGradeIndex < activeNanoGrades.length - 1) {
+                setCurrentGradeIndex(prev => prev + 1);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+            setCurrentStep(5); // Finished grades -> SNED
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+        
+        // Step 6: ARAL (Skip if not elementary)
+        if (currentStep === 5 && !hasElementary) {
+            setCurrentStep(7); // Skip ARAL, go to Gender
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+
+        setCurrentStep(prev => prev + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleBack = () => {
+        if (currentStep === 1) {
+            navigate("/modular-dashboard");
+            return;
+        }
+
+        // Back from Org Gatekeeper
+        if (currentStep === 2) {
+            if (hasKinder) {
+                setCurrentStep(1);
+            } else {
+                navigate("/modular-dashboard");
+            }
+            return;
+        }
+
+        // Back from MG Builder
+        if (currentStep === 3) {
+            setCurrentStep(2);
+            return;
+        }
+
+        // Back from Nano Pages
+        if (currentStep === 4) {
+            if (currentGradeIndex > 0) {
+                setCurrentGradeIndex(prev => prev - 1);
+                return;
+            }
+            if (hasElementary) {
+                if (orgType === 'pure_mg' || orgType === 'mixed') {
+                    setCurrentStep(3);
+                } else {
+                    setCurrentStep(2);
+                }
+            } else {
+                if (hasKinder) {
+                    setCurrentStep(1);
+                } else {
+                    navigate("/modular-dashboard");
+                }
+            }
+            return;
+        }
+
+        // Back from SNED
+        if (currentStep === 5) {
+            if (activeNanoGrades.length > 0) {
+                setCurrentStep(4);
+                setCurrentGradeIndex(activeNanoGrades.length - 1);
+            } else if (hasElementary) {
+                if (orgType === 'pure_mg' || orgType === 'mixed') {
+                    setCurrentStep(3);
+                } else {
+                    setCurrentStep(2);
+                }
+            } else if (hasKinder) {
+                setCurrentStep(1);
+            } else {
+                navigate("/modular-dashboard");
+            }
+            return;
+        }
+
+        // Back from ARAL
+        if (currentStep === 6) {
+            setCurrentStep(5);
+            return;
+        }
+
+        // Back from Gender
+        if (currentStep === 7) {
+            if (hasElementary) {
+                setCurrentStep(6);
+            } else {
+                setCurrentStep(5);
+            }
+            return;
+        }
+
+        setCurrentStep(prev => prev - 1);
+    };
+
+    const handleSave = async () => {
+        const storedId = localStorage.getItem('schoolId');
+        if (!storedId) return;
+        setIsSaving(true);
+
+        try {
+            // Construct the exact questionnaire state representation
+            const questionnaire = {
+                kinderEnrollment,
+                orgType,
+                mgCombinations,
+                gradeTotals,
+                gradeAvailability,
+                hasSnedSelfContained,
+                sned_self_contained_count: parseInt(sned_self_contained_count) || 0,
+                hasAralMath, aralMath: hasAralMath ? aralMath : {},
+                hasAralReading, aralReading: hasAralReading ? aralReading : {},
+                hasAralScience, aralScience: hasAralScience ? aralScience : {},
+                genderTotals,
+                grandTotal
             };
 
-            const res = await fetch(`/api/ph_schools/unit2/${schoolId}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+            // Backwards compatibility for Unit 3 and Unit 9: Construct the downstream grades array
+            const nanoGrades = activeNanoGrades.map(g => {
+                const totalActive = gradeAvailability[g.id] !== false;
+                const count = parseInt(gradeTotals[g.id]) || 0;
+                return {
+                    grade_level: g.id,
+                    is_active: totalActive,
+                    total: totalActive ? count : 0,
+                    male: 0, female: 0
+                };
             });
 
-            if (!res.ok) {
-                const errorData = await res.json().catch(() => ({}));
-                console.error("Server returned error:", errorData);
-                throw new Error(errorData.error || `Server HTTP Error: ${res.status}`);
-            }
+            // For Multigrade combinations, we split the total to the first grade in the combo
+            // to ensure the backend's sum(total) equals the grandTotal (excluding SNED).
+            const mgGrades = mgCombinations.flatMap(c => {
+                return c.grades.map((id, idx) => ({
+                    grade_level: id,
+                    is_active: true,
+                    total: idx === 0 ? (parseInt(c.enrollment) || 0) : 0,
+                    male: 0, female: 0
+                }));
+            });
 
-            // Update local progress to unlock unit 3
-            const stored = localStorage.getItem('quest_progress');
-            let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-            
-            if (!progress.completedUnits.includes(2)) {
-                progress.completedUnits.push(2);
-                progress.xp += 200; // Reward XP
-                localStorage.setItem('quest_progress', JSON.stringify(progress));
-            }
+            const kinderGrade = hasKinder ? [{
+                grade_level: 'kinder',
+                is_active: gradeAvailability.kinder !== false,
+                total: (gradeAvailability.kinder !== false) ? (parseInt(kinderEnrollment) || 0) : 0,
+                male: 0, female: 0
+            }] : [];
 
-            setShowSuccess(true);
-        } catch (err) {
-            console.error("Submission failed", err);
-            alert("Failed to sync data.");
+            const downstreamGrades = [...kinderGrade, ...nanoGrades, ...mgGrades];
+
+            const payload = {
+                array: downstreamGrades, 
+                questionnaire: questionnaire 
+            };
+
+
+            const res = await fetch(`/api/ph_schools/unit2/${storedId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    unit2_simplified_enrollment: payload,
+                    sned_self_contained_count: parseInt(sned_self_contained_count) || 0,
+                })
+            });
+
+            if (res.ok) {
+                // Determine completion
+                const progRes = await fetch(`/api/user/progress`);
+                if (progRes.ok) {
+                    const progData = await progRes.json();
+                    if (progData.progress && (!progData.progress.completed_units || !progData.progress.completed_units.includes(2))) {
+                         await fetch(`/api/user/progress`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ unitId: 2 })
+                        });
+                    }
+                }
+                setShowSuccess(true);
+            } else {
+                alert("Failed to save enrollment. Please try again.");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("An error occurred during save.");
         } finally {
-            setLoading(false);
+            setIsSaving(false);
         }
     };
 
-    const activeTotalSteps = hasElementary ? 5 : 4;
-    const displayStep = (!hasElementary && currentStep > 3) ? currentStep - 1 : currentStep;
-    const progressPercentage = (displayStep / activeTotalSteps) * 100;
-
-    // Slide animation direction
-    const slideVariants = {
-        enter: { opacity: 0, x: 60, scale: 0.97 },
-        center: { opacity: 1, x: 0, scale: 1 },
-        exit: { opacity: 0, x: -60, scale: 0.97 },
+    // --- Transitions ---
+    const pageVariants = {
+        initial: { opacity: 0, y: 30, scale: 0.98 },
+        in: { opacity: 1, y: 0, scale: 1 },
+        out: { opacity: 0, y: -30, scale: 0.98 }
     };
-
+    
     const expandVariants = {
         hidden: { opacity: 0, height: 0, marginTop: 0 },
-        visible: { opacity: 1, height: "auto", marginTop: 16 }
+        visible: { opacity: 1, height: "auto", marginTop: 16 },
     };
 
+    if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8"><div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div></div>;
+
     return (
-        <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-gray-50 to-gray-200 flex flex-col font-sans">
-            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                <div className="max-w-md mx-auto flex items-center gap-3">
-                    <button
-                        onClick={() => navigate('/modular-dashboard')}
-                        className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
-                    >
-                        <FiX className="w-6 h-6" />
+        <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-gray-100 font-sans text-slate-800 pb-32">
+            
+            {/* Header */}
+            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md shadow-sm px-4 py-4 mb-8">
+                <div className="max-w-xl mx-auto flex items-center justify-between">
+                     <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400">
+                        <FiChevronLeft className="w-8 h-8" />
                     </button>
-                    <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
-                        <motion.div
-                            className="h-full bg-green-500 rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progressPercentage}%` }}
-                            transition={{ duration: 0.5, ease: "easeOut" }}
-                        />
+                    <div className="flex-1 px-6">
+                        <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                            {/* Calculate total sub-steps: Org + GradeCount + Special + (ARAL?) + Gender + Confirm */}
+                            {(() => {
+                                const totalProg = 8;
+                                let currentProg = currentStep;
+                                if (currentStep === 4) {
+                                    // Sub-steps for grades
+                                    const gradeWeight = 1 / (activeNanoGrades.length || 1);
+                                    currentProg = 3 + (currentGradeIndex + 1) * gradeWeight;
+                                }
+
+                                return Array.from({ length: totalProg }).map((_, i) => (
+                                    <div 
+                                        key={i} 
+                                        className={`h-full transition-all duration-500 ease-out border-r-2 border-white last:border-0 ${currentProg >= i + 1 ? 'bg-indigo-500' : 'bg-transparent'}`} 
+                                        style={{ width: `${100 / totalProg}%` }} 
+                                    />
+                                ));
+                            })()}
+                        </div>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto pb-28">
+            <main className="max-w-xl mx-auto px-4">
                 <AnimatePresence mode="wait">
+                    
+                    {/* STEP 1: Kindergarten (Mandatory Standalone) */}
+                    {currentStep === 1 && (
+                        <motion.div key="kinder" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="text-center mb-10">
+                                <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                    Step 1 • Early Childhood
+                                </span>
+                                <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
+                                    Kindergarten Enrollment
+                                </h1>
+                                <p className="text-slate-500 font-medium italic">"Every child's journey starts here."</p>
+                            </div>
 
-                {/* ---- REVIEW MODE: Summary Receipt Card ---- */}
-                {isReviewMode ? (
-                    <motion.div
-                        key="review-card-u2"
-                        initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                        transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}
-                        className="max-w-md w-full mx-auto mt-10 px-6"
-                    >
-                        {/* Receipt Header */}
-                        <div className="text-center mb-6">
-                            <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ delay: 0.2, type: "spring", bounce: 0.5 }}
-                                className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-200"
-                            >
-                                <FiCheckCircle className="w-8 h-8 text-white" />
-                            </motion.div>
-                            <h2 className="text-2xl font-black text-gray-800">Unit 2 Complete!</h2>
-                            <p className="text-sm text-gray-400 mt-1">Learner enrollment data has been saved.</p>
-                        </div>
-
-                        {/* Enrollment Receipt */}
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.3 }}
-                            className="bg-white rounded-3xl shadow-xl shadow-gray-100/80 border border-gray-100 overflow-hidden"
-                        >
-                            <div className="h-2 bg-emerald-400" />
-                            <div className="px-6 py-5 space-y-4">
-                                {/* Grand Total */}
-                                <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35 }}
-                                    className="flex items-center justify-between bg-green-50 rounded-2xl px-4 py-3 border-2 border-green-100">
-                                    <span className="font-bold text-green-700">Grand Total</span>
-                                    <span className="text-3xl font-black text-green-600">{totalEnrollment.toLocaleString()}</span>
-                                </motion.div>
-
-                                {/* Gender Split */}
-                                <div className="grid grid-cols-2 gap-3">
-                                    {[
-                                        { label: "Male 👦", value: formData.male_enrollment || 0, color: "blue" },
-                                        { label: "Female 👧", value: femaleEnrollment, color: "pink" },
-                                    ].map((item, i) => (
-                                        <motion.div key={item.label}
-                                            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 + i * 0.05 }}
-                                            className={`bg-${item.color}-50 border-2 border-${item.color}-100 rounded-2xl px-4 py-3 text-center`}
-                                        >
-                                            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">{item.label}</p>
-                                            <p className={`text-2xl font-black text-${item.color}-600 mt-1`}>{Number(item.value).toLocaleString()}</p>
-                                        </motion.div>
-                                    ))}
-                                </div>
-
-                                {/* Special Categories */}
-                                {[
-                                    { label: "SNED Learners", value: formData.sned_learners, icon: "♿" },
-                                    { label: "Non-Graded", value: formData.non_graded_learners, icon: "📋" },
-                                ].filter(item => Number(item.value) > 0).map((item, i) => (
-                                    <motion.div key={item.label}
-                                        initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 + i * 0.05 }}
-                                        className="flex items-center gap-3">
-                                        <span className="text-lg">{item.icon}</span>
-                                        <div>
-                                            <p className="text-xs font-bold uppercase tracking-wider text-gray-300">{item.label}</p>
-                                            <p className="text-base font-semibold text-gray-800">{Number(item.value).toLocaleString()}</p>
-                                        </div>
-                                    </motion.div>
-                                ))}
-
-                                {/* ARAL Intervention Counts */}
-                                {(() => {
-                                    const aralGroups = [
-                                        {
-                                            label: "ARAL Math", icon: "➗",
-                                            total: ['g1','g2','g3','g4','g5','g6'].reduce((s,g) => s + (Number(formData[`aral_math_${g}`]) || 0), 0),
-                                            has: formData.hasAralMath,
-                                        },
-                                        {
-                                            label: "ARAL Reading", icon: "📖",
-                                            total: ['g1','g2','g3','g4','g5','g6'].reduce((s,g) => s + (Number(formData[`aral_read_${g}`]) || 0), 0),
-                                            has: formData.hasAralRead,
-                                        },
-                                        {
-                                            label: "ARAL Science", icon: "🔬",
-                                            total: ['g1','g2','g3','g4','g5','g6'].reduce((s,g) => s + (Number(formData[`aral_sci_${g}`]) || 0), 0),
-                                            has: formData.hasAralSci,
-                                        },
-                                    ].filter(g => g.has && g.total > 0);
-
-                                    if (aralGroups.length === 0 || !hasElementary) return null;
-                                    return (
-                                        <div className="pt-2 space-y-2">
-                                            <p className="text-xs font-bold uppercase tracking-wider text-gray-300">ARAL Learners</p>
-                                            {aralGroups.map((g, i) => (
-                                                <motion.div key={g.label}
-                                                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55 + i * 0.05 }}
-                                                    className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-2"
-                                                >
-                                                    <span className="text-sm font-semibold text-amber-700 flex items-center gap-2">
-                                                        <span>{g.icon}</span>{g.label}
+                            {(() => {
+                                const isAvailable = gradeAvailability.kinder !== false;
+                                return (
+                                    <>
+                                        <div className={`bg-white p-8 rounded-[2.5rem] border-4 transition-all duration-500 shadow-2xl shadow-slate-200/50 mb-8 ${isAvailable ? 'border-indigo-100/50 scale-100' : 'border-slate-100 grayscale scale-[0.98]'}`}>
+                                            {/* Master Switch Panel */}
+                                            <div className="w-full flex items-center justify-between p-4 bg-slate-50/50 rounded-3xl border-2 border-slate-100/50 mb-6">
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Status</span>
+                                                    <span className={`text-xl font-bold ${isAvailable ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                                        {isAvailable ? "Active Session" : "Not Offered"}
                                                     </span>
-                                                    <span className="text-lg font-black text-amber-600">{g.total.toLocaleString()}</span>
-                                                </motion.div>
-                                            ))}
+                                                </div>
+                                                <button 
+                                                    onClick={() => toggleAvailability('kinder')}
+                                                    className={`px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-md active:scale-95 ${isAvailable ? 'bg-white text-rose-500 border-2 border-rose-100 hover:bg-rose-50' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                                >
+                                                    {isAvailable ? "Disable Grade" : "Enable Grade"}
+                                                </button>
+                                            </div>
+
+                                            <label className={`block text-xs font-black uppercase tracking-widest mb-4 ml-2 ${isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Total Kinder Learners</label>
+                                            <input 
+                                                type="number" 
+                                                value={kinderEnrollment}
+                                                disabled={!isAvailable}
+                                                onChange={(e) => setKinderEnrollment(e.target.value)}
+                                                placeholder="0"
+                                                className={`${chunkyInput} ${!isAvailable ? 'bg-slate-50 border-slate-100 text-slate-300' : ''}`}
+                                                autoFocus={isAvailable}
+                                            />
+                                            <div className={`mt-8 p-4 rounded-2xl border-2 flex gap-3 items-center ${isAvailable ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100 opacity-50'}`}>
+                                                <span className="text-2xl">💡</span>
+                                                <p className={`text-sm font-medium leading-snug ${isAvailable ? 'text-amber-700' : 'text-slate-400'}`}>
+                                                    Kindergarten is handled standalone and is <strong>not included</strong> in multigrade combinations.
+                                                </p>
+                                            </div>
                                         </div>
-                                    );
-                                })()}
-                            </div>
-                            <div className="mx-6 border-t-2 border-dashed border-gray-100" />
-                            <div className="px-6 py-4">
-                                <p className="text-xs text-center text-gray-300">Tap below to update your data</p>
-                            </div>
+
+                                        <button 
+                                            onClick={handleNext} 
+                                            disabled={isAvailable && (!kinderEnrollment || parseInt(kinderEnrollment) === 0)}
+                                            className="w-full h-20 py-5 rounded-[2.5rem] bg-indigo-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(79,70,229,0.3)] hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-700 disabled:cursor-not-allowed"
+                                        >
+                                            Continue <FiArrowRight className="w-8 h-8" />
+                                        </button>
+                                    </>
+                                );
+                            })()}
                         </motion.div>
+                    )}
 
-                        {/* Unlock & Edit Button */}
-                        <motion.button
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.7 }}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.97 }}
-                            onClick={() => { setIsReviewMode(false); setCurrentStep(1); }}
-                            className="mt-6 w-full py-5 rounded-2xl font-black text-lg tracking-wide bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-200 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all flex items-center justify-center gap-3"
-                        >
-                            <FiEdit2 className="w-5 h-5" />
-                            Unlock &amp; Edit Data
-                        </motion.button>
-                    </motion.div>
-                ) : (
-                    /* ---- WIZARD MODE ---- */
-                    <div className="flex-1 max-w-md w-full mx-auto mt-8 px-6">
-                    <AnimatePresence mode="wait">
+                    {/* STEP 2: Organization Gatekeeper (G1-G6 Only) */}
+                    {currentStep === 2 && (
+                        <motion.div key="org" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="text-center mb-10">
+                                <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                    Step 2 • Elementary Organization
+                                </span>
+                                <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
+                                    How are your Grade 1 to Grade 6 classes organized?
+                                </h1>
+                                <p className="text-slate-500 font-medium">Choose the setup that fits your school.</p>
+                            </div>
 
-                        {/* ---- STEP 1: Base Enrollment ---- */}
-                        {currentStep === 1 && (
-                            <motion.div key="step1" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                <h2 className="text-2xl font-bold text-gray-800">Count Your Learners</h2>
-                                <p className="mt-2 text-sm text-gray-400">Enter the total enrollment per grade level.</p>
+                            <div className="space-y-4 mb-8">
+                                {[
+                                    { id: 'nano', label: 'Nano Grade', sub: 'Standard 1-grade-per-page (Pure Monograde)', icon: '🏫' },
+                                    { id: 'pure_mg', label: 'Pure Multigrade', sub: 'Only builds combinations (e.g. G1+G2)', icon: '🤝' },
+                                    { id: 'mixed', label: 'Mixed Organization', sub: 'Both Nano grades and Multigrade combinations', icon: '🔄' }
+                                ].map(opt => (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => setOrgType(opt.id)}
+                                        className={`w-full p-6 rounded-[2rem] border-4 transition-all flex items-center gap-6 text-left ${orgType === opt.id ? 'border-indigo-500 bg-indigo-50/50 shadow-xl shadow-indigo-100 scale-[1.02]' : 'border-slate-100 bg-white hover:border-indigo-200'}`}
+                                    >
+                                        <div className="text-4xl">{opt.icon}</div>
+                                        <div className="flex-1">
+                                            <h3 className="font-black text-xl text-slate-800">{opt.label}</h3>
+                                            <p className="text-sm font-medium text-slate-500">{opt.sub}</p>
+                                        </div>
+                                        <div className={`w-8 h-8 rounded-full border-4 flex items-center justify-center transition-all ${orgType === opt.id ? 'border-indigo-500 bg-indigo-500' : 'border-slate-200'}`}>
+                                            {orgType === opt.id && <FiCheckCircle className="text-white w-5 h-5" />}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
 
-                                {/* Dynamic Sticky Total */}
-                                <div className="sticky top-4 bg-white border-2 border-green-200 shadow-md rounded-2xl p-4 mt-6 z-10 flex justify-between items-center mb-6">
-                                    <span className="font-bold text-gray-500">Grand Total</span>
-                                    <span className="text-3xl font-black text-green-600">{totalEnrollment}</span>
+                            <button 
+                                onClick={handleNext} 
+                                disabled={!orgType}
+                                className="w-full h-20 py-5 rounded-[2.5rem] bg-indigo-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(79,70,229,0.3)] hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            >
+                                Continue <FiArrowRight className="w-8 h-8" />
+                            </button>
+                        </motion.div>
+                    )}
+
+                    {/* STEP 3: Multigrade Builder */}
+                    {currentStep === 3 && (
+                        <motion.div key="mg-builder" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="text-center mb-10">
+                                <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                    Step 3 • Combination Builder
+                                </span>
+                                <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
+                                    Build your multigrade classes
+                                </h1>
+                                <p className="text-slate-500 font-medium">Create Grade 1-6 combinations and enter totals.</p>
+                            </div>
+
+                            <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border-4 border-indigo-100/50 mb-8">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-xl font-black text-slate-800">Combinations</h2>
+                                    <button 
+                                        onClick={() => setMgCombinations(prev => [...prev, { id: Date.now(), grades: [], enrollment: 0 }])}
+                                        className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"
+                                    >
+                                        + Add Combo
+                                    </button>
                                 </div>
 
-                                <div className="space-y-4">
-                                    {visibleGrades.map((grade) => (
-                                        <div key={grade} className="flex items-center gap-4">
-                                            <label className="w-20 text-sm font-bold uppercase tracking-wider text-gray-400">
-                                                {grade === 'kinder' ? 'Kinder' : grade.toUpperCase()}
-                                            </label>
-                                            <input
-                                                type="number"
-                                                name={`enroll_${grade}`}
-                                                value={formData[`enroll_${grade}`]}
-                                                onChange={handleChange}
-                                                placeholder="0"
-                                                min="0"
-                                                className={`${chunkyInput} !mt-0 !bg-white`}
-                                            />
+                                <div className="space-y-6">
+                                    {mgCombinations.length === 0 && (
+                                        <div className="text-center py-16 bg-slate-50 rounded-[2rem] border-4 border-dashed border-slate-100">
+                                            <p className="text-slate-400 font-black italic">No combinations added yet.</p>
+                                        </div>
+                                    )}
+                                    {mgCombinations.map((c, idx) => (
+                                        <div key={c.id} className="p-6 bg-slate-50 rounded-[2rem] border-2 border-slate-100 relative shadow-inner">
+                                            <button 
+                                                onClick={() => setMgCombinations(prev => prev.filter(x => x.id !== c.id))}
+                                                className="absolute top-6 right-6 text-slate-300 hover:text-rose-500 transition-colors bg-white p-2 rounded-xl"
+                                            >
+                                                ✕
+                                            </button>
+                                            <div className="space-y-6">
+                                                <div>
+                                                    <label className="text-xs font-black uppercase text-indigo-500 tracking-widest block mb-4">G1-G6 Included</label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {ELEM_GRADES.map(lvl => {
+                                                            const g = ALL_GRADES.find(x => x.id === lvl);
+                                                            const isSelected = c.grades.includes(lvl);
+                                                            const isLockedByOther = mgCombinations.some(other => other.id !== c.id && other.grades.includes(lvl));
+                                                            
+                                                            return (
+                                                                <button
+                                                                    key={lvl}
+                                                                    disabled={isLockedByOther}
+                                                                    onClick={() => {
+                                                                        setMgCombinations(prev => prev.map(p => {
+                                                                            if (p.id !== c.id) return p;
+                                                                            const newG = isSelected ? p.grades.filter(x => x !== lvl) : [...p.grades, lvl];
+                                                                            return { ...p, grades: newG };
+                                                                        }));
+                                                                    }}
+                                                                    className={`px-4 py-2 rounded-xl text-sm font-black transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-lg' : isLockedByOther ? 'bg-slate-200 text-slate-400 cursor-not-allowed grayscale' : 'bg-white text-slate-400 border-2 border-slate-200 hover:border-indigo-300'}`}
+                                                                >
+                                                                    {g?.label}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-1">Combined Total</label>
+                                                    <input 
+                                                        type="number"
+                                                        placeholder="0"
+                                                        value={c.enrollment || ""}
+                                                        onChange={(e) => setMgCombinations(prev => prev.map(p => p.id === c.id ? { ...p, enrollment: parseInt(e.target.value) || 0 } : p))}
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
-                            </motion.div>
-                        )}
+                            </div>
 
-                        {/* ---- STEP 2: Special Categories ---- */}
-                        {currentStep === 2 && (
-                            <motion.div key="step2" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                <h2 className="text-2xl font-bold text-gray-800">Special Categories</h2>
-                                <p className="mt-2 text-sm text-gray-400">Do you have learners in these special programs?</p>
-
-                                <div className="mt-8">
-                                    <label className="block text-sm font-bold text-gray-600 mb-3">Do you have SNED learners?</label>
-                                    <div className="flex gap-3">
-                                        <button onClick={() => setFormData(p => ({ ...p, hasSned: true }))} className={`${toggleBtnBase} ${formData.hasSned === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
-                                        <button onClick={() => setFormData(p => ({ ...p, hasSned: false, sned_learners: "" }))} className={`${toggleBtnBase} ${formData.hasSned === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
-                                    </div>
-                                    <AnimatePresence>
-                                        {formData.hasSned && (
-                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
-                                                <input type="number" name="sned_learners" value={formData.sned_learners} onChange={handleChange} placeholder="How many SNED learners?" className={chunkyInput} />
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </div>
-
-                                <div className="mt-8 border-t border-gray-100 pt-6">
-                                    <label className="block text-sm font-bold text-gray-600 mb-3">Do you have Non-Graded learners?</label>
-                                    <div className="flex gap-3">
-                                        <button onClick={() => setFormData(p => ({ ...p, hasNonGraded: true }))} className={`${toggleBtnBase} ${formData.hasNonGraded === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
-                                        <button onClick={() => setFormData(p => ({ ...p, hasNonGraded: false, non_graded_learners: "" }))} className={`${toggleBtnBase} ${formData.hasNonGraded === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
-                                    </div>
-                                    <AnimatePresence>
-                                        {formData.hasNonGraded && (
-                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
-                                                <input type="number" name="non_graded_learners" value={formData.non_graded_learners} onChange={handleChange} placeholder="How many Non-Graded learners?" className={chunkyInput} />
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {/* ---- STEP 3: ARAL ---- */}
-                        {currentStep === 3 && (
-                            <motion.div key="step3" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                <h2 className="text-2xl font-bold text-gray-800">ARAL / Remedial</h2>
-                                <p className="mt-2 text-sm text-gray-400">Identify learners needing intervention per subject.</p>
-
-                                {/* Helper for rendering grades */}
-                                {["Math", "Read", "Sci"].map((subj) => (
-                                    <div key={subj} className="mt-8 border-b border-gray-100 pb-6 last:border-0">
-                                        <label className="block text-sm font-bold text-gray-600 mb-3">Do you have ARAL Learners in {subj === 'Read' ? 'Reading' : subj === 'Sci' ? 'Science' : subj}?</label>
-                                        <div className="flex gap-3">
-                                            <button onClick={() => setFormData(p => ({ ...p, [`hasAral${subj}`]: true }))} className={`${toggleBtnBase} ${formData[`hasAral${subj}`] === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
-                                            <button onClick={() => setFormData(p => ({ ...p, [`hasAral${subj}`]: false }))} className={`${toggleBtnBase} ${formData[`hasAral${subj}`] === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                            <button 
+                                onClick={handleNext} 
+                                disabled={mgCombinations.length === 0 || mgCombinations.some(c => c.grades.length === 0 || !c.enrollment)}
+                                className="w-full h-20 py-5 rounded-[2.5rem] bg-indigo-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(79,70,229,0.3)] hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            >
+                                Continue <FiArrowRight className="w-8 h-8" />
+                            </button>
+                        </motion.div>
+                    )}
+                    {/* STEP 4: Grade-by-Grade Enrollment */}
+                    {currentStep === 4 && activeNanoGrades[currentGradeIndex] && (
+                        <motion.div key={`grade-${activeNanoGrades[currentGradeIndex].id}`} variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            {(() => {
+                                const g = activeNanoGrades[currentGradeIndex];
+                                const isAvailable = gradeAvailability[g.id] !== false;
+                                return (
+                                    <div className="space-y-6">
+                                        <div className="text-center mb-10">
+                                            <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                                Step 4 • Standalone Grades
+                                            </span>
+                                            <h1 className="text-5xl font-black text-slate-800 mb-2 leading-tight">
+                                                {g.label}
+                                            </h1>
+                                            <p className="text-slate-500 font-medium">Define availability and total enrollment for this grade.</p>
                                         </div>
-                                        <AnimatePresence>
-                                            {formData[`hasAral${subj}`] && (
-                                                <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden grid grid-cols-2 gap-3">
-                                                    {[1, 2, 3, 4, 5, 6].map(g => (
-                                                        <div key={g}>
-                                                            <label className="block text-xs font-bold text-gray-400 mb-1">G{g}</label>
-                                                            <input type="number" name={`aral_${subj.toLowerCase()}_g${g}`} value={formData[`aral_${subj.toLowerCase()}_g${g}`]} onChange={handleChange} placeholder="0" className={`${chunkyInput} !mt-0 !p-3 text-base`} />
+
+                                        <div className={`bg-white rounded-[2.5rem] p-8 shadow-xl border-4 transition-all duration-500 ${isAvailable ? 'border-indigo-100/50 scale-100' : 'border-slate-100 grayscale scale-[0.98]'}`}>
+                                            <div className="flex flex-col items-center gap-6">
+                                                
+                                                {/* Master Switch Panel */}
+                                                <div className="w-full flex items-center justify-between p-4 bg-slate-50/50 rounded-3xl border-2 border-slate-100/50">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Status</span>
+                                                        <span className={`text-xl font-bold ${isAvailable ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                                            {isAvailable ? "Active Session" : "Not Offered"}
+                                                        </span>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => toggleAvailability(g.id)}
+                                                        className={`px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-md active:scale-95 ${isAvailable ? 'bg-white text-rose-500 border-2 border-rose-100 hover:bg-rose-50' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                                    >
+                                                        {isAvailable ? "Disable Grade" : "Enable Grade"}
+                                                    </button>
+                                                </div>
+
+                                                {/* Input Field Panel */}
+                                                <div className="w-full relative py-4">
+                                                    <div className="flex flex-col items-center">
+                                                        <label className={`text-sm font-black uppercase tracking-[0.2em] mb-4 ${isAvailable ? 'text-indigo-400' : 'text-slate-300'}`}>
+                                                            Learner Count
+                                                        </label>
+                                                        <div className="relative group">
+                                                            <input 
+                                                                type="number"
+                                                                min="0"
+                                                                placeholder="0"
+                                                                disabled={!isAvailable}
+                                                                value={gradeTotals[g.id] || ""}
+                                                                onChange={(e) => handleGradeChange(g.id, e.target.value)}
+                                                                className={`w-64 h-32 text-7xl font-black text-center rounded-[2rem] transition-all duration-300 ${isAvailable ? 'bg-indigo-50 border-4 border-indigo-200 text-indigo-700 focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/50' : 'bg-slate-50 border-2 border-slate-100 text-slate-300'}`}
+                                                            />
                                                         </div>
-                                                    ))}
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-                                ))}
-                            </motion.div>
-                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                        {/* ---- STEP 4: Gender Logic ---- */}
-                        {currentStep === 4 && (
-                            <motion.div key="step4" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                <h2 className="text-2xl font-bold text-gray-800">The Magic Math 🪄</h2>
-                                <p className="mt-2 text-sm text-gray-400">Let's calculate your gender split instantly.</p>
-
-                                <div className="mt-8 text-center bg-blue-50 py-6 px-4 rounded-3xl border-2 border-blue-100">
-                                    <p className="font-medium text-gray-600">Out of your <span className="font-bold text-2xl text-blue-600">{totalEnrollment}</span> learners,</p>
-                                    <p className="font-medium text-gray-600 mt-1">how many are MALE?</p>
-                                    
-                                    <div className="max-w-xs mx-auto mt-6">
-                                        <input 
-                                            type="number" 
-                                            name="male_enrollment" 
-                                            value={formData.male_enrollment} 
-                                            onChange={handleChange} 
-                                            placeholder="0" 
-                                            className={`${chunkyInput} text-center !text-3xl !py-6 !bg-white`} 
-                                        />
+                                        <div className="bg-slate-800 rounded-[2rem] p-6 shadow-lg flex justify-between items-center text-white">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cumulative Enrollment</span>
+                                                <span className="text-3xl font-black">{grandTotal}</span>
+                                            </div>
+                                            <button 
+                                                onClick={handleNext} 
+                                                disabled={isAvailable && (!gradeTotals[g.id] || parseInt(gradeTotals[g.id]) === 0)}
+                                                className="h-16 px-10 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-lg transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:bg-slate-700 disabled:cursor-not-allowed"
+                                            >
+                                                Next <FiArrowRight className="w-6 h-6" />
+                                            </button>
+                                        </div>
                                     </div>
+                                );
+                            })()}
+                        </motion.div>
+                    )}
+
+                    {/* STEP 5: Special Learners / SNED Self-Contained */}
+                    {currentStep === 5 && (
+                        <motion.div key="step5" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="text-center mb-8 relative">
+                                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 text-indigo-500 rounded-2xl text-2xl mb-4">🌟</div>
+                                <h1 className="text-3xl font-black text-slate-800 mb-3">Step 5: Special Learners</h1>
+                                <p className="text-slate-500 font-medium px-4">Do you have learners enrolled in specific special programs outside of the standard grade levels?</p>
+                            </div>
+
+                            <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border-4 border-indigo-100/50 relative overflow-hidden">
+                                {/* Language Toggle */}
+                                <div className="absolute top-6 right-8 flex bg-slate-100 p-1 rounded-xl">
+                                    <button 
+                                        onClick={() => setSnedLanguage("en")}
+                                        className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all ${snedLanguage === "en" ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}
+                                    >
+                                        EN
+                                    </button>
+                                    <button 
+                                        onClick={() => setSnedLanguage("ph")}
+                                        className={`px-3 py-1 text-[10px] font-black rounded-lg transition-all ${snedLanguage === "ph" ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}
+                                    >
+                                        PH
+                                    </button>
+                                </div>
+
+                                <div className="mb-8 pr-16">
+                                    <h3 className="text-xl font-black text-slate-800 leading-tight">
+                                        {snedLanguage === "en" 
+                                            ? "Do you have Special Needs Education Learners organized in self-contained classes (non-graded)?" 
+                                            : "Mayroon ba kayong Special Needs Education Learners na naka-organisa sa self-contained classes (non-graded)?"
+                                        }
+                                    </h3>
+                                </div>
+
+                                <div className="bg-slate-50 rounded-3xl p-5 mb-8 border-2 border-slate-100 italic">
+                                    <p className="text-sm font-bold text-slate-500 leading-relaxed text-center">
+                                        {snedLanguage === "en"
+                                            ? "The self-contained class is exclusively for those LWDs who are diagnosed or identified to have severe to profound disabilities. They are the non-graded LWDs or those who are in the transition program."
+                                            : "Ang self-contained class ay eksklusibo para sa mga LWD na may severe hanggang profound na kapansanan. Sila ang mga non-graded LWD o ang mga nasa transition program."
+                                        }
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-4 mb-8">
+                                    <button 
+                                        onClick={() => setHasSnedSelfContained(true)}
+                                        className={`flex-1 flex flex-col items-center gap-2 p-6 rounded-[2rem] border-4 transition-all ${hasSnedSelfContained === true ? 'bg-indigo-50 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 grayscale opacity-60'}`}
+                                    >
+                                        <span className="text-3xl">🙋‍♂️</span>
+                                        <span className={`font-black uppercase tracking-widest text-xs ${hasSnedSelfContained === true ? 'text-indigo-600' : 'text-slate-400'}`}>Yes, we have</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => { setHasSnedSelfContained(false); setSnedSelfContainedCount(""); }}
+                                        className={`flex-1 flex flex-col items-center gap-2 p-6 rounded-[2rem] border-4 transition-all ${hasSnedSelfContained === false ? 'bg-indigo-50 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 grayscale opacity-60'}`}
+                                    >
+                                        <span className="text-3xl">✕</span>
+                                        <span className={`font-black uppercase tracking-widest text-xs ${hasSnedSelfContained === false ? 'text-indigo-600' : 'text-slate-400'}`}>No, none</span>
+                                    </button>
                                 </div>
 
                                 <AnimatePresence>
-                                    {formData.male_enrollment !== "" && parseInt(formData.male_enrollment) <= totalEnrollment && (
+                                    {hasSnedSelfContained === true && (
                                         <motion.div 
-                                            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
-                                            className="mt-6 text-center bg-green-50 py-6 px-4 rounded-3xl border-2 border-green-200 shadow-sm"
+                                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                                            className="flex flex-col items-center pt-4 border-t-2 border-indigo-50"
                                         >
-                                            <p className="font-medium text-green-700">Got it! That means you have...</p>
-                                            <div className="mt-4">
-                                                <input 
-                                                    type="number" 
-                                                    value={femaleEnrollment} 
-                                                    readOnly 
-                                                    className={`${chunkyInput} text-center !text-3xl !py-6 !font-bold !bg-transparent !border-0 !shadow-none !text-green-600`} 
-                                                />
-                                            </div>
-                                            <p className="font-bold uppercase tracking-widest text-green-600 text-sm mt-2">Female Learners</p>
+                                            <label className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-4">
+                                                Number of Non-Graded Learners
+                                            </label>
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                placeholder="0" 
+                                                value={sned_self_contained_count} 
+                                                onChange={(e) => setSnedSelfContainedCount(e.target.value)} 
+                                                className="w-48 h-24 text-5xl font-black text-center rounded-3xl bg-indigo-50 border-4 border-indigo-200 text-indigo-700 outline-none focus:bg-white focus:border-indigo-500 shadow-lg"
+                                            />
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
+                            </div>
 
-                            </motion.div>
-                        )}
+                            <div className="mt-8 flex gap-4">
+                                <button
+                                    onClick={handleBack}
+                                    className="flex-1 h-18 py-5 rounded-[2rem] bg-white border-4 border-slate-100 text-slate-400 font-black text-lg transition-all hover:bg-slate-50 flex items-center justify-center gap-2"
+                                >
+                                    <FiChevronLeft className="w-6 h-6" /> Back
+                                </button>
+                                <button 
+                                    onClick={handleNext} 
+                                    disabled={hasSnedSelfContained === null || (hasSnedSelfContained === true && !sned_self_contained_count)}
+                                    className="flex-[2] h-18 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-lg shadow-[0_10px_30px_rgba(79,70,229,0.3)] hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2"
+                                >
+                                    Continue <FiArrowRight className="w-6 h-6" />
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
 
-                        {/* ---- STEP 5: Verification ---- */}
-                        {currentStep === 5 && (
-                            <motion.div key="step5" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                <h2 className="text-2xl font-bold text-gray-800">Final Verification</h2>
-                                <p className="mt-2 text-sm text-gray-400">Review your "receipt" before submitting.</p>
+                    {/* STEP 6: ARAL Program (Elementary Only) */}
+                    {currentStep === 6 && (
+                        <motion.div key="step6" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="text-center mb-8">
+                                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 text-indigo-500 rounded-2xl text-2xl mb-4">📚</div>
+                                <h1 className="text-3xl font-black text-slate-800 mb-3">Step 6: ARAL Program</h1>
+                                <p className="text-slate-500 font-medium">Record learners under the Academic Recovery and Acceleration Program (G1-G6).</p>
+                            </div>
 
-                                <div className="mt-6 bg-white border border-gray-200 shadow-sm rounded-3xl overflow-hidden">
-                                    <div className="bg-gray-50 border-b border-gray-200 p-4 text-center">
-                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Population</p>
-                                        <p className="text-4xl font-black text-gray-800 mt-1">{totalEnrollment}</p>
-                                    </div>
-                                    <div className="grid grid-cols-2 divide-x divide-gray-100 py-3">
-                                        <div className="text-center p-2">
-                                            <p className="text-xs font-bold text-gray-400 uppercase">Male</p>
-                                            <p className="text-xl font-bold text-blue-600">{formData.male_enrollment}</p>
+                            {/* Math */}
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-6">
+                                <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Mathematics?</h3>
+                                <div className="flex gap-3 mb-4">
+                                    <button onClick={() => setHasAralMath(true)} className={`${toggleBtnBase} ${hasAralMath === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
+                                    <button onClick={() => { setHasAralMath(false); setAralMath({}); }} className={`${toggleBtnBase} ${hasAralMath === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                                </div>
+                                <AnimatePresence>
+                                    {hasAralMath && (
+                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
+                                            {ELEM_GRADES.map(lvl => {
+                                                const isAvailable = gradeAvailability[lvl] !== false;
+                                                const capacity = gradeCapacities[lvl] || 0;
+                                                const currentVal = parseInt(aralMath[lvl]) || 0;
+                                                const isExceeded = currentVal > capacity;
+
+                                                return (
+                                                    <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0" 
+                                                            max={capacity}
+                                                            placeholder="0" 
+                                                            disabled={!isAvailable}
+                                                            value={aralMath[lvl] || ""} 
+                                                            onChange={(e) => handleAralChange('math', lvl, e.target.value)} 
+                                                            className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
+                                                        />
+                                                        {isAvailable && (
+                                                            <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                Max: {capacity}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            {/* Reading */}
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-6">
+                                <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Reading?</h3>
+                                <div className="flex gap-3 mb-4">
+                                    <button onClick={() => setHasAralReading(true)} className={`${toggleBtnBase} ${hasAralReading === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
+                                    <button onClick={() => { setHasAralReading(false); setAralReading({}); }} className={`${toggleBtnBase} ${hasAralReading === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                                </div>
+                                <AnimatePresence>
+                                    {hasAralReading && (
+                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
+                                            {ELEM_GRADES.map(lvl => {
+                                                const isAvailable = gradeAvailability[lvl] !== false;
+                                                const capacity = gradeCapacities[lvl] || 0;
+                                                const currentVal = parseInt(aralReading[lvl]) || 0;
+                                                const isExceeded = currentVal > capacity;
+
+                                                return (
+                                                    <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0" 
+                                                            max={capacity}
+                                                            placeholder="0" 
+                                                            disabled={!isAvailable}
+                                                            value={aralReading[lvl] || ""} 
+                                                            onChange={(e) => handleAralChange('reading', lvl, e.target.value)} 
+                                                            className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
+                                                        />
+                                                        {isAvailable && (
+                                                            <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                Max: {capacity}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            {/* Science */}
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-8">
+                                <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Science?</h3>
+                                <div className="flex gap-3 mb-4">
+                                    <button onClick={() => setHasAralScience(true)} className={`${toggleBtnBase} ${hasAralScience === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
+                                    <button onClick={() => { setHasAralScience(false); setAralScience({}); }} className={`${toggleBtnBase} ${hasAralScience === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                                </div>
+                                <AnimatePresence>
+                                    {hasAralScience && (
+                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
+                                            {ELEM_GRADES.map(lvl => {
+                                                const isAvailable = gradeAvailability[lvl] !== false;
+                                                const capacity = gradeCapacities[lvl] || 0;
+                                                const currentVal = parseInt(aralScience[lvl]) || 0;
+                                                const isExceeded = currentVal > capacity;
+
+                                                return (
+                                                    <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
+                                                        <input 
+                                                            type="number" 
+                                                            min="0" 
+                                                            max={capacity}
+                                                            placeholder="0" 
+                                                            disabled={!isAvailable}
+                                                            value={aralScience[lvl] || ""} 
+                                                            onChange={(e) => handleAralChange('science', lvl, e.target.value)} 
+                                                            className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
+                                                        />
+                                                        {isAvailable && (
+                                                            <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                Max: {capacity}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
+                            <button 
+                                onClick={handleNext} 
+                                disabled={
+                                    hasAralMath === null || 
+                                    hasAralReading === null || 
+                                    hasAralScience === null ||
+                                    (hasAralMath === true && (Object.values(aralMath).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralMath[lvl]) || 0) > (gradeCapacities[lvl] || 0)))) ||
+                                    (hasAralReading === true && (Object.values(aralReading).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralReading[lvl]) || 0) > (gradeCapacities[lvl] || 0)))) ||
+                                    (hasAralScience === true && (Object.values(aralScience).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralScience[lvl]) || 0) > (gradeCapacities[lvl] || 0))))
+                                } 
+                                className="w-full py-5 rounded-2xl bg-indigo-600 text-white font-black text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                            >
+                                Continue <FiArrowRight className="w-6 h-6 inline ml-2" />
+                            </button>
+                        </motion.div>
+                    )}
+
+                    {/* STEP 7: Global Gender Split */}
+                    {currentStep === 7 && (
+                        <motion.div key="step7" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="text-center mb-8">
+                                <h1 className="text-3xl font-black text-slate-800 mb-3">Step 7: Gender Breakdown</h1>
+                                <p className="text-slate-500 font-medium pb-4">Provide the overall gender split for the entire school based on your previous entries.</p>
+                                
+                                <div className="bg-slate-800 rounded-3xl p-5 inline-block shadow-lg mx-auto">
+                                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">School Grand Total</p>
+                                    <p className="text-5xl font-black text-white">{grandTotal}</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-8 space-y-6">
+                                <div>
+                                    <label className="text-lg font-bold text-slate-700 mb-2 block text-center">How many are Male? 👦🏻</label>
+                                    <input type="number" min="0" placeholder="0" value={genderTotals.male} onChange={(e) => handleGenderChange('male', e.target.value)} className={`${chunkyInput} !text-blue-600 border-blue-100 bg-blue-50 focus:border-blue-400`} />
+                                </div>
+                                
+                                <div>
+                                    <label className="text-lg font-bold text-slate-700 mb-2 block text-center">How many are Female? 👧🏻</label>
+                                    <input type="number" min="0" placeholder="0" value={genderTotals.female} onChange={(e) => handleGenderChange('female', e.target.value)} className={`${chunkyInput} !text-pink-600 border-pink-100 bg-pink-50 focus:border-pink-400`} />
+                                </div>
+                            </div>
+
+                            <AnimatePresence>
+                                {(genderTotals.male !== "" && genderTotals.female !== "") && (
+                                    <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="mb-8">
+                                        <div className={`p-5 rounded-2xl border-2 flex items-center gap-4 ${isMathPerfect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                                            <div className="text-3xl flex-shrink-0">
+                                                {isMathPerfect ? <FiCheckCircle className="text-emerald-500" /> : <FiAlertTriangle className="text-red-500" />}
+                                            </div>
+                                            <div>
+                                                <p className="font-black text-lg">{isMathPerfect ? "Data matches perfectly!" : "Numbers don't add up."}</p>
+                                                <p className="text-sm font-medium opacity-80 mt-1">
+                                                    {isMathPerfect ? `Male and Female sum equals the Grand Total of ${grandTotal}.` : `Male (${genderTotals.male||0}) + Female (${genderTotals.female||0}) = ${genderSum}. The total must equal ${grandTotal}.`}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="text-center p-2">
-                                            <p className="text-xs font-bold text-gray-400 uppercase">Female</p>
-                                            <p className="text-xl font-bold text-red-500">{femaleEnrollment}</p>
-                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <button onClick={handleNext} disabled={!isMathPerfect} className="w-full py-5 rounded-2xl bg-indigo-600 text-white font-black text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                Review &amp; Finish <FiArrowRight className="w-6 h-6 inline ml-2" />
+                            </button>
+                        </motion.div>
+                    )}
+
+                    {/* STEP 8: Confirmation */}
+                    {currentStep === 8 && (
+                        <motion.div key="step8" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="bg-indigo-600 rounded-b-[3rem] -mx-4 -mt-8 pt-12 pb-16 px-6 mb-8 text-center text-white relative overflow-hidden shadow-xl shadow-indigo-200/50">
+                                <div className="relative z-10">
+                                    <div className="w-20 h-20 bg-white/20 rounded-[2rem] flex items-center justify-center text-4xl mx-auto mb-6 backdrop-blur-sm border border-white/20">
+                                        📋
                                     </div>
-                                    {(formData.hasSned || formData.hasNonGraded) && (
-                                        <div className="bg-orange-50 p-4 text-sm border-t border-orange-100 text-orange-800 flex justify-between">
-                                            <span className="font-bold">Special Care:</span>
-                                            <span>
-                                                {formData.hasSned ? `${formData.sned_learners} SNED` : ''} 
-                                                {formData.hasSned && formData.hasNonGraded ? ' / ' : ''}
-                                                {formData.hasNonGraded ? `${formData.non_graded_learners} Non-Grade` : ''}
-                                            </span>
+                                    <h1 className="text-3xl font-black mb-3">Almost done!</h1>
+                                    <p className="text-indigo-100 font-medium px-4">Confirm your enrollment data before securing it to the database.</p>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-8 max-w-sm mx-auto">
+                                <h3 className="text-center font-black text-slate-400 uppercase tracking-widest text-xs mb-6">Summary Receipt</h3>
+                                
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center border-b border-slate-50 pb-4">
+                                        <span className="text-slate-500 font-medium">Grand Total</span>
+                                        <span className="text-2xl font-black text-slate-800">{grandTotal}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center border-b border-slate-50 pb-4">
+                                        <span className="text-slate-500 font-medium">Male</span>
+                                        <span className="text-lg font-bold text-blue-600">{genderTotals.male}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center border-b border-slate-50 pb-4">
+                                        <span className="text-slate-500 font-medium">Female</span>
+                                        <span className="text-lg font-bold text-pink-600">{genderTotals.female}</span>
+                                    </div>
+                                    
+                                    {(hasSnedSelfContained || mgCombinations.length > 0) && (
+                                        <div className="pt-2">
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-50 pb-2">Special & Combinations</p>
+                                            {mgCombinations.map((c, i) => (
+                                                <div key={c.id} className="flex justify-between text-sm py-1">
+                                                    <span className="text-indigo-500 font-bold">MG Group {i+1}</span>
+                                                    <span className="font-bold">{c.enrollment}</span>
+                                                </div>
+                                            ))}
+                                            {hasSnedSelfContained && (
+                                                <div className="flex justify-between text-sm py-1">
+                                                    <span className="text-slate-500">SNED (Self-Contained)</span>
+                                                    <span className="font-bold">{sned_self_contained_count}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
+                            </div>
 
-                                <div className="mt-8 bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 flex items-start gap-3 cursor-pointer" onClick={() => setFormData(p => ({ ...p, verified_as_of: !p.verified_as_of }))}>
-                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${formData.verified_as_of ? 'bg-blue-600 border-blue-600' : 'bg-white border-blue-300'}`}>
-                                        {formData.verified_as_of && <FiCheck className="text-white w-4 h-4" />}
-                                    </div>
-                                    <p className="text-sm text-blue-800 font-medium select-none">
-                                        I verify this data is correct and accurately reflects our enrollment as of {new Date().toLocaleDateString()}.
-                                    </p>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
-                )}
+                            <p className="text-center text-slate-500 font-bold mb-6">Is this data correct as of today?</p>
+
+                            <div className="flex gap-4">
+                                <button onClick={() => setCurrentStep(1)} className="flex-1 py-4 rounded-2xl font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                                    No, Edit Again
+                                </button>
+                                <button onClick={handleSave} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-indigo-600 text-white font-black shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50">
+                                    {isSaving ? "Saving..." : "Yes, Save Data"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+
                 </AnimatePresence>
             </main>
-
-            {!isReviewMode && (
-            <div className="fixed bottom-0 left-0 w-full p-6 bg-white border-t border-gray-100 flex justify-center z-50">
-                <div className="w-full max-w-md flex gap-3">
-                    {currentStep > 1 && (
-                        <motion.button initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} onClick={handleBack} className="px-5 py-4 rounded-2xl font-bold text-gray-500 bg-gray-100 border-b-[4px] border-gray-200 active:border-b-0 active:translate-y-[4px] transition-all">
-                            Back
-                        </motion.button>
-                    )}
-
-                    {currentStep === TOTAL_STEPS ? (
-                        <button onClick={handleNext} disabled={loading || !isCurrentStepValid()} className="flex-1 py-4 rounded-2xl text-white font-bold text-lg text-center bg-green-500 border-b-[6px] border-green-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 shadow-lg">
-                            {loading ? "Saving..." : "Submit Setup"}
-                        </button>
-                    ) : (
-                        <button onClick={handleNext} disabled={!isCurrentStepValid()} className="flex-1 py-4 rounded-2xl text-white font-bold text-lg text-center bg-blue-500 border-b-[6px] border-blue-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 shadow-lg">
-                            Continue
-                        </button>
-                    )}
-                </div>
-            </div>
-            )}
 
             <SuccessModal
                 isOpen={showSuccess}
                 onClose={() => setShowSuccess(false)}
-                message="Learner Setup Saved! You can now proceed to organize classes."
+                message="Smart Enrollment Sync Saved! Your learner counts are locked in."
                 redirectUrl="/modular-dashboard"
             />
         </div>

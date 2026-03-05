@@ -179,6 +179,19 @@ const Unit8PersonnelRegistry = ({ onSave, initialData, isReviewMode }) => {
             });
             const result = await res.json();
             if (result.success) {
+                // Determine if global user progress needs update
+                const progRes = await fetch(`/api/user/progress`);
+                if (progRes.ok) {
+                    const progData = await progRes.json();
+                    if (progData.progress && (!progData.progress.completed_units || !progData.progress.completed_units.includes(8))) {
+                        await fetch(`/api/user/progress`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ unitId: 8 })
+                        });
+                    }
+                }
+                
                 setShowSuccessModal(true);
                 if (onSave) onSave({});
             } else {
@@ -551,10 +564,13 @@ const Unit8PersonnelRegistry = ({ onSave, initialData, isReviewMode }) => {
                                 You have successfully finalized the Unit 8 Personnel Registry for this school.
                             </p>
                             <button 
-                                onClick={() => setShowSuccessModal(false)}
+                                onClick={() => {
+                                    setShowSuccessModal(false);
+                                    navigate('/modular-dashboard');
+                                }}
                                 className="w-full py-4 rounded-2xl font-black bg-emerald-500 text-white shadow-lg active:scale-95 transition-transform"
                             >
-                                Nice!
+                                Return to Dashboard
                             </button>
                         </motion.div>
                     </motion.div>

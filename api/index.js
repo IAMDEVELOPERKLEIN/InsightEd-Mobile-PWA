@@ -11966,7 +11966,7 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const result = await pool.query(
-      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, curricular_offering FROM ph_schools WHERE school_id = $1',
+      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed, curricular_offering FROM ph_schools WHERE school_id = $1',
       [schoolId]
     );
 
@@ -11985,6 +11985,8 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       if (row.unit5_completed) { completedUnits.push(5); xp += 300; }
       if (row.unit6_completed) { completedUnits.push(6); xp += 300; }
       if (row.unit7_completed) { completedUnits.push(7); xp += 350; }
+      if (row.unit8_completed) { completedUnits.push(8); xp += 400; }
+      if (row.unit9_completed) { completedUnits.push(9); xp += 500; }
     }
 
     res.json({ success: true, progress: { completedUnits, xp, curricular_offering } });
@@ -12057,37 +12059,68 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
 });
 
 // --- 27. PUT: Save Unit 2 Learner Data (Modular Beta) ---
+// Auto-migrate column
+pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB').catch(e => console.error("Auto-migrate unit2 JSON fail:", e.message));
+pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0').catch(e => console.error("Auto-migrate sned_self_contained_count fail:", e.message));
+
 app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
 
   try {
+    // We expect { unit2_simplified_enrollment: [...] } OR { unit2_simplified_enrollment: { array: [...], questionnaire: {} } }
+    const rawData = data.unit2_simplified_enrollment || [];
+    const simplifiedData = Array.isArray(rawData) ? rawData : (rawData.array || []);
+    
+    // Calculate global sums to populate legacy columns for Dashboards
+    let totalM = 0;
+    let totalF = 0;
+    let enrollmentByGrade = {
+        kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
+        g7: 0, g8: 0, g9: 0, g10: 0, g11: 0, g12: 0
+    };
+
+    simplifiedData.forEach(item => {
+        const m = parseInt(item.male) || 0;
+        const f = parseInt(item.female) || 0;
+        const total = parseInt(item.total) || (m + f);
+        totalM += m;
+        totalF += f;
+        if (enrollmentByGrade[item.grade_level] !== undefined) {
+            enrollmentByGrade[item.grade_level] = total;
+        }
+    });
+
+    // If we are using the new sequential flow, we might have global gender totals instead of per-grade.
+    // Let's check the questionnaire object for global totals.
+    if (!Array.isArray(rawData) && rawData.questionnaire && rawData.questionnaire.genderTotals) {
+        totalM = parseInt(rawData.questionnaire.genderTotals.male) || 0;
+        totalF = parseInt(rawData.questionnaire.genderTotals.female) || 0;
+    }
+
+    const globalTotal = totalM + totalF;
+
     const fields = [
       'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',
       'enroll_g4 = $5', 'enroll_g5 = $6', 'enroll_g6 = $7', 'enroll_g7 = $8', 'enroll_g8 = $9',
       'enroll_g9 = $10', 'enroll_g10 = $11', 'enroll_g11 = $12', 'enroll_g12 = $13', 'total_enrollment = $14',
-      'sned_learners = $15', 'non_graded_learners = $16',
-      'aral_math_g1 = $17', 'aral_math_g2 = $18', 'aral_math_g3 = $19', 'aral_math_g4 = $20', 'aral_math_g5 = $21', 'aral_math_g6 = $22',
-      'aral_read_g1 = $23', 'aral_read_g2 = $24', 'aral_read_g3 = $25', 'aral_read_g4 = $26', 'aral_read_g5 = $27', 'aral_read_g6 = $28',
-      'aral_sci_g1 = $29', 'aral_sci_g2 = $30', 'aral_sci_g3 = $31', 'aral_sci_g4 = $32', 'aral_sci_g5 = $33', 'aral_sci_g6 = $34',
-      'male_enrollment = $35', 'female_enrollment = $36', 'unit2_completed = TRUE', 'verified_as_of = CURRENT_TIMESTAMP'
+      'male_enrollment = $15', 'female_enrollment = $16', 
+      'sned_self_contained_count = $17',
+      'unit2_simplified_enrollment = $18',
+      'unit2_completed = TRUE', 'verified_as_of = CURRENT_TIMESTAMP'
     ];
-
-    const parseVal = (val) => (val === "" || val === null || val === undefined || isNaN(parseInt(val))) ? 0 : parseInt(val);
 
     const values = [
-      parseVal(data.enroll_kinder), parseVal(data.enroll_g1), parseVal(data.enroll_g2), parseVal(data.enroll_g3),
-      parseVal(data.enroll_g4), parseVal(data.enroll_g5), parseVal(data.enroll_g6), parseVal(data.enroll_g7), parseVal(data.enroll_g8),
-      parseVal(data.enroll_g9), parseVal(data.enroll_g10), parseVal(data.enroll_g11), parseVal(data.enroll_g12), parseVal(data.total_enrollment),
-      parseVal(data.sned_learners), parseVal(data.non_graded_learners),
-      parseVal(data.aral_math_g1), parseVal(data.aral_math_g2), parseVal(data.aral_math_g3), parseVal(data.aral_math_g4), parseVal(data.aral_math_g5), parseVal(data.aral_math_g6),
-      parseVal(data.aral_read_g1), parseVal(data.aral_read_g2), parseVal(data.aral_read_g3), parseVal(data.aral_read_g4), parseVal(data.aral_read_g5), parseVal(data.aral_read_g6),
-      parseVal(data.aral_sci_g1), parseVal(data.aral_sci_g2), parseVal(data.aral_sci_g3), parseVal(data.aral_sci_g4), parseVal(data.aral_sci_g5), parseVal(data.aral_sci_g6),
-      parseVal(data.male_enrollment), parseVal(data.female_enrollment),
-      schoolId // $37
+      enrollmentByGrade.kinder, enrollmentByGrade.g1, enrollmentByGrade.g2, enrollmentByGrade.g3,
+      enrollmentByGrade.g4, enrollmentByGrade.g5, enrollmentByGrade.g6, enrollmentByGrade.g7, enrollmentByGrade.g8,
+      enrollmentByGrade.g9, enrollmentByGrade.g10, enrollmentByGrade.g11, enrollmentByGrade.g12, globalTotal,
+      totalM, totalF,
+      parseInt(data.sned_self_contained_count) || 0,
+      JSON.stringify(rawData),
+      schoolId // $19
     ];
 
-    const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $37`;
+    const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $19`;
 
     await pool.query(query, values);
 
@@ -12109,46 +12142,34 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
 app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
-  const { has_multigrade, multigrade_details } = data;
+  const { has_multigrade, multigrade_sections_count, unit3_simplified_counts } = data;
 
   if (typeof has_multigrade === 'undefined') {
     return res.status(400).json({ error: 'has_multigrade is required' });
   }
 
-  const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
-
   try {
-    const detailsJson = has_multigrade
-      ? JSON.stringify(multigrade_details || [])
-      : JSON.stringify([]);
+    // Auto-migrate column if missing
+    try {
+      await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_simplified_counts JSONB');
+      await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_sections_count INTEGER DEFAULT 0');
+    } catch(e) {}
+
+    const sectionsJson = unit3_simplified_counts || '[]';
 
     const query = `
       UPDATE ph_schools
       SET
-        has_multigrade      = $1,
-        multigrade_details  = $2::jsonb,
-        sections_kinder     = $3,  size_less_kinder    = $4,  size_within_kinder  = $5,  size_above_kinder  = $6,
-        sections_g1         = $7,  size_less_g1        = $8,  size_within_g1      = $9,  size_above_g1      = $10,
-        sections_g2         = $11, size_less_g2        = $12, size_within_g2      = $13, size_above_g2      = $14,
-        sections_g3         = $15, size_less_g3        = $16, size_within_g3      = $17, size_above_g3      = $18,
-        sections_g4         = $19, size_less_g4        = $20, size_within_g4      = $21, size_above_g4      = $22,
-        sections_g5         = $23, size_less_g5        = $24, size_within_g5      = $25, size_above_g5      = $26,
-        sections_g6         = $27, size_less_g6        = $28, size_within_g6      = $29, size_above_g6      = $30,
-        unit3_completed     = TRUE,
-        updated_at          = CURRENT_TIMESTAMP
-      WHERE school_id = $31
+        has_multigrade             = $1,
+        multigrade_sections_count  = $2,
+        unit3_simplified_counts    = $3::jsonb,
+        unit3_completed            = TRUE,
+        updated_at                 = CURRENT_TIMESTAMP
+      WHERE school_id = $4
     `;
 
     const values = [
-      has_multigrade, detailsJson,
-      pInt(data.sections_kinder), pInt(data.size_less_kinder), pInt(data.size_within_kinder), pInt(data.size_above_kinder),
-      pInt(data.sections_g1), pInt(data.size_less_g1), pInt(data.size_within_g1), pInt(data.size_above_g1),
-      pInt(data.sections_g2), pInt(data.size_less_g2), pInt(data.size_within_g2), pInt(data.size_above_g2),
-      pInt(data.sections_g3), pInt(data.size_less_g3), pInt(data.size_within_g3), pInt(data.size_above_g3),
-      pInt(data.sections_g4), pInt(data.size_less_g4), pInt(data.size_within_g4), pInt(data.size_above_g4),
-      pInt(data.sections_g5), pInt(data.size_less_g5), pInt(data.size_within_g5), pInt(data.size_above_g5),
-      pInt(data.sections_g6), pInt(data.size_less_g6), pInt(data.size_within_g6), pInt(data.size_above_g6),
-      schoolId // $31
+      has_multigrade, multigrade_sections_count || 0, sectionsJson, schoolId
     ];
 
     await pool.query(query, values);
@@ -12165,6 +12186,19 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
   }
 });
 
+// Auto-migrate Unit 4 columns for G7-G12 and als_total
+const unit4MigrateCols = async () => {
+  const grades = ['kinder','g7','g8','g9','g10','g11','g12'];
+  const cats = ['als','muslim','ip','displaced','overage','dropout','repeater'];
+  for (const cat of cats) {
+    for (const g of grades) {
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => {});
+    }
+  }
+  await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => {});
+};
+unit4MigrateCols();
+
 // --- 31. PUT: Save Unit 4 Learner Profile (Modular Beta) ---
 app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
@@ -12174,6 +12208,16 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
   const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
 
   try {
+    // Auto-ensure columns exist before writing
+    const allGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+    const allCats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
+    for (const cat of allCats) {
+      for (const g of allGrades) {
+        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => {});
+      }
+    }
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => {});
+
     const groupsJson = JSON.stringify(selected_learner_groups);
     const setClauses = [];
     const values = [];
@@ -12191,9 +12235,9 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
       }
     }
 
-    // Dynamic Category x Grade columns
-    const grades = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-    const categories = ['als', 'muslim', 'ip', 'lwd', 'displaced', 'overage', 'sned', 'dropout', 'repeater'];
+    // Dynamic Category x Grade columns (K-12)
+    const grades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+    const categories = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
 
     for (const cat of categories) {
       for (const grade of grades) {
@@ -12203,6 +12247,12 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
           values.push(pInt(data[colName]));
         }
       }
+    }
+
+    // Global ALS total (independent of per-grade)
+    if (data.als_total !== undefined) {
+      setClauses.push(`als_total = $${vCount++}`);
+      values.push(pInt(data.als_total));
     }
 
     setClauses.push(`unit4_completed = TRUE`);
@@ -12215,6 +12265,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
       WHERE school_id = $${vCount}
     `;
 
+    console.log(`[Unit4 Save] Saving ${setClauses.length} fields for school ${schoolId}`);
     await pool.query(query, values);
 
     // Auto-update school_summary instantly
@@ -12649,6 +12700,7 @@ app.post('/api/ph_schools/unit8/:schoolId', async (req, res) => {
   try {
     // Mark unit8_completed flag in ph_schools
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_completed BOOLEAN DEFAULT FALSE;`);
     await pool.query(`UPDATE ph_schools SET unit8_completed = TRUE WHERE school_id = $1`, [schoolId]);
 
     res.json({ success: true, message: "Unit 8 Personnel Registry finalized!" });

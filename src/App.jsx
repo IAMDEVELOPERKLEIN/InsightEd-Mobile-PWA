@@ -82,6 +82,7 @@ import Unit5ShiftingModality from './components/modular/Unit5ShiftingModality';
 import Unit6PhysicalFacilities from './components/modular/Unit6PhysicalFacilities';
 import Unit6TeachingPersonnel from './components/modular/Unit6TeachingPersonnel';
 import Unit8PersonnelRegistry from './components/modular/Unit8PersonnelRegistry';
+import Unit9SchoolResources from './components/modular/Unit9SchoolResources';
 
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
@@ -231,6 +232,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
               <Unit8PersonnelRegistry />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-9"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit9SchoolResources />
             </ProtectedRoute>
           }
         />

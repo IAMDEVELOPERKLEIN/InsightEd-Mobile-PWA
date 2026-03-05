@@ -134,6 +134,13 @@ const ModularDashboard = () => {
                 path: "/modular/unit-8",
                 locked: !questProgress.completedUnits.includes(7),
             },
+            {
+                id: 9,
+                title: "School Resources",
+                icon: <FiBookOpen className="w-7 h-7" />,
+                path: "/modular/unit-9",
+                locked: !questProgress.completedUnits.includes(8),
+            },
         ];
 
         return mods;
