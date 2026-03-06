@@ -1,0 +1,11 @@
+[dotenv@17.2.3] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+C:\Users\KleinZebastianCatapa\Documents\INSIGHTEDCODES2026\node_modules\pg-pool\index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+Error: The server does not support SSL connections
+    at C:\Users\KleinZebastianCatapa\Documents\INSIGHTEDCODES2026\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async migrate (file:///C:/Users/KleinZebastianCatapa/Documents/INSIGHTEDCODES2026/migrate_funding_year.js:15:20)
+
+Node.js v24.11.0

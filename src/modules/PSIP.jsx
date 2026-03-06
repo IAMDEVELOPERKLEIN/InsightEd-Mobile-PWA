@@ -34,7 +34,7 @@ const StatCard = ({ icon: Icon, label, value, sub, color, bgColor }) => (
 const LoadingSpinner = () => (
     <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
         <FiLoader className="w-12 h-12 animate-spin text-blue-400 mb-4" />
-        <p className="font-bold">Loading 2026 Infrastructure Priorities Data...</p>
+        <p className="font-bold">Loading Newcon Priorities Data...</p>
     </div>
 );
 
@@ -574,10 +574,10 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                 <>
                                     <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 overflow-x-auto md:overflow-x-visible pb-4 md:pb-0 gap-6 snap-x snap-mandatory">
                                         <div 
-                                            onClick={() => onSearch('') || handleKpiClick({ key: 'projects', title: 'Total Readily Implementable Projects', color: '#f59e0b', source: 'congress' })}
+                                            onClick={() => onSearch('') || handleKpiClick({ key: 'projects', title: 'Total Newcon Priorities Projects', color: '#f59e0b', source: 'congress' })}
                                             className="min-w-[280px] md:min-w-0 snap-center bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-3xl p-8 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95 group"
                                         >
-                                            <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 group-hover:text-amber-500">Total Readily Implementable Projects</p>
+                                            <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 group-hover:text-amber-500">Total Newcon Priorities Projects</p>
                                             <p className="text-5xl font-black text-amber-700">{rows.length.toLocaleString()}</p>
                                         </div>
                                         <div 
@@ -636,8 +636,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                             {['School ID', 'School Name', 'Project Name', 'Amount', 'Status', 'Region', 'Division', 'Leg. District', 'Ownership (Pre)', 'Ownership (Conf)', 'Accessibility', 'Dimensions', 'Buildable?'].map(h => (
                                                 <th key={h} className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap">{h}</th>
                                             ))}
-                                            <th className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap sticky right-[160px] bg-slate-100/80 z-20">Implementing Office</th>
-                                            <th className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap sticky right-0 bg-slate-100/80 z-20">Actions</th>
+                                            <th className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap sticky right-0 bg-slate-100/80 z-20">Implementing Office</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -666,27 +665,45 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                                         {(r.has_buildable_space || '—').toUpperCase()}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 border-b border-white sticky right-[160px] bg-blue-50/80 group-hover:bg-blue-50 transition-colors z-10 backdrop-blur-sm">
-                                                    {r.assigned_to ? (
-                                                        <span className="bg-indigo-600 text-white px-3 py-1 rounded-full font-black text-[9px] uppercase tracking-wider shadow-sm">{r.assigned_to}</span>
-                                                    ) : (
-                                                        <span className="text-slate-300 italic font-medium">Not Assigned</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 border-b border-white sticky right-0 bg-blue-50/80 group-hover:bg-blue-50 transition-colors z-10 backdrop-blur-sm min-w-[160px]">
-                                                    <select 
-                                                        className="bg-white border-2 border-slate-100 rounded-xl px-2 py-1.5 text-[10px] font-black uppercase tracking-wider outline-none focus:ring-2 focus:ring-amber-400 transition-all cursor-pointer hover:border-amber-200"
-                                                        value={r.assigned_to || ''}
-                                                        onChange={(e) => handleAssign(r.id, e.target.value)}
-                                                    >
-                                                        <option value="">Implementing Office</option>
-                                                        <option value="PGO">PGO</option>
-                                                        <option value="MGO">MGO</option>
-                                                        <option value="CGO">CGO</option>
-                                                        <option value="DPWH">DPWH</option>
-                                                        <option value="DEPED">DepEd</option>
-                                                        <option value="CSO">CSO</option>
-                                                    </select>
+                                                <td className="px-6 py-4 border-b border-white sticky right-0 bg-blue-50/80 group-hover:bg-blue-50 transition-colors z-10 backdrop-blur-sm min-w-[200px]">
+                                                    <div className="flex flex-col gap-2">
+                                                        <select 
+                                                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-2 py-1.5 text-[10px] font-black uppercase tracking-wider outline-none focus:ring-2 focus:ring-amber-400 transition-all cursor-pointer hover:border-amber-200"
+                                                            value={r.assigned_to?.split(' - ')[0] || ''}
+                                                            onChange={(e) => {
+                                                                const agency = e.target.value;
+                                                                if (['MGO', 'PGO', 'CGO'].includes(agency)) {
+                                                                    // Default sub-selection based on school data
+                                                                    const sub = (agency === 'MGO' || agency === 'CGO') ? r.municipality : r.province;
+                                                                    handleAssign(r.id, `${agency}${sub ? ` - ${sub}` : ''}`);
+                                                                } else {
+                                                                    handleAssign(r.id, agency);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <option value="">Implementing Office</option>
+                                                            <option value="PGO">PGO</option>
+                                                            <option value="MGO">MGO</option>
+                                                            <option value="CGO">CGO</option>
+                                                            <option value="DPWH">DPWH</option>
+                                                            <option value="DEPED">DepEd</option>
+                                                            <option value="CSO">CSO</option>
+                                                        </select>
+
+                                                        {r.assigned_to && (
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-full font-black text-[8px] uppercase tracking-wider shadow-sm truncate max-w-[150px]">
+                                                                    {r.assigned_to}
+                                                                </span>
+                                                                <button 
+                                                                    onClick={() => handleAssign(r.id, '')}
+                                                                    className="text-slate-400 hover:text-red-500 transition-colors"
+                                                                >
+                                                                    <FiX size={12} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -803,7 +820,7 @@ const HomeView = ({
             isImplementingOffice: true
         },
         {
-            id: 'FOR_DECISION', title: 'Readily Implementable Projects',
+            id: 'FOR_DECISION', title: 'Newcon Priorities',
             icon: <FiAlertCircle className="w-6 h-6" />, color: 'bg-yellow-100 text-yellow-600',
             count: partnerships.total_initiatives || 0,
             drilldown: partnerships.forDecision || []
@@ -1025,7 +1042,7 @@ const HomeView = ({
                                             <h3 className="text-base md:text-lg font-bold text-slate-800">{p.title}</h3>
                                             <div className="flex flex-col mt-1">
                                                 <span className="text-xs md:text-sm font-bold text-blue-600 uppercase tracking-tight">
-                                                    {Number(p.count).toLocaleString()} {p.id === 'FOR_DECISION' ? 'Readily Implementable' : 'Assigned'} {p.count === 1 ? 'Project' : 'Projects'}
+                                                    {Number(p.count).toLocaleString()} {p.id === 'FOR_DECISION' ? 'Newcon Priorities' : 'Assigned'} {p.count === 1 ? 'Project' : 'Projects'}
                                                 </span>
                                                 {p.partner_count > 0 && (
                                                     <span className="text-[10px] text-slate-400 font-medium">

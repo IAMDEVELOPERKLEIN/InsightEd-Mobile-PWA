@@ -84,10 +84,17 @@ const EditProjectModal = ({
 
     // Optional: For internal logic if not provided
     internalFiles, // Array of File objects
-    externalFiles  // Array of File objects
+    externalFiles,  // Array of File objects
+    voHistory = [] // Passed from parent
 }) => {
     const [formData, setFormData] = useState(null);
-    const [documents, setDocuments] = useState({ POW: null, DUPA: null, CONTRACT: null, VO: null });
+    const [documents, setDocuments] = useState({ 
+        POW: null, DUPA: null, CONTRACT: null, VO: null,
+        RevisedPOW: null, RevisedDUPA: null, RevisedContract: null
+    });
+    const [isFundingYearLocked, setIsFundingYearLocked] = useState(true);
+    const [showJustificationPrompt, setShowJustificationPrompt] = useState(false);
+    const [tempFundingYear, setTempFundingYear] = useState('');
 
     // Realignment specific state
     const [realignmentCandidates, setRealignmentCandidates] = useState([]);
@@ -148,9 +155,25 @@ const EditProjectModal = ({
                 vo_number: project.vo_number || '',
                 vo_requested_date: (project.vo_requested_date || project.vo_approval_date) ? (project.vo_requested_date || project.vo_approval_date).split('T')[0] : '',
                 vo_requested_by: project.vo_requested_by || project.vo_approved_by || '',
+                // Enhanced VO Fields
+                vo_type: project.vo_type || 'Combined',
+                vo_sequence_no: project.vo_sequence_no || '',
+                additive_amount: project.additive_amount || '',
+                deductive_amount: project.deductive_amount || '',
+                net_vo_amount: project.net_vo_amount || '',
+                time_extension_days: project.time_extension_days || '',
+                revised_expiry_date: project.revised_expiry_date ? project.revised_expiry_date.split('T')[0] : '',
+                caf_reference: project.caf_reference || '',
                 // New Tab State
-                isProjectDetailsUpdate: false
+                isProjectDetailsUpdate: false,
+                fundingYear: project.funding_year || project.fundingYear || '',
+                fundingYearJustification: '',
+                // Justification Hierarchy
+                justification_category: project.justification_category || 'Site Condition',
+                justification_details: project.justification_details || ''
             });
+            setIsFundingYearLocked(true);
+            setShowJustificationPrompt(false);
             setDocuments({ POW: null, DUPA: null, CONTRACT: null });
         }
     }, [project, isOpen]);
@@ -212,10 +235,32 @@ const EditProjectModal = ({
             // Handle Numeric Fields with Commas
             const numericFields = [
                 'numberOfClassrooms', 'numberOfStoreys', 'numberOfSites', 
-                'approved_budget_for_contract', 'contract_amount', 'fundsUtilized', 'tranches_count', 'tranche_amount'
+                'approved_budget_for_contract', 'contract_amount', 'fundsUtilized', 'tranches_count', 'tranche_amount',
+                'additive_amount', 'deductive_amount', 'net_vo_amount'
             ];
             if (numericFields.includes(name)) {
-                newData[name] = stripCommas(value);
+                const stripped = stripCommas(value);
+                newData[name] = stripped;
+
+                // Auto-calculate Net VO Amount
+                if (['additive_amount', 'deductive_amount'].includes(name)) {
+                    const add = parseFloat(name === 'additive_amount' ? stripped : (prev.additive_amount || 0));
+                    const ded = parseFloat(name === 'deductive_amount' ? stripped : (prev.deductive_amount || 0));
+                    newData.net_vo_amount = (add - ded).toFixed(2);
+                    
+                    // Update Revised Contract Amount based on ORIGINAL contract amount from project prop
+                    const originalContract = parseFloat(project.contract_amount || project.approved_budget_for_contract || 0);
+                    newData.contract_amount = (originalContract + (add - ded)).toFixed(2);
+                }
+            }
+
+            if (name === 'revised_expiry_date' && value) {
+                // Auto-calculate Time Extension (Days) based on Original Target Completion Date
+                const originalExpiry = new Date(project.targetCompletionDate || project.noticeToProceed);
+                const revisedExpiry = new Date(value);
+                const diffTime = revisedExpiry.getTime() - originalExpiry.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                newData.time_extension_days = diffDays > 0 ? diffDays : 0;
             }
 
             if (name === "accomplishmentPercentage") {
@@ -328,6 +373,20 @@ const EditProjectModal = ({
         formData.status === ProjectStatus.Completed ||
         formData.status === ProjectStatus.ForFinalInspection;
 
+    const handleUnlockFundingYear = () => {
+        const reason = prompt("⚠️ STRICT UPDATE REQUIRED\n\nPlease provide a justification/reason for changing the Funding Year:");
+        if (reason && reason.trim().length > 5) {
+            setIsFundingYearLocked(false);
+            setFormData(prev => ({
+                ...prev,
+                fundingYearJustification: reason.trim()
+            }));
+            alert("✅ Funding Year Unlocked.\nPlease proceed with the update.");
+        } else if (reason !== null) {
+            alert("❌ FAILED\nA valid justification (at least 6 characters) is required to unlock this field.");
+        }
+    };
+
     // --- Render Sections Helpers ---
 
     const renderProjectDetails = () => (
@@ -362,8 +421,21 @@ const EditProjectModal = ({
 
             {/* Scope of Work */}
             <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Scope of Work</label>
-                <textarea name="scopeOfWork" rows="2" value={formData.scopeOfWork} onChange={handleChange} disabled={readOnly} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none ${readOnly ? 'bg-slate-100' : ''}`} />
+                <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">Scope of Work</label>
+                    <span className={`text-[9px] font-bold ${formData.scopeOfWork?.length >= 200 ? 'text-red-500' : 'text-slate-400'}`}>
+                        {formData.scopeOfWork?.length || 0}/200
+                    </span>
+                </div>
+                <textarea 
+                    name="scopeOfWork" 
+                    rows="2" 
+                    value={formData.scopeOfWork || ''} 
+                    onChange={handleChange} 
+                    disabled={readOnly} 
+                    maxLength="200"
+                    className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none ${readOnly ? 'bg-slate-100' : ''}`} 
+                />
             </div>
 
             {/* Stats: Classrooms, Storeys, Sites */}
@@ -425,28 +497,105 @@ const EditProjectModal = ({
                 </div>
             </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Approved Budget for Contract (ABC)</label>
-                        <input type="text" name="approved_budget_for_contract" value={formatWithCommas(formData.approved_budget_for_contract)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+            {/* If NOT Details Update tab, show funds here as before. If IS Details Update, we separate them into a new section below. */}
+            {!formData.isProjectDetailsUpdate && (
+                <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Approved Budget for Contract (ABC)</label>
+                            <input type="text" name="approved_budget_for_contract" value={formatWithCommas(formData.approved_budget_for_contract)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
+                            <input type="text" name="contract_amount" value={formatWithCommas(formData.contract_amount)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
-                        <input type="text" name="contract_amount" value={formatWithCommas(formData.contract_amount)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                            <input type="text" name="fundsUtilized" value={formatWithCommas(formData.fundsUtilized)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Batch</label>
+                            <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                        </div>
                     </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
-                        <input type="text" name="fundsUtilized" value={formatWithCommas(formData.fundsUtilized)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Batch</label>
-                        <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
-                    </div>
-                </div>
+                </>
+            )}
         </div>
     );
+
+    const renderFundsSection = () => {
+        if (!formData.isProjectDetailsUpdate) return null;
+
+        return (
+            <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-200 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-400">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-2">
+                        <span>💰</span> Funds
+                    </h3>
+                    {isFundingYearLocked && (
+                        <span className="text-[8px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 uppercase tracking-tighter">Strict Mode Active</span>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-1">Approved Budget for Contract (ABC)</label>
+                        <input type="text" name="approved_budget_for_contract" value={formatWithCommas(formData.approved_budget_for_contract)} onChange={handleChange} className="w-full p-2 bg-white border border-emerald-100 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-1">Contract Amount</label>
+                        <input type="text" name="contract_amount" value={formatWithCommas(formData.contract_amount)} onChange={handleChange} className="w-full p-2 bg-white border border-emerald-100 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 outline-none" />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-1">Funds Utilized</label>
+                        <input type="text" name="fundsUtilized" value={formatWithCommas(formData.fundsUtilized)} onChange={handleChange} className="w-full p-2 bg-white border border-emerald-100 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-1">Batch of Funds</label>
+                        <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-emerald-100 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 outline-none" />
+                    </div>
+                </div>
+
+                <div className="pt-3 border-t border-emerald-100">
+                    <label className="block text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-1 flex items-center justify-between">
+                        Funding Year
+                        {isFundingYearLocked ? (
+                            <button 
+                                type="button"
+                                onClick={handleUnlockFundingYear}
+                                className="text-[8px] text-blue-600 underline hover:text-blue-800"
+                            >
+                                Unlock to Edit
+                            </button>
+                        ) : (
+                            <span className="text-[8px] text-emerald-600 font-bold italic">Unlocked (Reason: {formData.fundingYearJustification?.substring(0, 15)}...)</span>
+                        )}
+                    </label>
+                    <div className="relative">
+                        <input 
+                            type="number" 
+                            name="fundingYear" 
+                            value={formData.fundingYear} 
+                            onChange={handleChange} 
+                            disabled={isFundingYearLocked}
+                            placeholder="YYYY" 
+                            className={`w-full p-2 font-black text-sm border rounded-lg transition-all ${isFundingYearLocked 
+                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
+                                : 'bg-white text-emerald-700 border-emerald-400 ring-2 ring-emerald-100 outline-none shadow-sm'}`} 
+                        />
+                        {isFundingYearLocked && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">🔒</div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const renderTabs = () => {
         if (mode === 'docs_only') return null;
@@ -492,89 +641,238 @@ const EditProjectModal = ({
     const renderVariationOrderHeader = () => {
         if (!formData.hasVariationOrder) return null;
         
+        const originalAmount = parseFloat(project.contract_amount || project.approved_budget_for_contract || 0);
+        
+        // CUMULATIVE CALCULATION
+        const prevVoTotal = (voHistory || []).reduce((sum, vo) => sum + parseFloat(vo.net_vo_amount || 0), 0);
+        const currentNetVO = parseFloat(formData.net_vo_amount || 0);
+        const cumulativeNetVO = prevVoTotal + currentNetVO;
+        const percentChangeCumulative = originalAmount > 0 ? (cumulativeNetVO / originalAmount) * 100 : 0;
+        
+        const isOverLimit = percentChangeCumulative > 10;
+
         return (
             <>
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-xl text-amber-600 shadow-inner">⚖️</div>
-                        <div>
-                            <h3 className="text-sm font-black text-amber-900 uppercase tracking-wide">Variation Order Mode</h3>
-                            <p className="text-[10px] text-amber-700 font-bold leading-tight">Updating project specification, timelines, or funding details.</p>
+                <div className={`border rounded-2xl p-4 mb-4 transition-all duration-300 ${isOverLimit ? 'bg-red-50 border-red-200 shadow-sm' : 'bg-amber-50 border-amber-200'}`}>
+                    <div className="flex flex-col gap-3 mb-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-inner ${isOverLimit ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>⚖️</div>
+                                <div>
+                                    <h3 className={`text-sm font-black uppercase tracking-wide ${isOverLimit ? 'text-red-900' : 'text-amber-900'}`}>{isOverLimit ? 'Critical Variation Order' : 'Variation Order Mode'}</h3>
+                                    <p className={`text-[10px] font-bold leading-tight ${isOverLimit ? 'text-red-700' : 'text-amber-700'}`}>
+                                        {isOverLimit ? '🚨 WARNING: Cumulative variation exceeds 10% limit (RA 9184 compliance risk).' : 'Updating project specification, timelines, or funding details.'}
+                                    </p>
+                                </div>
+                            </div>
+                            {isOverLimit && (
+                                <div className="bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-full animate-bounce shadow-lg">
+                                    {percentChangeCumulative.toFixed(1)}% CUMULATIVE
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Cumulative Progress Bar */}
+                        <div className="w-full mt-2">
+                            <div className="flex justify-between items-center mb-1">
+                                <span className={`text-[9px] font-black uppercase tracking-widest ${isOverLimit ? 'text-red-600' : 'text-amber-600'}`}>Cumulative VO Threshold (RA 9184)</span>
+                                <span className={`text-[9px] font-black ${isOverLimit ? 'text-red-600' : 'text-amber-600'}`}>{percentChangeCumulative.toFixed(2)}% / 10%</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-amber-500'}`} 
+                                    style={{ width: `${Math.min(percentChangeCumulative * 10, 100)}%` }}
+                                ></div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* NEW VO TRACKING FIELDS */}
-                    <div className="mt-4 pt-4 border-t border-amber-200 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* VO IDENTITY FIELDS */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-amber-200/50">
                         <div>
-                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">VO Number</label>
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">VO Sequence No.</label>
                             <input
-                                type="text"
-                                name="vo_number"
-                                value={formData.vo_number}
+                                type="number"
+                                name="vo_sequence_no"
+                                value={formData.vo_sequence_no}
                                 onChange={handleChange}
                                 placeholder="e.g. 1"
-                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:ring-1 focus:ring-amber-500 outline-none"
                             />
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Requested Date</label>
-                            <input
-                                type="date"
-                                name="vo_requested_date"
-                                value={formData.vo_requested_date}
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">VO Type</label>
+                            <select
+                                name="vo_type"
+                                value={formData.vo_type}
                                 onChange={handleChange}
-                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 outline-none"
-                            />
+                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:ring-1 focus:ring-amber-500 outline-none"
+                            >
+                                <option value="Change Order">Change Order</option>
+                                <option value="Extra Work Order">Extra Work Order</option>
+                                <option value="Combined">Combined (EWO + CO)</option>
+                            </select>
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Requested By</label>
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">CAF Reference</label>
                             <input
-                                name="vo_requested_by"
-                                value={formData.vo_requested_by}
+                                name="caf_reference"
+                                value={formData.caf_reference}
                                 onChange={handleChange}
-                                placeholder="Name of Requester"
+                                placeholder="Certificate of Availability of Funds"
                                 className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 outline-none uppercase"
                             />
                         </div>
                     </div>
 
-                    <div className="mt-4 pt-4 border-t border-amber-100">
-                        <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2">VO Document (PDF)</label>
-                        <div className={`p-2 rounded-xl border border-dashed transition-all ${documents.VO || formData.variationOrderPdf ? 'bg-white border-amber-400' : 'bg-amber-100/30 border-amber-200'}`}>
-                            {documents.VO ? (
-                                <div className="flex justify-between items-center px-1">
-                                    <span className="text-[10px] text-amber-900 font-bold truncate max-w-[200px]">📄 {documents.VO.name}</span>
-                                    <button onClick={() => removeDocument('VO')} className="text-red-500 font-black text-xs p-1 hover:bg-red-50 rounded">✕</button>
+                    {/* FINANCIAL BREAKDOWN */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 pb-4 border-b border-amber-200/50">
+                        <div>
+                            <label className="block text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-1">Additive Amount (+)</label>
+                            <input
+                                type="text"
+                                name="additive_amount"
+                                value={formatWithCommas(formData.additive_amount)}
+                                onChange={handleChange}
+                                placeholder="0.00"
+                                className="w-full p-2 bg-white border border-emerald-200 rounded-lg text-xs font-bold text-emerald-700 focus:ring-1 focus:ring-emerald-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-red-700 uppercase tracking-widest mb-1">Deductive Amount (-)</label>
+                            <input
+                                type="text"
+                                name="deductive_amount"
+                                value={formatWithCommas(formData.deductive_amount)}
+                                onChange={handleChange}
+                                placeholder="0.00"
+                                className="w-full p-2 bg-white border border-red-200 rounded-lg text-xs font-bold text-red-700 focus:ring-1 focus:ring-red-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-blue-700 uppercase tracking-widest mb-1">Net VO Amount</label>
+                            <input
+                                type="text"
+                                name="net_vo_amount"
+                                value={formatWithCommas(formData.net_vo_amount)}
+                                readOnly
+                                className="w-full p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs font-black text-blue-700 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* TIME & EXPIRY */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 pb-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Revised Expiry Date</label>
+                            <input
+                                type="date"
+                                name="revised_expiry_date"
+                                value={formData.revised_expiry_date}
+                                onChange={handleChange}
+                                className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs focus:ring-1 focus:ring-amber-500 outline-none font-bold"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Time Extension (Days)</label>
+                            <input
+                                type="number"
+                                name="time_extension_days"
+                                value={formData.time_extension_days}
+                                readOnly
+                                placeholder="0"
+                                className="w-full p-2 bg-amber-50 border border-amber-100 rounded-lg text-xs outline-none font-bold text-amber-900"
+                            />
+                        </div>
+                        <div className="flex flex-col justify-end">
+                            <div className="bg-amber-100/50 p-2 rounded-lg border border-amber-200/50">
+                                <span className="block text-[8px] font-black text-amber-600 uppercase tracking-[0.2em] mb-0.5">Current VO Summary</span>
+                                <span className="text-[10px] font-bold text-amber-800">
+                                    {currentNetVO >= 0 ? '➕ ADDITIVE' : '➖ DEDUCTIVE'} (₱{Number(Math.abs(currentNetVO)).toLocaleString()})
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* JUSTIFICATION HIERARCHY */}
+                    <div className="pt-4 pb-4 border-t border-amber-200/50 space-y-4">
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Justification Category</label>
+                            <select
+                                name="justification_category"
+                                value={formData.justification_category}
+                                onChange={handleChange}
+                                className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-amber-500 outline-none"
+                            >
+                                <option value="Site Condition">Change in Site Conditions (Unforeseen)</option>
+                                <option value="Design Correction">Corrective Design Adjustment</option>
+                                <option value="User Request">User-Requested Enhancement (Principal/SDO)</option>
+                                <option value="Regulatory">Regulatory Compliance Change</option>
+                                <option value="Other">Other Technical Requirement</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Detailed Reason / Justification</label>
+                            <textarea
+                                name="justification_details"
+                                value={formData.justification_details}
+                                onChange={handleChange}
+                                rows="3"
+                                placeholder="Provide specific technical reasoning for this variation..."
+                                className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-none resize-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* DETAILED DOCUMENT UPLOADS */}
+                    <div className="mt-4 pt-4 border-t border-amber-200 space-y-3">
+                        <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2">Required VO Documentation (Detailed PDFs)</label>
+                        
+                        <div className="grid grid-cols-1 gap-2">
+                             {/* Revised POW */}
+                             <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedPOW ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
+                                <div className="flex items-center gap-2 truncate pr-2">
+                                    <span>{documents.RevisedPOW ? '📄' : '📎'}</span>
+                                    <span className="truncate">{documents.RevisedPOW ? documents.RevisedPOW.name : 'REVISED PROGRAM OF WORKS (POW)'}</span>
                                 </div>
-                            ) : formData.variationOrderPdf ? (
-                                <div className="flex justify-between items-center px-1">
-                                    <span className="text-[10px] text-amber-600 font-bold italic">Existing VO PDF available</span>
-                                    <div className="flex gap-2">
-                                        {!readOnly && (
-                                            <label className="cursor-pointer text-[9px] font-black text-amber-700 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg shadow-sm border border-amber-200 hover:bg-amber-50 transition-all">
-                                                Change
-                                                <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'VO')} />
-                                            </label>
-                                        )}
-                                        <a 
-                                            href={formData.variationOrderPdf?.startsWith('data:') ? formData.variationOrderPdf : `data:application/pdf;base64,${formData.variationOrderPdf}`} 
-                                            download={`${formData.schoolName}_VO_${formData.vo_number || 'Update'}.pdf`}
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="text-[9px] font-black text-blue-600 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg shadow-sm border border-blue-200 hover:bg-blue-50"
-                                        >
-                                            View
-                                        </a>
-                                    </div>
-                                </div>
-                            ) : (
-                                !readOnly && (
-                                    <label className="cursor-pointer flex items-center justify-center gap-2 py-2.5 text-amber-600 hover:text-amber-700 transition-all">
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Upload Required VO PDF</span>
-                                        <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'VO')} />
+                                <div className="flex gap-2">
+                                    {documents.RevisedPOW && <button onClick={() => removeDocument('RevisedPOW')} className="text-red-500 hover:bg-red-50 p-1 rounded">✕</button>}
+                                    <label className="cursor-pointer bg-white border border-amber-200 px-2 py-1 rounded shadow-sm hover:bg-amber-50 text-[9px] uppercase tracking-tighter">
+                                        {documents.RevisedPOW ? 'Change' : 'Upload'}
+                                        <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'RevisedPOW')} />
                                     </label>
-                                )
-                            )}
+                                </div>
+                             </div>
+
+                             {/* Revised DUPA */}
+                             <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedDUPA ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
+                                <div className="flex items-center gap-2 truncate pr-2">
+                                    <span>{documents.RevisedDUPA ? '📄' : '📎'}</span>
+                                    <span className="truncate">{documents.RevisedDUPA ? documents.RevisedDUPA.name : 'REVISED DUPA (ITEMIZED)'}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    {documents.RevisedDUPA && <button onClick={() => removeDocument('RevisedDUPA')} className="text-red-500 hover:bg-red-50 p-1 rounded">✕</button>}
+                                    <label className="cursor-pointer bg-white border border-amber-200 px-2 py-1 rounded shadow-sm hover:bg-amber-50 text-[9px] uppercase tracking-tighter">
+                                        {documents.RevisedDUPA ? 'Change' : 'Upload'}
+                                        <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'RevisedDUPA')} />
+                                    </label>
+                                </div>
+                             </div>
+
+                             {/* Revised Contract */}
+                             <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedContract ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
+                                <div className="flex items-center gap-2 truncate pr-2">
+                                    <span>{documents.RevisedContract ? '📄' : '📎'}</span>
+                                    <span className="truncate">{documents.RevisedContract ? documents.RevisedContract.name : 'SUPPLEMENTAL AGREEMENT / REVISED CONTRACT'}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    {documents.RevisedContract && <button onClick={() => removeDocument('RevisedContract')} className="text-red-500 hover:bg-red-50 p-1 rounded">✕</button>}
+                                    <label className="cursor-pointer bg-white border border-amber-200 px-2 py-1 rounded shadow-sm hover:bg-amber-50 text-[9px] uppercase tracking-tighter">
+                                        {documents.RevisedContract ? 'Change' : 'Upload'}
+                                        <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'RevisedContract')} />
+                                    </label>
+                                </div>
+                             </div>
                         </div>
                     </div>
                 </div>
@@ -771,7 +1069,6 @@ const EditProjectModal = ({
         // Show status fields even for VO
         
         return (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-4">
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status Design Phase</label>
@@ -793,50 +1090,53 @@ const EditProjectModal = ({
                         </div>
                     </div>
                 </div>
-                <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status of Construction Phase</label>
-                    <div className="relative">
-                        <select
-                            name="status"
-                            value={formData.status}
-                            onChange={handleChange}
-                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
-                        >
-                            {Object.values(ProjectStatus).map((s) => (
-                                <option key={s} value={s}>{s}</option>
-                            ))}
-                        </select>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                            <FiSettings className="text-slate-400" />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status of Construction Phase</label>
+                        <div className="relative">
+                            <select
+                                name="status"
+                                value={formData.status}
+                                onChange={handleChange}
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                            >
+                                {Object.values(ProjectStatus).map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                <FiSettings className="text-slate-400" />
+                            </div>
                         </div>
                     </div>
+
+                    {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center ml-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Percentage (%)</label>
+                                <div className="flex gap-1.5">
+                                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 5)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+5%</button>
+                                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 10)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+10%</button>
+                                </div>
+                            </div>
+                            <input
+                                type="number"
+                                name="accomplishmentPercentage"
+                                value={formData.accomplishmentPercentage}
+                                onChange={handleChange}
+                                min="0"
+                                max="100"
+                                disabled={isDisabledPercentageInput}
+                                className={`w-full p-3 border rounded-2xl text-sm font-black text-center ${isDisabledPercentageInput
+                                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                                    : "bg-blue-50 text-[#004A99] border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    }`}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
-            {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
-                <div className="space-y-2">
-                    <div className="flex justify-between items-center ml-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Percentage (%)</label>
-                        <div className="flex gap-1.5">
-                            <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 5)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+5%</button>
-                            <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 10)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+10%</button>
-                        </div>
-                    </div>
-                    <input
-                        type="number"
-                        name="accomplishmentPercentage"
-                        value={formData.accomplishmentPercentage}
-                        onChange={handleChange}
-                        min="0"
-                        max="100"
-                        disabled={isDisabledPercentageInput}
-                        className={`w-full p-3 border rounded-2xl text-sm font-black text-center ${isDisabledPercentageInput
-                            ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                            : "bg-blue-50 text-[#004A99] border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                            }`}
-                    />
-                </div>
-            )}
-        </div>
         );
     };
 
@@ -1036,6 +1336,7 @@ const EditProjectModal = ({
                     {!formData.hasVariationOrder && !formData.isRealignment && formData.isProjectDetailsUpdate && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             {renderTimelineAndFunds()}
+                            {renderFundsSection()}
                             {renderProcurementMilestones()}
                             {renderDocumentUploads()}
                         </div>
@@ -1049,7 +1350,6 @@ const EditProjectModal = ({
                                 {renderProjectDetails()}
                                 {/* {renderStatusAndProgress()} */}
                                 {renderFundsUtilized()}
-                                {renderDocumentUploads()}
 
                                 {renderTimelineAndFunds()}
                                 {renderProcurementMilestones()}
@@ -1108,6 +1408,62 @@ const EditProjectModal = ({
                             <p className="text-[9px] text-slate-400 ml-1 italic">
                                 Target was: {formatDateShort(formData.targetCompletionDate)}
                             </p>
+                        </div>
+                    )}
+
+                    {/* --- TIMELINE DELAY TRACKING (EFD DEPED PROCESS) --- */}
+                    {(mode === 'quick' || mode === 'full') && 
+                     !['Completed', 'For Final Inspection'].includes(formData.status) && 
+                     formData.targetCompletionDate && 
+                     new Date() > new Date(formData.targetCompletionDate) && (
+                        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl space-y-3 animate-in fade-in zoom-in duration-500">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xl">⏳</span>
+                                <div>
+                                    <h3 className="text-xs font-bold text-red-700 uppercase">Timeline Delay Tracking</h3>
+                                    <p className="text-[9px] text-red-600 font-medium">Project has exceeded its original target completion date.</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Time Lapsed (Days)</label>
+                                    <div className="p-3 bg-white border border-red-100 rounded-xl text-sm font-black text-red-700 shadow-sm">
+                                        {Math.floor((new Date() - new Date(formData.targetCompletionDate)) / (1000 * 60 * 60 * 24))} Days
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Time Lapsed (%)</label>
+                                    <div className="p-3 bg-white border border-red-100 rounded-xl text-sm font-black text-red-700 shadow-sm">
+                                        {formData.accomplishmentPercentage || 0}%
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-[10px] font-bold text-red-500 uppercase">Reason for Delay <span className="text-red-600">*</span></label>
+                                <textarea 
+                                    name="delay_reason"
+                                    value={formData.delay_reason || ""}
+                                    onChange={handleChange}
+                                    placeholder="Explain why the project is delayed (EFD DepEd requirement)..."
+                                    rows="2"
+                                    className="w-full p-3 bg-white border border-red-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 outline-none transition-all placeholder:text-red-200 shadow-inner"
+                                    required={new Date() > new Date(formData.targetCompletionDate)}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-[10px] font-bold text-red-500 uppercase">Revised Target Completion Date</label>
+                                <input 
+                                    type="date"
+                                    name="revised_target_completion_date"
+                                    value={formData.revised_target_completion_date || ""}
+                                    onChange={handleChange}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="w-full p-3 bg-white border border-red-200 rounded-xl text-sm font-bold text-red-700 focus:ring-2 focus:ring-red-400 outline-none"
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -1216,8 +1572,18 @@ const EditProjectModal = ({
                                 if (documents.CONTRACT) finalData.contract_pdf = await convertFullFileToBase64(documents.CONTRACT);
                                 if (documents.VO) finalData.variationOrderPdf = await convertFullFileToBase64(documents.VO);
                                 
-                                // Set update_type based on VO status
-                                finalData.update_type = formData.hasVariationOrder ? 'Variation Order' : 'Regular Update';
+                                // New VO Documents
+                                if (documents.RevisedPOW) finalData.revised_pow_pdf = await convertFullFileToBase64(documents.RevisedPOW);
+                                if (documents.RevisedDUPA) finalData.revised_dupa_pdf = await convertFullFileToBase64(documents.RevisedDUPA);
+                                if (documents.RevisedContract) finalData.revised_contract_pdf = await convertFullFileToBase64(documents.RevisedContract);
+
+                                // Ensure delay tracking values are explicitly included for persistence
+                                if (new Date() > new Date(formData.targetCompletionDate)) {
+                                    finalData.time_lapsed_percentage = formData.accomplishmentPercentage || 0;
+                                    finalData.time_lapsed_days = Math.floor((new Date() - new Date(formData.targetCompletionDate)) / (1000 * 60 * 60 * 24));
+                                    finalData.delay_reason = formData.delay_reason || formData.remarks || "";
+                                    finalData.revised_target_completion_date = formData.targetCompletionDate;
+                                }
 
                                  // Determine Update Type for tracking
                                  let updateType = 'Status Update';
@@ -1225,7 +1591,7 @@ const EditProjectModal = ({
                                  if (formData.hasVariationOrder) updateType = 'Variation Order';
                                  if (formData.isRealignment) updateType = 'Realignment';
 
-                                 onSave({ ...finalData, update_type: updateType });
+                                 onSave({ ...finalData, update_type: updateType, actions: updateType });
                             }}
                             disabled={isUploading || isSubmittingRealignment}
                             className="flex-[2] py-4 text-white font-black text-xs uppercase tracking-widest bg-gradient-to-r from-[#004A99] to-[#003366] rounded-2xl shadow-xl shadow-blue-900/20 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98] transition-all"

@@ -138,6 +138,7 @@ const NewProjects = () => {
                 approved_budget_for_contract: '12,500,000',
                 contract_amount: '12,000,000',
                 batchOfFunds: 'Batch 2',
+                fundingYear: '2024',
                 otherRemarks: 'On schedule. Foundation complete. This is a sample entry.'
             });
         }
@@ -177,6 +178,7 @@ const NewProjects = () => {
         contractorName: '',
         approved_budget_for_contract: '',
         contract_amount: '',
+        fundingYear: new Date().getFullYear().toString(),
         batchOfFunds: '',
 
         // Remarks
@@ -583,6 +585,7 @@ const NewProjects = () => {
             { key: 'contractorName', label: 'Contractor Name' },
             { key: 'approved_budget_for_contract', label: 'Approved Budget for Contract (ABC)' },
             { key: 'contract_amount', label: 'Contract Amount' },
+            { key: 'fundingYear', label: 'Funding Year' },
             { key: 'batchOfFunds', label: 'Batch of Funds' }
             // { key: 'otherRemarks', label: 'Remarks' } // REMOVED: Now Optional
         ];
@@ -814,8 +817,21 @@ const NewProjects = () => {
 
                             {/* 1.5 SCOPE OF WORK */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Work</label>
-                                <textarea name="scopeOfWork" rows="2" value={formData.scopeOfWork || ''} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase">Scope of Work</label>
+                                    <span className={`text-[10px] font-bold ${formData.scopeOfWork?.length >= 200 ? 'text-red-500' : 'text-slate-400'}`}>
+                                        {formData.scopeOfWork?.length || 0}/200
+                                    </span>
+                                </div>
+                                <textarea 
+                                    name="scopeOfWork" 
+                                    rows="2" 
+                                    value={formData.scopeOfWork || ''} 
+                                    onChange={handleChange} 
+                                    maxLength="200"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" 
+                                    placeholder="Brief description of the project scope..."
+                                />
                             </div>
 
                             {/* 1.6 NUMBER OF STOREYS (if applicable) */}
@@ -1048,8 +1064,20 @@ const NewProjects = () => {
 
                                     {/* Scope */}
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works</label>
-                                        <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase">Scope of Works</label>
+                                            <span className={`text-[10px] font-bold ${formData.scope_of_works?.length >= 200 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                {formData.scope_of_works?.length || 0}/200
+                                            </span>
+                                        </div>
+                                        <textarea 
+                                            name="scope_of_works" 
+                                            rows="2" 
+                                            value={formData.scope_of_works} 
+                                            onChange={handleChange} 
+                                            maxLength="200"
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" 
+                                        />
                                     </div>
                                 </div>
 
@@ -1308,6 +1336,10 @@ const NewProjects = () => {
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch of Funds</label>
                                 <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} readOnly={isDummy} placeholder="e.g. Batch 1" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funding Year</label>
+                                <input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 2024" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract ID</label>

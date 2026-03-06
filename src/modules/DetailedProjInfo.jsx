@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { getCachedProjects, cacheGallery, getCachedGallery } from '../db';
@@ -7,7 +8,7 @@ import { TbPhoto } from "react-icons/tb";
 import { auth } from '../firebase';
 import EditProjectModal from '../components/EditProjectModal';
 import { compressImage } from '../utils/imageCompression';
-import { LuHistory, LuUser, LuCalendar } from "react-icons/lu";
+import { LuHistory, LuUser, LuCalendar, LuX } from "react-icons/lu";
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
 const RemarksHistory = ({ history, loading, currentRemarks }) => {
@@ -62,6 +63,34 @@ const RemarksHistory = ({ history, loading, currentRemarks }) => {
                             <p className="text-xs text-slate-700 font-medium leading-relaxed italic border-l-2 border-slate-100 pl-3">
                                 {entry.remarks ? `"${entry.remarks}"` : <span className="text-slate-400 not-italic">No additional remarks provided for this update.</span>}
                             </p>
+
+                            {/* DELAY TRACKING IN HISTORY (REFINED) */}
+                            {entry.delay_reason && (
+                                <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-100 border-l-4 border-l-red-500">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs">⏳</span>
+                                        <span className="text-[10px] font-black text-red-700 uppercase tracking-widest">Timeline Delay Log</span>
+                                    </div>
+                                    <p className="text-xs text-red-800 font-bold mb-2">Reason: {entry.delay_reason}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <div className="bg-white/50 px-2.5 py-1 rounded-lg border border-red-100 bg-red-50/50">
+                                            <span className="text-[8px] font-black text-red-400 uppercase block tracking-tighter">Days Lapsed</span>
+                                            <span className="text-[10px] font-black text-red-600">{entry.time_lapsed_days || entry.time_lapsed || entry.days_lapsed || 0} Days</span>
+                                        </div>
+                                        <div className="bg-white/50 px-2.5 py-1 rounded-lg border border-emerald-100 bg-emerald-50/50">
+                                            <span className="text-[8px] font-black text-emerald-400 uppercase block tracking-tighter">Accomplishment</span>
+                                            <span className="text-[10px] font-black text-emerald-600">{entry.time_lapsed_percentage || 0}%</span>
+                                        </div>
+                                        {entry.revised_target_completion_date && (
+                                            <div className="bg-white/50 px-2.5 py-1 rounded-lg border border-blue-100 bg-blue-50/50">
+                                                <span className="text-[8px] font-black text-blue-400 uppercase block tracking-tighter">Revised Target</span>
+                                                <span className="text-[10px] font-black text-blue-600">{new Date(entry.revised_target_completion_date).toLocaleDateString()}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="mt-2 flex items-center gap-1.5 pl-2">
                                 <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Update Type:</span>
                                 <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{entry.update_type || 'Status Update'}</span>
@@ -99,7 +128,8 @@ const VOComparison = ({ current, previous }) => {
         { key: 'longitude', label: 'Longitude' },
         { key: 'vo_number', label: 'VO Number' },
         { key: 'vo_requested_date', label: 'Requested Date' },
-        { key: 'vo_requested_by', label: 'Requested By' }
+        { key: 'vo_requested_by', label: 'Requested By' },
+        { key: 'funding_year', label: 'Funding Year' }
     ];
 
     const changes = fieldsToCompare.filter(field => {
@@ -156,6 +186,127 @@ const VOComparison = ({ current, previous }) => {
                         </div>
                     </div>
                 ))}
+            </div>
+        </div>
+    );
+};
+
+// --- SUB-COMPONENT: VO HISTORY LIST ---
+const VOHistoryList = ({ voHistory, loading }) => {
+    if (loading) return (
+        <div className="bg-amber-50/50 p-6 rounded-2xl border border-amber-100 flex justify-center items-center gap-3">
+            <div className="w-4 h-4 border-2 border-slate-200 border-t-amber-500 rounded-full animate-spin"></div>
+            <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Loading VO Details...</p>
+        </div>
+    );
+
+    if (!voHistory || voHistory.length === 0) return null;
+
+    return (
+        <div className="space-y-4 mb-8">
+            <div className="flex items-center justify-between ml-1 mb-2">
+                <h3 className="text-amber-700 font-bold text-sm flex items-center gap-2">
+                    <span className="text-lg">⚖️</span> Variation Order History
+                </h3>
+                <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 uppercase tracking-tighter">EFD Records</span>
+            </div>
+            
+            <div className="space-y-4">
+                {voHistory.map((vo, idx) => {
+                   const netVal = parseFloat(vo.net_vo_amount || 0);
+                   const isAdditive = netVal >= 0;
+                   return (
+                    <div key={idx} className={`bg-white rounded-[2rem] border overflow-hidden shadow-sm transition-all hover:shadow-md ${isAdditive ? 'border-emerald-100 hover:border-emerald-300' : 'border-red-100 hover:border-red-300'}`}>
+                        {/* Header Section */}
+                        <div className={`p-4 flex flex-wrap items-center justify-between gap-3 ${isAdditive ? 'bg-emerald-50/30' : 'bg-red-50/30'}`}>
+                           <div className="flex items-center gap-3">
+                               <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm border ${isAdditive ? 'bg-white text-emerald-600 border-emerald-100' : 'bg-white text-red-600 border-red-100'}`}>
+                                   {isAdditive ? '➕' : '➖'}
+                               </div>
+                               <div>
+                                   <div className="flex items-center gap-2">
+                                       <span className="text-xs font-black text-slate-800 tracking-tight">VO #{vo.vo_sequence_no || vo.vo_number || idx + 1}</span>
+                                       <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border ${isAdditive ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-red-100 text-red-700 border-red-200'}`}>
+                                           {vo.vo_type || 'Variation Order'}
+                                       </span>
+                                   </div>
+                                   <div className="flex items-center gap-1.5 mt-0.5">
+                                       <LuCalendar size={10} className="text-slate-400" />
+                                       <span className="text-[10px] font-bold text-slate-500">{vo.requested_date ? new Date(vo.requested_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</span>
+                                   </div>
+                               </div>
+                           </div>
+                           <div className="text-right">
+                               <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-0.5">Net Variation</span>
+                               <span className={`text-sm font-black ${isAdditive ? 'text-emerald-600' : 'text-red-600'}`}>
+                                   {isAdditive ? '+' : ''}₱{Number(Math.abs(netVal)).toLocaleString()}
+                               </span>
+                           </div>
+                        </div>
+
+                        {/* Details Grid */}
+                        <div className="p-5 grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-slate-50">
+                            <div>
+                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Contract Amount</span>
+                                <span className="text-[11px] font-bold text-slate-600 underline decoration-slate-200 decoration-dotted underline-offset-4">₱{Number(vo.revised_contract_amount || 0).toLocaleString()}</span>
+                            </div>
+                            <div>
+                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Time Extension</span>
+                                <span className="text-[11px] font-bold text-blue-600 tracking-tight">{vo.time_extension_days || 0} Days</span>
+                            </div>
+                            <div>
+                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Expiry Date</span>
+                                <span className="text-[11px] font-bold text-slate-600">{vo.revised_expiry_date ? new Date(vo.revised_expiry_date).toLocaleDateString() : 'N/A'}</span>
+                            </div>
+                            <div>
+                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">CAF Reference</span>
+                                <span className="text-[11px] font-bold text-slate-500 italic truncate block">{vo.caf_reference || 'NONE'}</span>
+                            </div>
+                        </div>
+
+                        {/* Documents Section */}
+                        {(vo.revised_pow_pdf || vo.revised_dupa_pdf || vo.revised_contract_pdf) && (
+                            <div className="px-5 pb-5 flex flex-wrap gap-2">
+                                <span className="w-full text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                    <div className="h-[1px] flex-1 bg-slate-50"></div>
+                                    Supporting Documents
+                                    <div className="h-[1px] flex-1 bg-slate-50"></div>
+                                </span>
+                                {vo.revised_pow_pdf && (
+                                    <a href={vo.revised_pow_pdf.startsWith('data:') ? vo.revised_pow_pdf : `data:application/pdf;base64,${vo.revised_pow_pdf}`} download={`Revised_POW_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                        📄 POW
+                                    </a>
+                                )}
+                                {vo.revised_dupa_pdf && (
+                                    <a href={vo.revised_dupa_pdf.startsWith('data:') ? vo.revised_dupa_pdf : `data:application/pdf;base64,${vo.revised_dupa_pdf}`} download={`Revised_DUPA_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                        📄 DUPA
+                                    </a>
+                                )}
+                                {vo.revised_contract_pdf && (
+                                    <a href={vo.revised_contract_pdf.startsWith('data:') ? vo.revised_contract_pdf : `data:application/pdf;base64,${vo.revised_contract_pdf}`} download={`Revised_Contract_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                        📄 CONTRACT
+                                    </a>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Justification Footer */}
+                        {(vo.justification || vo.justification_details) && (
+                            <div className="px-5 py-3 bg-slate-50/50 border-t border-slate-50 space-y-1">
+                                {vo.justification_category && (
+                                    <span className="text-[8px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                        {vo.justification_category}
+                                    </span>
+                                )}
+                                <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                                    <span className="font-black text-slate-400 uppercase tracking-tighter mr-2">Reason:</span>
+                                    {vo.justification_details || vo.justification}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                   )
+                })}
             </div>
         </div>
     );
@@ -265,6 +416,8 @@ const DetailedProjInfo = () => {
     // History State
     const [history, setHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(true);
+    const [voHistory, setVoHistory] = useState([]);
+    const [voHistoryLoading, setVoHistoryLoading] = useState(false);
 
     // New State for Images
     const [projectImages, setProjectImages] = useState([]);
@@ -272,12 +425,65 @@ const DetailedProjInfo = () => {
 
     // --- EDIT MODAL STATE ---
     const [editModalOpen, setEditModalOpen] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
     const [internalFiles, setInternalFiles] = useState([]);
     const [internalPreviews, setInternalPreviews] = useState([]);
     const [externalFiles, setExternalFiles] = useState([]);
     const [externalPreviews, setExternalPreviews] = useState([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const [selectedZoomImage, setSelectedZoomImage] = useState(null);
     const [activeCategory, setActiveCategory] = useState('Internal');
+
+    // Helper to extract image source correctly
+    const getImageSrc = (imageItem) => {
+        if (!imageItem) return null;
+        if (imageItem.image_url) return imageItem.image_url;
+        
+        // Handle image_data specifically
+        let data = imageItem.image_data;
+        if (!data) return null;
+
+        // 1. If it's an object, extract the actual string
+        if (typeof data === 'object' && data !== null) {
+            data = data.image_data || data.base64 || data.url || JSON.stringify(data);
+        }
+
+        // 2. If it's a JSON string, parse it
+        if (typeof data === 'string' && data.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(data);
+                data = parsed.image_data || parsed.base64 || parsed.url || data;
+            } catch (e) {
+                console.warn("Failed to parse image JSON", e);
+            }
+        }
+
+        // 3. Ensure we have a string for the final checks
+        if (typeof data !== 'string') return null;
+
+        // 4. Handle standard data URI or URL
+        if (data.startsWith('data:') || data.startsWith('http')) {
+            return data;
+        }
+
+        // 5. Otherwise assume it's raw base64 and wrap it
+        return `data:image/jpeg;base64,${data}`;
+    };
+
+    // Helper to get consistently filtered images for gallery
+    const getFilteredImages = (category) => {
+        return projectImages.filter(img => {
+            const cat = (img.category || 'Internal').toLowerCase();
+            const hasData = (img.image_url || (img.image_data && img.image_data !== ''));
+            if (!hasData) return false;
+            
+            if (category.toLowerCase() === 'external') {
+                return cat === 'external';
+            } else {
+                return cat !== 'external' && cat !== 'default';
+            }
+        });
+    };
+
 
     // Refs
     const fileInputRef = React.useRef(null);
@@ -415,6 +621,7 @@ const DetailedProjInfo = () => {
             }
         };
 
+
         const fetchImages = async () => {
             if (type === 'LGU') return; // LGU images handled in main fetch
 
@@ -469,22 +676,50 @@ const DetailedProjInfo = () => {
     }, [id, navigate]);
 
     useEffect(() => {
-        if (project?.ipc) {
-            const fetchHistory = async () => {
-                setHistoryLoading(true);
-                try {
-                    const res = await fetch(`/api/project-history/${project.ipc}`);
-                    if (!res.ok) throw new Error("Failed to fetch history");
-                    const data = await res.json();
-                    setHistory(data);
-                } catch (err) {
-                    console.error("History fetch error:", err);
-                } finally {
-                    setHistoryLoading(false);
-                }
-            };
-            fetchHistory();
+        if (selectedZoomImage !== null) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'auto';
         }
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [selectedZoomImage]);
+
+    useEffect(() => {
+        if (!project?.ipc) return;
+
+        const fetchHistory = async () => {
+            setHistoryLoading(true);
+            try {
+                const res = await fetch(`/api/project-history/${project.ipc}`);
+                if (!res.ok) throw new Error("Failed to fetch history");
+                const data = await res.json();
+                setHistory(data);
+            } catch (err) {
+                console.error("History fetch error:", err);
+            } finally {
+                setHistoryLoading(false);
+            }
+        };
+
+        const fetchVOHistory = async () => {
+            setVoHistoryLoading(true);
+            try {
+                const res = await fetch(`/api/projects/variation-orders/${project.ipc}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setVoHistory(data);
+                }
+            } catch (err) {
+                console.error("VO History Fetch Err:", err);
+            } finally {
+                setVoHistoryLoading(false);
+            }
+        };
+
+        fetchHistory();
+        fetchVOHistory();
     }, [project?.ipc]);
 
     // --- HANDLERS ---
@@ -567,6 +802,8 @@ const DetailedProjInfo = () => {
             alert("Success: Project details updated!");
             setInternalFiles([]);
             setExternalFiles([]);
+            setInternalPreviews([]);
+            setExternalPreviews([]);
             setEditModalOpen(false);
 
             // Trigger refresh of images (optional, or just append locally)
@@ -591,9 +828,9 @@ const DetailedProjInfo = () => {
 
     // Helper for display fields
     const DetailItem = ({ label, value, isMoney }) => (
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm overflow-hidden min-w-0">
             <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">{label}</p>
-            <p className="text-sm font-semibold text-slate-800">
+            <p className="text-sm font-semibold text-slate-800 break-words whitespace-pre-wrap">
                 {isMoney && value ? `₱${(Number(value)).toLocaleString()}` : (value || 'N/A')}
             </p>
         </div>
@@ -644,6 +881,29 @@ const DetailedProjInfo = () => {
                                      <span className="text-[9px] text-purple-200 uppercase font-black tracking-widest">Realignment</span>
                                      <div className="h-3 w-[1px] bg-purple-400/30"></div>
                                      <span className="text-sm text-purple-50 font-black tracking-wider uppercase">{project.updateType?.replace('Realignment (', '').replace(')', '') || 'ACTIVE'}</span>
+                                 </div>
+                             )}
+
+                             {/* Cumulative VO % Badge */}
+                             {(voHistory || []).length > 0 && (
+                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-[#002B5C]/40 backdrop-blur-md rounded-xl border border-white/20 shadow-lg group">
+                                     <span className="text-[9px] text-blue-200 uppercase font-black tracking-widest">Cumulative Variation</span>
+                                     <div className="h-3 w-[1px] bg-white/20"></div>
+                                     <span className={`text-sm font-black tracking-wider ${
+                                         (() => {
+                                             const originalAmount = parseFloat(project.contract_amount || project.approved_budget_for_contract || 0);
+                                             const cumulativeNetVO = (voHistory || []).reduce((sum, vo) => sum + parseFloat(vo.net_vo_amount || 0), 0);
+                                             const percent = originalAmount > 0 ? (cumulativeNetVO / originalAmount) * 100 : 0;
+                                             return percent > 10 ? 'text-red-400' : 'text-emerald-400';
+                                         })()
+                                     }`}>
+                                         {(() => {
+                                             const originalAmount = parseFloat(project.contract_amount || project.approved_budget_for_contract || 0);
+                                             const cumulativeNetVO = (voHistory || []).reduce((sum, vo) => sum + parseFloat(vo.net_vo_amount || 0), 0);
+                                             const percent = originalAmount > 0 ? (cumulativeNetVO / originalAmount) * 100 : 0;
+                                             return percent.toFixed(2);
+                                         })()}%
+                                     </span>
                                  </div>
                              )}
                          </div>
@@ -709,6 +969,49 @@ const DetailedProjInfo = () => {
                         </div>
                     </div>
 
+                    {/* Timeline Delay Tracking (Current Status) */}
+                    {project.delay_reason && !['Completed', 'For Final Inspection'].includes(project.status_of_construction_phase || project.status) && (
+                        <div className="bg-red-50 p-6 rounded-[2.5rem] border border-red-200 shadow-lg shadow-red-900/5 space-y-4 animate-in fade-in slide-in-from-top-4 duration-700 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-red-100/50 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xl">⚠️</span>
+                                <h3 className="text-xs font-black text-red-800 uppercase tracking-widest">Project Delay Documentation</h3>
+                            </div>
+                            <div className="bg-white/60 p-3 rounded-xl border border-red-100 italic">
+                                <p className="text-[9px] uppercase font-black text-red-400 mb-1 not-italic">Reason for Latest Delay</p>
+                                <p className="text-sm font-bold text-red-900 leading-relaxed">
+                                    "{project.delay_reason}"
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white/60 p-3 rounded-xl border border-red-100">
+                                    <p className="text-[9px] uppercase font-black text-red-400 mb-1">Time Lapsed (Days)</p>
+                                    <p className="text-sm font-black text-red-700">
+                                        {project.time_lapsed_days || project.days_lapsed || project.time_lapsed || 0} Days
+                                    </p>
+                                </div>
+                                <div className="bg-white/60 p-3 rounded-xl border border-red-100">
+                                    <p className="text-[9px] uppercase font-black text-emerald-400 mb-1">Accomplished (%)</p>
+                                    <p className="text-sm font-black text-emerald-700">
+                                        {project.time_lapsed_percentage || 0}%
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3">
+                                <div className="bg-white/60 p-3 rounded-xl border border-red-100">
+                                    <p className="text-[9px] uppercase font-black text-blue-400 mb-1">Revised Target Date</p>
+                                    <p className="text-sm font-black text-blue-700">
+                                        {project.revised_target_completion_date ? new Date(project.revised_target_completion_date).toLocaleDateString() : 'N/A'}
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-red-600 font-bold italic px-1 flex items-center gap-1">
+                                <div className="w-1 h-1 bg-red-400 rounded-full animate-pulse"></div>
+                                This information aligns with EFD DepEd delay monitoring processes.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Financial & Contractor Section */}
                     <div>
                         <h3 className="text-slate-700 font-bold text-sm mb-2 ml-1">Project Details</h3>
@@ -726,9 +1029,10 @@ const DetailedProjInfo = () => {
                                 />
                                 <DetailItem label="Contract Amount" value={project.contractAmount || project.contract_amount} isMoney />
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-3 gap-3">
                                 <DetailItem label="Savings" value={project.savings !== undefined && project.savings !== null ? project.savings : (Number(history.length > 0 ? (history[history.length - 1].approved_budget_for_contract || history[history.length - 1].projectAllocation || history[history.length - 1].project_allocation) : (project.projectAllocation || project.approved_budget_for_contract || 0)) - Number(project.contractAmount || project.contract_amount || 0))} isMoney />
                                 <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
+                                <DetailItem label="Funding Year" value={project.funding_year || project.fundingYear} />
                             </div>
                             <div className="grid grid-cols-1 gap-3">
                                 <DetailItem label="Handling Division Engineer" value={project.engineerName ? `Engr. ${project.engineerName}` : 'Unassigned'} />
@@ -999,7 +1303,7 @@ const DetailedProjInfo = () => {
 
                             {/* Map Preview */}
                             {(project.latitude && project.longitude) && (
-                                <div className="rounded-xl overflow-hidden shadow-inner border border-slate-200 mt-2 h-48 relative z-0">
+                                <div className="rounded-2xl overflow-hidden shadow-2xl border border-slate-200 mt-2 h-64 relative z-0">
                                     <LocationPickerMap
                                         latitude={project.latitude}
                                         longitude={project.longitude}
@@ -1028,92 +1332,59 @@ const DetailedProjInfo = () => {
                         ) : (
                             <>
                                 {/* EXTERNAL (First) */}
-                                {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external' && img.image_data !== '').length > 0 && (
+                                {getFilteredImages('External').length > 0 && (
                                     <div>
                                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos</h4>
                                         <div className="grid grid-cols-2 gap-3">
-                                            {projectImages.filter(img => img.category && img.category.toLowerCase() === 'external' && img.image_data !== '').map((img, idx) => {
-                                                const getImageSrc = (imageItem) => {
-                                                    if (imageItem.image_url) return imageItem.image_url;
-                                                    if (imageItem.image_data) {
-                                                        let base64 = imageItem.image_data;
-                                                        if (typeof base64 === 'string' && base64.trim().startsWith('{')) {
-                                                            try {
-                                                                const parsed = JSON.parse(base64);
-                                                                base64 = parsed.image_data || parsed;
-                                                            } catch (e) {
-                                                                // keep as is
-                                                            }
-                                                        }
-                                                        // Ensure prefix
-                                                        if (typeof base64 === 'string' && !base64.startsWith("http") && !base64.startsWith("data:")) {
-                                                            return `data:image/jpeg;base64,${base64}`;
-                                                        }
-                                                        return base64;
-                                                    }
-                                                    return null;
-                                                };
-                                                const imgSrc = getImageSrc(img);
-
-                                                return (
-                                                    <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
-                                                        <img
-                                                            src={imgSrc}
-                                                            alt={`External ${idx}`}
-                                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                                            onError={(e) => { e.target.style.display = 'none' }}
-                                                        />
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
-                                                            <p className="text-white text-[10px] font-medium truncate w-full">By: {img.uploaded_by}</p>
-                                                        </div>
+                                            {getFilteredImages('External').map((img, idx) => (
+                                                <div 
+                                                    key={idx} 
+                                                    onClick={() => {
+                                                        setSelectedZoomImage({ ...img, src: getImageSrc(img) });
+                                                        setActiveCategory('External');
+                                                    }}
+                                                    className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group cursor-zoom-in active:scale-95 transition-transform"
+                                                >
+                                                    <img
+                                                        src={getImageSrc(img)}
+                                                        alt={`External ${idx}`}
+                                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                                        onError={(e) => { e.target.style.display = 'none' }}
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                        <span className="text-white text-[10px] font-bold uppercase tracking-widest bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm">View</span>
                                                     </div>
-                                                )
-                                            })}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
 
                                 {/* INTERNAL (Second) */}
-                                {projectImages.filter(img => (!img.category || img.category.toLowerCase() !== 'external') && img.category?.toLowerCase() !== 'default' && img.image_data !== '').length > 0 && (
+                                {getFilteredImages('Internal').length > 0 && (
                                     <div>
                                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos</h4>
                                         <div className="grid grid-cols-2 gap-3">
-                                            {projectImages.filter(img => (!img.category || img.category.toLowerCase() !== 'external') && img.category?.toLowerCase() !== 'default' && img.image_data !== '').map((img, idx) => {
-                                                const getImageSrc = (imageItem) => {
-                                                    if (imageItem.image_url) return imageItem.image_url;
-                                                    if (imageItem.image_data) {
-                                                        let base64 = imageItem.image_data;
-                                                        if (typeof base64 === 'string' && base64.trim().startsWith('{')) {
-                                                            try {
-                                                                const parsed = JSON.parse(base64);
-                                                                base64 = parsed.image_data || parsed;
-                                                            } catch (e) {
-                                                                // keep as is
-                                                            }
-                                                        }
-                                                        if (typeof base64 === 'string' && !base64.startsWith("http") && !base64.startsWith("data:")) {
-                                                            return `data:image/jpeg;base64,${base64}`;
-                                                        }
-                                                        return base64;
-                                                    }
-                                                    return null;
-                                                };
-                                                const imgSrc = getImageSrc(img);
-
-                                                return (
-                                                    <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
-                                                        <img
-                                                            src={imgSrc}
-                                                            alt={`Internal ${idx}`}
-                                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                                            onError={(e) => { e.target.style.display = 'none' }}
-                                                        />
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
-                                                            <p className="text-white text-[10px] font-medium truncate w-full">By: {img.uploaded_by}</p>
-                                                        </div>
+                                            {getFilteredImages('Internal').map((img, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className="aspect-square bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer relative group"
+                                                    onClick={() => {
+                                                        setSelectedZoomImage({ ...img, src: getImageSrc(img) });
+                                                        setActiveCategory('Internal');
+                                                    }}
+                                                >
+                                                    <img
+                                                        src={getImageSrc(img)}
+                                                        alt={`Internal site ${idx + 1}`}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => { e.target.style.display = 'none' }}
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                        <span className="text-white text-[10px] font-bold uppercase tracking-widest bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm">View</span>
                                                     </div>
-                                                )
-                                            })}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
@@ -1121,8 +1392,11 @@ const DetailedProjInfo = () => {
                         )}
                     </div>
 
-                    {/* Project Update Log (Combined Remarks & History) */}
                     <div className="pt-2">
+                        <VOHistoryList 
+                            voHistory={voHistory} 
+                            loading={voHistoryLoading} 
+                        />
                         <RemarksHistory 
                             history={history} 
                             loading={historyLoading} 
@@ -1154,7 +1428,64 @@ const DetailedProjInfo = () => {
                     externalPreviews={externalPreviews}
                     onRemoveFile={removeFile}
                     isUploading={isUploading}
+                    voHistory={voHistory}
                 />
+                {/* --- ZOOM MODAL (PORTALLED) --- */}
+                {selectedZoomImage && createPortal(
+                    <div 
+                        className="fixed inset-0 bg-black/95 z-[9999] flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300"
+                        onClick={() => setSelectedZoomImage(null)}
+                    >
+                        <button 
+                            onClick={() => setSelectedZoomImage(null)}
+                            className="absolute top-10 right-6 w-12 h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-[10000] border border-white/10 shadow-xl"
+                        >
+                            <LuX size={24} />
+                        </button>
+
+                        <div className="w-full max-w-4xl h-[70vh] flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
+                            {/* Loading state for the high-res image */}
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-white/20 -z-10">
+                                <div className="w-10 h-10 border-2 border-white/5 border-t-white/40 rounded-full animate-spin mb-2"></div>
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Loading Photo</span>
+                            </div>
+
+                            <img 
+                                src={selectedZoomImage.src || getImageSrc(selectedZoomImage)} 
+                                alt="preview" 
+                                className="max-w-full max-h-full object-contain rounded-xl shadow-2xl ring-1 ring-white/10 animate-in zoom-in-95 duration-500" 
+                                style={{ transform: 'translateZ(0)' }} // Hardware acceleration
+                                onLoad={(e) => {
+                                    e.target.style.opacity = '1';
+                                }}
+                                onError={(e) => {
+                                    console.error("Zoom image failed to load");
+                                    const fallback = getImageSrc(selectedZoomImage);
+                                    if (fallback && e.target.src !== fallback) {
+                                        e.target.src = fallback;
+                                    } else {
+                                        e.target.parentElement.innerHTML = '<div class="text-white/50 text-center flex flex-col items-center gap-3"><span class="text-4xl">📷</span><p class="text-[10px] font-bold uppercase tracking-widest">Image Unavailable</p></div>';
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        {/* Metadata Footer */}
+                        <div className="mt-8 text-center text-white max-w-lg animate-in slide-in-from-bottom-6 duration-500" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-2 mb-2">
+                                <span className="bg-blue-600/30 text-blue-400 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-500/20">
+                                    {selectedZoomImage.category || 'Documentation'}
+                                </span>
+                            </div>
+                            <h3 className="text-lg font-bold mb-1 px-4">{project.schoolName || 'Project Photo'}</h3>
+                            <p className="text-xs text-slate-400">
+                                Captured on {new Date(selectedZoomImage.uploaded_at || selectedZoomImage.created_at || Date.now()).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-tighter opacity-40">Secure Site Proof</p>
+                        </div>
+                    </div>,
+                    document.body
+                )}
             </div>
         </PageTransition>
     );
