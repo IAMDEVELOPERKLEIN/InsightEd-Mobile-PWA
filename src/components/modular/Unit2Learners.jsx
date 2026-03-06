@@ -34,11 +34,14 @@ const Unit2Learners = () => {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [isReadOnly, setIsReadOnly] = useState(false);
+    const [hasSubmitted, setHasSubmitted] = useState(false);
 
     // --- Wizard State ---
     const [currentStep, setCurrentStep] = useState(1);
     const [currentGradeIndex, setCurrentGradeIndex] = useState(0); 
     const [availableGrades, setAvailableGrades] = useState([]);
+    const [schoolOffering, setSchoolOffering] = useState("");
     const [hasKinder, setHasKinder] = useState(false);
     const [hasElementary, setHasElementary] = useState(false);
 
@@ -146,33 +149,47 @@ const Unit2Learners = () => {
                         const d = data.data;
 
                         // 1. Determine Available Grades via Unit 1
-                        const offering = d.curricular_offering || "";
-                        let parsedLevels = [];
-                        try {
-                            parsedLevels = JSON.parse(d.grade_levels || "[]");
-                        } catch(e) {}
+                        const offering = d.curricular_offering || localStorage.getItem('schoolOffering') || "";
+                        setSchoolOffering(offering);
 
-                        let combinedGrades = new Set([...parsedLevels]);
-                        const textOffering = offering.toLowerCase();
-                        if (textOffering.includes("kinder")) combinedGrades.add("kinder");
-                        if (textOffering.includes("elementary") || textOffering.includes("k to 10") || textOffering.includes("k to 12") || textOffering.includes("k-10") || textOffering.includes("k-12")) {
-                            ['1','2','3','4','5','6'].forEach(lvl => combinedGrades.add(`g${lvl}`));
-                        }
-                        if (textOffering.includes("junior high") || textOffering.includes("jhs") || textOffering.includes("k to 10") || textOffering.includes("k to 12") || textOffering.includes("k-10") || textOffering.includes("k-12")) {
-                            ['7','8','9','10'].forEach(lvl => combinedGrades.add(`g${lvl}`));
-                        }
-                        if (textOffering.includes("senior high") || textOffering.includes("shs") || textOffering.includes("k to 12") || textOffering.includes("k-12")) {
-                            ['11','12'].forEach(lvl => combinedGrades.add(`g${lvl}`));
+                        const text = offering.toLowerCase();
+                        let filteredIds = [];
+
+                        if (text.includes("integrated") || text.includes("k-12") || text.includes("k to 12") || text.includes("k-10") || text.includes("k to 10")) {
+                            filteredIds = ALL_GRADES.map(g => g.id);
+                        } else {
+                            if (text.includes("elementary") || text.includes("primary")) {
+                                filteredIds.push('kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
+                            }
+                            if (text.includes("jhs") || text.includes("junior high")) {
+                                filteredIds.push('g7', 'g8', 'g9', 'g10');
+                            }
+                            if (text.includes("shs") || text.includes("senior high")) {
+                                filteredIds.push('g11', 'g12');
+                            }
                         }
 
-                        const gradesArr = Array.from(combinedGrades);
-                        const uniqueObj = ALL_GRADES.filter(g => gradesArr.includes(g.id));
+                        filteredIds = [...new Set(filteredIds)];
+                        const uniqueObj = ALL_GRADES.filter(g => filteredIds.includes(g.id));
+                        
                         setAvailableGrades(uniqueObj);
                         setHasKinder(uniqueObj.some(g => g.id === 'kinder'));
-                        setHasElementary(uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder'));
+                        const hasElem = uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder');
+                        setHasElementary(hasElem);
 
-                        // 2. Pre-fill Data if Unit 2 was already saved in the new structure
+                        // 2. Auto-advance if Kinder/Elementary is not offered
+                        if (!uniqueObj.some(g => g.id === 'kinder')) {
+                            if (hasElem) {
+                                setCurrentStep(2);
+                            } else {
+                                setOrgType('nano');
+                                setCurrentStep(4);
+                            }
+                        }
+
                         if (d.unit2_simplified_enrollment) {
+                            setHasSubmitted(true);
+                            setIsReadOnly(true);
                             try {
                                 const parsed = typeof d.unit2_simplified_enrollment === 'string' 
                                     ? JSON.parse(d.unit2_simplified_enrollment) 
@@ -499,6 +516,8 @@ const Unit2Learners = () => {
                         });
                     }
                 }
+                setHasSubmitted(true);
+                setIsReadOnly(true);
                 setShowSuccess(true);
             } else {
                 alert("Failed to save enrollment. Please try again.");
@@ -521,6 +540,87 @@ const Unit2Learners = () => {
     const expandVariants = {
         hidden: { opacity: 0, height: 0, marginTop: 0 },
         visible: { opacity: 1, height: "auto", marginTop: 16 },
+    };
+
+    // --- Internal Summary Component ---
+    const Unit2Summary = () => {
+        const maleVal = parseInt(genderTotals.male) || 0;
+        const femaleVal = parseInt(genderTotals.female) || 0;
+        
+        return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-700">
+                <div className="text-center mb-8">
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase tracking-[0.2em] mb-4 shadow-sm border border-emerald-200">
+                        Enrollment Dashboard ✓
+                    </span>
+                    <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">Master Summary</h1>
+                    <p className="text-slate-500 font-medium italic">Current official records for this academic year.</p>
+                </div>
+
+                {/* Stat Cards */}
+                <div className="grid grid-cols-1 gap-4">
+                    <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-200 flex items-center justify-between overflow-hidden relative group transition-transform active:scale-95">
+                        <div className="relative z-10">
+                            <p className="text-indigo-200 text-xs font-black uppercase tracking-widest mb-1">Grand Total Enrollment</p>
+                            <h2 className="text-6xl font-black leading-none">{grandTotal}</h2>
+                        </div>
+                        <div className="text-6xl opacity-20 relative z-10">🌍</div>
+                        <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-blue-50 border-4 border-blue-100 rounded-[2.5rem] p-6 text-center">
+                            <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Male</p>
+                            <h3 className="text-4xl font-black text-blue-600">{maleVal}</h3>
+                        </div>
+                        <div className="bg-rose-50 border-4 border-rose-100 rounded-[2.5rem] p-6 text-center">
+                            <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Female</p>
+                            <h3 className="text-4xl font-black text-rose-600">{femaleVal}</h3>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Grade Breakdown */}
+                <div className="space-y-4">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest pl-4">Grade Breakdown</h4>
+                    {availableGrades.map((g) => {
+                        const count = g.id === 'kinder' ? (parseInt(kinderEnrollment) || 0) : (parseInt(gradeTotals[g.id]) || 0);
+                        const isInactive = gradeAvailability[g.id] === false;
+                        if (count === 0 && isInactive) return null;
+
+                        return (
+                            <div key={g.id} className="bg-white rounded-[2rem] p-5 shadow-sm border-2 border-slate-100 flex items-center justify-between hover:border-indigo-300 transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-xl shadow-inner font-black text-slate-400">
+                                        {g.label.match(/\d+/) ? g.label.match(/\d+/)[0] : 'K'}
+                                    </div>
+                                    <div>
+                                        <h5 className="font-black text-slate-800">{g.label}</h5>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{isInactive ? "Not Offered" : "Standard Enrollment"}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-slate-50 px-5 py-3 rounded-2xl">
+                                        <span className="text-lg font-black text-slate-700">{count}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Unlock Button */}
+                <div className="border-t-2 border-slate-100 pt-8 mt-12 pb-20">
+                    <button 
+                        onClick={() => setIsReadOnly(false)}
+                        className="w-full flex items-center justify-center gap-3 py-6 rounded-3xl bg-slate-900 shadow-2xl shadow-slate-200 text-white font-black text-lg active:scale-95 transition-all"
+                    >
+                        <span>🔓</span> Unlock to Edit Enrollment
+                    </button>
+                    <p className="text-center text-slate-400 text-xs font-bold mt-4 uppercase tracking-[0.2em]">Authorized Access Only</p>
+                </div>
+            </motion.div>
+        );
     };
 
     if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8"><div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div></div>;
@@ -560,7 +660,21 @@ const Unit2Learners = () => {
             </header>
 
             <main className="max-w-xl mx-auto px-4">
-                <AnimatePresence mode="wait">
+                {isReadOnly ? (
+                    <Unit2Summary />
+                ) : (
+                    <>
+                        {!schoolOffering && !loading && (
+                            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+                                className="mb-8 p-6 bg-rose-50 border-4 border-rose-100 rounded-[2rem] flex items-center gap-4 shadow-xl shadow-rose-100/50">
+                                <div className="w-12 h-12 bg-rose-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg">⚠️</div>
+                                <div className="flex-1">
+                                    <h3 className="font-black text-rose-800 uppercase tracking-widest text-xs mb-1">Attention Required</h3>
+                                    <p className="text-rose-700 font-bold leading-tight">Please complete Unit 1 to set your Curricular Offering so the correct grade levels appear here.</p>
+                                </div>
+                            </motion.div>
+                        )}
+                        <AnimatePresence mode="wait">
                     
                     {/* STEP 1: Kindergarten (Mandatory Standalone) */}
                     {currentStep === 1 && (
@@ -1096,128 +1210,12 @@ const Unit2Learners = () => {
                             </button>
                         </motion.div>
                     )}
-
-                    {/* STEP 7: Global Gender Split */}
-                    {currentStep === 7 && (
-                        <motion.div key="step7" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
-                            <div className="text-center mb-8">
-                                <h1 className="text-3xl font-black text-slate-800 mb-3">Step 7: Gender Breakdown</h1>
-                                <p className="text-slate-500 font-medium pb-4">Provide the overall gender split for the entire school based on your previous entries.</p>
-                                
-                                <div className="bg-slate-800 rounded-3xl p-5 inline-block shadow-lg mx-auto">
-                                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">School Grand Total</p>
-                                    <p className="text-5xl font-black text-white">{grandTotal}</p>
-                                </div>
-                            </div>
-
-                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-8 space-y-6">
-                                <div>
-                                    <label className="text-lg font-bold text-slate-700 mb-2 block text-center">How many are Male? 👦🏻</label>
-                                    <input type="number" min="0" placeholder="0" value={genderTotals.male} onChange={(e) => handleGenderChange('male', e.target.value)} className={`${chunkyInput} !text-blue-600 border-blue-100 bg-blue-50 focus:border-blue-400`} />
-                                </div>
-                                
-                                <div>
-                                    <label className="text-lg font-bold text-slate-700 mb-2 block text-center">How many are Female? 👧🏻</label>
-                                    <input type="number" min="0" placeholder="0" value={genderTotals.female} onChange={(e) => handleGenderChange('female', e.target.value)} className={`${chunkyInput} !text-pink-600 border-pink-100 bg-pink-50 focus:border-pink-400`} />
-                                </div>
-                            </div>
-
-                            <AnimatePresence>
-                                {(genderTotals.male !== "" && genderTotals.female !== "") && (
-                                    <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="mb-8">
-                                        <div className={`p-5 rounded-2xl border-2 flex items-center gap-4 ${isMathPerfect ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                                            <div className="text-3xl flex-shrink-0">
-                                                {isMathPerfect ? <FiCheckCircle className="text-emerald-500" /> : <FiAlertTriangle className="text-red-500" />}
-                                            </div>
-                                            <div>
-                                                <p className="font-black text-lg">{isMathPerfect ? "Data matches perfectly!" : "Numbers don't add up."}</p>
-                                                <p className="text-sm font-medium opacity-80 mt-1">
-                                                    {isMathPerfect ? `Male and Female sum equals the Grand Total of ${grandTotal}.` : `Male (${genderTotals.male||0}) + Female (${genderTotals.female||0}) = ${genderSum}. The total must equal ${grandTotal}.`}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-                            <button onClick={handleNext} disabled={!isMathPerfect} className="w-full py-5 rounded-2xl bg-indigo-600 text-white font-black text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                                Review &amp; Finish <FiArrowRight className="w-6 h-6 inline ml-2" />
-                            </button>
-                        </motion.div>
-                    )}
-
-                    {/* STEP 8: Confirmation */}
-                    {currentStep === 8 && (
-                        <motion.div key="step8" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
-                            <div className="bg-indigo-600 rounded-b-[3rem] -mx-4 -mt-8 pt-12 pb-16 px-6 mb-8 text-center text-white relative overflow-hidden shadow-xl shadow-indigo-200/50">
-                                <div className="relative z-10">
-                                    <div className="w-20 h-20 bg-white/20 rounded-[2rem] flex items-center justify-center text-4xl mx-auto mb-6 backdrop-blur-sm border border-white/20">
-                                        📋
-                                    </div>
-                                    <h1 className="text-3xl font-black mb-3">Almost done!</h1>
-                                    <p className="text-indigo-100 font-medium px-4">Confirm your enrollment data before securing it to the database.</p>
-                                </div>
-                            </div>
-                            
-                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-8 max-w-sm mx-auto">
-                                <h3 className="text-center font-black text-slate-400 uppercase tracking-widest text-xs mb-6">Summary Receipt</h3>
-                                
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-                                        <span className="text-slate-500 font-medium">Grand Total</span>
-                                        <span className="text-2xl font-black text-slate-800">{grandTotal}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-                                        <span className="text-slate-500 font-medium">Male</span>
-                                        <span className="text-lg font-bold text-blue-600">{genderTotals.male}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-                                        <span className="text-slate-500 font-medium">Female</span>
-                                        <span className="text-lg font-bold text-pink-600">{genderTotals.female}</span>
-                                    </div>
-                                    
-                                    {(hasSnedSelfContained || mgCombinations.length > 0) && (
-                                        <div className="pt-2">
-                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-50 pb-2">Special & Combinations</p>
-                                            {mgCombinations.map((c, i) => (
-                                                <div key={c.id} className="flex justify-between text-sm py-1">
-                                                    <span className="text-indigo-500 font-bold">MG Group {i+1}</span>
-                                                    <span className="font-bold">{c.enrollment}</span>
-                                                </div>
-                                            ))}
-                                            {hasSnedSelfContained && (
-                                                <div className="flex justify-between text-sm py-1">
-                                                    <span className="text-slate-500">SNED (Self-Contained)</span>
-                                                    <span className="font-bold">{sned_self_contained_count}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <p className="text-center text-slate-500 font-bold mb-6">Is this data correct as of today?</p>
-
-                            <div className="flex gap-4">
-                                <button onClick={() => setCurrentStep(1)} className="flex-1 py-4 rounded-2xl font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-                                    No, Edit Again
-                                </button>
-                                <button onClick={handleSave} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-indigo-600 text-white font-black shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50">
-                                    {isSaving ? "Saving..." : "Yes, Save Data"}
-                                </button>
-                            </div>
-                        </motion.div>
-                    )}
-
-                </AnimatePresence>
+                        </AnimatePresence>
+                    </>
+                )}
             </main>
 
-            <SuccessModal
-                isOpen={showSuccess}
-                onClose={() => setShowSuccess(false)}
-                message="Smart Enrollment Sync Saved! Your learner counts are locked in."
-                redirectUrl="/modular-dashboard"
-            />
+            <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="Smart Enrollment Sync Saved! Your learner counts are locked in." redirectUrl="/modular-dashboard" />
         </div>
     );
 };

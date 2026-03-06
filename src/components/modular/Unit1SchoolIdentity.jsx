@@ -1,47 +1,48 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2 } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft } from "react-icons/fi";
 import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
 import locationData from "../../locations.json";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
-const chunkyInput = "w-full p-4 mt-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:bg-blue-50 transition-colors shadow-sm";
-const chunkySelect = "w-full p-4 mt-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:bg-blue-50 transition-colors shadow-sm appearance-none bg-white disabled:opacity-50 disabled:bg-gray-100";
+const chunkyInput = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm placeholder:text-gray-300";
+const chunkySelect = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:24px] bg-[right_1rem_center] bg-no-repeat disabled:opacity-50 disabled:bg-gray-50";
 
 // ── Skeleton Loaders ─────────────────────────────────────────────────────────
-const Pulse = ({ className }) => <div className={`animate-pulse bg-slate-200 rounded-2xl ${className}`} />;
+const Pulse = ({ className }) => <div className={`animate-pulse bg-slate-200 rounded-3xl ${className}`} />;
 
 const SkeletonWizard = () => (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-gray-50 to-gray-200 flex flex-col font-sans">
-        <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-sm px-4 py-3">
-            <div className="max-w-md mx-auto flex items-center gap-3">
-                <div className="p-2 rounded-full bg-gray-100 w-10 h-10" />
-                <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden"><Pulse className="h-full w-1/2 rounded-full" /></div>
-                <Pulse className="h-5 w-10" />
+    <div className="min-h-screen bg-white flex flex-col font-sans">
+        <header className="px-6 py-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-gray-100" />
+            <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full w-1/5 bg-gray-200 animate-pulse" />
             </div>
         </header>
-        <main className="flex-1 overflow-y-auto pb-28">
-            <div className="max-w-md w-full mx-auto mt-12 px-6 space-y-5">
-                <Pulse className="h-9 w-3/4" />
-                <Pulse className="h-5 w-full" />
-                <Pulse className="h-16 w-full mt-4" />
-                <Pulse className="h-16 w-full" />
+        <main className="flex-1 p-6 space-y-8">
+            <div className="space-y-3">
+                <Pulse className="h-10 w-3/4" />
+                <Pulse className="h-6 w-1/2" />
+            </div>
+            <div className="space-y-4 pt-4">
+                <Pulse className="h-20 w-full" />
+                <Pulse className="h-20 w-full" />
             </div>
         </main>
-        <div className="fixed bottom-0 left-0 w-full p-6 bg-white border-t border-gray-100 z-50">
-            <Pulse className="h-16 w-full max-w-md mx-auto" />
-        </div>
+        <footer className="p-6">
+            <Pulse className="h-16 w-full" />
+        </footer>
     </div>
 );
 
 // ── Main Component ───────────────────────────────────────────────────────────
 const Unit1SchoolIdentity = () => {
     const navigate = useNavigate();
-    const [currentStep, setCurrentStep] = useState(1);
+    const [currentStep, setCurrentStep] = useState(0);
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
@@ -64,6 +65,8 @@ const Unit1SchoolIdentity = () => {
         latitude: "",
         longitude: "",
         iern: "",
+        school_head: "",
+        contact_number: "",
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -79,9 +82,9 @@ const Unit1SchoolIdentity = () => {
             const storedId = localStorage.getItem("schoolId");
             if (!storedId) {
                 const draft = await getUnit1Draft("draft_unit_1");
-                if (draft && draft.step > 1) {
-                    setFormData(draft.formData || {});
-                    setCurrentStep(Math.min(draft.step, TOTAL_STEPS));
+                if (draft) {
+                    setFormData(prev => ({ ...prev, ...draft.formData }));
+                    setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                     setShowWelcomeBack(true);
                     setTimeout(() => setShowWelcomeBack(false), 3000);
                 }
@@ -101,8 +104,10 @@ const Unit1SchoolIdentity = () => {
             if (savedRes?.ok) {
                 const txt = await savedRes.text();
                 if (txt) {
-                    const parsed = JSON.parse(txt);
-                    if (parsed.exists && parsed.data) d = parsed.data;
+                    try {
+                        const parsed = JSON.parse(txt);
+                        if (parsed.exists && parsed.data) d = parsed.data;
+                    } catch(e) {}
                 }
             }
             if (iernRes?.ok) {
@@ -111,7 +116,7 @@ const Unit1SchoolIdentity = () => {
             }
 
             if (d && d.unit1_completed) {
-                // Merge saved + iern data to fill any gaps
+                // Merge saved + iern data
                 const merged = {
                     school_id:           d.school_id || storedId,
                     school_name:         d.school_name || iernRow?.School_Name || "",
@@ -126,10 +131,12 @@ const Unit1SchoolIdentity = () => {
                     curricular_offering: d.curricular_offering || iernRow?.Curricular_Offering || "",
                     latitude:            d.latitude || iernRow?.Latitude || "",
                     longitude:           d.longitude || iernRow?.Longitude || "",
+                    school_head:         d.school_head || "",
+                    contact_number:      d.contact_number || "",
                 };
                 setFormData(merged);
 
-                // Pre-populate location dropdowns in parallel
+                // Pre-populate location dropdowns
                 if (merged.region && locationData?.[merged.region]) {
                     setProvinceOptions(Object.keys(locationData[merged.region]).sort());
                     if (merged.province && locationData[merged.region][merged.province]) {
@@ -156,11 +163,11 @@ const Unit1SchoolIdentity = () => {
                 return;
             }
 
-            // Not yet completed — check for draft or auto-fill from IERN
+            // Not yet completed — check draft or auto-fill
             const draft = await getUnit1Draft("draft_unit_1");
-            if (draft && draft.step > 1) {
-                setFormData(draft.formData || {});
-                setCurrentStep(Math.min(draft.step, TOTAL_STEPS));
+            if (draft) {
+                setFormData(prev => ({ ...prev, ...draft.formData }));
+                setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
             } else {
@@ -189,10 +196,9 @@ const Unit1SchoolIdentity = () => {
             setIsModeLoading(false);
         };
         init();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ── Location dropdown sync ───────────────────────────────────────────────
+    // ── Logic sync ───────────────────────────────────────────────────────────
     useEffect(() => {
         if (!formData.region || !locationData?.[formData.region]) return;
         setProvinceOptions(Object.keys(locationData[formData.region]).sort());
@@ -224,12 +230,11 @@ const Unit1SchoolIdentity = () => {
             .then(r => r.json()).then(setDistrictOptions).catch(() => {});
     }, [formData.region, formData.division]);
 
-    // Auto-save draft
     useEffect(() => {
-        if (formData.school_id || currentStep > 1) {
+        if (!isModeLoading) {
             saveUnit1Draft("draft_unit_1", { formData, step: currentStep });
         }
-    }, [formData, currentStep]);
+    }, [formData, currentStep, isModeLoading]);
 
     // ── Handlers ─────────────────────────────────────────────────────────────
     const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -239,12 +244,12 @@ const Unit1SchoolIdentity = () => {
     const handleDivisionChange = (e) => setFormData(prev => ({ ...prev, division: e.target.value, district: "" }));
 
     const handleBack = () => {
-        if (currentStep > 1) setCurrentStep(s => s - 1);
-        else navigate(-1);
+        if (currentStep > 0) setCurrentStep(s => s - 1);
+        else navigate("/modular-dashboard");
     };
 
     const handleNext = () => {
-        if (currentStep < TOTAL_STEPS) setCurrentStep(s => s + 1);
+        if (currentStep < TOTAL_STEPS - 1) setCurrentStep(s => s + 1);
         else handleSubmit();
     };
 
@@ -267,6 +272,7 @@ const Unit1SchoolIdentity = () => {
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             if (!progress.completedUnits.includes(1)) { progress.completedUnits.push(1); progress.xp += 150; localStorage.setItem("quest_progress", JSON.stringify(progress)); }
             localStorage.setItem("schoolId", formData.school_id);
+            localStorage.setItem("schoolOffering", formData.curricular_offering);
             setShowSuccess(true);
         } catch (err) {
             console.error("Submit failed:", err);
@@ -276,259 +282,211 @@ const Unit1SchoolIdentity = () => {
         }
     };
 
-    const progressPercentage = (currentStep / TOTAL_STEPS) * 100;
+    const progressPercentage = ((currentStep + 1) / TOTAL_STEPS) * 100;
 
-    const stepQuestions = {
-        1: "What's the school's name and ID?",
-        2: "Where is the school located?",
-        3: "What does the school offer?",
-        4: "Pin the school on the map 📍",
-    };
-    const stepSubtitles = {
-        1: "Enter the 6-digit DepEd School ID and verify the name.",
-        2: "Select the region, division, and district details.",
-        3: "Choose the curricular offering level.",
-        4: "Set the exact coordinates using the map or manual input.",
-    };
-    const slideVariants = {
-        enter: { opacity: 0, x: 60, scale: 0.97 },
-        center: { opacity: 1, x: 0, scale: 1 },
-        exit: { opacity: 0, x: -60, scale: 0.97 },
-    };
+    const stepInfo = [
+        { q: "What's the school's ID?", sub: "Enter the 6-digit DepEd School ID to identify your school." },
+        { q: "Confirm the school name", sub: "Is this the official name of the institution?" },
+        { q: "Where is the school located?", sub: "Select the specific region, division, and district details." },
+        { q: "What does the school offer?", sub: "Choose the curricular levels provided by the school." },
+        { q: "Pin the school 📍", sub: "Confirm the coordinates to update the school's map registry." },
+    ];
 
-    const isStep1Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id) && formData.school_name.trim() !== "";
+    const isStep0Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id);
+    const isStep1Valid = formData.school_name.trim().length > 3;
     const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
     const isStep3Valid = formData.curricular_offering !== "";
     const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
-    const isCurrentStepValid = () => [isStep1Valid, isStep2Valid, isStep3Valid, isStep4Valid][currentStep - 1];
+    const isCurrentStepValid = () => {
+        if (currentStep === 0) return isStep0Valid;
+        if (currentStep === 1) return isStep1Valid;
+        if (currentStep === 2) return isStep2Valid;
+        if (currentStep === 3) return isStep3Valid;
+        if (currentStep === 4) return isStep4Valid;
+        return false;
+    };
 
-    // ── Skeleton while loading ───────────────────────────────────────────────
     if (isModeLoading) return <SkeletonWizard />;
 
     return (
-        <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-gray-50 to-gray-200 flex flex-col font-sans">
-
-            {/* Header */}
-            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                <div className="max-w-md mx-auto flex items-center gap-3">
-                    <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                        <FiX className="w-6 h-6" />
-                    </button>
-                    <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
-                        <motion.div className="h-full bg-green-500 rounded-full" initial={{ width: 0 }} animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.5, ease: "easeOut" }} />
-                    </div>
-                    <span className="text-sm font-bold text-gray-400 whitespace-nowrap">{currentStep}/{TOTAL_STEPS}</span>
+        <div className="min-h-screen bg-white flex flex-col font-sans text-gray-900 overflow-hidden">
+            
+            {/* Minimal Header */}
+            <header className="px-6 py-5 flex items-center justify-between">
+                <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
+                    <FiArrowLeft className="w-6 h-6" />
+                </button>
+                <div className="flex-1 max-w-[120px] mx-4 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <motion.div className="h-full bg-blue-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.8, ease: "circOut" }} />
                 </div>
+                <span className="text-xs font-black tracking-widest text-gray-300 uppercase">Step {currentStep + 1}/{TOTAL_STEPS}</span>
             </header>
 
             {/* Welcome Back Toast */}
             <AnimatePresence>
                 {showWelcomeBack && (
                     <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-                        className="fixed top-16 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm flex items-center gap-2 z-[60]">
-                        <FiCheckCircle className="text-green-400" /> Welcome back! Continuing from Step {currentStep}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-[13px] font-bold flex items-center gap-2 z-[60]">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                        Recovered your draft!
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Main Content */}
-            <main className="flex-1 overflow-y-auto pb-28">
+            <main className="flex-1 relative overflow-y-auto px-6 pt-4 pb-32">
                 <AnimatePresence mode="wait">
-
-                    {/* ── REVIEW MODE ── */}
                     {isReviewMode ? (
-                        <motion.div key="review-card"
-                            initial={{ opacity: 0, y: 30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                            transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}
-                            className="max-w-md w-full mx-auto mt-10 px-6">
-                            <div className="text-center mb-6">
-                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", bounce: 0.5 }}
-                                    className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-200">
-                                    <FiCheckCircle className="w-8 h-8 text-white" />
-                                </motion.div>
-                                <h2 className="text-2xl font-black text-gray-800">Unit 1 Complete!</h2>
-                                <p className="text-sm text-gray-400 mt-1">School Identity has been verified and saved.</p>
-                            </div>
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
-                                className="bg-white rounded-3xl shadow-xl shadow-gray-100/80 border border-gray-100 overflow-hidden">
-                                <div className="h-2 bg-emerald-400" />
-                                <div className="px-6 py-5 space-y-4">
-                                    {[
-                                        { label: "School ID", value: formData.school_id, icon: "🏫" },
-                                        { label: "School Name", value: formData.school_name, icon: "✏️" },
-                                        { label: "IERN", value: formData.iern || "Not Assigned", icon: "🪪" },
-                                        { label: "Region", value: formData.region, icon: "📍" },
-                                        { label: "Division", value: formData.division, icon: "🗂️" },
-                                        { label: "Curricular Offering", value: formData.curricular_offering || "Not Set", icon: "📚" },
-                                    ].map((item, i) => (
-                                        <motion.div key={item.label} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35 + i * 0.06 }}
-                                            className="flex items-start gap-3">
-                                            <span className="text-lg mt-0.5">{item.icon}</span>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-bold uppercase tracking-wider text-gray-300">{item.label}</p>
-                                                <p className="text-base font-semibold text-gray-800 truncate">{item.value || "—"}</p>
-                                            </div>
-                                        </motion.div>
-                                    ))}
+                        <motion.div key="review" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md mx-auto space-y-6">
+                            <div className="bg-emerald-50 rounded-[2.5rem] p-8 text-center border-2 border-emerald-100 shadow-sm">
+                                <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-200">
+                                    <FiCheck className="w-10 h-10 text-white" />
                                 </div>
-                                <div className="mx-6 border-t-2 border-dashed border-gray-100" />
-                                <div className="px-6 py-4"><p className="text-xs text-center text-gray-300">Tap below to make corrections</p></div>
-                            </motion.div>
-                            <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
-                                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                                onClick={() => { setIsReviewMode(false); setCurrentStep(1); }}
-                                className="mt-6 w-full py-5 rounded-2xl font-black text-lg tracking-wide bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-200 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all flex items-center justify-center gap-3">
-                                <FiEdit2 className="w-5 h-5" /> Unlock &amp; Edit Data
-                            </motion.button>
+                                <h1 className="text-3xl font-black text-gray-900 leading-tight">Identity Verified</h1>
+                                <p className="text-emerald-700 font-medium mt-2">School profile is up to date.</p>
+                            </div>
+
+                            <div className="bg-white rounded-[2.5rem] border-2 border-gray-100 p-6 space-y-4 shadow-sm">
+                                {[
+                                    { l: "School Name", v: formData.school_name, i: "🏫" },
+                                    { l: "IERN", v: formData.iern || "N/A", i: "📄" },
+                                    { l: "Division", v: formData.division, i: "🗂️" }
+                                ].map(item => (
+                                    <div key={item.l} className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-xl shadow-inner">{item.i}</div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">{item.l}</p>
+                                            <p className="text-base font-bold text-gray-800 truncate">{item.v}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <button onClick={() => { setIsReviewMode(false); setCurrentStep(0); }}
+                                className="w-full py-5 rounded-3xl bg-gray-900 text-white font-black text-lg shadow-xl shadow-gray-200 active:scale-98 transition-all flex items-center justify-center gap-3">
+                                <FiEdit2 className="w-5 h-5" /> Update Identity
+                            </button>
                         </motion.div>
                     ) : (
-                        /* ── WIZARD MODE ── */
-                        <div className="flex-1 max-w-md w-full mx-auto mt-12 px-6">
-                            <AnimatePresence mode="wait">
+                        <motion.div key={currentStep} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.4, ease: "circOut" }}
+                            className="max-w-md mx-auto h-full flex flex-col">
+                            
+                            <div className="space-y-2 mb-8">
+                                <h1 className="text-3xl font-black text-gray-900 leading-tight">{stepInfo[currentStep].q}</h1>
+                                <p className="text-gray-500 font-medium leading-relaxed">{stepInfo[currentStep].sub}</p>
+                            </div>
 
-                                {/* STEP 1 */}
-                                {currentStep === 1 && (
-                                    <motion.div key="step1" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                        <h2 className="text-2xl font-bold text-gray-800">{stepQuestions[1]}</h2>
-                                        <p className="mt-2 text-sm text-gray-400">{stepSubtitles[1]}</p>
-                                        <div className="relative mt-6">
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">School ID</label>
-                                            <input type="text" name="school_id" value={formData.school_id} onChange={handleChange}
-                                                placeholder="e.g. 101010" maxLength={6} className={chunkyInput} />
-                                            {formData.school_id.length === 6 && /^\d+$/.test(formData.school_id) && (
-                                                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-4 top-10 bg-green-100 p-1.5 rounded-full">
-                                                    <FiCheck className="text-green-600 w-5 h-5" />
-                                                </motion.div>
-                                            )}
-                                        </div>
-                                        <div className="mt-4">
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">School Name</label>
-                                            <input type="text" name="school_name" value={formData.school_name} onChange={handleChange}
-                                                disabled={!!formData.iern} placeholder="e.g. San Isidro Elementary School" className={chunkyInput} />
+                            <div className="space-y-6">
+                                {currentStep === 0 && (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">6-Digit School ID</label>
+                                            <div className="relative">
+                                                <input type="tel" name="school_id" value={formData.school_id} onChange={handleChange} maxLength={6} placeholder="e.g. 101010" className={chunkyInput} autoFocus />
+                                                {isStep0Valid && <FiCheckCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500 w-6 h-6" />}
+                                            </div>
                                         </div>
                                         {formData.iern && (
-                                            <div className="mt-4">
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-green-500 mb-1">Official IERN</label>
-                                                <input value={formData.iern} disabled className={chunkyInput + " !border-green-300 !bg-green-50"} />
-                                            </div>
+                                            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="p-5 bg-emerald-50 border-2 border-emerald-100 rounded-3xl flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold">✓</div>
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-0.5">IERN Verified</p>
+                                                    <p className="text-lg font-black text-emerald-900 tracking-wider">{formData.iern}</p>
+                                                </div>
+                                            </motion.div>
                                         )}
-                                    </motion.div>
+                                    </div>
                                 )}
 
-                                {/* STEP 2 */}
+                                {currentStep === 1 && (
+                                    <div>
+                                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Full School Name</label>
+                                        <input type="text" name="school_name" value={formData.school_name} onChange={handleChange} placeholder="Official Name" className={chunkyInput} autoFocus />
+                                    </div>
+                                )}
+
                                 {currentStep === 2 && (
-                                    <motion.div key="step2" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                        <h2 className="text-2xl font-bold text-gray-800">{stepQuestions[2]}</h2>
-                                        <p className="mt-2 text-sm text-gray-400">{stepSubtitles[2]}</p>
-                                        <div className="mt-6 space-y-3">
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 gap-4">
                                             <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Region</label>
-                                                <select name="region" value={formData.region} onChange={handleRegionChange} disabled={!!formData.iern} className={chunkySelect}>
-                                                    <option value="">Select Region</option>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Region</label>
+                                                <select name="region" value={formData.region} onChange={handleRegionChange} className={chunkySelect}>
+                                                    <option value="">Choose Region</option>
                                                     {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Province</label>
-                                                    <select name="province" value={formData.province} onChange={handleProvinceChange} disabled={!formData.region} className={chunkySelect}>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Province</label>
+                                                    <select name="province" value={formData.province} onChange={handleProvinceChange} className={chunkySelect} disabled={!formData.region}>
                                                         <option value="">Select</option>
                                                         {provinceOptions.map(p => <option key={p}>{p}</option>)}
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Municipality</label>
-                                                    <select name="municipality" value={formData.municipality} onChange={handleCityChange} disabled={!formData.province} className={chunkySelect}>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Municipality</label>
+                                                    <select name="municipality" value={formData.municipality} onChange={handleCityChange} className={chunkySelect} disabled={!formData.province}>
                                                         <option value="">Select</option>
                                                         {cityOptions.map(c => <option key={c}>{c}</option>)}
                                                     </select>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div>
-                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Barangay</label>
-                                                    <select name="barangay" value={formData.barangay} onChange={handleChange} disabled={!formData.municipality} className={chunkySelect}>
-                                                        <option value="">Select</option>
-                                                        {barangayOptions.map(b => <option key={b}>{b}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Division</label>
-                                                    <select name="division" value={formData.division} onChange={handleDivisionChange} disabled={!formData.region} className={chunkySelect}>
-                                                        <option value="">Select</option>
-                                                        {divisionOptions.map(d => <option key={d}>{d}</option>)}
-                                                    </select>
-                                                </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Division</label>
+                                                <select name="division" value={formData.division} onChange={handleDivisionChange} className={chunkySelect} disabled={!formData.region}>
+                                                    <option value="">Select Division</option>
+                                                    {divisionOptions.map(d => <option key={d}>{d}</option>)}
+                                                </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">District</label>
-                                                    <select name="district" value={formData.district} onChange={handleChange} disabled={!formData.division} className={chunkySelect}>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">District</label>
+                                                    <select name="district" value={formData.district} onChange={handleChange} className={chunkySelect} disabled={!formData.division}>
                                                         <option value="">Select</option>
                                                         {districtOptions.map(d => <option key={d}>{d}</option>)}
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Leg. District</label>
-                                                    <select name="leg_district" value={formData.leg_district} onChange={handleChange} className={chunkySelect}>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Barangay</label>
+                                                    <select name="barangay" value={formData.barangay} onChange={handleChange} className={chunkySelect} disabled={!formData.municipality}>
                                                         <option value="">Select</option>
-                                                        {legDistrictOptions.map(l => <option key={l}>{l}</option>)}
+                                                        {barangayOptions.map(b => <option key={b}>{b}</option>)}
                                                     </select>
                                                 </div>
                                             </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Legislative District</label>
+                                                <select name="leg_district" value={formData.leg_district} onChange={handleChange} className={chunkySelect} disabled={!formData.region}>
+                                                    <option value="">Select Leg. District</option>
+                                                    {legDistrictOptions.map(l => <option key={l}>{l}</option>)}
+                                                </select>
+                                            </div>
                                         </div>
-                                    </motion.div>
+                                    </div>
                                 )}
 
-                                {/* STEP 3 */}
                                 {currentStep === 3 && (
-                                    <motion.div key="step3" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                        <h2 className="text-2xl font-bold text-gray-800">{stepQuestions[3]}</h2>
-                                        <p className="mt-2 text-sm text-gray-400">{stepSubtitles[3]}</p>
-                                        <div className="mt-6">
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Curricular Offering</label>
-                                            <select name="curricular_offering" value={formData.curricular_offering} onChange={handleChange} className={chunkySelect}>
-                                                <option value="">Select Curricular Offering...</option>
-                                                <option value="Purely Elementary">Purely Elementary</option>
-                                                <option value="Elementary School and Junior High School (K-10)">ES and JHS (K to 10)</option>
-                                                <option value="Junior High and Senior High">JHS with SHS</option>
-                                                <option value="All Offering (K to 12)">All Offering (K to 12)</option>
-                                                <option value="Purely Junior High School">Purely Junior High School</option>
-                                                <option value="Purely Senior High School">Purely Senior High School</option>
-                                            </select>
+                                    <div className="space-y-6">
+                                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Audit Category</label>
+                                        <select name="curricular_offering" value={formData.curricular_offering} onChange={handleChange} className={chunkySelect}>
+                                            <option value="">Select Category...</option>
+                                            <option value="Purely Elementary">Purely Elementary</option>
+                                            <option value="Elementary School and Junior High School (K-10)">ES and JHS (K to 10)</option>
+                                            <option value="Junior High and Senior High">JHS with SHS</option>
+                                            <option value="All Offering (K to 12)">All Offering (K to 12)</option>
+                                            <option value="Purely Junior High School">Purely Junior High School</option>
+                                            <option value="Purely Senior High School">Purely Senior High School</option>
+                                        </select>
+                                        <div className="p-5 bg-amber-50 border-2 border-amber-100 rounded-3xl flex gap-3">
+                                            <span className="text-xl">⚠️</span>
+                                            <p className="text-[13px] font-bold text-amber-800 leading-tight">This choice determines which grade levels are audited later. Choose carefully.</p>
                                         </div>
-                                        {formData.curricular_offering && (
-                                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                                                className="mt-6 bg-green-50 border-2 border-green-200 rounded-2xl p-4 flex items-center gap-3">
-                                                <div className="bg-green-100 p-2 rounded-full"><FiCheck className="text-green-600 w-5 h-5" /></div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-green-700">Selected</p>
-                                                    <p className="text-xs text-green-600">{formData.curricular_offering}</p>
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                        <div className="mt-6 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-start gap-3 text-sm text-amber-700 font-medium">
-                                            ⚠️ This selection determines which grade levels appear in the rest of your audit forms.
-                                        </div>
-                                    </motion.div>
+                                    </div>
                                 )}
 
-                                {/* STEP 4 */}
-                                {currentStep === 4 && (
-                                    <motion.div key="step4" variants={slideVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3 }}>
-                                        <h2 className="text-2xl font-bold text-gray-800">{stepQuestions[4]}</h2>
-                                        <p className="mt-2 text-sm text-gray-400">{stepSubtitles[4]}</p>
-                                        <div className="mt-6 grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Latitude</label>
-                                                <input type="number" step="any" name="latitude" value={formData.latitude} onChange={handleChange} className={chunkyInput} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Longitude</label>
-                                                <input type="number" step="any" name="longitude" value={formData.longitude} onChange={handleChange} className={chunkyInput} />
-                                            </div>
-                                        </div>
-                                        <div className="mt-4 rounded-2xl overflow-hidden border-2 border-gray-200 shadow-sm">
+                                { currentStep === 4 && (
+                                    <div className="space-y-4 pb-20">
+                                        
+                                        <div className="h-48 rounded-[2rem] overflow-hidden border-2 border-gray-100 shadow-inner relative mt-4">
                                             <LocationPickerMap
                                                 latitude={formData.latitude}
                                                 longitude={formData.longitude}
@@ -536,70 +494,58 @@ const Unit1SchoolIdentity = () => {
                                                 readOnly={false}
                                             />
                                         </div>
-                                        <div className="mt-6 bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 flex items-start gap-3">
-                                            <FiCheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0 text-blue-600" />
-                                            <p className="text-sm text-blue-700 font-medium">You are about to complete Unit 1. This will securely sync your school identity data.</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <input type="text" value={formData.latitude} disabled placeholder="Lat" className={chunkyInput + " text-sm text-center !bg-gray-50"} />
+                                            <input type="text" value={formData.longitude} disabled placeholder="Long" className={chunkyInput + " text-sm text-center !bg-gray-50"} />
                                         </div>
-                                    </motion.div>
+                                    </div>
                                 )}
-
-                            </AnimatePresence>
-                        </div>
+                            </div>
+                        </motion.div>
                     )}
                 </AnimatePresence>
             </main>
 
-            {/* Sticky Action Bar */}
+            {/* Sticky Navigation Footer */}
             {!isReviewMode && (
-                <div className="fixed bottom-0 left-0 w-full p-6 bg-white border-t border-gray-100 flex justify-center z-50">
-                    <div className="w-full max-w-md flex gap-3">
-                        {currentStep > 1 && (
-                            <motion.button initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                                onClick={handleBack}
-                                className="px-5 py-4 rounded-2xl font-bold text-gray-500 bg-gray-100 border-b-[4px] border-gray-200 active:border-b-0 active:translate-y-[4px] transition-all">
-                                Back
-                            </motion.button>
+                <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
+                    <div className="max-w-md mx-auto flex gap-3">
+                        {currentStep > 0 && (
+                            <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
                         )}
                         <button onClick={handleNext} disabled={loading || !isCurrentStepValid()}
-                            className={`flex-1 py-4 rounded-2xl text-white font-bold text-lg text-center border-b-[6px] active:border-b-0 active:translate-y-[6px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-lg
-                                ${currentStep === TOTAL_STEPS ? "bg-green-500 border-green-700" : "bg-blue-500 border-blue-700"}`}>
+                            className={`flex-1 h-16 rounded-[2rem] text-white font-black text-lg transition-all shadow-xl active:scale-98 disabled:opacity-30 disabled:scale-100
+                                ${currentStep === TOTAL_STEPS - 1 ? "bg-emerald-500 shadow-emerald-200" : "bg-blue-600 shadow-blue-200"}`}>
                             {loading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    {currentStep === TOTAL_STEPS ? "Syncing..." : "Loading..."}
-                                </span>
-                            ) : currentStep === TOTAL_STEPS ? "Complete Level ⭐" : "Continue"}
+                                <div className="flex items-center justify-center gap-2">
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <span>Syncing...</span>
+                                </div>
+                            ) : currentStep === TOTAL_STEPS - 1 ? "💾 Save Profile" : "Continue"}
                         </button>
                     </div>
                 </div>
             )}
 
-            <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="School Identity profile setup is complete! ✓" redirectUrl="/modular-dashboard" />
+            <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="School identity profile has been successfully saved to our cloud registry! ✓" redirectUrl="/modular-dashboard" />
 
             <AnimatePresence>
                 {showIernModal && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                        <motion.div initial={{ scale: 0.8, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 20 }}
-                            transition={{ type: "spring", bounce: 0.5 }}
-                            className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center relative overflow-hidden">
-                            <div className="absolute top-[-50px] left-1/2 -translate-x-1/2 w-40 h-40 bg-green-100 rounded-full blur-3xl opacity-50" />
-                            <motion.div initial={{ rotate: -180, scale: 0 }} animate={{ rotate: 0, scale: 1 }} transition={{ type: "spring", delay: 0.2 }}
-                                className="w-20 h-20 bg-green-500 rounded-full mx-auto flex items-center justify-center shadow-lg relative z-10">
-                                <span className="text-4xl">🌟</span>
-                            </motion.div>
-                            <h2 className="text-3xl font-extrabold text-gray-800 mt-6 relative z-10">School Identified!</h2>
-                            <p className="text-gray-500 mt-3 text-sm relative z-10">Your official InsightEd Educational Registry Number (IERN) is:</p>
-                            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.4 }}
-                                className="bg-gray-50 border-2 border-gray-200 rounded-2xl p-4 mt-6 relative z-10">
-                                <span className="text-4xl tracking-widest font-black text-green-600">{fetchedIern}</span>
-                            </motion.div>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-emerald-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-emerald-200 mb-6">🏷️</div>
+                            <h2 className="text-3xl font-black text-gray-900 text-center leading-tight">IERN Matched!</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">We found your official Educational Registry Number.</p>
+                            <div className="bg-gray-50 border-2 border-gray-100 rounded-[2rem] p-6 mt-8 text-center">
+                                <span className="text-4xl font-black text-emerald-600 tracking-[0.2em]">{fetchedIern}</span>
+                            </div>
                             <button onClick={() => setShowIernModal(false)}
-                                className="w-full mt-8 py-4 rounded-2xl text-white font-bold text-lg text-center bg-blue-500 border-b-[6px] border-blue-700 active:border-b-0 active:translate-y-[6px] transition-all relative z-10">
-                                Start Verification
+                                className="w-full mt-10 py-5 rounded-[2rem] bg-gray-900 text-white font-black text-xl shadow-2xl active:scale-95 transition-all">
+                                Confirm &amp; Proceed
                             </button>
                         </motion.div>
                     </motion.div>

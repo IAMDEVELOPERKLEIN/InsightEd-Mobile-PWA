@@ -12016,6 +12016,10 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
   }
 });
 
+// Auto-migrate: ensure school_head and contact_number columns exist
+pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;').catch(e => console.error("Auto-migrate school_head fail:", e.message));
+pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;').catch(e => console.error("Auto-migrate contact_number fail:", e.message));
+
 // --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
 app.post('/api/ph_schools/unit1', async (req, res) => {
   const data = req.body;
@@ -12023,8 +12027,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     const query = `
       INSERT INTO ph_schools (
         school_id, iern, school_name, region, province, municipality, barangay,
-        division, district, leg_district, curricular_offering, latitude, longitude, unit1_completed
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE)
+        division, district, leg_district, curricular_offering, latitude, longitude,
+        school_head, contact_number, unit1_completed
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, TRUE)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -12038,6 +12043,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         curricular_offering = EXCLUDED.curricular_offering,
         latitude = EXCLUDED.latitude,
         longitude = EXCLUDED.longitude,
+        school_head = EXCLUDED.school_head,
+        contact_number = EXCLUDED.contact_number,
         unit1_completed = TRUE,
         updated_at = CURRENT_TIMESTAMP;
     `;
@@ -12046,7 +12053,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.region, data.province || null, data.municipality || null, data.barangay || null,
       data.division, data.district, data.leg_district || null,
       data.curricular_offering,
-      data.latitude || null, data.longitude || null
+      data.latitude || null, data.longitude || null,
+      data.school_head || null, data.contact_number || null
     ];
     await pool.query(query, values);
 
