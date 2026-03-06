@@ -11961,12 +11961,15 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
 //               MODULAR BETA ENDPOINTS (PH_SCHOOLS)
 // ==================================================================
 
+// --- Auto-migrate: ensure unit10_completed column exists ---
+pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE').catch(e => console.error('Auto-migrate unit10_completed fail:', e.message));
+
 // --- 28. GET: Fetch Quest Progress (Modular Beta) ---
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const result = await pool.query(
-      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed, curricular_offering FROM ph_schools WHERE school_id = $1',
+      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed, unit10_completed, curricular_offering FROM ph_schools WHERE school_id = $1',
       [schoolId]
     );
 
@@ -11987,6 +11990,7 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       if (row.unit7_completed) { completedUnits.push(7); xp += 350; }
       if (row.unit8_completed) { completedUnits.push(8); xp += 400; }
       if (row.unit9_completed) { completedUnits.push(9); xp += 500; }
+      if (row.unit10_completed) { completedUnits.push(10); xp += 500; }
     }
 
     res.json({ success: true, progress: { completedUnits, xp, curricular_offering } });
@@ -12344,6 +12348,88 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
   } catch (err) {
     console.error("Save Unit 5 Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- Generic PUT: Save Arbitrary ph_schools Data (Used by Unit 9 and others) ---
+app.put('/api/ph_schools/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  const data = req.body;
+
+  try {
+    const keys = Object.keys(data);
+    if (keys.length === 0) return res.json({ success: true, message: 'No data provided' });
+
+    const setClauses = [];
+    const values = [];
+    let idx = 1;
+
+    for (const key of keys) {
+      setClauses.push(`${key} = $${idx++}`);
+      values.push(data[key]);
+    }
+    
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(schoolId);
+
+    const query = `
+      UPDATE ph_schools 
+      SET ${setClauses.join(', ')}
+      WHERE school_id = $${idx}
+      RETURNING *;
+    `;
+    const result = await pool.query(query, values);
+
+    // Auto-update school_summary instantly
+    try {
+      if (poolNew) await updateSchoolSummary(schoolId, poolNew);
+    } catch (e) { }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error("Generic School Update Error:", err);
+  }
+});
+
+// --- Unit 9: Replace eCarts Relational Table Data ---
+app.post('/api/ph_schools/unit9/:schoolId/ecarts', async (req, res) => {
+  const { schoolId } = req.params;
+  const { ecarts } = req.body;
+
+  try {
+    // 1. Fetch iern context
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const iern = sRes.rows.length > 0 ? sRes.rows[0].iern : null;
+
+    // 2. Clear old batches (Full Replacement logic)
+    await pool.query('DELETE FROM ph_ecart_batches WHERE school_id = $1', [schoolId]);
+
+    // 3. Insert new batches
+    if (ecarts && ecarts.length > 0) {
+      for (const item of ecarts) {
+        await pool.query(`
+          INSERT INTO ph_ecart_batches (
+            school_id, iern, batches_name, year_received, sources_fund,
+            ecart_laptops, ecart_tablets, ecart_tv, charging_condition, remarks
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `, [
+          schoolId, iern, 
+          item.batches_name || 'Unnamed Batch', 
+          parseInt(item.year_received) || null, 
+          item.sources_fund || null,
+          parseInt(item.ecart_laptops) || 0, 
+          parseInt(item.ecart_tablets) || 0, 
+          parseInt(item.ecart_tv) || 0,
+          item.charging_condition || null, 
+          item.remarks || null
+        ]);
+      }
+    }
+
+    res.json({ success: true, message: "eCarts synced to relational table successfully." });
+  } catch (err) {
+    console.error("eCart Relational Sync Error:", err);
+    res.status(500).json({ error: "Failed to persist eCart batches." });
   }
 });
 
@@ -12706,6 +12792,292 @@ app.post('/api/ph_schools/unit8/:schoolId', async (req, res) => {
     res.json({ success: true, message: "Unit 8 Personnel Registry finalized!" });
   } catch (err) {
     console.error("Finalize Unit 8 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// ==================================================================
+//               UNIT 10: PHYSICAL FACILITIES (MAP BUILDER)
+// ==================================================================
+
+// --- Unit 10 migrations ---
+const ensureUnit10Tables = async (client) => {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ph_buildings_inventory (
+      id SERIAL PRIMARY KEY,
+      school_id TEXT,
+      iern TEXT,
+      building_name TEXT,
+      category TEXT,
+      storey INTEGER,
+      classroom INTEGER,
+      room_length NUMERIC,
+      room_width NUMERIC,
+      year_completed INTEGER,
+      remarks TEXT,
+      status TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ph_buildings_demolition (
+      id SERIAL PRIMARY KEY,
+      school_id TEXT,
+      iern TEXT,
+      building_name TEXT,
+      room_length NUMERIC,
+      room_width NUMERIC,
+      age BOOLEAN DEFAULT FALSE,
+      safety BOOLEAN DEFAULT FALSE,
+      calamity BOOLEAN DEFAULT FALSE,
+      upgrade BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
+      id SERIAL PRIMARY KEY,
+      school_id TEXT,
+      iern TEXT,
+      building_name TEXT,
+      room_name TEXT,
+      item_name TEXT,
+      oms TEXT,
+      condition TEXT,
+      damage_ratio INTEGER,
+      recommended_action TEXT,
+      demo_justification TEXT,
+      remarks TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+};
+
+// Master Submission Handle
+app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
+  console.log(`[Unit 10 Master Submit] Initiated for schoolId: ${req.params.schoolId}`);
+  const { schoolId } = req.params;
+  const { inventory, repairs, demolitions } = req.body;
+  
+  console.log(`[Unit 10 Master Submit] Payload received:`);
+  console.log(`  - Inventory count: ${inventory ? inventory.length : 0}`);
+  console.log(`  - Repairs count: ${repairs ? repairs.length : 0}`);
+  console.log(`  - Demolitions count: ${demolitions ? demolitions.length : 0}`);
+  // console.log(`  - Full Payload:`, JSON.stringify(req.body, null, 2));
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    console.log(`[Unit 10 Master Submit] Transaction BEGIN`);
+    
+    // 0. Ensure tables exist
+    await ensureUnit10Tables(client);
+    console.log(`[Unit 10 Master Submit] Step 0: Ensure tables exist - Done`);
+    
+    // Get IERN
+    const sRes = await client.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const iern = sRes.rows.length > 0 ? sRes.rows[0].iern : null;
+    console.log(`[Unit 10 Master Submit] Fetched IERN: ${iern}`);
+
+    // 1. Clear old records
+    const resInvDel = await client.query('DELETE FROM ph_buildings_inventory WHERE school_id = $1', [schoolId]);
+    const resDemDel = await client.query('DELETE FROM ph_buildings_demolition WHERE school_id = $1', [schoolId]);
+    const resRepDel = await client.query('DELETE FROM ph_buildings_repairs WHERE school_id = $1', [schoolId]);
+    console.log(`[Unit 10 Master Submit] Step 1: Clear old records - Deleted [Inv: ${resInvDel.rowCount}, Dem: ${resDemDel.rowCount}, Rep: ${resRepDel.rowCount}]`);
+
+    // 2. Insert Inventory (Newly Built & Good Condition)
+    if (inventory && Array.isArray(inventory)) {
+      let invCount = 0;
+      for (const b of inventory) {
+        await client.query(`
+          INSERT INTO ph_buildings_inventory (
+            school_id, iern, building_name, category, storey, classroom, 
+            room_length, room_width, year_completed, remarks, status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `, [
+          schoolId, iern, b.building_name, b.category, b.storey || 1, b.classroom || 1,
+          b.room_length || 0, b.room_width || 0, b.year_completed, b.remarks, b.status
+        ]);
+        invCount++;
+      }
+      console.log(`[Unit 10 Master Submit] Step 2: Inserted ${invCount} inventory records`);
+    }
+
+    // 3. Insert repairs into ph_buildings_repairs
+    if (repairs && Array.isArray(repairs)) {
+      let repCount = 0;
+      for (const r of repairs) {
+        if (r.items && Array.isArray(r.items)) {
+          for (const itm of r.items) {
+             await client.query(`
+              INSERT INTO ph_buildings_repairs (
+                school_id, iern, building_name, room_name, item_name, 
+                condition, damage_ratio, recommended_action, demo_justification, remarks
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `, [
+              schoolId, iern, r.building_name, r.room_name, itm.item,
+              itm.condition, itm.damage_ratio || 0, itm.recommend_action, itm.demo_justification, itm.remarks
+            ]);
+            repCount++;
+          }
+        }
+      }
+      console.log(`[Unit 10 Master Submit] Step 3: Inserted ${repCount} repair records (items)`);
+    }
+
+    // 4. Insert Demolitions
+    if (demolitions && Array.isArray(demolitions)) {
+      let demCount = 0;
+      for (const d of demolitions) {
+        await client.query(`
+          INSERT INTO ph_buildings_demolition (
+            school_id, iern, building_name, room_length, room_width, 
+            age, safety, calamity, upgrade
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [
+          schoolId, iern, d.building_name, d.room_length || 0, d.room_width || 0,
+          !!d.age, !!d.safety, !!d.calamity, !!d.upgrade
+        ]);
+        demCount++;
+      }
+      console.log(`[Unit 10 Master Submit] Step 4: Inserted ${demCount} demolition records`);
+    }
+
+    // 5. Finalize Completion
+    await client.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE;');
+    await client.query('UPDATE ph_schools SET unit10_completed = TRUE WHERE school_id = $1', [schoolId]);
+    console.log(`[Unit 10 Master Submit] Step 5: Updated unit10_completed = TRUE`);
+
+    await client.query('COMMIT');
+    console.log(`[Unit 10 Master Submit] Transaction COMMIT - Success`);
+    res.json({ success: true, message: "Unit 10 Audit finalized successfully." });
+  } catch (err) {
+    if (client) {
+      await client.query('ROLLBACK');
+      console.error(`[Unit 10 Master Submit] Transaction ROLLBACK due to error`);
+    }
+    console.error("❌ Unit 10 Master Submission Error details:", err);
+    res.status(500).json({ error: "Failed to finalize Unit 10 Audit.", details: err.message });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// GET Unit 10 Phase 2 Master Data
+app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const invRes = await pool.query('SELECT * FROM ph_buildings_inventory WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+    const repRes = await pool.query('SELECT * FROM ph_buildings_repairs WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+    const demRes = await pool.query('SELECT * FROM ph_buildings_demolition WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+    
+    // Check completion status from ph_schools
+    let completed = false;
+    try {
+      const schRes = await pool.query('SELECT unit10_completed FROM ph_schools WHERE school_id = $1', [schoolId]);
+      if (schRes.rows.length > 0) {
+        completed = schRes.rows[0].unit10_completed === true;
+      }
+    } catch (e) {
+      console.warn(`Could not check unit10_completed for ${schoolId}:`, e.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        inventory: invRes.rows || [],
+        repairs: repRes.rows || [],
+        demolitions: demRes.rows || [],
+        isCompleted: completed
+      }
+    });
+
+  } catch (err) {
+    console.error(`Error fetching Unit 10 master data for ${schoolId}:`, err);
+    res.status(500).json({ error: "Failed to fetch master data" });
+  }
+});
+
+// GET spaces for a school
+app.get('/api/ph_schools/unit10/:schoolId/spaces', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM ph_school_buildable_spaces WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
+    res.json({ success: true, spaces: result.rows });
+  } catch (err) {
+    console.error("GET Unit 10 Spaces Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST a new space
+app.post('/api/ph_schools/unit10/:schoolId/spaces', async (req, res) => {
+  const { schoolId } = req.params;
+  const { iern, space_name, center_lat, center_lng, length_m, width_m, total_area_sqm } = req.body;
+  try {
+    const query = `
+      INSERT INTO ph_school_buildable_spaces 
+      (school_id, iern, space_name, center_lat, center_lng, length_m, width_m, total_area_sqm) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+      RETURNING *;
+    `;
+    const values = [schoolId, iern || null, space_name || 'New Space', center_lat, center_lng, length_m, width_m, total_area_sqm];
+    const result = await pool.query(query, values);
+    
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE;');
+    // Removed premature UPDATE unit10_completed = TRUE
+
+    res.json({ success: true, space: result.rows[0] });
+  } catch (err) {
+    console.error("POST Unit 10 Space Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// DELETE a space
+app.delete('/api/ph_schools/unit10/spaces/:spaceId', async (req, res) => {
+  const { spaceId } = req.params;
+  try {
+    await pool.query('DELETE FROM ph_school_buildable_spaces WHERE id = $1', [spaceId]);
+    res.json({ success: true, message: "Space deleted." });
+  } catch (err) {
+    console.error("DELETE Unit 10 Space Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// ==================================================================
+//               USER PROGRESS ENDPOINTS (Facade)
+// ==================================================================
+
+// GET /api/user/progress — Returns progress for the current user's school
+app.get('/api/user/progress', async (req, res) => {
+  try {
+    // This endpoint is called without a schoolId param, so return a safe default.
+    // The real source of truth is GET /api/ph_schools/progress/:schoolId.
+    res.json({ success: true, progress: { completed_units: [], xp: 0 } });
+  } catch (err) {
+    console.error("GET /api/user/progress Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /api/user/progress — Marks a unit as completed for a school
+app.post('/api/user/progress', async (req, res) => {
+  const { unitId, schoolId } = req.body;
+  try {
+    // If schoolId was provided, update the flag directly
+    if (schoolId && unitId) {
+      const col = `unit${unitId}_completed`;
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} BOOLEAN DEFAULT FALSE`);
+      await pool.query(`UPDATE ph_schools SET ${col} = TRUE WHERE school_id = $1`, [schoolId]);
+    }
+    // Always return success — the frontend treats 404 as an error that blocks navigation
+    res.json({ success: true, message: `Unit ${unitId} marked as completed.` });
+  } catch (err) {
+    console.error("POST /api/user/progress Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });

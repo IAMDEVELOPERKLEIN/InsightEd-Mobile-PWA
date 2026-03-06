@@ -107,9 +107,9 @@ const Unit9SchoolResources = () => {
     const [showEcartModal, setShowEcartModal] = useState(false);
     
     const initialEcartForm = {
-        batch_name: "", year_received: "", funding_source: "",
-        laptops_included: "", tablets_included: "", smarttvs_included: "",
-        is_included_in_phase2: false, has_charger_base: null, other_equipment: "",
+        batches_name: "", year_received: "", sources_fund: "",
+        ecart_laptops: "", ecart_tablets: "", ecart_tv: "",
+        charging_condition: "", remarks: "",
     };
     const [ecartForm, setEcartForm] = useState(initialEcartForm);
 
@@ -432,8 +432,8 @@ const Unit9SchoolResources = () => {
     };
 
     const handleSaveEcart = () => {
-        if (!ecartForm.batch_name || !ecartForm.year_received || !ecartForm.funding_source || ecartForm.has_charger_base === null) {
-            alert("Please complete required package details and the charger base toggle.");
+        if (!ecartForm.batches_name || !ecartForm.year_received || !ecartForm.sources_fund || !ecartForm.charging_condition) {
+            alert("Please complete required package details and the charging condition toggle.");
             return;
         }
         setECarts(prev => [...prev, { ...ecartForm, id: Date.now().toString() }]);
@@ -495,14 +495,15 @@ const Unit9SchoolResources = () => {
         const storedId = localStorage.getItem("schoolId");
         
         try {
-            // Compile payload
+            // Compile payload — includes unit9_completed flag so backend marks it done
             const payload = {
                 unit9_furniture: JSON.stringify({ grades: gradesData.filter(g => g.isVerified), general: generalRoomsData }),
                 unit9_ict: JSON.stringify(ictData),
                 unit9_has_ecart: hasEcart,
-                unit9_ecarts: JSON.stringify(eCarts),
+                unit9_ecarts: JSON.stringify(eCarts), // kept for backwards compatibility
                 unit9_wash: JSON.stringify(washData),
-                unit9_utilities: JSON.stringify(utilitiesData)
+                unit9_utilities: JSON.stringify(utilitiesData),
+                unit9_completed: true
             };
 
             const res = await fetch(`/api/ph_schools/${storedId}`, {
@@ -512,18 +513,26 @@ const Unit9SchoolResources = () => {
             });
 
             if (res.ok) {
-                // Determine if unit 9 is complete
-                const progRes = await fetch(`/api/user/progress`);
-                if (progRes.ok) {
-                    const progData = await progRes.json();
-                    if (progData.progress && (!progData.progress.completed_units || !progData.progress.completed_units.includes(9))) {
-                        await fetch(`/api/user/progress`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ unitId: 9 })
-                        });
+                // Secondary API call to sync eCarts with the new relational table
+                try {
+                    await fetch(`/api/ph_schools/unit9/${storedId}/ecarts`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ecarts: eCarts })
+                    });
+                } catch (e) { console.warn("Relational eCart sync failed", e); }
+
+                // Update local quest progress to unlock Unit 10
+                try {
+                    const stored = localStorage.getItem('quest_progress');
+                    let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                    if (!progress.completedUnits.includes(9)) {
+                        progress.completedUnits.push(9);
+                        progress.xp += 500;
+                        localStorage.setItem('quest_progress', JSON.stringify(progress));
                     }
-                }
+                } catch (e) { console.warn("Local progress update failed", e); }
+
                 alert("School Resources module completed and saved successfully!");
                 navigate("/modular-dashboard");
             } else {
@@ -788,8 +797,8 @@ const Unit9SchoolResources = () => {
                                                             <div className="flex items-center gap-3">
                                                                 <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center font-black">#{idx + 1}</div>
                                                                 <div>
-                                                                    <p className="font-bold text-gray-800 text-base">{item.batch_name}</p>
-                                                                    <p className="text-xs font-medium text-gray-400 mt-0.5">{item.year_received} · {item.funding_source}</p>
+                                                                    <p className="font-bold text-gray-800 text-base">{item.batches_name}</p>
+                                                                    <p className="text-xs font-medium text-gray-400 mt-0.5">{item.year_received} · {item.sources_fund} · {item.charging_condition}</p>
                                                                 </div>
                                                             </div>
                                                             <button onClick={() => deleteEcart(item.id)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"><FiTrash2 className="w-5 h-5" /></button>
@@ -1073,12 +1082,12 @@ const Unit9SchoolResources = () => {
                                 <div>
                                     <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3">Package Details</h4>
                                     <div className="space-y-3">
-                                        <div><p className="text-xs font-bold text-gray-500 mb-1 ml-1">Batch / Package Name</p><input type="text" name="batch_name" value={ecartForm.batch_name} onChange={handleEcartFormChange} placeholder="e.g. Batch 44" className={`${chunkyInput} !mt-0 !text-left !px-5`} /></div>
+                                        <div><p className="text-xs font-bold text-gray-500 mb-1 ml-1">Batch / Package Name</p><input type="text" name="batches_name" value={ecartForm.batches_name} onChange={handleEcartFormChange} placeholder="e.g. Batch 44" className={`${chunkyInput} !mt-0 !text-left !px-5`} /></div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <div><p className="text-xs font-bold text-gray-500 mb-1 ml-1">Year Received</p><input type="number" name="year_received" value={ecartForm.year_received} onChange={handleEcartFormChange} placeholder="e.g. 2021" min="1990" max="2050" className={`${chunkyInput} !mt-0`} /></div>
                                             <div>
                                                 <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Funding Source</p>
-                                                <select name="funding_source" value={ecartForm.funding_source} onChange={handleEcartFormChange} className={`${chunkySelect} !mt-0 text-base py-4.5`}>
+                                                <select name="sources_fund" value={ecartForm.sources_fund} onChange={handleEcartFormChange} className={`${chunkySelect} !mt-0 text-base py-4.5`}>
                                                     <option value="" disabled>Select...</option>
                                                     {ECART_FUNDING_SOURCES.map(src => <option key={src} value={src}>{src}</option>)}
                                                 </select>
@@ -1089,14 +1098,10 @@ const Unit9SchoolResources = () => {
 
                                 <div className="pt-2">
                                     <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3">Included Devices</h4>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">💻 Laptops</p><input type="number" name="laptops_included" value={ecartForm.laptops_included} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
-                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📱 Tablets</p><input type="number" name="tablets_included" value={ecartForm.tablets_included} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
-                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📺 Smart TVs</p><input type="number" name="smarttvs_included" value={ecartForm.smarttvs_included} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
-                                    </div>
-                                    <div onClick={() => setEcartForm(p => ({...p, is_included_in_phase2: !p.is_included_in_phase2}))} className={`mt-4 rounded-2xl p-4 border-2 flex items-start gap-3 cursor-pointer transition-colors ${ecartForm.is_included_in_phase2 ? "bg-amber-50 border-amber-300" : "bg-gray-50 border-gray-200"}`}>
-                                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${ecartForm.is_included_in_phase2 ? "bg-amber-500 border-amber-500" : "bg-white border-gray-300"}`}>{ecartForm.is_included_in_phase2 && <FiCheck className="text-white w-4 h-4" />}</div>
-                                        <div><p className={`text-sm font-bold ${ecartForm.is_included_in_phase2 ? "text-amber-800" : "text-gray-600"}`}>Double-Count Notice</p><p className={`text-xs mt-1 ${ecartForm.is_included_in_phase2 ? "text-amber-700" : "text-gray-400"}`}>Check here if these specific devices were ALREADY included in your Phase 2 Whole-School Totals.</p></div>
+                                    <div className="grid grid-cols-3 gap-3 mb-2">
+                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">💻 Laptops</p><input type="number" name="ecart_laptops" value={ecartForm.ecart_laptops} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
+                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📱 Tablets</p><input type="number" name="ecart_tablets" value={ecartForm.ecart_tablets} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
+                                        <div><p className="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">📺 Smart TVs</p><input type="number" name="ecart_tv" value={ecartForm.ecart_tv} onChange={handleEcartFormChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0`} /></div>
                                     </div>
                                 </div>
 
@@ -1104,11 +1109,11 @@ const Unit9SchoolResources = () => {
                                     <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3">Infrastructure &amp; Extras</h4>
                                     <p className="text-sm font-bold text-gray-700 mb-2">Charging Station / Base</p>
                                     <div className="flex gap-3 mb-4">
-                                        <button onClick={() => setEcartForm(p => ({...p, has_charger_base: true}))} className={`${toggleBtnBase} !text-sm !py-3 ${ecartForm.has_charger_base === true ? toggleBtnActive : toggleBtnInactive}`}>Functional</button>
-                                        <button onClick={() => setEcartForm(p => ({...p, has_charger_base: false}))} className={`${toggleBtnBase} !text-sm !py-3 ${ecartForm.has_charger_base === false ? toggleBtnActive : toggleBtnInactive}`}>Missing/Broken</button>
+                                        <button onClick={() => setEcartForm(p => ({...p, charging_condition: 'Functional'}))} className={`${toggleBtnBase} !text-sm !py-3 ${ecartForm.charging_condition === 'Functional' ? toggleBtnActive : toggleBtnInactive}`}>Functional</button>
+                                        <button onClick={() => setEcartForm(p => ({...p, charging_condition: 'Non-Functional'}))} className={`${toggleBtnBase} !text-sm !py-3 ${ecartForm.charging_condition === 'Non-Functional' ? toggleBtnActive : toggleBtnInactive}`}>Missing/Broken</button>
                                     </div>
-                                    <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Other Included Equipment <span className="font-normal">(Optional)</span></p>
-                                    <textarea name="other_equipment" value={ecartForm.other_equipment} onChange={handleEcartFormChange} placeholder="e.g. Routers, Headphones, Adapters..." className="w-full p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm font-medium text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors min-h-[100px] resize-none" />
+                                    <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Remarks / Other Equipment <span className="font-normal">(Optional)</span></p>
+                                    <textarea name="remarks" value={ecartForm.remarks} onChange={handleEcartFormChange} placeholder="e.g. Routers, Headphones, Adapters..." className="w-full p-4 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm font-medium text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors min-h-[100px] resize-none" />
                                 </div>
                             </div>
                             <div className="p-5 border-t border-gray-100 flex gap-3">

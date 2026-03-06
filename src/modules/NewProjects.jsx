@@ -202,7 +202,6 @@ const NewProjects = () => {
         municipality: '',
         legislative_district: '',
         scope_of_works: '',
-        contract_amount: '',
         bid_opening_date: '',
         resolution_award_date: '',
         procurement_stage: '',
