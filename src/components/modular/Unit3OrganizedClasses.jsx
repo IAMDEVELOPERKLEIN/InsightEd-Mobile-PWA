@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiChevronRight, FiChevronLeft, FiLayers } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 
@@ -67,6 +67,10 @@ const Unit3OrganizedClasses = () => {
 
     // Form State
     const [sectionData, setSectionData] = useState({});
+
+    // Summary & Enrollment State
+    const [isReadOnly, setIsReadOnly] = useState(false);
+    const [totalEnrollment, setTotalEnrollment] = useState(0);
 
     useEffect(() => {
         const init = async () => {
@@ -136,6 +140,15 @@ const Unit3OrganizedClasses = () => {
                             }; 
                         });
 
+                        // Calculate total enrollment from u2Parsed
+                        const tEnrollment = u2Parsed.reduce((sum, item) => {
+                            const male = parseInt(item.male_count) || 0;
+                            const female = parseInt(item.female_count) || 0;
+                            const total = parseInt(item.total) || 0;
+                            return sum + (total > 0 ? total : male + female);
+                        }, 0);
+                        setTotalEnrollment(tEnrollment);
+
                         if (d.unit3_simplified_counts) {
                             try {
                                 const parsed = typeof d.unit3_simplified_counts === 'string' 
@@ -179,7 +192,13 @@ const Unit3OrganizedClasses = () => {
                              });
                         }
                         
+                        
                         setSectionData(loadedData);
+                        
+                        // Set read-only if valid data exists
+                        if (d.unit3_simplified_counts || d.unit3_sections) {
+                            setIsReadOnly(true);
+                        }
                         
                         // Removed Multigrade loading logic
                     }
@@ -287,6 +306,94 @@ const Unit3OrganizedClasses = () => {
         return (current / total) * 100;
     }, [currentStep, totalSteps]);
 
+    const Unit3ClassesSummary = () => {
+        // Calculate Total Classes across active grades
+        const totalClasses = (availableGrades || []).reduce((sum, g) => {
+            const data = sectionData[g.id] || {};
+            return sum + (data.total_sections || 0);
+        }, 0);
+
+        const averageClassSize = totalClasses > 0 ? Math.round(totalEnrollment / totalClasses) : 0;
+
+        return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-32">
+                <div className="px-6 py-8">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <div className="w-20 h-20 bg-gradient-to-br from-teal-400 to-cyan-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-teal-200">
+                            <FiLayers className="w-10 h-10 text-white" />
+                        </div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-teal-100 text-teal-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                            Unit 3 • Organized Classes
+                        </span>
+                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Classes Summary</h1>
+                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                    </div>
+
+                    {/* Metric Cards */}
+                    <div className="grid grid-cols-2 gap-4 mb-10">
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-cyan-50 flex items-center justify-center mb-3 shadow-inner">
+                                <FiLayers className="w-6 h-6 text-cyan-600" />
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Classes</span>
+                            <span className="text-3xl font-black text-slate-800 mt-1">{totalClasses}</span>
+                        </div>
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center mb-3 shadow-inner">
+                                <FiUsers className="w-6 h-6 text-teal-600" />
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Avg Class Size</span>
+                            <span className="text-3xl font-black text-slate-800 mt-1">{averageClassSize}</span>
+                        </div>
+                    </div>
+
+                    {/* Breakdown */}
+                    <div className="space-y-6">
+                        <section>
+                            <div className="flex items-center gap-2 mb-4 ml-2">
+                                <div className="w-1 h-4 bg-teal-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Grade-by-Grade Breakdown</h3>
+                            </div>
+                            <div className="grid gap-3">
+                                {(availableGrades || []).map(g => {
+                                    const data = sectionData[g.id] || {};
+                                    if (!data.is_active) return null; // Defensive check
+                                    return (
+                                        <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                            <span className="font-bold text-slate-700 text-lg">{g.label}</span>
+                                            <div className="bg-cyan-50 px-4 py-2 rounded-xl">
+                                                <span className="font-black text-cyan-700 text-lg">{data.total_sections || 0} Sec</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    </div>
+
+                    {/* Unlock Action */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="mt-12"
+                    >
+                        <button 
+                            onClick={() => setIsReadOnly(false)}
+                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-teal-100 text-teal-700 font-black text-lg shadow-xl shadow-teal-100/50 hover:border-teal-200 hover:bg-teal-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-teal-500/0 via-teal-500/5 to-teal-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                            <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <FiUnlock className="w-5 h-5" />
+                            </div>
+                            <span>Unlock to Edit Classes</span>
+                        </button>
+                    </motion.div>
+                </div>
+            </motion.div>
+        );
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 pb-32">
@@ -312,16 +419,22 @@ const Unit3OrganizedClasses = () => {
                 </div>
 
                 {/* Progress Bar */}
-                <div className="w-full h-1 bg-slate-100">
-                    <div 
-                        className="h-full bg-indigo-500 transition-all duration-300 ease-out"
-                        style={{ width: `${progressPercent}%` }}
-                    />
-                </div>
+                {!isReadOnly && (
+                    <div className="w-full h-1 bg-slate-100">
+                        <div 
+                            className="h-full bg-indigo-500 transition-all duration-300 ease-out"
+                            style={{ width: `${progressPercent}%` }}
+                        />
+                    </div>
+                )}
             </header>
 
             <main className="max-w-md mx-auto p-5 pb-10 mt-4">
                 
+                {isReadOnly ? (
+                    <Unit3ClassesSummary />
+                ) : (
+                    <>
                 {/* Page 0 (Multigrade) Removed */}
 
 
@@ -490,10 +603,12 @@ const Unit3OrganizedClasses = () => {
                         </div>
                     </motion.div>
                 )}
+                </>
+                )}
             </main>
 
             {/* Stepper Navigation */}
-            {currentStep <= totalSteps && (
+            {(!isReadOnly && currentStep <= totalSteps) && (
                 <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-100 flex justify-center z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] px-5 py-6 pb-safe">
                     <div className="w-full max-w-md flex items-center justify-between gap-4">
                         
