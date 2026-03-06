@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown, FiUnlock } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMapEvents, useMap } from "react-leaflet";
@@ -709,11 +709,26 @@ export default function Unit10PhysicalFacilities() {
                     </div>
                 </header>
 
-                <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col pt-6 space-y-8">
+                <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col space-y-8 pb-32">
                     
+                    {/* Header */}
+                    <div className="text-center mb-6 mt-8">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-emerald-500 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                        >
+                            <span className="text-4xl">🏢</span>
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                            Unit 10 • Physical Facilities
+                        </span>
+                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Architecture Summary</h1>
+                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                    </div>
+
                     {/* 1. Top-Level Metric Cards */}
                     <div>
-                        <h2 className="text-2xl font-black text-gray-800 mb-4">Highlights ✨</h2>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
                                 <span className="text-4xl font-black text-emerald-600 mb-1">{spaces.length}</span>
@@ -858,12 +873,23 @@ export default function Unit10PhysicalFacilities() {
 
                     {/* 5. Unlock Action */}
                     <div className="pt-6 pb-4">
-                        <button 
-                            onClick={() => setIsReadOnly(false)}
-                            className="w-full bg-gray-900 text-white font-black text-lg py-5 rounded-2xl shadow-xl shadow-gray-200 border-b-[6px] border-gray-950 active:border-b-0 active:translate-y-[6px] transition-all flex justify-center items-center gap-2"
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="mt-6"
                         >
-                            🔓 Unlock to Edit Data
-                        </button>
+                            <button 
+                                onClick={() => setIsReadOnly(false)}
+                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <FiUnlock className="w-5 h-5 text-indigo-700" />
+                                </div>
+                                <span>Unlock to Edit Architecture</span>
+                            </button>
+                        </motion.div>
                         <p className="text-center text-xs font-bold text-gray-400 mt-4">Unlocking allows you to add or modify records in this specific audit unit.</p>
                     </div>
 

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom'; // Added for navigation
 import { 
     FiUsers, FiUserPlus, FiTrash2, FiEdit2, FiChevronRight, 
-    FiChevronLeft, FiPlus, FiSave, FiCheckCircle, FiArrowLeft
+    FiChevronLeft, FiPlus, FiSave, FiCheckCircle, FiArrowLeft, FiUnlock
 } from 'react-icons/fi';
 
 const Unit8PersonnelRegistry = ({ onSave, initialData, isReviewMode }) => {
@@ -39,14 +39,26 @@ const Unit8PersonnelRegistry = ({ onSave, initialData, isReviewMode }) => {
     const [formData, setFormData] = useState(initialFormState);
 
     // ── Fetch Data ────────────────────────────────────────────────────────────
+    const [internalReviewMode, setInternalReviewMode] = useState(isReviewMode || false);
+
     useEffect(() => {
         const fetchPersonnel = async () => {
             if (!storedId) return;
             try {
+                // Fetch personnel list
                 const res = await fetch(`/api/personnel/${storedId}`);
                 const result = await res.json();
                 if (result.success && result.data) {
                     setPersonnelList(result.data);
+                }
+
+                // Check unit 8 completed status
+                const schoolRes = await fetch(`/api/ph_schools/${storedId}`);
+                if (schoolRes.ok) {
+                    const saved = await schoolRes.json();
+                    if (saved.exists && saved.data && saved.data.unit8_completed) {
+                        setInternalReviewMode(true);
+                    }
                 }
             } catch (err) {
                 console.error("Error fetching personnel:", err);
@@ -318,6 +330,95 @@ const Unit8PersonnelRegistry = ({ onSave, initialData, isReviewMode }) => {
             default: return null;
         }
     };
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // RENDER
+    // ══════════════════════════════════════════════════════════════════════════
+    if (internalReviewMode) {
+        return (
+            <div className="min-h-screen bg-slate-50 pb-32">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6 py-8 pb-32 max-w-md mx-auto">
+                    {/* Header */}
+                    <div className="text-center mb-10 mt-8">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                        >
+                            <FiUsers className="w-10 h-10 text-white" />
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                            Unit 8 • Personnel Roster
+                        </span>
+                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Registry Summary</h1>
+                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                    </div>
+
+                    {/* Metric Cards Grid */}
+                    <div className="grid grid-cols-2 gap-4 mb-8">
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                👥
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Staff Listed</span>
+                            <span className="text-3xl font-black text-slate-800 mt-1">{totalStaff}</span>
+                        </div>
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                ⚖️
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Avg Load</span>
+                            <span className="text-2xl font-black text-slate-800 mt-1">{avgHrs}h {avgMins}m</span>
+                        </div>
+                    </div>
+
+                    {/* Subsections */}
+                    <div className="space-y-6">
+                        <section>
+                            <div className="flex items-center gap-2 mb-4 ml-2">
+                                <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Staff Distribution</h3>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                    <span className="text-[10px] font-black uppercase text-emerald-500 tracking-widest block mb-1">Teaching</span>
+                                    <span className="text-2xl font-black text-slate-800">{teachingCount}</span>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                    <span className="text-[10px] font-black uppercase text-orange-500 tracking-widest block mb-1">Non-Teaching</span>
+                                    <span className="text-2xl font-black text-slate-800">{nonTeachingCount}</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Note about list */}
+                        <div className="bg-blue-50/50 rounded-2xl p-5 border border-blue-100 text-center text-sm font-medium text-blue-700">
+                            The full personnel directory is securely saved. Unlock the registry to make individual additions or modifications.
+                        </div>
+                    </div>
+
+                    {/* Unlock Action */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="mt-12"
+                    >
+                        <button 
+                            onClick={() => { setInternalReviewMode(false); }}
+                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <FiUnlock className="w-5 h-5 text-indigo-700" />
+                            </div>
+                            <span>Unlock Registry</span>
+                        </button>
+                    </motion.div>
+                </motion.div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans mb-24 pb-20">

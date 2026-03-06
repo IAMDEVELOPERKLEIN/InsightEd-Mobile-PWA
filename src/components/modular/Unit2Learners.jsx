@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle } from 'react-icons/fi';
+import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import SuccessModal from '../SuccessModal';
 
@@ -549,12 +549,20 @@ const Unit2Learners = () => {
         
         return (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-700">
-                <div className="text-center mb-8">
-                    <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-600 text-[10px] font-black uppercase tracking-[0.2em] mb-4 shadow-sm border border-emerald-200">
-                        Enrollment Dashboard ✓
+                {/* Header */}
+                <div className="text-center mb-10 mt-8">
+                    <motion.div 
+                        initial={{ scale: 0 }} 
+                        animate={{ scale: 1 }} 
+                        className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-emerald-500 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                    >
+                        <span className="text-4xl">👥</span>
+                    </motion.div>
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-200">
+                        Unit 2 • Learners
                     </span>
-                    <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">Master Summary</h1>
-                    <p className="text-slate-500 font-medium italic">Current official records for this academic year.</p>
+                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Enrollment Dashboard</h1>
+                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
                 </div>
 
                 {/* Stat Cards */}
@@ -609,16 +617,25 @@ const Unit2Learners = () => {
                     })}
                 </div>
 
-                {/* Unlock Button */}
-                <div className="border-t-2 border-slate-100 pt-8 mt-12 pb-20">
+                {/* Unlock Action */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="mt-12 mb-12"
+                >
                     <button 
                         onClick={() => setIsReadOnly(false)}
-                        className="w-full flex items-center justify-center gap-3 py-6 rounded-3xl bg-slate-900 shadow-2xl shadow-slate-200 text-white font-black text-lg active:scale-95 transition-all"
+                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
                     >
-                        <span>🔓</span> Unlock to Edit Enrollment
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <FiUnlock className="w-5 h-5 text-indigo-700" />
+                        </div>
+                        <span>Unlock to Edit Enrollment</span>
                     </button>
                     <p className="text-center text-slate-400 text-xs font-bold mt-4 uppercase tracking-[0.2em]">Authorized Access Only</p>
-                </div>
+                </motion.div>
             </motion.div>
         );
     };

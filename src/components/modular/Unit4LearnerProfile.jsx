@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiCheck, FiActivity } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiCheck, FiActivity, FiUnlock } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 
@@ -465,132 +465,136 @@ const Unit4LearnerProfile = () => {
         const repSum  = sumMove("repeater");
 
         return (
-            <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-gray-100 p-6 pb-32">
-                <header className="max-w-xl mx-auto flex items-center justify-between mb-10">
-                    <button onClick={() => navigate("/modular-dashboard")} className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100 hover:bg-slate-50 transition-all text-slate-400">
-                        <FiChevronLeft className="w-6 h-6" />
-                    </button>
-                    <div className="text-right">
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Unit 4 Profile</span>
-                        <h2 className="text-xl font-black text-slate-800">Record Summary</h2>
-                    </div>
-                </header>
-
-                <main className="max-w-xl mx-auto space-y-6">
-                    {/* Header Card */}
-                    <div className="bg-white p-8 rounded-[2.5rem] border-4 border-slate-50 shadow-2xl shadow-slate-200/40 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 opacity-50" />
-                        <div className="relative z-10 flex items-center gap-6">
-                            <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center text-4xl text-white shadow-xl shadow-indigo-100">
-                                <FiUsers />
-                            </div>
-                            <div>
-                                <h1 className="text-3xl font-black text-slate-800 leading-tight">Learner Profile</h1>
-                                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-1">Status: Registered ✓</p>
-                            </div>
-                        </div>
+            <div className="min-h-screen bg-gray-50 pb-32">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6 py-8 pb-32 max-w-md mx-auto">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-violet-400 to-fuchsia-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-fuchsia-200"
+                        >
+                            <FiUsers className="w-10 h-10 text-white" />
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-fuchsia-100 text-fuchsia-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                            Unit 4 • Learner Profile
+                        </span>
+                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Profile Summary</h1>
+                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-50 shadow-xl shadow-slate-200/20">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Total Enrolled</span>
-                            <div className="flex items-end gap-2 text-indigo-600">
-                                <span className="text-3xl font-black">{totalEnrolled}</span>
-                                <span className="text-xs font-bold mb-1 opacity-60">Learners</span>
+                    {/* Metric Cards Grid */}
+                    <div className="grid grid-cols-2 gap-4 mb-8">
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
+                                <FiUsers className="w-6 h-6 text-indigo-600" />
                             </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Enrolled</span>
+                            <span className="text-3xl font-black text-slate-800 mt-1">{enrollmentTotal}</span>
                         </div>
-                        <div className="bg-white p-6 rounded-[2rem] border-4 border-slate-50 shadow-xl shadow-slate-200/20">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Groups Tracked</span>
-                            <div className="flex items-end gap-2 text-violet-600">
-                                <span className="text-3xl font-black">{displayGroups.length}</span>
-                                <span className="text-xs font-bold mb-1 opacity-60">Profiles</span>
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center mb-3 shadow-inner">
+                                <span className="text-xl">🗂️</span>
                             </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Groups Tracked</span>
+                            <span className="text-3xl font-black text-slate-800 mt-1">{displayGroups.length}</span>
                         </div>
                     </div>
 
-                    {/* Community Groups */}
-                    <div className="bg-white p-8 rounded-[2.5rem] border-4 border-slate-50 shadow-xl shadow-slate-200/20">
-                        <div className="flex items-center gap-3 mb-6">
-                            <span className="text-2xl">🗂️</span>
-                            <h3 className="text-lg font-black text-slate-800">Special Groups</h3>
-                        </div>
-                        <div className="space-y-3">
-                            {displayGroups.length === 0 ? (
-                                <p className="text-slate-400 italic text-sm py-4 text-center">No community groups were reported.</p>
-                            ) : (
-                                displayGroups.map(g => {
-                                    const total = g.id === 'als' 
-                                        ? (parseInt(savedData?.als_total) || 0)
-                                        : dynamicGrades.reduce((sum, gr) => sum + (parseInt(savedData?.[`${g.id}_${gr.id}`]) || 0), 0);
-                                    return (
-                                        <div key={g.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 hover:border-indigo-100 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-lg">{g.icon}</span>
-                                                <span className="font-bold text-slate-700">{g.label}</span>
+                    {/* Subsections */}
+                    <div className="space-y-6">
+                        <section>
+                            <div className="flex items-center gap-2 mb-4 ml-2">
+                                <div className="w-1 h-4 bg-fuchsia-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Special Groups</h3>
+                            </div>
+                            <div className="grid gap-3">
+                                {displayGroups.length === 0 ? (
+                                    <div className="bg-white rounded-2xl p-4 border border-slate-50 text-center shadow-sm">
+                                        <span className="text-slate-400 font-medium italic text-sm">No special groups reported.</span>
+                                    </div>
+                                ) : (
+                                    displayGroups.map(g => {
+                                        const total = g.id === 'als' 
+                                            ? (parseInt(savedData?.als_total) || 0)
+                                            : dynamicGrades.reduce((sum, gr) => sum + (parseInt(savedData?.[`${g.id}_${gr.id}`]) || 0), 0);
+                                        return (
+                                            <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-2xl">{g.icon}</span>
+                                                    <span className="font-bold text-slate-700 text-lg">{g.label}</span>
+                                                </div>
+                                                <div className="bg-fuchsia-50 px-3 py-1.5 rounded-xl">
+                                                    <span className="font-black text-fuchsia-700">{total}</span>
+                                                </div>
                                             </div>
-                                            <span className="font-black text-xl text-indigo-500">{total}</span>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </section>
+
+                        <section>
+                            <div className="flex items-center gap-2 mb-4 ml-2">
+                                <div className="w-1 h-4 bg-blue-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Learner Activity</h3>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest block mb-1">Dropouts</span>
+                                    <span className="text-2xl font-black text-slate-800">{dropSum}</span>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                    <span className="text-[10px] font-black uppercase text-orange-400 tracking-widest block mb-1">Repeaters</span>
+                                    <span className="text-2xl font-black text-slate-800">{repSum}</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section>
+                            <div className="bg-gradient-to-br from-emerald-500 to-teal-500 p-[3px] rounded-3xl shadow-sm mt-6">
+                                <div className="bg-white rounded-[1.4rem] p-5">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-lg">🥗</span>
+                                            <span className="font-black text-slate-700 text-sm">Health Profile</span>
                                         </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Activity */}
-                    <div className="bg-white p-8 rounded-[2.5rem] border-4 border-slate-50 shadow-xl shadow-slate-200/20">
-                        <div className="flex items-center gap-3 mb-6">
-                            <span className="text-2xl">🚶</span>
-                            <h3 className="text-lg font-black text-slate-800">Learner Activity</h3>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="p-5 bg-blue-50/50 rounded-2xl border-2 border-blue-100">
-                                <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest block mb-1">Total Dropouts</span>
-                                <span className="text-2xl font-black text-blue-600">{dropSum}</span>
-                            </div>
-                            <div className="p-5 bg-indigo-50/50 rounded-2xl border-2 border-indigo-100">
-                                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-1">Total Repeaters</span>
-                                <span className="text-2xl font-black text-indigo-600">{repSum}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Health */}
-                    <div className="bg-gradient-to-br from-emerald-500 to-teal-500 p-[3px] rounded-[2.2rem] shadow-xl shadow-emerald-100">
-                        <div className="bg-white p-8 rounded-[2rem]">
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">🥗</span>
-                                    <h3 className="text-lg font-black text-slate-800">Health Profile</h3>
-                                </div>
-                                <div className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Calculated</div>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                                        <span className="text-xs font-bold text-slate-400">Normal Body Mass Index</span>
                                     </div>
-                                    <p className="text-2xl font-black text-slate-700 tracking-tight">{savedData?.bmi_normal || 0} Learners</p>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-4xl font-black text-emerald-600 leading-none">
-                                        {enrollmentTotal > 0 ? (((savedData?.bmi_normal || 0) / enrollmentTotal) * 100).toFixed(0) : 0}%
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Normal BMI</span>
+                                            <span className="text-xl font-black text-slate-800">{savedData?.bmi_normal || 0}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-2xl font-black text-emerald-600">
+                                                {enrollmentTotal > 0 ? (((savedData?.bmi_normal || 0) / enrollmentTotal) * 100).toFixed(0) : 0}%
+                                            </span>
+                                        </div>
                                     </div>
-                                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Prevalence</span>
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     </div>
 
-                    <button
-                        onClick={() => { setIsReviewMode(false); setCurrentChapter(1); }}
-                        className="w-full h-16 rounded-[2rem] bg-indigo-600 text-white font-black text-xl border-b-[6px] border-indigo-800 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-100 uppercase tracking-widest"
+                    {/* Unlock Action */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="mt-12"
                     >
-                        Update Record
-                    </button>
-                    <p className="text-center text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] pb-10">Last Updated: {new Date().toLocaleDateString()}</p>
-                </main>
+                        <button 
+                            onClick={() => { setIsReviewMode(false); setCurrentChapter(1); }}
+                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-fuchsia-100 text-fuchsia-700 font-black text-lg shadow-xl shadow-fuchsia-100/50 hover:border-fuchsia-200 hover:bg-fuchsia-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/0 via-fuchsia-500/5 to-fuchsia-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                            <div className="w-10 h-10 rounded-xl bg-fuchsia-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <FiUnlock className="w-5 h-5 text-fuchsia-700" />
+                            </div>
+                            <span>Unlock to Edit Profile</span>
+                        </button>
+                    </motion.div>
+                </motion.div>
             </div>
         );
     }

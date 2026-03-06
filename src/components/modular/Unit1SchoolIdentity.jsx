@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock } from "react-icons/fi";
 import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
@@ -336,35 +336,92 @@ const Unit1SchoolIdentity = () => {
             <main className="flex-1 relative overflow-y-auto px-6 pt-4 pb-32">
                 <AnimatePresence mode="wait">
                     {isReviewMode ? (
-                        <motion.div key="review" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md mx-auto space-y-6">
-                            <div className="bg-emerald-50 rounded-[2.5rem] p-8 text-center border-2 border-emerald-100 shadow-sm">
-                                <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-200">
-                                    <FiCheck className="w-10 h-10 text-white" />
-                                </div>
-                                <h1 className="text-3xl font-black text-gray-900 leading-tight">Identity Verified</h1>
-                                <p className="text-emerald-700 font-medium mt-2">School profile is up to date.</p>
+                        <motion.div key="review" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md mx-auto pb-32">
+                            {/* Header */}
+                            <div className="text-center mb-10">
+                                <motion.div 
+                                    initial={{ scale: 0 }} 
+                                    animate={{ scale: 1 }} 
+                                    className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                                >
+                                    <span className="text-4xl">🏢</span>
+                                </motion.div>
+                                <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                                    Unit 1 • School Identity
+                                </span>
+                                <h1 className="text-4xl font-black text-slate-800 leading-tight">Profile Summary</h1>
+                                <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
                             </div>
 
-                            <div className="bg-white rounded-[2.5rem] border-2 border-gray-100 p-6 space-y-4 shadow-sm">
-                                {[
-                                    { l: "School Name", v: formData.school_name, i: "🏫" },
-                                    { l: "IERN", v: formData.iern || "N/A", i: "📄" },
-                                    { l: "Division", v: formData.division, i: "🗂️" }
-                                ].map(item => (
-                                    <div key={item.l} className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-xl shadow-inner">{item.i}</div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">{item.l}</p>
-                                            <p className="text-base font-bold text-gray-800 truncate">{item.v}</p>
+                            {/* Metric Cards Grid */}
+                            <div className="grid grid-cols-2 gap-4 mb-8">
+                                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                        📄
+                                    </div>
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">School ID</span>
+                                    <span className="text-2xl font-black text-slate-800 mt-1">{formData.school_id || "N/A"}</span>
+                                </div>
+                                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                                    <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                        🏷️
+                                    </div>
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">IERN</span>
+                                    <span className="text-2xl font-black text-slate-800 mt-1">{formData.iern || "N/A"}</span>
+                                </div>
+                            </div>
+
+                            {/* Detailed Breakdown */}
+                            <div className="space-y-6">
+                                <section>
+                                    <div className="flex items-center gap-2 mb-4 ml-2">
+                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Registry Details</h3>
+                                    </div>
+                                    <div className="grid gap-3">
+                                        <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                            <div className="flex flex-col max-w-[70%]">
+                                                <span className="font-bold text-slate-700 text-lg line-clamp-1">{formData.school_name || "N/A"}</span>
+                                                <span className="text-[10px] text-slate-400 font-medium uppercase">Official Name</span>
+                                            </div>
+                                            <div className="bg-indigo-50 px-3 py-2 rounded-xl text-center">
+                                                <span className="text-xl">🏫</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-slate-700">{formData.division || "N/A"}</span>
+                                                <span className="text-[10px] text-slate-400 font-medium uppercase">Division</span>
+                                            </div>
+                                            <div className="bg-purple-50 px-3 py-2 rounded-xl">
+                                                <span className="font-black text-purple-700 text-sm">{formData.region || "Req"}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                ))}
+                                </section>
                             </div>
-                            
-                            <button onClick={() => { setIsReviewMode(false); setCurrentStep(0); }}
-                                className="w-full py-5 rounded-3xl bg-gray-900 text-white font-black text-lg shadow-xl shadow-gray-200 active:scale-98 transition-all flex items-center justify-center gap-3">
-                                <FiEdit2 className="w-5 h-5" /> Update Identity
-                            </button>
+
+                            {/* Unlock Action */}
+                            <motion.div 
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.3 }}
+                                className="mt-12"
+                            >
+                                <button 
+                                    onClick={() => { setIsReviewMode(false); setCurrentStep(0); }}
+                                    className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <FiUnlock className="w-5 h-5 text-indigo-700" />
+                                    </div>
+                                    <span>Unlock to Edit Identity</span>
+                                </button>
+                                <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4">
+                                    Note: Unlocking will allow you to update demographic targets.
+                                </p>
+                            </motion.div>
                         </motion.div>
                     ) : (
                         <motion.div key={currentStep} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.4, ease: "circOut" }}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTriangle, FiMonitor, FiRadio, FiBook, FiLayers } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTriangle, FiMonitor, FiRadio, FiBook, FiLayers, FiUnlock } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 
@@ -264,98 +264,124 @@ const Unit5ShiftingModality = () => {
     // ══════════════════════════════════════════════
     if (isReviewMode) {
         return (
-            <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-gray-50 to-gray-200 flex flex-col font-sans">
-                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                    <div className="max-w-md mx-auto flex items-center gap-3">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiX className="w-6 h-6" />
-                        </button>
-                        <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
-                            <div className="h-full w-full bg-indigo-500 rounded-full" />
+            <div className="min-h-screen bg-gray-50 pb-32">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6 py-8 pb-32 max-w-md mx-auto">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-orange-400 to-red-500 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-orange-200"
+                        >
+                            <FiClock className="w-10 h-10 text-white" />
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                            Unit 5 • Modality Profile
+                        </span>
+                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Shifting Summary</h1>
+                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                    </div>
+
+                    {/* Metric Cards Grid */}
+                    <div className="grid grid-cols-2 gap-4 mb-8">
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center mb-3 shadow-inner">
+                                <span className="text-xl">🏫</span>
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Base Setup</span>
+                            <span className="text-xl font-black text-slate-800 mt-1">
+                                {hasStandardShifting ? "Standard" : "Mixed"}
+                            </span>
+                        </div>
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mb-3 shadow-inner">
+                                <FiAlertTriangle className="w-6 h-6 text-red-600" />
+                            </div>
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Emergency ADMs</span>
+                            <span className="text-xl font-black text-slate-800 mt-1">
+                                {hasAdms ? "Active Tracker" : "None Utilized"}
+                            </span>
                         </div>
                     </div>
-                </header>
 
-                <main className="flex-1 overflow-y-auto pb-28">
-                    <motion.div initial={{ opacity: 0, y: 30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-w-md w-full mx-auto mt-10 px-6">
-                        
-                        <div className="text-center mb-6">
-                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5 }}
-                                className="w-16 h-16 bg-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-indigo-200">
-                                <FiCheckCircle className="w-8 h-8 text-white" />
-                            </motion.div>
-                            <h2 className="text-2xl font-black text-gray-800">Unit 5 Complete!</h2>
-                        </div>
-
-                        <div className="space-y-4">
-                            {/* Recap Summary */}
-                            <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-                                <div className="h-2 bg-indigo-400" />
-                                <div className="px-6 py-5">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">Saved Setup</p>
-
-                                    {hasStandardShifting ? (
-                                        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl px-4 py-4 text-center">
-                                            <p className="font-bold text-indigo-700 text-lg mb-1">Standard Setup 🏫</p>
-                                            <p className="text-sm font-medium text-indigo-600">100% Single Shift &amp; In-Person</p>
-                                        </div>
-                                    ) : (
-                                        <div className="bg-orange-50 border border-orange-200 rounded-2xl px-4 py-4 text-center">
-                                            <p className="font-bold text-orange-700 text-lg mb-1">Mixed Schedule ⚙️</p>
-                                            <p className="text-sm font-medium text-orange-600">Grade-by-Grade mapping configured.</p>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-list of grades if mixed */}
-                                    {!hasStandardShifting && (
-                                        <div className="mt-4 space-y-2">
-                                            {activeGrades.map(g => (
-                                                <div key={g.key} className="flex flex-col bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">
-                                                    <span className="text-sm font-black text-gray-700">{g.label}</span>
-                                                    <div className="flex gap-2">
-                                                        <span className="text-xs font-bold text-indigo-500">{mapData[`shift_${g.key}`]}</span>
-                                                        <span className="text-xs text-gray-400">•</span>
-                                                        <span className="text-xs font-bold text-emerald-500">{mapData[`mode_${g.key}`]}</span>
-                                                    </div>
+                    {/* Detailed Breakdown */}
+                    <div className="space-y-6">
+                        <section>
+                            <div className="flex items-center gap-2 mb-4 ml-2">
+                                <div className="w-1 h-4 bg-orange-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Schedule Mapping</h3>
+                            </div>
+                            
+                            {hasStandardShifting ? (
+                                <div className="bg-white rounded-2xl p-6 border border-slate-50 text-center shadow-sm">
+                                    <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <FiCheckCircle className="w-8 h-8 text-emerald-500" />
+                                    </div>
+                                    <h4 className="font-black text-slate-800 text-lg mb-1">100% Homogeneous</h4>
+                                    <p className="text-sm font-medium text-slate-500">All grades strictly track Single Shift and In-Person classes.</p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {activeGrades.map(g => (
+                                        <div key={g.key} className="bg-white rounded-2xl p-4 border border-slate-50 flex flex-col shadow-sm">
+                                            <span className="font-bold text-slate-700 text-lg mb-2 pl-1 border-l-4 border-orange-400">{g.label}</span>
+                                            <div className="flex gap-2">
+                                                <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                                                    <span className="font-bold text-slate-600 text-xs uppercase">{mapData[`shift_${g.key}`]}</span>
                                                 </div>
-                                            ))}
+                                                <div className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                                                    <span className="font-bold text-indigo-600 text-xs uppercase">{mapData[`mode_${g.key}`]}</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                    )}
+                                    ))}
+                                </div>
+                            )}
+                        </section>
 
-                                    {/* ADMs */}
-                                    <div className="mt-6 border-t-2 border-dashed border-gray-100 pt-4">
-                                        <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Emergency ADMs</p>
-                                        {hasAdms ? (
-                                            <div className="flex flex-wrap gap-2">
-                                                {Object.entries(admData).map(([k, v]) => {
-                                                    if (!v) return null;
-                                                    const match = ADM_CARDS.find(c => c.id === k);
-                                                    return (
-                                                        <div key={k} className="bg-emerald-50 text-emerald-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-emerald-200">
-                                                            {match?.label}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        ) : (
-                                            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-center">
-                                                <p className="font-bold text-gray-500 text-sm">None utilized</p>
-                                            </div>
-                                        )}
+                        {hasAdms && (
+                            <section>
+                                <div className="flex items-center gap-2 mb-4 ml-2">
+                                    <div className="w-1 h-4 bg-red-500 rounded-full" />
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Active ADMs</h3>
+                                </div>
+                                <div className="bg-white rounded-2xl p-5 border border-slate-50 shadow-sm">
+                                    <div className="flex flex-wrap gap-2">
+                                        {Object.entries(admData).map(([k, v]) => {
+                                            if (!v) return null;
+                                            const match = ADM_CARDS.find(c => c.id === k);
+                                            return (
+                                                <div key={k} className="bg-red-50 text-red-700 font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-2">
+                                                    {match?.icon && <span className="scale-75">{match.icon}</span>}
+                                                    {match?.label}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                            </section>
+                        )}
+                    </div>
 
-                        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                    {/* Unlock Action */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="mt-12"
+                    >
+                        <button 
                             onClick={() => { setIsReviewMode(false); setCurrentChapter(1); setIsVerified(false); }}
-                            className="mt-6 mb-8 w-full py-5 rounded-2xl font-black text-lg tracking-wide bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-200 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all flex items-center justify-center gap-3"
+                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-orange-100 text-orange-700 font-black text-lg shadow-xl shadow-orange-100/50 hover:border-orange-200 hover:bg-orange-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
                         >
-                            <FiEdit2 className="w-5 h-5" />
-                            Unlock &amp; Edit Data
-                        </motion.button>
+                            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/0 via-orange-500/5 to-orange-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <FiUnlock className="w-5 h-5 text-orange-700" />
+                            </div>
+                            <span>Unlock to Edit Modality</span>
+                        </button>
                     </motion.div>
-                </main>
+                </motion.div>
             </div>
         );
     }

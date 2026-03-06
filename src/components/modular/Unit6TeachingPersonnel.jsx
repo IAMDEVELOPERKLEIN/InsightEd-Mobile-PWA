@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2 } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiUnlock } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 
@@ -367,58 +367,109 @@ const Unit6TeachingPersonnel = () => {
 
                 {/* ── REVIEW MODE ───────────────────────────────────────────── */}
                 {isReviewMode ? (
-                    <motion.div key="review-tp" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }} transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}
-                        className="max-w-md w-full mx-auto mt-10 px-6"
-                    >
-                        <div className="text-center mb-6">
-                            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-                                transition={{ delay: 0.2, type: "spring", bounce: 0.5 }}
-                                className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-200">
-                                <FiCheckCircle className="w-8 h-8 text-white" />
+                    <motion.div key="review-tp" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-md mx-auto pb-32">
+                        {/* Header */}
+                        <div className="text-center mb-10 px-6 mt-8">
+                            <motion.div 
+                                initial={{ scale: 0 }} 
+                                animate={{ scale: 1 }} 
+                                className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-emerald-200"
+                            >
+                                <span className="text-4xl">👨‍🏫</span>
                             </motion.div>
-                            <h2 className="text-2xl font-black text-gray-800">Teaching Personnel Complete!</h2>
-                            <p className="text-sm text-gray-400 mt-1">Personnel data has been saved.</p>
+                            <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                                Unit 6 • Teaching Staff
+                            </span>
+                            <h1 className="text-4xl font-black text-slate-800 leading-tight">Personnel Summary</h1>
+                            <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
                         </div>
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
-                            className="bg-white rounded-3xl shadow-xl shadow-gray-100/80 border border-gray-100 overflow-hidden">
-                            <div className="h-2 bg-emerald-400" />
-                            <div className="px-6 py-5 space-y-4">
-                                <div className="flex items-center justify-between bg-green-50 rounded-2xl px-4 py-3 border-2 border-green-100">
-                                    <span className="font-bold text-green-700">Total Staff</span>
-                                    <span className="text-3xl font-black text-green-600">{totalFunding}</span>
+
+                        {/* Metric Cards Grid */}
+                        <div className="grid grid-cols-2 gap-4 mb-8 px-6">
+                            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                    🌟
                                 </div>
-                                {/* Funding Breakdown */}
-                                <div className="space-y-2">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-gray-300">Funding Source</p>
-                                    {[{ l: "DepEd", v: formData.fund_deped }, { l: "LGU", v: formData.fund_lgu }, { l: "Others", v: formData.fund_others }]
-                                        .filter(i => pInt(i.v) > 0).map(i => (
-                                        <div key={i.l} className="flex justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-2">
-                                            <span className="text-sm font-semibold text-blue-700">{i.l}</span>
-                                            <span className="font-black text-blue-600">{pInt(i.v)}</span>
-                                        </div>
-                                    ))}
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Staff</span>
+                                <span className="text-3xl font-black text-slate-800 mt-1">{totalFunding}</span>
+                            </div>
+                            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                                <div className="w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                    🏢
                                 </div>
-                                {/* Grade Deployment */}
-                                <div className="space-y-2">
-                                    <p className="text-xs font-bold uppercase tracking-wider text-gray-300">Grade Deployment</p>
-                                    <div className="flex justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2">
-                                        <span className="text-sm font-semibold text-indigo-700">Total Deployed</span>
-                                        <span className="font-black text-indigo-600">{totalDeployment}</span>
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Dept. Base</span>
+                                <span className="text-3xl font-black text-slate-800 mt-1">{pInt(formData.fund_deped)}</span>
+                            </div>
+                        </div>
+
+                        {/* Subsections */}
+                        <div className="space-y-6 px-6">
+                            {(pInt(formData.fund_lgu) > 0 || pInt(formData.fund_others) > 0) && (
+                                <section>
+                                    <div className="flex items-center gap-2 mb-4 ml-2">
+                                        <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Supplemental Funding</h3>
+                                    </div>
+                                    <div className="grid gap-3">
+                                        {pInt(formData.fund_lgu) > 0 && (
+                                            <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                                <span className="font-bold text-slate-700">LGU Funded</span>
+                                                <div className="bg-emerald-50 px-3 py-1.5 rounded-xl">
+                                                    <span className="font-black text-emerald-700 text-sm">{formData.fund_lgu}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {pInt(formData.fund_others) > 0 && (
+                                            <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                                <span className="font-bold text-slate-700">Other Sources</span>
+                                                <div className="bg-emerald-50 px-3 py-1.5 rounded-xl">
+                                                    <span className="font-black text-emerald-700 text-sm">{formData.fund_others}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
+
+                            <section>
+                                <div className="flex items-center gap-2 mb-4 ml-2">
+                                    <div className="w-1 h-4 bg-teal-500 rounded-full" />
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Workforce Stats</h3>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                        <span className="text-[10px] font-black uppercase text-teal-400 tracking-widest block mb-1">Deployed</span>
+                                        <span className="text-2xl font-black text-slate-800">{totalDeployment}</span>
+                                    </div>
+                                    <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                        <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest block mb-1">By Exp.</span>
+                                        <span className="text-2xl font-black text-slate-800">{totalExperience}</span>
                                     </div>
                                 </div>
-                                {/* Experience Total */}
-                                <div className="flex items-center justify-between bg-purple-50 rounded-xl px-4 py-2 border border-purple-100">
-                                    <span className="text-sm font-semibold text-purple-700">By Experience Brackets</span>
-                                    <span className="font-black text-purple-600">{totalExperience}</span>
+                            </section>
+                        </div>
+
+                        {/* Unlock Action */}
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="mt-12 px-6"
+                        >
+                            <button 
+                                onClick={() => { setIsReviewMode(false); setCurrentStep(1); }}
+                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-emerald-100 text-emerald-700 font-black text-lg shadow-xl shadow-emerald-100/50 hover:border-emerald-200 hover:bg-emerald-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-emerald-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <FiUnlock className="w-5 h-5 text-emerald-700" />
                                 </div>
-                            </div>
+                                <span>Unlock to Edit Staff Info</span>
+                            </button>
+                            <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4">
+                                Note: Unlocking will require re-saving data.
+                            </p>
                         </motion.div>
-                        <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
-                            onClick={() => { setIsReviewMode(false); setCurrentStep(1); }}
-                            className="mt-6 w-full py-5 rounded-2xl font-black text-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-200 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all flex items-center justify-center gap-3">
-                            <FiEdit2 className="w-5 h-5" /> Unlock & Edit Data
-                        </motion.button>
                     </motion.div>
                 ) : (
 
