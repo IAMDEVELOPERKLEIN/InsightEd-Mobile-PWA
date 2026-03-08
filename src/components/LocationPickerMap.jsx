@@ -137,13 +137,7 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, disabled = f
                 )}
             </MapContainer>
 
-            {disabled && (
-                <div className="absolute inset-0 bg-gray-100/50 z-[1000] flex items-center justify-center cursor-not-allowed">
-                    <span className="bg-white/80 px-4 py-2 rounded-full font-bold text-gray-500 shadow-sm backdrop-blur-sm">
-                        Map Interaction Disabled
-                    </span>
-                </div>
-            )}
+            {/* Disabled Overlay Removed to allow Panning/Zooming but keep Marker Read-Only */}
         </div>
     );
 };

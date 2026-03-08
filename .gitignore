@@ -32,3 +32,5 @@ full_backup_neon.sql
 scripts/migrate_db.ps1
 source_schema.json
 dummy_credentials.json
+all_columns.json
+output_cmd.txt

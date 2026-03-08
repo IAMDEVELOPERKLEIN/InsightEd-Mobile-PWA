@@ -1071,32 +1071,37 @@ const Register = () => {
                                             {/* ASSIGNMENT */}
                                             <div className="space-y-3">
                                                 <label className="text-xs font-bold text-teal-700 uppercase">Assignment</label>
-                                                <select
-                                                    name="region"
-                                                    onChange={handleRegionChange}
-                                                    value={formData.region}
-                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
-                                                    required
-                                                >
-                                                    <option value="">Select Region</option>
-                                                    {regions.map((reg) => (
-                                                        <option key={reg} value={reg}>{reg}</option>
-                                                    ))}
-                                                </select>
+                                                
+                                                {formData.role !== 'EFD' && (
+                                                    <>
+                                                        <select
+                                                            name="region"
+                                                            onChange={handleRegionChange}
+                                                            value={formData.region}
+                                                            className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
+                                                            required
+                                                        >
+                                                            <option value="">Select Region</option>
+                                                            {regions.map((reg) => (
+                                                                <option key={reg} value={reg}>{reg}</option>
+                                                            ))}
+                                                        </select>
 
-                                                <select
-                                                    name="division"
-                                                    onChange={handleChange}
-                                                    value={formData.division}
-                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
-                                                    disabled={!formData.region}
-                                                    required
-                                                >
-                                                    <option value="">Select Division</option>
-                                                    {divisions.map(div => (
-                                                        <option key={div} value={div}>{div}</option>
-                                                    ))}
-                                                </select>
+                                                        <select
+                                                            name="division"
+                                                            onChange={handleChange}
+                                                            value={formData.division}
+                                                            className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                                                            disabled={!formData.region}
+                                                            required
+                                                        >
+                                                            <option value="">Select Division</option>
+                                                            {divisions.map(div => (
+                                                                <option key={div} value={div}>{div}</option>
+                                                            ))}
+                                                        </select>
+                                                    </>
+                                                )}
 
                                                 <select
                                                     name="position"

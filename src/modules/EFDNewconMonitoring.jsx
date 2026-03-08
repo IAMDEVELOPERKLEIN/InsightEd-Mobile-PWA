@@ -118,21 +118,21 @@ const EFDNewconMonitoring = () => {
 
                     <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden flex flex-col flex-1">
                         {/* Panel Header */}
-                        <div className="bg-gradient-to-r from-amber-500 to-yellow-500 px-8 py-6 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 rounded-2xl text-white">
+                        <div className="bg-gradient-to-r from-amber-500 to-yellow-500 px-6 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                                <div className="p-3 bg-white/20 rounded-2xl text-white shrink-0">
                                     <FiAlertCircle size={24} />
                                 </div>
-                                <div>
-                                    <h3 className="text-white font-black text-2xl">Masterlist</h3>
-                                    <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest">{rows.length} Total Projects Tracked</p>
+                                <div className="min-w-0">
+                                    <h3 className="text-white font-black text-xl sm:text-2xl truncate">Masterlist</h3>
+                                    <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest truncate">{rows.length} Total Projects Tracked</p>
                                 </div>
                             </div>
-                            <div className="flex bg-white/20 rounded-2xl p-1.5 gap-1.5 backdrop-blur-sm shadow-xl">
-                                <button onClick={() => setActiveTab('info')} className={`px-6 py-2 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'info' ? 'bg-white text-amber-600 shadow-lg' : 'text-white hover:bg-white/20'}`}>
+                            <div className="flex bg-white/20 rounded-2xl p-1.5 gap-1.5 backdrop-blur-sm shadow-xl w-full sm:w-auto">
+                                <button onClick={() => setActiveTab('info')} className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${activeTab === 'info' ? 'bg-white text-amber-600 shadow-lg' : 'text-white hover:bg-white/20'}`}>
                                     <FiInfo size={16} /> Summary
                                 </button>
-                                <button onClick={() => setActiveTab('details')} className={`px-6 py-2 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-white text-amber-600 shadow-lg' : 'text-white hover:bg-white/20'}`}>
+                                <button onClick={() => setActiveTab('details')} className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${activeTab === 'details' ? 'bg-white text-amber-600 shadow-lg' : 'text-white hover:bg-white/20'}`}>
                                     <FiList size={16} /> Details
                                 </button>
                             </div>
@@ -150,14 +150,14 @@ const EFDNewconMonitoring = () => {
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-3xl p-8 shadow-sm group hover:shadow-md transition-all">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-3xl p-6 sm:p-8 shadow-sm group hover:shadow-md transition-all">
                                                     <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 group-hover:text-amber-500">Total Readily Implementable Projects</p>
-                                                    <p className="text-5xl font-black text-amber-700">{rows.length.toLocaleString()}</p>
+                                                    <p className="text-4xl sm:text-5xl font-black text-amber-700">{rows.length.toLocaleString()}</p>
                                                 </div>
-                                                <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-3xl p-8 shadow-sm group hover:shadow-md transition-all">
+                                                <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-3xl p-6 sm:p-8 shadow-sm group hover:shadow-md transition-all">
                                                     <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 group-hover:text-emerald-500">Total Budget</p>
-                                                    <p className="text-5xl font-black text-emerald-700">₱{(totalAmount / 1_000_000_000).toFixed(2)}B</p>
+                                                    <p className="text-4xl sm:text-5xl font-black text-emerald-700">₱{(totalAmount / 1_000_000_000).toFixed(2)}B</p>
                                                 </div>
                                             </div>
                                             
@@ -174,8 +174,8 @@ const EFDNewconMonitoring = () => {
                                 </div>
                             ) : (
                                 <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                    <div className="flex flex-col sm:flex-row items-center gap-4 mb-8">
-                                        <div className="relative flex-1 w-full sm:max-w-md">
+                                    <div className="flex flex-col md:flex-row items-center gap-4 mb-8">
+                                        <div className="relative flex-1 w-full max-w-none md:max-w-md">
                                             <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                             <input
                                                 type="text"
@@ -185,7 +185,7 @@ const EFDNewconMonitoring = () => {
                                                 className="w-full pl-12 pr-4 py-4 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-amber-100 focus:border-amber-400 outline-none transition-all"
                                             />
                                         </div>
-                                        {importMsg && <span className="text-[10px] font-black text-amber-600 bg-amber-100/50 px-3 py-1 rounded-full">{importMsg}</span>}
+                                        {importMsg && <span className="text-[10px] font-black text-amber-600 bg-amber-100/50 px-4 py-2 rounded-full whitespace-nowrap">{importMsg}</span>}
                                     </div>
 
                                     <div className="flex-1 overflow-auto rounded-3xl border border-slate-100 shadow-inner bg-slate-50/30">

@@ -164,7 +164,22 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS opening_of_financial_proposal DATE,
       ADD COLUMN IF NOT EXISTS request_for_quotation DATE,
       ADD COLUMN IF NOT EXISTS negotiation DATE,
-      ADD COLUMN IF NOT EXISTS opening_of_quotation DATE;
+      ADD COLUMN IF NOT EXISTS opening_of_quotation DATE,
+      ADD COLUMN IF NOT EXISTS funding_year INTEGER,
+      ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
+      ADD COLUMN IF NOT EXISTS delay_reason TEXT,
+      ADD COLUMN IF NOT EXISTS revised_target_completion_date DATE,
+      ADD COLUMN IF NOT EXISTS time_lapsed_days INTEGER,
+      ADD COLUMN IF NOT EXISTS time_lapsed_percentage NUMERIC;
+
+      -- Backfill time_lapsed_days and drop old column
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='time_lapsed') THEN
+          UPDATE engineer_form SET time_lapsed_days = time_lapsed WHERE time_lapsed_days IS NULL;
+          ALTER TABLE engineer_form DROP COLUMN time_lapsed;
+        END IF;
+      END $$;
 
       -- Rename update_type column to actions safely (checks if actions already exists)
       DO $$ 
@@ -184,19 +199,67 @@ const initDB = async () => {
           project_id INTEGER NOT NULL,
           ipc TEXT,
           vo_number TEXT,
+          vo_sequence_no INTEGER,
+          vo_type TEXT,
           requested_date DATE,
           requested_by TEXT,
           original_contract_amount NUMERIC,
-          vo_amount NUMERIC,
+          additive_amount NUMERIC,
+          deductive_amount NUMERIC,
+          net_vo_amount NUMERIC,
           revised_contract_amount NUMERIC,
           original_target_completion_date DATE,
           revised_target_completion_date DATE,
+          time_extension_days INTEGER,
+          revised_expiry_date DATE,
           justification TEXT,
+          justification_category TEXT,
+          justification_details TEXT,
+          previous_vo_total NUMERIC DEFAULT 0,
+          original_expiry_date DATE,
+          caf_reference TEXT,
           status TEXT DEFAULT 'Pending',
-          document_url TEXT,
+          revised_pow_pdf TEXT,
+          revised_dupa_pdf TEXT,
+          revised_contract_pdf TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           created_by TEXT
       );
+
+      -- Migration for justification and cumulative fields
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='justification_category') THEN
+          ALTER TABLE variation_orders ADD COLUMN justification_category TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='justification_details') THEN
+          ALTER TABLE variation_orders ADD COLUMN justification_details TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='previous_vo_total') THEN
+          ALTER TABLE variation_orders ADD COLUMN previous_vo_total NUMERIC DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='original_expiry_date') THEN
+          ALTER TABLE variation_orders ADD COLUMN original_expiry_date DATE;
+        END IF;
+      END $$;
+
+      -- Migration for existing variation_orders table
+      DO $$ 
+      BEGIN 
+        IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'variation_orders') THEN
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS vo_sequence_no INTEGER;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS vo_type TEXT;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS additive_amount NUMERIC;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS deductive_amount NUMERIC;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS net_vo_amount NUMERIC;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS time_extension_days INTEGER;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_expiry_date DATE;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS caf_reference TEXT;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_pow_pdf TEXT;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_dupa_pdf TEXT;
+          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_contract_pdf TEXT;
+        END IF;
+      END $$;
 
       CREATE TABLE IF NOT EXISTS realignments (
           id SERIAL PRIMARY KEY,
@@ -340,7 +403,7 @@ const initDB = async () => {
         ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1;
       `);
-    } catch(err) {
+    } catch (err) {
       // Table likely missing
     }
 
@@ -368,8 +431,12 @@ const initDB = async () => {
     // --- MIGRATION: ADD IPC TO ENGINEER_IMAGE (SECONDARY DB) ---
     if (poolNew) {
       try {
-        await poolNew.query(`ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT; `);
-        console.log("✅ DB Init: Secondary DB schema synced (engineer_image + ipc).");
+        await poolNew.query(`
+          ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year INTEGER;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year_justification TEXT;
+        `);
+        console.log("✅ DB Init: Secondary DB schema synced (engineer_form/image + funding_year).");
       } catch (err) {
         console.error("⚠️ Secondary DB Schema Sync Error:", err.message);
       }
@@ -553,7 +620,7 @@ const initDB = async () => {
       await pool.query(`ALTER TABLE ph_teachers_list RENAME COLUMN instructional_hrs TO workload_hrs;`);
       console.log("Renamed instructional_hrs to workload_hrs");
     } catch (e) { /* already renamed or doesn't exist */ }
-    
+
     try {
       await pool.query(`ALTER TABLE ph_teachers_list RENAME COLUMN instructional_mins TO workload_mins;`);
       console.log("Renamed instructional_mins to workload_mins");
@@ -562,9 +629,9 @@ const initDB = async () => {
     // Drop defunct columns if they exist
     const defunctCols = ['ancillary_hrs', 'ancillary_mins'];
     for (const col of defunctCols) {
-        try {
-            await pool.query(`ALTER TABLE ph_teachers_list DROP COLUMN IF EXISTS ${col};`);
-        } catch (e) { /* already dropped or busy */ }
+      try {
+        await pool.query(`ALTER TABLE ph_teachers_list DROP COLUMN IF EXISTS ${col};`);
+      } catch (e) { /* already dropped or busy */ }
     }
     console.log("✅ DB Init: Workload columns simplified on ph_teachers_list.");
 
@@ -584,7 +651,7 @@ const initDB = async () => {
       'adm_mdl BOOLEAN DEFAULT FALSE', 'adm_odl BOOLEAN DEFAULT FALSE',
       'adm_tvi BOOLEAN DEFAULT FALSE', 'adm_blended BOOLEAN DEFAULT FALSE',
     ];
-    const levels = ['kinder','g1','g2','g3','g4','g5','g6','g7','g8','g9','g10','g11','g12'];
+    const levels = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
     for (const lvl of levels) {
       shiftModeCols.push(`shift_${lvl} TEXT`);
       shiftModeCols.push(`mode_${lvl} TEXT`);
@@ -942,6 +1009,21 @@ app.get('/api/reference/building-types', async (req, res) => {
   }
 });
 
+app.get('/api/reference/funding-years', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT funding_year 
+      FROM engineer_form 
+      WHERE funding_year IS NOT NULL 
+      ORDER BY funding_year DESC;
+    `);
+    res.json(result.rows.map(row => row.funding_year));
+  } catch (err) {
+    console.error('❌ Error fetching funding years:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- MASTERLIST API ENDPOINTS ---
 
 app.get('/api/import-masterlist-teachers/:schoolId', async (req, res) => {
@@ -1042,6 +1124,42 @@ app.get('/api/masterlist/filters', async (req, res) => {
     res.json(result.rows.map(r => Object.values(r)[0]));
   } catch (err) {
     console.error('❌ Masterlist Filters Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generic Lists for Assignments (using schools table with metadata)
+app.get('/api/lists/provinces', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT DISTINCT province, region FROM schools WHERE province IS NOT NULL ORDER BY province');
+    res.json(result.rows); // Returns [{province, region}, ...]
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/lists/municipalities', async (req, res) => {
+  try {
+    const { province } = req.query;
+    let query = 'SELECT DISTINCT municipality, region, division, province FROM schools WHERE municipality IS NOT NULL';
+    let params = [];
+    if (province) {
+      query += ' AND province = $1';
+      params.push(province);
+    }
+    query += ' ORDER BY municipality';
+    const result = await pool.query(query, params);
+    res.json(result.rows); // Returns [{municipality, region, division, province}, ...]
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/lists/divisions', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT DISTINCT division, region FROM schools WHERE division IS NOT NULL ORDER BY division');
+    res.json(result.rows); // Returns [{division, region}, ...]
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -1482,8 +1600,8 @@ const checkTableExists = async (tableName) => {
 
 // Helper to get the correct table or subquery for initiatives
 const getInitiativesSubquery = async (version) => {
-  const columns = `id, school_id, project_name, school_name, amount, masterlist_status, region, division, legislative_district, ownership_type_preloaded, ownership_type_confirmed, accessibility_rating, buildable_space_dimensions, has_buildable_space, assigned_to`;
-  return `(SELECT ${columns}, 'v1' as version_source FROM congressional_initiatives)`;
+  const columns = `ci.id, ci.school_id, ci.project_name, ci.school_name, ci.amount, ci.masterlist_status, ci.region, ci.division, ci.legislative_district, ci.ownership_type_preloaded, ci.ownership_type_confirmed, ci.accessibility_rating, ci.buildable_space_dimensions, ci.has_buildable_space, ci.assigned_to, s.municipality, s.barangay, s.province`;
+  return `(SELECT ${columns}, 'v1' as version_source FROM congressional_initiatives ci LEFT JOIN schools s ON ci.school_id = s.school_id)`;
 };
 
 // One-time: import CSV into DB table
@@ -5250,14 +5368,14 @@ app.post('/api/register-beta', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
     `;
     const values = [
-      schoolData.school_id, 
-      schoolData.school_name, 
-      schoolData.region || null, 
-      schoolData.province || iernData.Province || null, 
-      schoolData.municipality || iernData.Municipality || null, 
-      schoolData.division || null, 
-      schoolData.district || iernData.District || null, 
-      schoolData.legislative_district || schoolData.legislative || iernData.LegLegDistrict || iernData.LegDistrict || null, 
+      schoolData.school_id,
+      schoolData.school_name,
+      schoolData.region || null,
+      schoolData.province || iernData.Province || null,
+      schoolData.municipality || iernData.Municipality || null,
+      schoolData.division || null,
+      schoolData.district || iernData.District || null,
+      schoolData.legislative_district || schoolData.legislative || iernData.LegLegDistrict || iernData.LegDistrict || null,
       schoolData.curricular_offering || iernData.Curricular_Offering || null,
       iernData.Latitude || null,
       iernData.Longitude || null,
@@ -6291,6 +6409,11 @@ app.post('/api/save-project', async (req, res) => {
   let client;
   let clientNew; // For secondary DB transaction
 
+  // Validation: Scope of Work limit
+  if (data.scopeOfWork && data.scopeOfWork.length > 200) {
+    return res.status(400).json({ message: "Scope of Work must be 200 characters or less." });
+  }
+
   try {
     client = await pool.connect();
     await client.query('BEGIN'); // Start Transaction
@@ -6371,7 +6494,13 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.openingOfFinancialProposal), // $40
       valueOrNull(data.requestForQuotation), // $41
       valueOrNull(data.negotiation), // $42
-      valueOrNull(data.openingOfQuotation) // $43
+      valueOrNull(data.openingOfQuotation), // $43
+      parseIntOrNull(data.fundingYear), // $44
+      null, // $45: funding_year_justification (not needed for new projects)
+      data.delay_reason || null, // $46
+      valueOrNull(data.revised_target_completion_date) || null, // $47
+      parseIntOrNull(data.time_lapsed_days || data.time_lapsed) || null, // $48
+      valueOrNull(data.time_lapsed_percentage) || null // $49
     ];
 
     const projectQuery = `
@@ -6387,8 +6516,10 @@ app.post('/api/save-project', async (req, res) => {
         actions, savings,
         status_design_phase, contract_id, date_notice_of_award,
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
-        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
+        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
+        funding_year, funding_year_justification,
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -6428,7 +6559,11 @@ app.post('/api/save-project', async (req, res) => {
           ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
           ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
           ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
-          ADD COLUMN IF NOT EXISTS actions TEXT;
+          ADD COLUMN IF NOT EXISTS actions TEXT,
+          ADD COLUMN IF NOT EXISTS delay_reason TEXT,
+          ADD COLUMN IF NOT EXISTS revised_target_completion_date DATE,
+          ADD COLUMN IF NOT EXISTS time_lapsed_days INTEGER,
+          ADD COLUMN IF NOT EXISTS time_lapsed_percentage NUMERIC;
 
           ALTER TABLE engineer_form
           DROP COLUMN IF EXISTS has_variation_order,
@@ -6596,9 +6731,9 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.constructionStartDate) || oldData.construction_start_date, // $24
       valueOrNull(data.projectCategory) || oldData.project_category, // $25
       valueOrNull(data.scopeOfWork) || oldData.scope_of_work, // $26
-      valueOrNull(data.numberOfClassrooms) || oldData.number_of_classrooms, // $27
-      valueOrNull(data.numberOfStoreys) || oldData.number_of_storeys, // $28
+      valueOrNull(data.numberOfClassrooms) || oldData.number_of_classrooms, // $28
       valueOrNull(data.numberOfSites) || oldData.number_of_sites, // $29
+      valueOrNull(data.numberOfStoreys) || oldData.number_of_storeys, // $30
       valueOrNull(data.fundsUtilized) || oldData.funds_utilized, // $30
       valueOrNull(data.update_type) || 'Status Update', // $31: Priority to dynamic tracking
       Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation) - Number(valueOrNull(data.contract_amount) || oldData.contract_amount), // $32: Savings
@@ -6611,7 +6746,13 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.openingOfFinancialProposal) || oldData.opening_of_financial_proposal, // $40
       valueOrNull(data.requestForQuotation) || oldData.request_for_quotation, // $41
       valueOrNull(data.negotiation) || oldData.negotiation, // $42
-      valueOrNull(data.openingOfQuotation) || oldData.opening_of_quotation // $43
+      valueOrNull(data.openingOfQuotation) || oldData.opening_of_quotation, // $43
+      parseIntOrNull(data.fundingYear) || oldData.funding_year, // $44
+      data.fundingYearJustification || null, // $45
+      data.delay_reason || oldData.delay_reason, // $46
+      valueOrNull(data.revised_target_completion_date) || oldData.revised_target_completion_date, // $47
+      parseIntOrNull(data.time_lapsed_days || data.time_lapsed || data.days_lapsed) || oldData.time_lapsed_days || oldData.time_lapsed, // $48
+      valueOrNull(data.time_lapsed_percentage) || oldData.time_lapsed_percentage // $49
     ];
 
     const insertQuery = `
@@ -6623,16 +6764,86 @@ app.put('/api/update-project/:id', async (req, res) => {
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
         construction_start_date, project_category, scope_of_work,
-        number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
+        number_of_classrooms, number_of_sites, number_of_storeys, funds_utilized,
         actions, savings,
         status_design_phase, contract_id, date_notice_of_award,
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
-        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
+        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
+        funding_year, funding_year_justification,
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
       RETURNING *;
     `;
 
     const result = await client.query(insertQuery, insertValues);
+    const newData = result.rows[0];
+
+    // --- 2.5 HANDLE VARIATION ORDER RECORD ---
+    if (data.update_type === 'Variation Order' || data.actions === 'Variation Order') {
+      try {
+        // Fetch cumulative VO total before this update
+        const voSumRes = await client.query(
+          'SELECT SUM(net_vo_amount) FROM variation_orders WHERE project_id = $1',
+          [id]
+        );
+        const previousVoTotal = parseFloat(voSumRes.rows[0].sum || 0);
+
+        const voValues = [
+          newData.project_id,
+          newData.ipc,
+          data.vo_number || null,
+          parseInt(data.vo_sequence_no) || null,
+          data.vo_type || 'Combined',
+          data.vo_requested_date || new Date(),
+          data.vo_requested_by || finalUserName,
+          oldData.contract_amount, // original_contract_amount
+          parseFloat(data.additive_amount) || 0,
+          parseFloat(data.deductive_amount) || 0,
+          parseFloat(data.net_vo_amount) || 0,
+          newData.contract_amount,         // revised_contract_amount (already updated in newData)
+          oldData.target_completion_date, // original_target_completion_date
+          newData.target_completion_date, // revised_target_completion_date
+          parseInt(data.time_extension_days) || 0,
+          data.revised_expiry_date || newData.target_completion_date,
+          data.otherRemarks || '',
+          data.caf_reference || null,
+          'Approved', // Default to approved as it's signed off by the engineer in this flow
+          data.revised_pow_pdf || data.pow_pdf || null,
+          data.revised_dupa_pdf || data.dupa_pdf || null,
+          data.revised_contract_pdf || data.contract_pdf || null,
+          finalUserName,
+          data.justification_category || 'Other',
+          data.justification_details || data.otherRemarks || '',
+          previousVoTotal,
+          oldData.target_completion_date // original_expiry_date reference
+        ];
+
+        const voQuery = `
+          INSERT INTO variation_orders (
+            project_id, ipc, vo_number, vo_sequence_no, vo_type, 
+            requested_date, requested_by, original_contract_amount, 
+            additive_amount, deductive_amount, net_vo_amount, revised_contract_amount,
+            original_target_completion_date, revised_target_completion_date,
+            time_extension_days, revised_expiry_date, justification, caf_reference, 
+            status, revised_pow_pdf, revised_dupa_pdf, revised_contract_pdf, created_by,
+            justification_category, justification_details, previous_vo_total, original_expiry_date
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+        `;
+
+        await client.query(voQuery, voValues);
+        if (clientNew) {
+          try {
+            await clientNew.query(voQuery, voValues);
+          } catch (dwErr) {
+            console.error("Dual-Write Variation Order Err:", dwErr.message);
+          }
+        }
+        console.log("✅ Variation Order Record Created for IPC:", newData.ipc);
+      } catch (voErr) {
+        console.error("❌ ERROR CREATING VO RECORD:", voErr.message);
+        // Non-blocking for the main update, but we should log it
+      }
+    }
 
     // --- DUAL WRITE: UPDATE PROJECT ---
     if (clientNew) {
@@ -6658,7 +6869,6 @@ app.put('/api/update-project/:id', async (req, res) => {
         await clientNew.query('ROLLBACK').catch(() => { });
       }
     }
-    const newData = result.rows[0];
 
     await client.query('COMMIT');
 
@@ -6702,6 +6912,21 @@ app.put('/api/update-project/:id', async (req, res) => {
   } finally {
     if (client) client.release();
     if (clientNew) clientNew.release();
+  }
+});
+
+// --- 9.5 GET: Variation Orders by IPC ---
+app.get('/api/projects/variation-orders/:ipc', async (req, res) => {
+  const { ipc } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM variation_orders WHERE ipc = $1 ORDER BY COALESCE(vo_sequence_no, 0) ASC, created_at ASC',
+      [ipc]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Error fetching VO history:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -6791,8 +7016,9 @@ app.post('/api/projects/realign', async (req, res) => {
         actions, savings,
         status_design_phase, contract_id, date_notice_of_award,
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
-        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43)
+        opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
+        funding_year, funding_year_justification
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45)
     `;
 
     // 3. Insert NEW record for Source Project (Reduced Allocation)
@@ -6810,7 +7036,8 @@ app.post('/api/projects/realign', async (req, res) => {
       Number(newSourceAllocation) - Number(sourceData.contract_amount), // savings
       sourceData.status_design_phase, sourceData.contract_id, sourceData.date_notice_of_award,
       sourceData.issuance_of_invitation_to_bid, sourceData.pre_bid_conference, sourceData.opening_of_technical_proposal,
-      sourceData.opening_of_financial_proposal, sourceData.request_for_quotation, sourceData.negotiation, sourceData.opening_of_quotation
+      sourceData.opening_of_financial_proposal, sourceData.request_for_quotation, sourceData.negotiation, sourceData.opening_of_quotation,
+      sourceData.funding_year, sourceData.funding_year_justification
     ];
     await client.query(insertSql, sourceVals);
     if (clientNew) await clientNew.query(insertSql, sourceVals);
@@ -6830,7 +7057,8 @@ app.post('/api/projects/realign', async (req, res) => {
       Number(newTargetAllocation) - Number(targetData.contract_amount), // savings
       sourceData.status_design_phase, sourceData.contract_id, sourceData.date_notice_of_award,
       sourceData.issuance_of_invitation_to_bid, sourceData.pre_bid_conference, sourceData.opening_of_technical_proposal,
-      sourceData.opening_of_financial_proposal, sourceData.request_for_quotation, sourceData.negotiation, sourceData.opening_of_quotation
+      sourceData.opening_of_financial_proposal, sourceData.request_for_quotation, sourceData.negotiation, sourceData.opening_of_quotation,
+      targetData.funding_year, targetData.funding_year_justification
     ];
     await client.query(insertSql, targetVals);
     if (clientNew) await clientNew.query(insertSql, targetVals);
@@ -6867,7 +7095,7 @@ app.get('/api/projects', async (req, res) => {
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
             pow_pdf, dupa_pdf, contract_pdf,
-            actions, savings
+            actions, savings, funding_year, funding_year_justification
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
@@ -6891,7 +7119,10 @@ app.get('/api/projects', async (req, res) => {
         p.latitude, p.longitude,
         p.actions AS "updateType",
         (p.actions LIKE 'Realignment%') AS "isRealigned",
-        p.savings
+        p.savings,
+        p.funding_year AS "fundingYear",
+        p.funding_year AS "funding_year",
+        p.funding_year_justification AS "fundingYearJustification"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
@@ -7028,7 +7259,10 @@ app.get('/api/projects/:id', async (req, res) => {
         TO_CHAR(opening_of_financial_proposal, 'YYYY-MM-DD') AS "opening_of_financial_proposal",
         TO_CHAR(request_for_quotation, 'YYYY-MM-DD') AS "request_for_quotation",
         TO_CHAR(negotiation, 'YYYY-MM-DD') AS "negotiation",
-        TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation"
+        TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation",
+        funding_year AS "fundingYear",
+        funding_year AS "funding_year",
+        funding_year_justification AS "fundingYearJustification"
       FROM "engineer_form" WHERE project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -7072,7 +7306,10 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         TO_CHAR(opening_of_financial_proposal, 'YYYY-MM-DD') AS "opening_of_financial_proposal",
         TO_CHAR(request_for_quotation, 'YYYY-MM-DD') AS "request_for_quotation",
         TO_CHAR(negotiation, 'YYYY-MM-DD') AS "negotiation",
-        TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation"
+        TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation",
+        funding_year AS "fundingYear",
+        funding_year AS "funding_year",
+        funding_year_justification AS "fundingYearJustification"
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;
     `;
@@ -12597,7 +12834,7 @@ app.get('/api/personnel/:schoolId', async (req, res) => {
     if (existing.rows.length === 0) {
       // 2. Auto-seed from existing teachers_list table
       const legacyTeachers = await pool.query('SELECT * FROM teachers_list WHERE CAST("school.id" AS TEXT) = $1', [schoolId]);
-      
+
       if (legacyTeachers.rows.length > 0) {
         // Fetch school basic info for the new records
         const schoolRes = await pool.query('SELECT school_name, region, division, district FROM ph_schools WHERE school_id = $1', [schoolId]);
@@ -12627,7 +12864,7 @@ app.get('/api/personnel/:schoolId', async (req, res) => {
             t['corrected.degree'] || null
           ]);
         }
-        
+
         // Refetch after seeding
         const newlySeeded = await pool.query('SELECT * FROM ph_teachers_list WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
         return res.json({ success: true, data: newlySeeded.rows, seeded: true });
@@ -12647,7 +12884,7 @@ app.post('/api/personnel', async (req, res) => {
   try {
     // 1. Fetch school details from ph_schools to auto-populate the registry
     const schoolRes = await pool.query('SELECT school_name, region, division, district FROM ph_schools WHERE school_id = $1', [schoolId]);
-    
+
     if (schoolRes.rows.length === 0) {
       return res.status(404).json({ error: "School not found" });
     }
@@ -12664,7 +12901,7 @@ app.post('/api/personnel', async (req, res) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *;
     `;
-    
+
     const values = [
       schoolId,
       schoolInfo.school_name,
@@ -12684,7 +12921,7 @@ app.post('/api/personnel', async (req, res) => {
     ];
 
     const result = await pool.query(insertQuery, values);
-    
+
     // 3. Mark unit8_completed flag in ph_schools (Optional/Future proofing)
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
     await pool.query(`UPDATE ph_schools SET unit8_completed = TRUE WHERE school_id = $1`, [schoolId]);
@@ -12702,7 +12939,7 @@ app.delete('/api/personnel/:id', async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM ph_teachers_list WHERE id = $1 RETURNING *', [id]);
     if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Personnel record not found" });
+      return res.status(404).json({ error: "Personnel record not found" });
     }
     res.json({ success: true, message: "Personnel removed successfully!" });
   } catch (err) {
@@ -12746,10 +12983,10 @@ app.put('/api/personnel/:id', async (req, res) => {
       data.ancillary_mins ? parseInt(data.ancillary_mins) : 0,
       id
     ];
-    
+
     const result = await pool.query(updateQuery, values);
     if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Personnel record not found" });
+      return res.status(404).json({ error: "Personnel record not found" });
     }
     res.json({ success: true, data: result.rows[0], message: "Personnel updated successfully!" });
   } catch (err) {
@@ -12776,10 +13013,10 @@ app.put('/api/personnel/:id/workload', async (req, res) => {
       workload_mins ? parseInt(workload_mins) : 0,
       id
     ];
-    
+
     const result = await pool.query(updateQuery, values);
     if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Personnel record not found" });
+      return res.status(404).json({ error: "Personnel record not found" });
     }
     res.json({ success: true, data: result.rows[0], message: "Workload updated successfully!" });
   } catch (err) {

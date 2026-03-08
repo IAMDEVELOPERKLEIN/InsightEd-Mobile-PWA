@@ -318,9 +318,9 @@ const runMigrations = async (client, dbLabel) => {
                 batch_of_funds TEXT,
                 other_remarks TEXT,
                 engineer_id TEXT,
-                validation_status TEXT,
-                validation_remarks TEXT,
-                validated_by TEXT
+                validated_by TEXT,
+                funding_year INTEGER,
+                funding_year_justification TEXT
             );
         `);
         await client.query(`
@@ -328,7 +328,9 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE,
             ADD COLUMN IF NOT EXISTS latitude TEXT,
             ADD COLUMN IF NOT EXISTS longitude TEXT,
-            ADD COLUMN IF NOT EXISTS engineer_name TEXT;
+            ADD COLUMN IF NOT EXISTS engineer_name TEXT,
+            ADD COLUMN IF NOT EXISTS funding_year INTEGER,
+            ADD COLUMN IF NOT EXISTS funding_year_justification TEXT;
         `);
 
         // --- 8b. ENGINEER IMAGE EXTENSIONS ---
