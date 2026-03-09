@@ -341,7 +341,8 @@ const initDB = async () => {
           ADD COLUMN IF NOT EXISTS awarding_date TIMESTAMP,
           ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
           ADD COLUMN IF NOT EXISTS funds_downloaded NUMERIC,
-          ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
+          ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC,
+          ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE;
       `);
     } catch(err) {
       console.log("⚠️ DB Init Notice: lgu_forms update skipped (table may not exist).");
@@ -825,17 +826,29 @@ const initMasterlistDB = async () => {
           "proposed_funding_year" integer,
           "est_classroom_cost" numeric,
           "project_implementor" character varying(255),
-          "cl_sty_ratio" character varying(50)
+          "cl_sty_ratio" character varying(50),
+          "province" character varying(100)
       );
     `);
-    // Migration: Rename leg_district to legislative_district if it exists
+    // Migration: Rename leg_district to legislative_district if it exists, add province
     await pool.query(`
       DO $$
       BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'masterlist_26_30' AND column_name = 'leg_district') THEN
           ALTER TABLE masterlist_26_30 RENAME COLUMN leg_district TO legislative_district;
         END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'masterlist_26_30' AND column_name = 'province') THEN
+          ALTER TABLE masterlist_26_30 ADD COLUMN province character varying(100);
+        END IF;
       END $$;
+
+      -- Populate province from schools table
+      UPDATE masterlist_26_30 m
+      SET province = s.province
+      FROM schools s
+      WHERE m.school_id = s.school_id
+      AND m.province IS NULL;
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_funding_year ON masterlist_26_30("proposed_funding_year");`);
@@ -1024,6 +1037,21 @@ app.get('/api/reference/funding-years', async (req, res) => {
   }
 });
 
+app.get('/api/reference/efd-locations', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT region, division 
+      FROM engineer_form 
+      WHERE region IS NOT NULL AND division IS NOT NULL
+      ORDER BY region, division;
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Error fetching EFD locations:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- MASTERLIST API ENDPOINTS ---
 
 app.get('/api/import-masterlist-teachers/:schoolId', async (req, res) => {
@@ -1082,12 +1110,13 @@ app.get('/api/debug-integrity', async (req, res) => {
 
 // Helper for dynamic WHERE clause
 const buildMasterlistQuery = (baseQuery, filters) => {
-  const { region, division, municipality, legislative_district } = filters;
+  const { region, province, division, municipality, legislative_district } = filters;
   let where = [];
   let params = [];
   let pIdx = 1;
 
   if (region) { where.push(`"region" = $${pIdx++}`); params.push(region); }
+  if (province) { where.push(`"province" = $${pIdx++}`); params.push(province); }
   if (division) { where.push(`"division" = $${pIdx++}`); params.push(division); }
   if (municipality) { where.push(`"municipality" = $${pIdx++}`); params.push(municipality); }
   if (legislative_district) { where.push(`"legislative_district" = $${pIdx++}`); params.push(legislative_district); }
@@ -1099,20 +1128,28 @@ const buildMasterlistQuery = (baseQuery, filters) => {
 // Filter options (Cascading)
 app.get('/api/masterlist/filters', async (req, res) => {
   try {
-    const { region, division, municipality } = req.query;
+    const { region, province, division, municipality, target } = req.query;
 
     let query, params;
     if (municipality) {
       // Fetch Leg Districts for Municipality
-      query = 'SELECT DISTINCT "legislative_district" FROM masterlist_26_30 WHERE "municipality" = $1 ORDER BY "legislative_district"';
+      query = 'SELECT DISTINCT "legislative_district" FROM masterlist_26_30 WHERE "municipality" = $1 AND "legislative_district" IS NOT NULL ORDER BY "legislative_district"';
       params = [municipality];
     } else if (division) {
       // Fetch Municipalities for Division
-      query = 'SELECT DISTINCT "municipality" FROM masterlist_26_30 WHERE "division" = $1 ORDER BY "municipality"';
+      query = 'SELECT DISTINCT "municipality" FROM masterlist_26_30 WHERE "division" = $1 AND "municipality" IS NOT NULL ORDER BY "municipality"';
       params = [division];
+    } else if (target === 'division' && region) {
+      // Direct jump from Region to Division (skipping Province)
+      query = 'SELECT DISTINCT "division" FROM masterlist_26_30 WHERE "region" = $1 AND "division" IS NOT NULL ORDER BY "division"';
+      params = [region];
+    } else if (province) {
+      // Fetch Divisions for Province
+      query = 'SELECT DISTINCT "division" FROM masterlist_26_30 WHERE "province" = $1 AND "division" IS NOT NULL ORDER BY "division"';
+      params = [province];
     } else if (region) {
-      // Fetch Divisions for Region
-      query = 'SELECT DISTINCT "division" FROM masterlist_26_30 WHERE "region" = $1 ORDER BY "division"';
+      // Fetch Provinces for Region
+      query = 'SELECT DISTINCT "province" FROM masterlist_26_30 WHERE "region" = $1 AND "province" IS NOT NULL ORDER BY "province"';
       params = [region];
     } else {
       // Fetch Regions
@@ -6500,7 +6537,8 @@ app.post('/api/save-project', async (req, res) => {
       data.delay_reason || null, // $46
       valueOrNull(data.revised_target_completion_date) || null, // $47
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed) || null, // $48
-      valueOrNull(data.time_lapsed_percentage) || null // $49
+      valueOrNull(data.time_lapsed_percentage) || null, // $49
+      data.is_donated || false // $50
     ];
 
     const projectQuery = `
@@ -6518,8 +6556,8 @@ app.post('/api/save-project', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -6752,7 +6790,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       data.delay_reason || oldData.delay_reason, // $46
       valueOrNull(data.revised_target_completion_date) || oldData.revised_target_completion_date, // $47
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed || data.days_lapsed) || oldData.time_lapsed_days || oldData.time_lapsed, // $48
-      valueOrNull(data.time_lapsed_percentage) || oldData.time_lapsed_percentage // $49
+      valueOrNull(data.time_lapsed_percentage) || oldData.time_lapsed_percentage, // $49
+      data.isDonated !== undefined ? data.isDonated : (data.is_donated !== undefined ? data.is_donated : oldData.is_donated) // $50
     ];
 
     const insertQuery = `
@@ -6770,8 +6809,8 @@ app.put('/api/update-project/:id', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)
       RETURNING *;
     `;
 
@@ -7082,7 +7121,7 @@ app.post('/api/projects/realign', async (req, res) => {
 app.get('/api/projects', async (req, res) => {
   try {
     // We catch the engineer_id sent from EngineerDashboard.jsx
-    const { status, region, division, search, engineer_id } = req.query;
+    const { status, region, division, search, engineer_id, is_donated } = req.query;
     let queryParams = [];
     let whereClauses = [];
 
@@ -7095,7 +7134,7 @@ app.get('/api/projects', async (req, res) => {
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
             pow_pdf, dupa_pdf, contract_pdf,
-            actions, savings, funding_year, funding_year_justification
+            actions, savings, funding_year, funding_year_justification, is_donated
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
@@ -7122,7 +7161,9 @@ app.get('/api/projects', async (req, res) => {
         p.savings,
         p.funding_year AS "fundingYear",
         p.funding_year AS "funding_year",
-        p.funding_year_justification AS "fundingYearJustification"
+        p.funding_year_justification AS "fundingYearJustification",
+        p.is_donated AS "isDonated",
+        p.is_donated AS "is_donated"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
@@ -7150,6 +7191,17 @@ app.get('/api/projects', async (req, res) => {
     if (req.query.municipality) {
       queryParams.push(req.query.municipality);
       whereClauses.push(`sp.municipality = $${queryParams.length}`);
+    }
+
+    // NEW: Donated Filter
+    if (is_donated !== undefined && is_donated !== null && is_donated !== '' && is_donated !== 'All') {
+      if (is_donated === 'Donated' || is_donated === 'true' || is_donated === true) {
+        queryParams.push(true);
+        whereClauses.push(`p.is_donated = $${queryParams.length}`);
+      } else if (is_donated === 'Non-Donated' || is_donated === 'false' || is_donated === false) {
+        queryParams.push(false);
+        whereClauses.push(`p.is_donated = $${queryParams.length}`);
+      }
     }
 
     if (search) {
@@ -7262,7 +7314,9 @@ app.get('/api/projects/:id', async (req, res) => {
         TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation",
         funding_year AS "fundingYear",
         funding_year AS "funding_year",
-        funding_year_justification AS "fundingYearJustification"
+        funding_year_justification AS "fundingYearJustification",
+        is_donated AS "isDonated",
+        is_donated AS "is_donated"
       FROM "engineer_form" WHERE project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -7298,6 +7352,8 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         latitude, longitude,
         actions AS "updateType",
         savings,
+        is_donated AS "isDonated",
+        is_donated AS "is_donated",
         status_design_phase, contract_id,
         TO_CHAR(date_notice_of_award, 'YYYY-MM-DD') AS "date_notice_of_award",
         TO_CHAR(issuance_of_invitation_to_bid, 'YYYY-MM-DD') AS "issuance_of_invitation_to_bid",
@@ -11095,9 +11151,8 @@ app.post('/api/lgu/save-project', async (req, res) => {
       valueOrNull(data.date_notice_of_award),  // 55
       valueOrNull(data.variationOrderPdf),      // 56
       valueOrNull(data.projectCategory),        // 57
-      parseIntOrNull(data.numberOfClassrooms),  // 58
-      parseIntOrNull(data.numberOfStoreys),     // 59
-      parseIntOrNull(data.numberOfSites)         // 60
+      parseIntOrNull(data.numberOfSites),         // 60
+      data.is_donated || false                    // 61
     ];
 
     const projectQuery = `
@@ -11122,12 +11177,12 @@ app.post('/api/lgu/save-project', async (req, res) => {
         date_contract_signing, bid_amount, nature_of_delay, date_notice_of_award,
         variation_order_pdf,
         -- PROJECT SPECS (VO COMPAT)
-        project_category, number_of_classrooms, number_of_storeys, number_of_sites
+        project_category, number_of_classrooms, number_of_storeys, number_of_sites, is_donated
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
         $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41,
         $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56,
-        $57, $58, $59, $60
+        $57, $58, $59, $60, $61
       )
       RETURNING project_id, project_name, ipc;
     `;
@@ -11617,9 +11672,10 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
                 project_category = COALESCE($45, project_category),
                 number_of_classrooms = COALESCE($46, number_of_classrooms),
                 number_of_storeys = COALESCE($47, number_of_storeys),
-                number_of_sites = COALESCE($48, number_of_sites)
+                number_of_sites = COALESCE($48, number_of_sites),
+                is_donated = COALESCE($49, is_donated)
 
-            WHERE project_id = $49
+            WHERE project_id = $50
             RETURNING *;
         `;
 
@@ -11660,6 +11716,7 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
       parseIntOrNull(data.numberOfClassrooms),
       parseIntOrNull(data.numberOfStoreys),
       parseIntOrNull(data.numberOfSites),
+      data.is_donated !== undefined ? data.is_donated : (data.isDonated !== undefined ? data.isDonated : null),
 
       id
     ];
@@ -12320,31 +12377,31 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
     // We expect { unit2_simplified_enrollment: [...] } OR { unit2_simplified_enrollment: { array: [...], questionnaire: {} } }
     const rawData = data.unit2_simplified_enrollment || [];
     const simplifiedData = Array.isArray(rawData) ? rawData : (rawData.array || []);
-    
+
     // Calculate global sums to populate legacy columns for Dashboards
     let totalM = 0;
     let totalF = 0;
     let enrollmentByGrade = {
-        kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
-        g7: 0, g8: 0, g9: 0, g10: 0, g11: 0, g12: 0
+      kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
+      g7: 0, g8: 0, g9: 0, g10: 0, g11: 0, g12: 0
     };
 
     simplifiedData.forEach(item => {
-        const m = parseInt(item.male) || 0;
-        const f = parseInt(item.female) || 0;
-        const total = parseInt(item.total) || (m + f);
-        totalM += m;
-        totalF += f;
-        if (enrollmentByGrade[item.grade_level] !== undefined) {
-            enrollmentByGrade[item.grade_level] = total;
-        }
+      const m = parseInt(item.male) || 0;
+      const f = parseInt(item.female) || 0;
+      const total = parseInt(item.total) || (m + f);
+      totalM += m;
+      totalF += f;
+      if (enrollmentByGrade[item.grade_level] !== undefined) {
+        enrollmentByGrade[item.grade_level] = total;
+      }
     });
 
     // If we are using the new sequential flow, we might have global gender totals instead of per-grade.
     // Let's check the questionnaire object for global totals.
     if (!Array.isArray(rawData) && rawData.questionnaire && rawData.questionnaire.genderTotals) {
-        totalM = parseInt(rawData.questionnaire.genderTotals.male) || 0;
-        totalF = parseInt(rawData.questionnaire.genderTotals.female) || 0;
+      totalM = parseInt(rawData.questionnaire.genderTotals.male) || 0;
+      totalF = parseInt(rawData.questionnaire.genderTotals.female) || 0;
     }
 
     const globalTotal = totalM + totalF;
@@ -12353,7 +12410,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
       'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',
       'enroll_g4 = $5', 'enroll_g5 = $6', 'enroll_g6 = $7', 'enroll_g7 = $8', 'enroll_g8 = $9',
       'enroll_g9 = $10', 'enroll_g10 = $11', 'enroll_g11 = $12', 'enroll_g12 = $13', 'total_enrollment = $14',
-      'male_enrollment = $15', 'female_enrollment = $16', 
+      'male_enrollment = $15', 'female_enrollment = $16',
       'sned_self_contained_count = $17',
       'unit2_simplified_enrollment = $18',
       'unit2_completed = TRUE', 'verified_as_of = CURRENT_TIMESTAMP'
@@ -12402,7 +12459,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     try {
       await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_simplified_counts JSONB');
       await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_sections_count INTEGER DEFAULT 0');
-    } catch(e) {}
+    } catch (e) { }
 
     const sectionsJson = unit3_simplified_counts || '[]';
 
@@ -12437,14 +12494,14 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
 
 // Auto-migrate Unit 4 columns for G7-G12 and als_total
 const unit4MigrateCols = async () => {
-  const grades = ['kinder','g7','g8','g9','g10','g11','g12'];
-  const cats = ['als','muslim','ip','displaced','overage','dropout','repeater'];
+  const grades = ['kinder', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+  const cats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
   for (const cat of cats) {
     for (const g of grades) {
-      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => {});
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => { });
     }
   }
-  await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => {});
+  await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => { });
 };
 unit4MigrateCols();
 
@@ -12462,10 +12519,10 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
     const allCats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
     for (const cat of allCats) {
       for (const g of allGrades) {
-        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => {});
+        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => { });
       }
     }
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => {});
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => { });
 
     const groupsJson = JSON.stringify(selected_learner_groups);
     const setClauses = [];
@@ -12613,7 +12670,7 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
       setClauses.push(`${key} = $${idx++}`);
       values.push(data[key]);
     }
-    
+
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(schoolId);
 
@@ -12658,14 +12715,14 @@ app.post('/api/ph_schools/unit9/:schoolId/ecarts', async (req, res) => {
             ecart_laptops, ecart_tablets, ecart_tv, charging_condition, remarks
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `, [
-          schoolId, iern, 
-          item.batches_name || 'Unnamed Batch', 
-          parseInt(item.year_received) || null, 
+          schoolId, iern,
+          item.batches_name || 'Unnamed Batch',
+          parseInt(item.year_received) || null,
           item.sources_fund || null,
-          parseInt(item.ecart_laptops) || 0, 
-          parseInt(item.ecart_tablets) || 0, 
+          parseInt(item.ecart_laptops) || 0,
+          parseInt(item.ecart_tablets) || 0,
           parseInt(item.ecart_tv) || 0,
-          item.charging_condition || null, 
+          item.charging_condition || null,
           item.remarks || null
         ]);
       }
@@ -13105,7 +13162,7 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
   console.log(`[Unit 10 Master Submit] Initiated for schoolId: ${req.params.schoolId}`);
   const { schoolId } = req.params;
   const { inventory, repairs, demolitions } = req.body;
-  
+
   console.log(`[Unit 10 Master Submit] Payload received:`);
   console.log(`  - Inventory count: ${inventory ? inventory.length : 0}`);
   console.log(`  - Repairs count: ${repairs ? repairs.length : 0}`);
@@ -13116,11 +13173,11 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
   try {
     await client.query('BEGIN');
     console.log(`[Unit 10 Master Submit] Transaction BEGIN`);
-    
+
     // 0. Ensure tables exist
     await ensureUnit10Tables(client);
     console.log(`[Unit 10 Master Submit] Step 0: Ensure tables exist - Done`);
-    
+
     // Get IERN
     const sRes = await client.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
     const iern = sRes.rows.length > 0 ? sRes.rows[0].iern : null;
@@ -13156,7 +13213,7 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
       for (const r of repairs) {
         if (r.items && Array.isArray(r.items)) {
           for (const itm of r.items) {
-             await client.query(`
+            await client.query(`
               INSERT INTO ph_buildings_repairs (
                 school_id, iern, building_name, room_name, item_name, 
                 condition, damage_ratio, recommended_action, demo_justification, remarks
@@ -13217,7 +13274,7 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
     const invRes = await pool.query('SELECT * FROM ph_buildings_inventory WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
     const repRes = await pool.query('SELECT * FROM ph_buildings_repairs WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
     const demRes = await pool.query('SELECT * FROM ph_buildings_demolition WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
-    
+
     // Check completion status from ph_schools
     let completed = false;
     try {
@@ -13270,7 +13327,7 @@ app.post('/api/ph_schools/unit10/:schoolId/spaces', async (req, res) => {
     `;
     const values = [schoolId, iern || null, space_name || 'New Space', center_lat, center_lng, length_m, width_m, total_area_sqm];
     const result = await pool.query(query, values);
-    
+
     await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE;');
     // Removed premature UPDATE unit10_completed = TRUE
 

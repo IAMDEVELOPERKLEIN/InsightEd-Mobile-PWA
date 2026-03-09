@@ -211,7 +211,8 @@ const NewProjects = () => {
         awarding_date: '',
         construction_start_date: '',
         funds_downloaded: '',
-        funds_utilized: ''
+        funds_utilized: '',
+        is_donated: false
     });
 
     // --- NEW: GEOLOCATION LOGIC ---
@@ -812,6 +813,24 @@ const NewProjects = () => {
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
                                 <input name="projectName" value={formData.projectName} onChange={handleChange} required readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+
+                            {/* Donated Project Toggle */}
+                            <div className="flex items-center gap-3 p-4 bg-blue-50/50 border border-blue-100 rounded-xl mb-4">
+                                <div className={`p-2 rounded-lg ${formData.is_donated ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-200 text-slate-400'}`}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                                </div>
+                                <div className="flex-1">
+                                    <h4 className="text-[10px] font-black text-[#004A99] uppercase tracking-wider">Donated Project</h4>
+                                    <p className="text-[9px] text-slate-400 font-medium">Toggle if this project is funded by a private donor.</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, is_donated: !prev.is_donated }))}
+                                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${formData.is_donated ? 'bg-blue-600' : 'bg-slate-200'}`}
+                                >
+                                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${formData.is_donated ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
                             </div>
 
                             {/* 1.5 SCOPE OF WORK */}

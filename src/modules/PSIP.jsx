@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiChevronRight, FiLayers, FiMap, FiUser, FiTv, FiSettings, FiDatabase, FiTrendingUp, FiDollarSign, FiBarChart2, FiTarget, FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiClock, FiLoader, FiCpu, FiSend, FiX, FiInfo, FiList, FiSearch, FiArrowLeft } from 'react-icons/fi';
+import { FiChevronRight, FiLayers, FiMap, FiUser, FiTv, FiSettings, FiDatabase, FiTrendingUp, FiDollarSign, FiBarChart2, FiTarget, FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiClock, FiLoader, FiCpu, FiSend, FiX, FiInfo, FiList, FiSearch, FiArrowLeft, FiPieChart } from 'react-icons/fi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList } from 'recharts';
 import BottomNav from './BottomNav';
 
@@ -819,13 +819,16 @@ const HomeView = ({
             drilldown: partnerships.cso || [],
             isImplementingOffice: true
         },
-        {
-            id: 'FOR_DECISION', title: 'Newcon Priorities',
-            icon: <FiAlertCircle className="w-6 h-6" />, color: 'bg-yellow-100 text-yellow-600',
-            count: partnerships.total_initiatives || 0,
-            drilldown: partnerships.forDecision || []
-        },
     ] : [];
+
+    const partnershipDistributionData = partnerships ? [
+        { name: 'MGO', value: Number(partnerships.totals.mayor_muni_count) || 0, color: '#3B82F6' },
+        { name: 'CGO', value: Number(partnerships.totals.mayor_city_count) || 0, color: '#8B5CF6' },
+        { name: 'PGO', value: Number(partnerships.totals.governor_count) || 0, color: '#10B981' },
+        { name: 'DPWH', value: Number(partnerships.totals.dpwh_count) || 0, color: '#F59E0B' },
+        { name: 'DepEd', value: Number(partnerships.totals.deped_count) || 0, color: '#10B981' },
+        { name: 'CSO', value: Number(partnerships.totals.cso_count) || 0, color: '#EF4444' },
+    ].filter(d => d.value > 0) : [];
 
     // Fetch partnerships for drilldown if not yet loaded
     useEffect(() => {
@@ -854,29 +857,65 @@ const HomeView = ({
         const currentLevel = drilldownPath[drilldownPath.length - 1];
         return (
             <div className="space-y-6 pb-32 animate-fadeIn">
-                <button onClick={handleBack} className="text-sm text-blue-600 font-bold flex items-center gap-2 mb-4 hover:translate-x-[-4px] transition-transform">
-                    <FiChevronRight className="rotate-180" /> Back to Overview
-                </button>
-                <h2 className="text-2xl font-bold text-slate-800 mb-6">{currentLevel.title} — Top Partners</h2>
-                <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 overflow-x-auto md:overflow-x-visible pb-4 md:pb-0 gap-4 snap-x snap-mandatory">
-                    {currentLevel.drilldown.length === 0 && (
-                        <div className="text-slate-400 italic text-sm">No organizations categorized under {currentLevel.title} yet.</div>
-                    )}
-                    {currentLevel.drilldown.map((item, idx) => (
-                        <div key={idx}
-                            onClick={() => handlePartnerClick({ id: currentLevel.id, name: item.name, type: currentLevel.id, isImplementingOffice: currentLevel.isImplementingOffice })}
-                            className="min-w-[260px] md:min-w-0 snap-center bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
-                            <span className="font-bold text-slate-700 text-base block mb-1 group-hover:text-blue-700">{item.name}</span>
-                            <div className="flex items-center gap-4 text-sm text-slate-500 mb-2">
-                                <span>{Number(item.projects).toLocaleString()} projects</span>
-                                <span className="text-blue-600 font-bold">{Number(item.classrooms).toLocaleString()} classrooms</span>
-                            </div>
-                            <div className="text-[10px] items-center text-blue-500 font-bold uppercase tracking-widest flex gap-1 group-hover:underline">
-                                View Handled Schools <FiChevronRight />
-                            </div>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                    <button onClick={handleBack} className="text-sm text-blue-600 font-bold flex items-center gap-2 hover:translate-x-[-4px] transition-transform">
+                        <FiChevronRight className="rotate-180" /> Back to Overview
+                    </button>
+                    {!currentLevel.activeTab && (
+                        <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-2 w-full sm:w-auto">
+                            <button 
+                                onClick={() => {
+                                    const newPath = [...drilldownPath];
+                                    newPath[newPath.length - 1] = { ...currentLevel, activeTab: 'summary' };
+                                    setDrilldownPath(newPath);
+                                }}
+                                className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${(!currentLevel.activeTab || currentLevel.activeTab === 'summary') ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-white/50'}`}
+                            >
+                                <FiBarChart2 size={14} /> Summary
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    const newPath = [...drilldownPath];
+                                    newPath[newPath.length - 1] = { ...currentLevel, activeTab: 'details' };
+                                    setDrilldownPath(newPath);
+                                }}
+                                className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${currentLevel.activeTab === 'details' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:bg-white/50'}`}
+                            >
+                                <FiList size={14} /> Details
+                            </button>
                         </div>
-                    ))}
+                    )}
                 </div>
+
+                <h2 className="text-2xl font-bold text-slate-800 mb-6">{currentLevel.title} — {currentLevel.activeTab === 'details' ? 'Full Project List' : 'Partnership Distribution'}</h2>
+
+                {(!currentLevel.activeTab || currentLevel.activeTab === 'summary') ? (
+                    <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 overflow-x-auto md:overflow-x-visible pb-4 md:pb-0 gap-4 snap-x snap-mandatory">
+                        {currentLevel.drilldown.length === 0 && (
+                            <div className="text-slate-400 italic text-sm">No organizations categorized under {currentLevel.title} yet.</div>
+                        )}
+                        {currentLevel.drilldown.map((item, idx) => (
+                            <div key={idx}
+                                onClick={() => handlePartnerClick({ id: currentLevel.id, name: item.name, type: currentLevel.id, isImplementingOffice: currentLevel.isImplementingOffice })}
+                                className="min-w-[260px] md:min-w-0 snap-center bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group">
+                                <span className="font-bold text-slate-700 text-base block mb-1 group-hover:text-blue-700">{item.name}</span>
+                                <div className="flex items-center gap-4 text-sm text-slate-500 mb-2">
+                                    <span>{Number(item.projects).toLocaleString()} projects</span>
+                                    <span className="text-blue-600 font-bold">{Number(item.classrooms).toLocaleString()} classrooms</span>
+                                </div>
+                                <div className="text-[10px] items-center text-blue-500 font-bold uppercase tracking-widest flex gap-1 group-hover:underline">
+                                    View Handled Schools <FiChevronRight />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm text-center py-20">
+                        <FiSettings className="w-16 h-16 text-slate-200 mx-auto mb-4 animate-spin-slow" />
+                        <h4 className="text-xl font-bold text-slate-800">Project Details View in Development</h4>
+                        <p className="text-slate-500 mt-2">Enhanced line-item tracking for {currentLevel.title} projects is being prepared.</p>
+                    </div>
+                )}
             </div>
         );
     }
@@ -912,12 +951,18 @@ const HomeView = ({
                         </h2>
 
                         <div className="space-y-4 mb-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                                 <select value={filters.region} onChange={e => setFilters({ ...filters, region: e.target.value })}
                                     className="bg-white border border-slate-200 p-3 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
                                     <option value="">All Regions</option>
                                     {filterOptions.regions.map(r => <option key={r} value={r}>{r}</option>)}
                                 </select>
+                                {/* <select value={filters.province} onChange={e => setFilters({ ...filters, province: e.target.value })}
+                                    disabled={!filters.region}
+                                    className="bg-white border border-slate-200 p-3 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 shadow-sm">
+                                    <option value="">All Provinces</option>
+                                    {filterOptions.provinces.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select> */}
                                 <select value={filters.division} onChange={e => setFilters({ ...filters, division: e.target.value })}
                                     disabled={!filters.region}
                                     className="bg-white border border-slate-200 p-3 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 shadow-sm">
@@ -936,6 +981,12 @@ const HomeView = ({
                                     <option value="">All Leg. Districts</option>
                                     {filterOptions.legislativeDistricts.map(l => <option key={l} value={l}>{l}</option>)}
                                 </select>
+                                <button 
+                                    onClick={() => setFilters({ region: '', province: '', division: '', municipality: '', legislative_district: '' })}
+                                    className="bg-slate-800 text-white rounded-xl text-sm font-black hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <FiX size={16} /> Clear Filters
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -945,7 +996,7 @@ const HomeView = ({
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                         <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/30 rounded-full blur-2xl -ml-10 -mb-10"></div>
                         <div className="relative z-10">
-                            <h1 className="text-3xl lg:text-5xl font-extrabold mb-3 tracking-tight">Masterlist Dashboard</h1>
+                            <h1 className="text-3xl lg:text-5xl font-extrabold mb-3 tracking-tight">2026 Infrastructure Priorities</h1>
                             <p className="opacity-90 text-sm md:text-lg mb-8 max-w-lg">Strategic Overview and Classroom Provision Planning</p>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
@@ -1010,16 +1061,99 @@ const HomeView = ({
                                     <div className="text-5xl md:text-6xl font-black tracking-tighter text-emerald-300">{summary && summary.total_classrooms ? Number(summary.total_classrooms).toLocaleString() : '...'}</div>
                                     <p className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] opacity-80 mt-2">Proposed Classrooms</p>
                                 </motion.div>
+
+                                {/* Newcon Priorities Card */}
+                                <motion.div
+                                    onClick={() => setShowCongressView(true)}
+                                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                                    whileTap={{ scale: 0.98 }}
+                                    className="bg-amber-400 text-amber-950 backdrop-blur-md rounded-3xl p-6 border border-amber-300/40 cursor-pointer hover:bg-amber-300 transition-all flex flex-col justify-center shadow-lg"
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="p-2 bg-amber-950/10 rounded-lg"><FiAlertCircle className="w-5 h-5" /></div>
+                                        <span className="text-[10px] font-black uppercase tracking-widest bg-amber-950/10 px-2 py-0.5 rounded-full">Newcon Priorities</span>
+                                    </div>
+                                    <div className="text-4xl md:text-5xl font-black tracking-tighter mb-1">
+                                        {partnerships ? Number(partnerships.total_initiatives).toLocaleString() : '...'}
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Strategic Projects</p>
+                                    <div className="mt-4 flex items-center justify-between text-[10px] font-black uppercase">
+                                        <span>Click to view Details</span>
+                                        <FiArrowLeft className="rotate-180" />
+                                    </div>
+                                </motion.div>
                             </div>
                         </div>
                     </div>
 
                     {/* Partnerships */}
                     <div>
-                        <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                            <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><FiLayers className="w-5 h-5" /></div>
-                            Partnerships Projects
+                        <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><FiLayers className="w-5 h-5" /></div>
+                                Partnerships Projects
+                            </div>
                         </h2>
+
+                        {partnerships && (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10 items-center">
+                                <div className="lg:col-span-1 flex flex-col items-center justify-center p-8 bg-white rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-indigo-100 transition-colors"></div>
+                                    
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 relative z-10">Project Distribution</h4>
+                                    <ResponsiveContainer width="100%" height={240}>
+                                        <PieChart>
+                                            <Pie
+                                                data={partnershipDistributionData}
+                                                innerRadius={65}
+                                                outerRadius={95}
+                                                paddingAngle={6}
+                                                dataKey="value"
+                                                strokeWidth={0}
+                                            >
+                                                {partnershipDistributionData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip 
+                                                contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', fontSize: '12px', fontWeight: 'bold' }}
+                                                itemStyle={{ color: '#1e293b' }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    
+                                    <div className="grid grid-cols-3 gap-3 w-full mt-6 relative z-10">
+                                        {partnershipDistributionData.slice(0, 6).map((d, i) => (
+                                            <div key={i} className="flex flex-col items-center">
+                                                <div className="flex items-center gap-1.5 mb-1">
+                                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }}></div>
+                                                    <span className="text-[9px] font-black text-slate-500">{d.name}</span>
+                                                </div>
+                                                <span className="text-xs font-black text-slate-800">{d.value.toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="lg:col-span-2 space-y-4">
+                                    <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-[2rem] border border-indigo-100/50">
+                                        <div className="flex items-center gap-4 mb-4">
+                                            <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200">
+                                                <FiPieChart size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-black text-slate-800 tracking-tight">Partnership Insights</h3>
+                                                <p className="text-xs text-slate-500 font-medium">Distribution of infrastructure roles across agencies.</p>
+                                            </div>
+                                        </div>
+                                        <p className="text-sm text-slate-600 leading-relaxed italic border-l-4 border-indigo-200 pl-4 py-1">
+                                            The visualization highlights our strategic resource allocation. <strong>{partnershipDistributionData[0]?.name || 'N/A'}</strong> currently manages the largest segment with <strong>{partnershipDistributionData[0]?.value.toLocaleString() || 0}</strong> active projects.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 overflow-x-auto md:overflow-x-visible pb-6 md:pb-0 gap-6 snap-x snap-mandatory no-scrollbar -mx-2 px-2">
                             {partnershipCards.map((p) => (
                                 <motion.button
@@ -1574,6 +1708,8 @@ const PartnerDetailView = ({
     partner, schools, search, setSearch, page, setPage, pageSize, 
     onBack, handleResolve, formatCost 
 }) => {
+    const [activeTab, setActiveTab] = React.useState('summary'); // 'summary' | 'details'
+    
     if (!partner) return null;
 
     const filtered = (schools.data || []).filter(s => {
@@ -1589,157 +1725,234 @@ const PartnerDetailView = ({
     const totalPages = Math.ceil(filtered.length / pageSize);
     const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+    // Summary Statistics
+    const projectsCount = filtered.length;
+    const totalAmount = (schools.data || []).reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+    const resolvedCount = (schools.data || []).filter(s => s.masterlist_status && s.masterlist_status.toLowerCase().includes('found')).length;
+
     return (
-        <div className="space-y-6 pb-20">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
+        <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+            {/* Premium Amber Header Section */}
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-[2.5rem] p-6 text-white shadow-xl shadow-amber-200/50 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-6">
                     <button 
                         onClick={onBack}
-                        className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm group"
+                        className="p-4 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-3xl text-white transition-all group"
                     >
-                        <FiArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                        <FiArrowLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
                     </button>
-                    <div>
-                        <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-1">
-                            {partner.type} Partner
+                    <div className="flex items-center gap-5">
+                        <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
+                            <FiAlertCircle size={30} className="text-white" />
                         </div>
-                        <h2 className="text-3xl font-black text-slate-800 tracking-tight">{partner.name}</h2>
+                        <div>
+                            <h2 className="text-4xl font-black tracking-tight leading-none mb-1">{partner.id === 'FOR_DECISION' ? 'Masterlist' : partner.name}</h2>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] opacity-80">{projectsCount.toLocaleString()} Total Projects Tracked</p>
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all w-full md:w-96">
-                    <FiSearch className="text-slate-400" />
-                    <input 
-                        type="text"
-                        placeholder="Search schools, IDs, or projects..."
-                        className="bg-transparent border-none outline-none text-sm font-medium w-full text-slate-700 placeholder:text-slate-300"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
+                <div className="flex bg-black/10 backdrop-blur-md rounded-[2rem] p-1.5 gap-1.5 border border-white/10">
+                    <button 
+                        onClick={() => setActiveTab('summary')}
+                        className={`px-8 py-3 rounded-[1.5rem] text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'summary' ? 'bg-white text-amber-600 shadow-xl' : 'text-white hover:bg-white/10'}`}
+                    >
+                        <FiInfo size={18} /> Summary
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('details')}
+                        className={`px-8 py-3 rounded-[1.5rem] text-sm font-black transition-all flex items-center gap-2 ${activeTab === 'details' ? 'bg-white text-amber-600 shadow-xl' : 'text-white hover:bg-white/10'}`}
+                    >
+                        <FiList size={18} /> Details
+                    </button>
                 </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
-                <div className="p-0 overflow-x-auto">
-                    {schools.loading ? (
-                        <div className="flex flex-col items-center justify-center py-24 space-y-4">
-                            <FiLoader className="w-10 h-10 text-blue-500 animate-spin" />
-                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching project data...</p>
+            {activeTab === 'summary' ? (
+                <div className="animate-in slide-in-from-bottom-4 duration-500 space-y-8">
+                    {/* KPI Cards */}
+                    <div className="flex flex-col md:flex-row gap-6">
+                        <div className="flex-1 bg-amber-50/50 border border-amber-100 rounded-[2rem] p-10 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                            <FiTarget className="absolute -right-6 -bottom-6 w-32 h-32 text-amber-500/10 -rotate-12 group-hover:rotate-0 transition-transform duration-700" />
+                            <p className="text-[10px] font-black text-amber-400 uppercase tracking-[0.2em] mb-3">Total {partner.id === 'FOR_DECISION' ? 'Newcon Priorities' : partner.name} Projects</p>
+                            <h3 className="text-6xl font-black text-amber-700 tracking-tighter">{projectsCount.toLocaleString()}</h3>
                         </div>
-                    ) : (
-                        <table className="w-full text-xs border-separate border-spacing-0">
-                            <thead className="bg-slate-50/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-100">
-                                <tr>
-                                    {['School ID & Name', 'Project Details', 'Amount', 'Status', 'Location & District', 'Ownership', 'Accessibility', 'Buildable Space'].map(h => (
-                                        <th key={h} className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">{h}</th>
-                                    ))}
-                                    {partner.type === 'FOR_DECISION' && <th className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Actions</th>}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {paginated.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={10} className="py-24 text-center">
-                                            <FiMap className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                                            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">No matches found</p>
-                                        </td>
-                                    </tr>
-                                ) : paginated.map((school, i) => (
-                                    <tr key={i} className="hover:bg-blue-50/30 transition-colors group">
-                                        <td className="px-6 py-5 border-b border-slate-50 group-hover:bg-blue-50/30 transition-colors whitespace-nowrap bg-white">
-                                            <div className="font-mono text-[10px] text-slate-400 mb-0.5">{school.school_id}</div>
-                                            <div className="font-bold text-slate-800 text-sm truncate max-w-[180px]" title={school.school_name}>{school.school_name}</div>
-                                        </td>
-                                        <td className="px-6 py-5 border-b border-slate-50 italic text-slate-500 font-medium max-w-[200px] truncate" title={school.project_name || 'N/A'}>
-                                            {school.project_name || 'Standard Building'}
-                                        </td>
-                                        <td className="px-6 py-5 border-b border-slate-50">
-                                            <span className="font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl">
-                                                {school.shortage}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
-                                            <span className="px-3 py-1 rounded-lg text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-tight">
-                                                {school.classrooms}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 border-b border-slate-50">
-                                            <div className="text-[10px] font-bold text-slate-600 truncate max-w-[150px]">
-                                                {school.region} · {school.division}
-                                            </div>
-                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{school.legislative_district}</div>
-                                        </td>
-                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
-                                            <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100">
-                                                {school.ownership_type_confirmed || school.ownership_type_preloaded || 'Unknown'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
-                                            <span className={`px-2.5 py-1.5 rounded-full font-black text-[9px] uppercase border ${school.accessibility_rating?.includes('4') ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
-                                                Rating: {school.accessibility_rating || '—'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
-                                            <div className="flex flex-col">
-                                                <div className={`font-black text-[10px] uppercase ${(school.has_buildable_space||'').toUpperCase() === 'YES' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                    {(school.has_buildable_space || '—').toUpperCase()}
-                                                </div>
-                                                {school.buildable_space_dimensions && (
-                                                    <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{school.buildable_space_dimensions}</div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        {partner.type === 'FOR_DECISION' && (
-                                            <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
-                                                <select
-                                                    className="bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-[10px] font-black text-slate-700 outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer hover:border-amber-200 transition-all shadow-sm"
-                                                    onChange={(e) => handleResolve(school.school_id, e.target.value)}
-                                                    defaultValue=""
-                                                >
-                                                    <option value="" disabled>Resolve to...</option>
-                                                    <option value="PGO">PGO</option>
-                                                    <option value="MGO">MGO</option>
-                                                    <option value="CGO">CGO</option>
-                                                    <option value="DPWH">DPWH</option>
-                                                    <option value="DEPED">DepEd</option>
-                                                    <option value="CSO">CSO</option>
-                                                </select>
-                                            </td>
-                                        )}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
 
-                {totalPages > 1 && (
-                    <div className="p-6 bg-white border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of {filtered.length} Projects
+                        <div className="flex-1 bg-emerald-50/50 border border-emerald-100 rounded-[2rem] p-10 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                            <FiTrendingUp className="absolute -right-6 -bottom-6 w-32 h-32 text-emerald-500/10 -rotate-12 group-hover:rotate-0 transition-transform duration-700" />
+                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-3">Total Budget</p>
+                            <h3 className="text-6xl font-black text-emerald-700 tracking-tighter">
+                                ₱{totalAmount >= 1_000_000_000 ? `${(totalAmount/1_000_000_000).toFixed(2)}B` : `${(totalAmount/1_000_000).toFixed(1)}M`}
+                            </h3>
+                        </div>
+                    </div>
+
+                    {/* About Section */}
+                    <div className="bg-slate-50/80 rounded-[2.5rem] p-10 border border-slate-100 flex items-start gap-6 relative group overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-bl-full translate-x-8 -translate-y-8" />
+                        <div className="p-4 bg-white shadow-sm border border-slate-100 text-amber-500 rounded-3xl shrink-0 group-hover:scale-110 transition-transform">
+                            <FiInfo size={28} strokeWidth={2.5} />
+                        </div>
+                        <div className="relative">
+                            <h3 className="text-xl font-black text-slate-800 mb-3 tracking-tight">About {partner.id === 'FOR_DECISION' ? 'Masterlist' : partner.name}</h3>
+                            <p className="text-slate-500 leading-relaxed text-sm font-medium italic">
+                                {partner.id === 'FOR_DECISION' ? (
+                                    "Newcon Priorities represent high-priority school infrastructure projects identified for strategic implementation. These projects are specifically allocated and can be assigned to various implementing agencies for streamlined monitoring and progression. Accurate tracking here ensures that critical infrastructure gaps are addressed efficiently through our partnership network."
+                                ) : (
+                                    `Monitoring and implementation registry for initiatives assigned to ${partner.name}. This view provides a collaborative interface to track the progression of infrastructure priorities from project identification to actual deployment. Data is synchronized with the central repository to ensure consistency across all regional and divisional offices.`
+                                )}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Timestamp Footer */}
+                    <div className="flex justify-end pt-4">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] italic">
+                            Data displayed is as of February 23, 2026. 5:45 PM
                         </p>
-                        <div className="flex items-center gap-2">
-                            <button 
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={page === 1}
-                                className="p-2 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-all group"
-                            >
-                                <FiChevronRight className="rotate-180 group-active:scale-90 transition-transform" />
-                            </button>
-                            <span className="text-[10px] font-black text-slate-500 bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl shadow-inner">
-                                PAGE {page} OF {totalPages}
-                            </span>
-                            <button 
-                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                                disabled={page === totalPages}
-                                className="p-2 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-all group"
-                            >
-                                <FiChevronRight className="group-active:scale-90 transition-transform" />
-                            </button>
-                        </div>
                     </div>
-                )}
-            </div>
+                </div>
+            ) : (
+                <div className="animate-in slide-in-from-bottom-4 duration-500 space-y-6">
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                        <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 transition-all w-full md:w-96">
+                            <FiSearch className="text-slate-400" />
+                            <input 
+                                type="text"
+                                placeholder="Search projects by name or ID..."
+                                className="bg-transparent border-none outline-none text-sm font-medium w-full text-slate-700 placeholder:text-slate-300"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                        </div>
+                        {projectsCount > 0 && (
+                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white border border-slate-100 px-4 py-2 rounded-xl shadow-sm">
+                                {projectsCount} Projects in Registry
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+                        <div className="p-0 overflow-x-auto">
+                            {schools.loading ? (
+                                <div className="flex flex-col items-center justify-center py-24 space-y-4">
+                                    <FiLoader className="w-10 h-10 text-blue-500 animate-spin" />
+                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching project data...</p>
+                                </div>
+                            ) : (
+                                <table className="w-full text-xs border-separate border-spacing-0">
+                                    <thead className="bg-slate-50/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-100">
+                                        <tr>
+                                            {['School ID & Name', 'Project Details', 'Amount', 'Status', 'Location & District', 'Ownership', 'Accessibility', 'Buildable Space'].map(h => (
+                                                <th key={h} className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">{h}</th>
+                                            ))}
+                                            {partner.type === 'FOR_DECISION' && <th className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-400 whitespace-nowrap">Actions</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {paginated.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={10} className="py-24 text-center">
+                                                    <FiMap className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">No matches found</p>
+                                                </td>
+                                            </tr>
+                                        ) : paginated.map((school, i) => (
+                                            <tr key={i} className="hover:bg-blue-50/30 transition-colors group">
+                                                <td className="px-6 py-5 border-b border-slate-50 group-hover:bg-blue-50/30 transition-colors whitespace-nowrap bg-white">
+                                                    <div className="font-mono text-[10px] text-slate-400 mb-0.5">{school.school_id}</div>
+                                                    <div className="font-bold text-slate-800 text-sm truncate max-w-[180px]" title={school.school_name}>{school.school_name}</div>
+                                                </td>
+                                                <td className="px-6 py-5 border-b border-slate-50 italic text-slate-500 font-medium max-w-[200px] truncate" title={school.project_name || 'N/A'}>
+                                                    {school.project_name || 'Standard Building'}
+                                                </td>
+                                                <td className="px-6 py-5 border-b border-slate-50 text-slate-600 font-bold">
+                                                    ₱{(Number(school.amount)/1_000_000).toFixed(1)}M
+                                                </td>
+                                                <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                                    <span className="px-3 py-1 rounded-lg text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-tight">
+                                                        {school.masterlist_status || 'Assigned'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-5 border-b border-slate-50">
+                                                    <div className="text-[10px] font-bold text-slate-600 truncate max-w-[150px]">
+                                                        {school.region} · {school.division}
+                                                    </div>
+                                                    <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{school.legislative_district}</div>
+                                                </td>
+                                                <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                                    <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100">
+                                                        {school.ownership_type_confirmed || school.ownership_type_preloaded || 'Unknown'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                                    <span className={`px-2.5 py-1.5 rounded-full font-black text-[9px] uppercase border ${school.accessibility_rating?.includes('4') ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-orange-50 text-orange-700 border-orange-100'}`}>
+                                                        Rating: {school.accessibility_rating || '—'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                                    <div className="flex flex-col">
+                                                        <div className={`font-black text-[10px] uppercase ${(school.has_buildable_space||'').toUpperCase() === 'YES' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            {(school.has_buildable_space || '—').toUpperCase()}
+                                                        </div>
+                                                        {school.buildable_space_dimensions && (
+                                                            <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">{school.buildable_space_dimensions}</div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                {partner.type === 'FOR_DECISION' && (
+                                                    <td className="px-6 py-5 border-b border-slate-50 whitespace-nowrap">
+                                                        <select
+                                                            className="bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-[10px] font-black text-slate-700 outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer hover:border-amber-200 transition-all shadow-sm"
+                                                            onChange={(e) => handleResolve(school.school_id, e.target.value)}
+                                                            defaultValue=""
+                                                        >
+                                                            <option value="" disabled>Resolve to...</option>
+                                                            <option value="PGO">PGO</option>
+                                                            <option value="MGO">MGO</option>
+                                                            <option value="CGO">CGO</option>
+                                                            <option value="DPWH">DPWH</option>
+                                                            <option value="DEPED">DepEd</option>
+                                                            <option value="CSO">CSO</option>
+                                                        </select>
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+
+                        {totalPages > 1 && (
+                            <div className="p-6 bg-white border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of {filtered.length} Projects
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        disabled={page === 1}
+                                        className="p-2 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-all group"
+                                    >
+                                        <FiChevronRight className="rotate-180 group-active:scale-90 transition-transform" />
+                                    </button>
+                                    <span className="text-[10px] font-black text-slate-500 bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl shadow-inner">
+                                        PAGE {page} OF {totalPages}
+                                    </span>
+                                    <button 
+                                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                        disabled={page === totalPages}
+                                        className="p-2 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:hover:text-slate-400 transition-all group"
+                                    >
+                                        <FiChevronRight className="group-active:scale-90 transition-transform" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -1794,12 +2007,14 @@ const PSIP = () => {
     // ── Advanced Filtering State ──
     const [filters, setFilters] = useState({
         region: '',
+        province: '',
         division: '',
         municipality: '',
         legislative_district: ''
     });
     const [filterOptions, setFilterOptions] = useState({
         regions: [],
+        provinces: [],
         divisions: [],
         municipalities: [],
         legislativeDistricts: []
@@ -1818,6 +2033,7 @@ const PSIP = () => {
     const getQueryString = () => {
         const params = new URLSearchParams();
         if (filters.region) params.append('region', filters.region);
+        if (filters.province) params.append('province', filters.province);
         if (filters.division) params.append('division', filters.division);
         if (filters.municipality) params.append('municipality', filters.municipality);
         if (filters.legislative_district) params.append('legislative_district', filters.legislative_district);
@@ -1838,14 +2054,27 @@ const PSIP = () => {
         fetchFilters();
     }, []);
 
-    // Cascade: Fetch Divisions when Region changes
-    useEffect(() => {
+    // Cascade: Fetch Provinces when Region changes
+    /* useEffect(() => {
         if (!filters.region) {
-            setFilterOptions(prev => ({ ...prev, divisions: [], municipalities: [], legislativeDistricts: [] }));
-            setFilters(prev => ({ ...prev, division: '', municipality: '', legislative_district: '' }));
+            setFilterOptions(prev => ({ ...prev, provinces: [], divisions: [], municipalities: [], legislativeDistricts: [] }));
+            setFilters(prev => ({ ...prev, province: '', division: '', municipality: '', legislative_district: '' }));
             return;
         }
         fetch(`${API_BASE}/api/masterlist/filters?region=${encodeURIComponent(filters.region)}`)
+            .then(r => r.json())
+            .then(d => setFilterOptions(prev => ({ ...prev, provinces: d })))
+            .catch(console.error);
+    }, [filters.region]); */
+
+    // Cascade: Fetch Divisions when Region changes (Province commented out)
+    useEffect(() => {
+        if (!filters.region) {
+            setFilterOptions(prev => ({ ...prev, provinces: [], divisions: [], municipalities: [], legislativeDistricts: [] }));
+            setFilters(prev => ({ ...prev, province: '', division: '', municipality: '', legislative_district: '' }));
+            return;
+        }
+        fetch(`${API_BASE}/api/masterlist/filters?region=${encodeURIComponent(filters.region)}&target=division`)
             .then(r => r.json())
             .then(d => setFilterOptions(prev => ({ ...prev, divisions: d })))
             .catch(console.error);

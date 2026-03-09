@@ -12,10 +12,12 @@ const EFDMonitoring = () => {
     const [engineers, setEngineers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [efdLocations, setEfdLocations] = useState([]);
     const [selectedRegion, setSelectedRegion] = useState('');
     const [selectedDivision, setSelectedDivision] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedFundingYear, setSelectedFundingYear] = useState('');
+    const [selectedDonated, setSelectedDonated] = useState('All'); // 'All', 'Donated', 'Non-Donated'
     const [fundingYears, setFundingYears] = useState([]);
 
     const categories = [
@@ -30,7 +32,7 @@ const EFDMonitoring = () => {
         "Midrise School Building"
     ];
 
-    const normalize = (val) => val?.toString().trim() || 'Unassigned';
+    const normalize = (val) => val?.toString().trim().toUpperCase() || 'UNASSIGNED';
     const [selectedProject, setSelectedProject] = useState(null);
     const [selectedEngineer, setSelectedEngineer] = useState('');
     const [isAssigning, setIsAssigning] = useState(false);
@@ -40,16 +42,17 @@ const EFDMonitoring = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [projRes, engRes] = await Promise.all([
+                const [projRes, engRes, fyRes, locRes] = await Promise.all([
                     fetch('/api/projects'),
-                    fetch('/api/engineers')
+                    fetch('/api/engineers'),
+                    fetch('/api/reference/funding-years'),
+                    fetch('/api/reference/efd-locations')
                 ]);
 
                 if (projRes.ok) setProjects(await projRes.json());
                 if (engRes.ok) setEngineers(await engRes.json());
-
-                const fyRes = await fetch('/api/reference/funding-years');
                 if (fyRes.ok) setFundingYears(await fyRes.json());
+                if (locRes.ok) setEfdLocations(await locRes.json());
             } catch (error) {
                 console.error("Error fetching monitoring data:", error);
             } finally {
@@ -70,6 +73,25 @@ const EFDMonitoring = () => {
             .sort((a, b) => b.value - a.value);
     }, [projects]);
 
+    const allRegions = useMemo(() => {
+        const regions = new Set();
+        efdLocations.forEach(loc => {
+            if (loc.region) regions.add(loc.region.trim().toUpperCase());
+        });
+        return Array.from(regions).sort();
+    }, [efdLocations]);
+
+    const allDivisions = useMemo(() => {
+        if (!selectedRegion) return [];
+        const divisions = new Set();
+        efdLocations
+            .filter(loc => loc.region?.trim().toUpperCase() === selectedRegion.toUpperCase())
+            .forEach(loc => {
+                if (loc.division) divisions.add(loc.division.trim().toUpperCase());
+            });
+        return Array.from(divisions).sort();
+    }, [efdLocations, selectedRegion]);
+
     const divisionData = useMemo(() => {
         if (!selectedRegion) return [];
         const counts = {};
@@ -87,6 +109,9 @@ const EFDMonitoring = () => {
             const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
+            const matchesDonated = selectedDonated === 'All' || 
+                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
+                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
             const isUnassignedOnly = !showUnassignedOnly || !p.engineerName;
             
             const matchesSearch = !searchTerm || 
@@ -95,9 +120,9 @@ const EFDMonitoring = () => {
                 p.schoolId?.toString().includes(searchTerm) ||
                 p.engineerName?.toLowerCase().includes(searchTerm.toLowerCase());
                 
-            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && isUnassignedOnly && matchesSearch;
+            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && isUnassignedOnly && matchesSearch;
         });
-    }, [projects, searchTerm, showUnassignedOnly, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear]);
+    }, [projects, searchTerm, showUnassignedOnly, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, selectedDonated]);
 
     const handleAssign = async () => {
         if (!selectedProject || !selectedEngineer) return;
@@ -197,7 +222,7 @@ const EFDMonitoring = () => {
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
                                     <option value="">All Regions</option>
-                                    {regionalData.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                                    {allRegions.map(r => <option key={r} value={r}>{r}</option>)}
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -209,7 +234,7 @@ const EFDMonitoring = () => {
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all disabled:opacity-40"
                                 >
                                     <option value="">All Divisions</option>
-                                    {divisionData.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                                    {allDivisions.map(d => <option key={d} value={d}>{d}</option>)}
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -236,6 +261,18 @@ const EFDMonitoring = () => {
                                     {fundingYears.map(year => (
                                         <option key={year} value={year}>{year}</option>
                                     ))}
+                                </select>
+                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                            </div>
+                            <div className="relative">
+                                <select 
+                                    value={selectedDonated}
+                                    onChange={(e) => setSelectedDonated(e.target.value)}
+                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
+                                >
+                                    <option value="All">All Projects</option>
+                                    <option value="Donated">Donated Projects</option>
+                                    <option value="Non-Donated">Not Donated Projects</option>
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
