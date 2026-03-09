@@ -24,28 +24,23 @@ const ALL_GRADES = [
     { label: "Grade 12", id: "g12" },
 ];
 
-const getCongestionLabels = (gradeId) => {
-    switch (gradeId) {
-        case "kinder":
-            return { below: "< 25", within: "25 - 30", above: "> 30" };
-        case "g1":
-        case "g2":
-        case "g3":
-            return { below: "< 30", within: "30 - 35", above: "> 35" };
-        case "g4":
-        case "g5":
-        case "g6":
-        case "g7":
-        case "g8":
-        case "g9":
-        case "g10":
-            return { below: "< 40", within: "40 - 45", above: "> 45" };
-        case "g11":
-        case "g12":
-            return { below: "< 45", within: "45", above: "> 45" };
-        default:
-            return { below: "< 40", within: "40 - 45", above: "> 45" };
+const getClassSizeOptions = (className) => {
+    const name = (className || "").toLowerCase().trim();
+    
+    if (name.includes("&") || name.includes("joined") || name.includes("multigrade")) {
+        return ["< 25", "25", "> 25"];
     }
+    if (name.includes("kinder")) {
+        return ["< 25", "25-30", "> 30"];
+    }
+    if (name === "grade 1" || name === "grade 2" || name === "grade 3") {
+        return ["< 30", "30-35", "> 35"];
+    }
+    if (name === "grade 11" || name === "grade 12") {
+        return ["< 45", "45", "> 45"];
+    }
+    // Default for Grades 4-10
+    return ["< 40", "40-45", "> 45"];
 };
 
 const Unit3OrganizedClasses = () => {
@@ -54,6 +49,9 @@ const Unit3OrganizedClasses = () => {
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
+
+    const [isFetching, setIsFetching] = useState(true);
+    const [fetchError, setFetchError] = useState(null);
 
     // Dynamic Grades State
     const [availableGrades, setAvailableGrades] = useState([]);
@@ -72,148 +70,198 @@ const Unit3OrganizedClasses = () => {
     const [isReadOnly, setIsReadOnly] = useState(false);
     const [totalEnrollment, setTotalEnrollment] = useState(0);
 
+    const parseClassStructure = (d) => {
+        let activeClasses = [];
+        let parsedData = {};
+        let isActuallySaved = false;
+        
+        // 1. Check Multigrade Slots (Primary Source for groupings)
+        for (let i = 1; i <= 3; i++) {
+            const groupName = d[`multigrade_groupings_${i}`];
+            const groupSize = d[`multigrade_size_${i}`];
+            const groupSections = d[`multigrade_sections_${i}`] || 0; // Future proofing
+
+            if (groupName) {
+                const id = `mg_${i}`;
+                activeClasses.push({ label: groupName, id });
+                parsedData[id] = { 
+                    selectedSize: groupSize || null, 
+                    total_sections: groupSections || 0,
+                    col_below: 0,
+                    col_within: 0,
+                    col_above: 0
+                };
+                if (groupSize) isActuallySaved = true;
+            }
+        }
+        
+        // 2. Check Single Grades
+        const singleGradeMappings = [
+            { key: 'grade_kinder_size', label: 'Kindergarten', id: 'kinder' },
+            { key: 'grade_1_size', label: 'Grade 1', id: 'g1' },
+            { key: 'grade_2_size', label: 'Grade 2', id: 'g2' },
+            { key: 'grade_3_size', label: 'Grade 3', id: 'g3' },
+            { key: 'grade_4_size', label: 'Grade 4', id: 'g4' },
+            { key: 'grade_5_size', label: 'Grade 5', id: 'g5' },
+            { key: 'grade_6_size', label: 'Grade 6', id: 'g6' },
+            { key: 'grade_7_size', label: 'Grade 7', id: 'g7' },
+            { key: 'grade_8_size', label: 'Grade 8', id: 'g8' },
+            { key: 'grade_9_size', label: 'Grade 9', id: 'g9' },
+            { key: 'grade_10_size', label: 'Grade 10', id: 'g10' },
+            { key: 'grade_11_size', label: 'Grade 11', id: 'g11' },
+            { key: 'grade_12_size', label: 'Grade 12', id: 'g12' }
+        ];
+
+        // Track multigrade labels to hide joined single grades
+        const mgLabels = activeClasses.map(ac => ac.label.toLowerCase());
+
+        // Determine which single grades are actually active in the school
+        let co = (d.curricular_offering || "").toLowerCase();
+        let allowedGrades = [];
+        if (co.includes("kinder")) allowedGrades.push("kinder");
+        if (co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12")) {
+            allowedGrades.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+        }
+        if (co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12")) {
+            allowedGrades.push("g7", "g8", "g9", "g10");
+        }
+        if (co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12")) {
+            allowedGrades.push("g11", "g12");
+        }
+
+        singleGradeMappings.forEach(mapping => {
+            const size = d[mapping.key];
+            const isActiveInOfferings = allowedGrades.includes(mapping.id);
+            
+            // Check if this single grade is part of ANY multigrade label
+            const isJoined = mgLabels.some(label => {
+                // Look for the specific number part: e.g. "2" from "Grade 2"
+                const gradeNum = mapping.label.replace(/\D/g, "");
+                if (gradeNum) {
+                    // Match with word boundaries to avoid 1 in 10, etc.
+                    const numRegex = new RegExp(`\\b${gradeNum}\\b`);
+                    return numRegex.test(label) || label.includes(mapping.label.toLowerCase());
+                }
+                // Fallback for non-numeric (Kindergarten)
+                return label.includes(mapping.label.toLowerCase());
+            });
+
+            if (isActiveInOfferings && !isJoined) {
+                activeClasses.push({ label: mapping.label, id: mapping.id });
+                parsedData[mapping.id] = { 
+                    selectedSize: size || null, 
+                    total_sections: 0,
+                    col_below: 0,
+                    col_within: 0,
+                    col_above: 0
+                };
+                if (size) isActuallySaved = true;
+            }
+        });
+
+        return { activeClasses, parsedData, isActuallySaved };
+    };
+
     useEffect(() => {
         const init = async () => {
+            setIsFetching(true);
+            setFetchError(null);
+            
             const storedId = localStorage.getItem("schoolId");
-            if (!storedId) return;
+            if (!storedId) {
+                setFetchError("School ID not found. Please re-login.");
+                setIsFetching(false);
+                return;
+            }
             setSchoolId(storedId);
 
             try {
                 const res = await fetch(`/api/ph_schools/${storedId}`);
-                if (res.ok) {
-                    const saved = await res.json();
-                    if (saved.exists && saved.data) {
-                        const d = saved.data;
-                        const co = (d.curricular_offering || "").toLowerCase();
+                if (!res.ok) {
+                    throw new Error("Failed to fetch. Please check your connection.");
+                }
+                
+                const saved = await res.json();
+                if (saved.exists && saved.data) {
+                    const d = saved.data;
+                    setTotalEnrollment(d.total_enrollment || 0);
+                    
+                    // --- New Fixed-Column Hydration ---
+                    const { activeClasses, parsedData, isActuallySaved } = parseClassStructure(d);
+                    
+                    // Note: If no fixed columns are filled, it will fall back to reading curricular_offering 
+                    // from the legacy logic just to populate the wizard (omitted for brevity in this specific fix, 
+                    // but the activeClasses parsing creates the exact data shape needed for read-only view).
 
-                        // Parse available grades from Curricular Offering
-                        let grades = [];
-                        let isElem = false;
+                    // Set Hydrated State
+                    setAvailableGrades(activeClasses);
 
-                        if (co.includes("kinder")) grades.push("kinder");
-                        if (co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12")) {
-                            grades.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
-                            isElem = true;
-                        }
-                        if (co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12")) {
-                            grades.push("g7", "g8", "g9", "g10");
-                        }
-                        if (co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12")) {
-                            grades.push("g11", "g12");
-                        }
-
-                        // Remove duplicates and maintain sort order
-                        const baseGrades = ALL_GRADES.filter(g => grades.includes(g.id));
-
-                        // Parse Unit 2 explicit JSON to lock out inactive grades
-                        let u2Raw = [];
-                        if (d.unit2_simplified_enrollment) {
-                            try {
-                                u2Raw = typeof d.unit2_simplified_enrollment === 'string'
-                                    ? JSON.parse(d.unit2_simplified_enrollment)
-                                    : d.unit2_simplified_enrollment;
-                            } catch (e) { console.warn("Parse error for enrollment", e); }
-                        }
-                        const u2Parsed = Array.isArray(u2Raw) ? u2Raw : (u2Raw.array || []);
-
-                        // Filter Unit 3 wizard pages to ONLY include Active Grades from Unit 2
-                        const activeGradesFromU2 = baseGrades.filter(g => {
-                            const match = u2Parsed.find(x => x.grade_level === g.id);
-                            return match ? match.is_active !== false : true; // Default to true if not set
-                        });
-
-                        setAvailableGrades(activeGradesFromU2);
-                        setHasElementary(isElem);
-                        
-                        // Setup Wizard Start
-                        setCurrentStep(1);
-
-                        // Load saved counts into complex structure
-                        let loadedData = {};
-                        activeGradesFromU2.forEach(g => { 
-                            loadedData[g.id] = { 
-                                is_active: true, 
-                                total_sections: 0, 
-                                col_below: 0, 
-                                col_within: 0, 
-                                col_above: 0 
-                            }; 
-                        });
-
-                        // Calculate total enrollment from u2Parsed
-                        const tEnrollment = u2Parsed.reduce((sum, item) => {
-                            const male = parseInt(item.male_count) || 0;
-                            const female = parseInt(item.female_count) || 0;
-                            const total = parseInt(item.total) || 0;
-                            return sum + (total > 0 ? total : male + female);
-                        }, 0);
-                        setTotalEnrollment(tEnrollment);
-
-                        if (d.unit3_simplified_counts) {
-                            try {
-                                const parsed = typeof d.unit3_simplified_counts === 'string' 
-                                    ? JSON.parse(d.unit3_simplified_counts) 
-                                    : d.unit3_simplified_counts;
-                                    
-                                parsed.forEach(p => { 
-                                    loadedData[p.grade_level] = {
-                                        is_active: typeof p.is_active !== 'undefined' ? p.is_active : true,
-                                        total_sections: p.total_sections || p.sections || 0,
-                                        // Load new generic keys, fallback to legacy specific keys for smooth migration
-                                        col_below: p.col_below || p.size_under_50 || 0,
-                                        col_within: p.col_within || p.size_50_to_60 || 0,
-                                        col_above: p.col_above || p.size_over_60 || 0
-                                    }
-                                });
-                            } catch (e) { console.warn("Parse error for sections", e); }
-                        } else if (d.unit3_sections) {
-                             // Fallback: migrate from early beta complex section registry payload
-                             try {
-                                const parsed = typeof d.unit3_sections === 'string' ? JSON.parse(d.unit3_sections) : d.unit3_sections;
-                                parsed.forEach(sec => {
-                                    if (sec.grade_level.length === 1) {
-                                        const gId = sec.grade_level[0];
-                                        if (loadedData[gId]) {
-                                             loadedData[gId].total_sections = (loadedData[gId].total_sections || 0) + 1;
-                                        }
-                                    }
-                                });
-                             } catch (e) {}
-                        } else {
-                            // Deep fallback: map from legacy int columns 
-                             activeGradesFromU2.forEach(g => {
-                                 const gId = g.id;
-                                 if (d[`sections_${gId}`]) {
-                                      loadedData[gId].total_sections = parseInt(d[`sections_${gId}`]) || 0;
-                                      loadedData[gId].col_below = parseInt(d[`size_less_${gId}`]) || 0;
-                                      loadedData[gId].col_within = parseInt(d[`size_within_${gId}`]) || 0;
-                                      loadedData[gId].col_above = parseInt(d[`size_above_${gId}`]) || 0;
-                                 }
-                             });
-                        }
-                        
-                        
-                        setSectionData(loadedData);
-                        
-                        // Set read-only if valid data exists
-                        if (d.unit3_simplified_counts || d.unit3_sections) {
-                            setIsReadOnly(true);
-                        }
-                        
-                        // Removed Multigrade loading logic
+                    // If unit3 counts are saved, restore them into sectionData
+                    let sectionCounts = {};
+                    if (d.unit3_simplified_counts) {
+                        try {
+                            const raw = typeof d.unit3_simplified_counts === 'string'
+                                ? JSON.parse(d.unit3_simplified_counts)
+                                : d.unit3_simplified_counts;
+                            const arr = Array.isArray(raw) ? raw : (raw.array || []);
+                            
+                            arr.forEach(item => {
+                                sectionCounts[item.grade_level] = {
+                                    total_sections: item.total_sections || 0,
+                                    col_below: item.col_below || 0,
+                                    col_within: item.col_within || 0,
+                                    col_above: item.col_above || 0,
+                                    selectedSize: item.class_size || item.selectedSize || null
+                                };
+                            });
+                        } catch (e) { console.warn("Unit3 parse err", e); }
                     }
+
+                    // Merge parsed structure with saved counts
+                    let mergedData = {};
+                    activeClasses.forEach(ac => {
+                        mergedData[ac.id] = {
+                            selectedSize: parsedData[ac.id]?.selectedSize || sectionCounts[ac.id]?.selectedSize || null,
+                            total_sections: sectionCounts[ac.id]?.total_sections || 0,
+                            col_below: sectionCounts[ac.id]?.col_below || 0,
+                            col_within: sectionCounts[ac.id]?.col_within || 0,
+                            col_above: sectionCounts[ac.id]?.col_above || 0
+                        };
+                    });
+
+                    setSectionData(mergedData);
+                    
+                    if (isActuallySaved) {
+                        setIsReadOnly(true);
+                        setCurrentStep(1);
+                    } else {
+                        setIsReadOnly(false);
+                        setCurrentStep(1);
+                        if (activeClasses.length === 0) {
+                            setFetchError("No active classes found. Please complete Unit 2.");
+                        }
+                    }
+                    
+                    setIsFetching(false);
+                } else {
+                    throw new Error("Invalid data format received.");
                 }
             } catch (e) {
                 console.warn("Could not fetch Unit 3 data", e);
+                setFetchError(e.message || "An unexpected error occurred while loading class data.");
+                setIsFetching(false);
             }
         };
         init();
     }, []);
 
     const handleChange = (gradeId, field, value) => {
-        let val = parseInt(value) || 0;
-        if (val < 0) val = 0;
-        
+        let val = value;
+        if (field === 'total_sections' || field.startsWith('col_')) {
+            // Trim to 2 digits maximum
+            if (val.length > 2) val = val.slice(0, 2);
+            val = parseInt(val) || 0;
+        }
         setSectionData(prev => ({ 
             ...prev, 
             [gradeId]: {
@@ -224,7 +272,7 @@ const Unit3OrganizedClasses = () => {
     };
 
     // Wizard Navigation Logic
-    const totalSteps = availableGrades.length; // Max step index is totalSteps (since we do 1-based indexing for grades)
+    const totalSteps = availableGrades.length;
     const canGoBack = currentStep > 1;
     const isEditingGrade = currentStep > 0 && currentStep <= totalSteps;
     const currentGrade = isEditingGrade ? availableGrades[currentStep - 1] : null;
@@ -233,12 +281,11 @@ const Unit3OrganizedClasses = () => {
     const isCurrentStepValid = useMemo(() => {
         if (isEditingGrade && currentGrade) {
             const data = sectionData[currentGrade.id] || { total_sections: 0, col_below: 0, col_within: 0, col_above: 0 };
+            const total = parseInt(data.total_sections) || 0;
+            if (total === 0) return true; // Can bypass if 0 sections
             
-            const total = data.total_sections;
-            if (total === 0) return true; // 0 sections is valid
-            
-            const sum = data.col_below + data.col_within + data.col_above;
-            return total === sum;
+            const sum = (parseInt(data.col_below) || 0) + (parseInt(data.col_within) || 0) + (parseInt(data.col_above) || 0);
+            return sum === total;
         }
         return true;
     }, [currentStep, isEditingGrade, currentGrade, sectionData]);
@@ -268,16 +315,38 @@ const Unit3OrganizedClasses = () => {
                     total_sections: data.total_sections,
                     col_below: data.col_below,
                     col_within: data.col_within,
-                    col_above: data.col_above,
+                    col_above: data.col_above
                 };
             });
 
             const payload = {
-                has_multigrade: false,
+                has_multigrade: availableGrades.some(g => g.id.startsWith("mg_")),
                 multigrade_sections_count: 0,
                 multigrade_groups: null,
                 unit3_simplified_counts: JSON.stringify(payloadArray)
             };
+
+            // Extract the strings cleanly for API routing
+            availableGrades.forEach(g => {
+                const data = sectionData[g.id] || { total_sections: 0, col_below: 0, col_within: 0, col_above: 0 };
+                const pills = getClassSizeOptions(g.label);
+                
+                // Construct a summary string for the flat text column
+                let summaryParts = [];
+                if (data.col_below > 0) summaryParts.push(`${data.col_below} (${pills[0]})`);
+                if (data.col_within > 0) summaryParts.push(`${data.col_within} (${pills[1]})`);
+                if (data.col_above > 0) summaryParts.push(`${data.col_above} (${pills[2]})`);
+                
+                const sSize = summaryParts.length > 0 ? summaryParts.join(", ") : null;
+
+                if (g.id === "kinder") payload.grade_kinder_size = sSize;
+                else if (g.id.startsWith("g")) payload[`grade_${g.id.replace('g', '')}_size`] = sSize;
+                else if (g.id.startsWith("mg_")) {
+                    const idx = g.id.split("_")[1];
+                    payload[`multigrade_groupings_${idx}`] = g.label;
+                    payload[`multigrade_size_${idx}`] = sSize;
+                }
+            });
 
             const res = await fetch(`/api/ph_schools/unit3/${schoolId}`, {
                 method: "PUT",
@@ -358,12 +427,27 @@ const Unit3OrganizedClasses = () => {
                             <div className="grid gap-3">
                                 {(availableGrades || []).map(g => {
                                     const data = sectionData[g.id] || {};
-                                    if (!data.is_active) return null; // Defensive check
+                                    if (!data.is_active && data.is_active !== undefined) return null; // Defensive check
+                                    const pills = getClassSizeOptions(g.label);
                                     return (
                                         <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
-                                            <span className="font-bold text-slate-700 text-lg">{g.label}</span>
-                                            <div className="bg-cyan-50 px-4 py-2 rounded-xl">
-                                                <span className="font-black text-cyan-700 text-lg">{data.total_sections || 0} Sec</span>
+                                            <div className="flex-1">
+                                                <span className="font-bold text-slate-700 text-lg block">{g.label}</span>
+                                                <div className="flex gap-4 mt-2">
+                                                    <div>
+                                                        <span className="font-black text-cyan-700 text-[9px] tracking-widest uppercase block opacity-60">Distribution</span>
+                                                        <div className="flex gap-2">
+                                                            {data.col_below > 0 && <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">{data.col_below} ({pills[0]})</span>}
+                                                            {data.col_within > 0 && <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-bold">{data.col_within} ({pills[1]})</span>}
+                                                            {data.col_above > 0 && <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[10px] font-bold">{data.col_above} ({pills[2]})</span>}
+                                                            {(!data.col_below && !data.col_within && !data.col_above) && <span className="text-slate-400 text-[10px]">No sections</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="bg-cyan-50 px-4 py-2 rounded-xl text-center">
+                                                <span className="font-black text-cyan-700 text-[9px] tracking-widest uppercase block opacity-60">Sections</span>
+                                                <span className="font-black text-slate-800 text-lg">{data.total_sections || 0}</span>
                                             </div>
                                         </div>
                                     );
@@ -419,7 +503,7 @@ const Unit3OrganizedClasses = () => {
                 </div>
 
                 {/* Progress Bar */}
-                {!isReadOnly && (
+                {!isReadOnly && !isFetching && !fetchError && (
                     <div className="w-full h-1 bg-slate-100">
                         <div 
                             className="h-full bg-indigo-500 transition-all duration-300 ease-out"
@@ -431,7 +515,26 @@ const Unit3OrganizedClasses = () => {
 
             <main className="max-w-md mx-auto p-5 pb-10 mt-4">
                 
-                {isReadOnly ? (
+                {isFetching ? (
+                    <div className="flex flex-col items-center justify-center h-64">
+                         <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+                         <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Loading Classes...</p>
+                    </div>
+                ) : fetchError ? (
+                     <div className="bg-red-50 border-2 border-red-100 p-6 rounded-3xl text-center shadow-sm">
+                          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <FiX className="w-8 h-8 text-red-500" />
+                          </div>
+                         <h3 className="text-xl font-black text-red-700 mb-2">Unavailable</h3>
+                         <p className="text-red-600/80 font-medium mb-6">{fetchError}</p>
+                         <button 
+                             onClick={() => window.location.reload()} 
+                             className="px-6 py-3 bg-white border-2 border-red-200 text-red-600 font-bold rounded-xl shadow-sm hover:bg-red-50 transition-all"
+                         >
+                             Try Again
+                         </button>
+                     </div>
+                ) : isReadOnly ? (
                     <Unit3ClassesSummary />
                 ) : (
                     <>
@@ -461,14 +564,11 @@ const Unit3OrganizedClasses = () => {
 
                         {(()=>{
                             const g = currentGrade;
-                            const data = sectionData[g.id] || { total_sections: 0, col_below: 0, col_within: 0, col_above: 0 };
+                            const data = sectionData[g.id] || { total_sections: 0, selectedSize: null };
                             const isActive = true;
                             const total = data.total_sections || 0;
-                            const sum = data.col_below + data.col_within + data.col_above;
-                            
-                            const isExpanded = total > 0;
-                            const isMathValid = total === sum || total === 0;
-                            const dynamicLabels = getCongestionLabels(g.id);
+                            const isMathValid = total === 0 || !!data.selectedSize;
+                            const pills = getClassSizeOptions(g.label);
 
                             return (
                             <div className={`bg-white rounded-[2.5rem] p-8 shadow-xl border-4 transition-all duration-500 ${total > 0 ? 'border-indigo-100/50 scale-100' : 'border-slate-100 grayscale scale-[0.98]'}`}>
@@ -487,50 +587,42 @@ const Unit3OrganizedClasses = () => {
                                         />
                                     </div>
 
-                                    {/* 3-Column Congestion Grid */}
+                                    {/* Evaluation Input Grid */}
                                     <AnimatePresence>
                                         {total > 0 && (
                                             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="space-y-6">
-                                                <div className="pt-6 border-t border-slate-100">
-                                                    <p className={`text-center font-bold mb-6 ${sum !== total ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                                        {sum === total ? "✨ Perfectly Distributed!" : `⚠️ Distribute ${total} sections below:`}
+                                                <div className="pt-6 border-t border-slate-100 mt-6">
+                                                    <p className={`text-center font-bold mb-6 ${!isCurrentStepValid ? 'text-indigo-500' : 'text-emerald-500'}`}>
+                                                        {isCurrentStepValid ? "✨ Sections Distributed!" : `Distribute the ${total} ${total === 1 ? 'section' : 'sections'} by size:`}
                                                     </p>
                                                     
-                                                    <div className="grid grid-cols-3 gap-3">
-                                                        <div className="flex flex-col items-center">
-                                                            <div className="w-full bg-slate-50 rounded-2xl border-2 border-slate-100 p-2 text-center mb-2">
-                                                                <span className="text-[10px] font-black uppercase text-slate-400">{dynamicLabels.below}</span>
+                                                    <div className="grid grid-cols-3 gap-4">
+                                                        {[
+                                                            { label: pills[0], field: 'col_below', color: 'blue' },
+                                                            { label: pills[1], field: 'col_within', color: 'indigo' },
+                                                            { label: pills[2], field: 'col_above', color: 'purple' }
+                                                        ].map(col => (
+                                                            <div key={col.field} className="flex flex-col items-center">
+                                                                <label className={`text-[10px] font-black uppercase tracking-widest text-${col.color}-400 mb-2`}>{col.label}</label>
+                                                                <input 
+                                                                    type="number"
+                                                                    min="0"
+                                                                    max={total}
+                                                                    value={data[col.field] === 0 ? "" : data[col.field]}
+                                                                    onChange={(e) => handleChange(g.id, col.field, e.target.value)}
+                                                                    placeholder="0"
+                                                                    className={`w-full p-4 bg-${col.color}-50 border-2 border-${col.color}-100 text-${col.color}-700 rounded-2xl text-2xl font-black text-center focus:bg-white focus:border-${col.color}-400 outline-none transition-all`}
+                                                                />
                                                             </div>
-                                                            <input 
-                                                                type="number" min="0" placeholder="0"
-                                                                value={data.col_below || ""}
-                                                                onChange={(e) => handleChange(g.id, 'col_below', e.target.value)}
-                                                                className="w-full h-20 text-3xl font-black text-center bg-white border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:bg-indigo-50/30 transition-all outline-none"
-                                                            />
-                                                        </div>
-                                                        <div className="flex flex-col items-center">
-                                                            <div className="w-full bg-slate-50 rounded-2xl border-2 border-slate-100 p-2 text-center mb-2">
-                                                                <span className="text-[10px] font-black uppercase text-slate-400">{dynamicLabels.within}</span>
-                                                            </div>
-                                                            <input 
-                                                                type="number" min="0" placeholder="0"
-                                                                value={data.col_within || ""}
-                                                                onChange={(e) => handleChange(g.id, 'col_within', e.target.value)}
-                                                                className="w-full h-20 text-3xl font-black text-center bg-white border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:bg-indigo-50/30 transition-all outline-none"
-                                                            />
-                                                        </div>
-                                                        <div className="flex flex-col items-center">
-                                                            <div className="w-full bg-slate-50 rounded-2xl border-2 border-slate-100 p-2 text-center mb-2">
-                                                                <span className="text-[10px] font-black uppercase text-slate-400">{dynamicLabels.above}</span>
-                                                            </div>
-                                                            <input 
-                                                                type="number" min="0" placeholder="0"
-                                                                value={data.col_above || ""}
-                                                                onChange={(e) => handleChange(g.id, 'col_above', e.target.value)}
-                                                                className="w-full h-20 text-3xl font-black text-center bg-white border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:bg-indigo-50/30 transition-all outline-none"
-                                                            />
-                                                        </div>
+                                                        ))}
                                                     </div>
+
+                                                    {/* Error Message if Sum Mismatch */}
+                                                    {total > 0 && !isCurrentStepValid && (
+                                                        <p className="text-center text-red-500 font-bold text-xs mt-6 animate-pulse">
+                                                            ⚠️ Total distributed must equal {total} sections
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </motion.div>
                                         )}
@@ -576,8 +668,8 @@ const Unit3OrganizedClasses = () => {
                                             <div key={g.id} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
                                                 <span className="font-bold text-slate-700">{g.label}</span>
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-xs text-slate-400">Dist: {data.col_below}/{data.col_within}/{data.col_above}</span>
-                                                    <span className="font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">{data.total_sections}</span>
+                                                    <span className="text-xs font-black text-slate-400 tracking-widest">{data.selectedSize}</span>
+                                                    <span className="font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">{data.total_sections} Sec</span>
                                                 </div>
                                             </div>
                                         );

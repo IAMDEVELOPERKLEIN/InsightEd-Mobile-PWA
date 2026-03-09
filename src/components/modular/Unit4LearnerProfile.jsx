@@ -771,7 +771,11 @@ const Unit4LearnerProfile = () => {
                                                             type="number" min="0" placeholder="0"
                                                             value={demographicsData[`als_total`] || ""}
                                                             onFocus={e => { if (e.target.value === '0') setDemographicsData(prev => ({ ...prev, als_total: "" })) }}
-                                                            onChange={e => setDemographicsData(prev => ({ ...prev, als_total: e.target.value }))}
+                                                            onChange={e => {
+                                                                let val = e.target.value;
+                                                                if (val.length > 3) val = val.slice(0, 3);
+                                                                setDemographicsData(prev => ({ ...prev, als_total: val }));
+                                                            }}
                                                             className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black text-slate-700 focus:outline-none focus:border-indigo-400 focus:bg-white focus:shadow-xl focus:shadow-indigo-100/50 transition-all duration-300"
                                                         />
                                                     </div>
@@ -800,7 +804,11 @@ const Unit4LearnerProfile = () => {
                                                                     max={maxVal}
                                                                     value={demographicsData[fieldKey] !== undefined ? demographicsData[fieldKey] : ""}
                                                                     onFocus={e => { if (e.target.value === '0') setDemographicsData(prev => ({ ...prev, [fieldKey]: "" })) }}
-                                                                    onChange={e => setDemographicsData(prev => ({ ...prev, [fieldKey]: e.target.value }))}
+                                                                    onChange={e => {
+                                                                        let val = e.target.value;
+                                                                        if (val.length > 3) val = val.slice(0, 3);
+                                                                        setDemographicsData(prev => ({ ...prev, [fieldKey]: val }));
+                                                                    }}
                                                                     className={`w-full p-5 bg-slate-50 border-4 rounded-3xl text-2xl font-black text-slate-700 focus:outline-none transition-all duration-300 ${isExceeded ? 'border-rose-200 bg-rose-50 text-rose-600 focus:border-rose-400' : 'border-slate-100 focus:border-indigo-400 focus:bg-white focus:shadow-xl focus:shadow-indigo-100/50'}`}
                                                                 />
                                                                 {isExceeded && (
@@ -922,7 +930,11 @@ const Unit4LearnerProfile = () => {
                                                                     max={maxVal}
                                                                     value={movementData[fieldKey] !== undefined ? movementData[fieldKey] : ""}
                                                                     onFocus={e => { if (e.target.value === '0') setMovementData(prev => ({ ...prev, [fieldKey]: "" })) }}
-                                                                    onChange={e => setMovementData(prev => ({ ...prev, [fieldKey]: e.target.value }))}
+                                                                    onChange={e => {
+                                                                        let val = e.target.value;
+                                                                        if (val.length > 3) val = val.slice(0, 3);
+                                                                        setMovementData(prev => ({ ...prev, [fieldKey]: val }));
+                                                                    }}
                                                                     className={`w-full p-5 bg-slate-50 border-4 rounded-3xl text-2xl font-black text-slate-700 focus:outline-none transition-all duration-300 ${isExceeded ? 'border-rose-200 bg-rose-50 text-rose-600 focus:border-rose-400' : 'border-slate-100 focus:border-blue-400 focus:bg-white focus:shadow-xl focus:shadow-blue-100/50'}`}
                                                                 />
                                                                 {isExceeded && (
@@ -1006,7 +1018,8 @@ const Unit4LearnerProfile = () => {
                                                         value={bmiData[f.key] !== undefined ? bmiData[f.key] : ""}
                                                         onFocus={e => { if (e.target.value === '0') setBmiData(prev => ({ ...prev, [f.key]: "" })) }}
                                                         onChange={e => {
-                                                            const val = e.target.value;
+                                                            let val = e.target.value;
+                                                            if (val.length > 3) val = val.slice(0, 3);
                                                             setBmiData(p => ({ ...p, [f.key]: val }));
                                                         }}
                                                         className={`w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black text-slate-700 focus:outline-none focus:border-${f.color}-400 focus:bg-white focus:shadow-xl transition-all duration-300`}

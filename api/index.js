@@ -847,7 +847,7 @@ const initMasterlistDB = async () => {
       UPDATE masterlist_26_30 m
       SET province = s.province
       FROM schools s
-      WHERE m.school_id = s.school_id
+      WHERE m.school_id::text = s.school_id::text
       AND m.province IS NULL;
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
@@ -12375,6 +12375,20 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
   const data = req.body;
 
   try {
+    // Auto-migrate multigrade columns if missing (syncs with Unit 3 structure)
+    try {
+      const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
+      for (const col of mgCols) {
+        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
+      }
+      const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
+      for (const col of mgEnrCols) {
+        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
+      }
+    } catch (e) {
+      console.warn("DB Migration Warning for Unit 2:", e.message);
+    }
+
     // We expect { unit2_simplified_enrollment: [...] } OR { unit2_simplified_enrollment: { array: [...], questionnaire: {} } }
     const rawData = data.unit2_simplified_enrollment || [];
     const simplifiedData = Array.isArray(rawData) ? rawData : (rawData.array || []);
@@ -12407,6 +12421,11 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
 
     const globalTotal = totalM + totalF;
 
+    // NOTE FOR DATABASE CLEANUP: 
+    // The previous 'multigrade_details' JSON column is now deprecated in favor of 
+    // fixed-columns to match Unit 3 structure. You can drop it from your database manually using:
+    // ALTER TABLE ph_schools DROP COLUMN multigrade_details;
+
     const fields = [
       'enroll_kinder = $1', 'enroll_g1 = $2', 'enroll_g2 = $3', 'enroll_g3 = $4',
       'enroll_g4 = $5', 'enroll_g5 = $6', 'enroll_g6 = $7', 'enroll_g7 = $8', 'enroll_g8 = $9',
@@ -12414,6 +12433,8 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
       'male_enrollment = $15', 'female_enrollment = $16',
       'sned_self_contained_count = $17',
       'unit2_simplified_enrollment = $18',
+      'multigrade_groupings_1 = $20', 'multigrade_groupings_2 = $21', 'multigrade_groupings_3 = $22',
+      'multigrade_enrollment_1 = $23', 'multigrade_enrollment_2 = $24', 'multigrade_enrollment_3 = $25',
       'unit2_completed = TRUE', 'verified_as_of = CURRENT_TIMESTAMP'
     ];
 
@@ -12424,7 +12445,13 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
       totalM, totalF,
       parseInt(data.sned_self_contained_count) || 0,
       JSON.stringify(rawData),
-      schoolId // $19
+      schoolId, // $19
+      data.multigrade_groupings_1 || null, // $20
+      data.multigrade_groupings_2 || null, // $21
+      data.multigrade_groupings_3 || null, // $22
+      parseInt(data.multigrade_enrollment_1) || null, // $23
+      parseInt(data.multigrade_enrollment_2) || null, // $24
+      parseInt(data.multigrade_enrollment_3) || null  // $25
     ];
 
     const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $19`;
@@ -12451,7 +12478,18 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
 app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
-  const { has_multigrade, multigrade_sections_count, unit3_simplified_counts } = data;
+  
+  const { 
+    has_multigrade, 
+    multigrade_sections_count, 
+    unit3_simplified_counts,
+    grade_kinder_size, grade_1_size, grade_2_size, grade_3_size, grade_4_size,
+    grade_5_size, grade_6_size, grade_7_size, grade_8_size, grade_9_size,
+    grade_10_size, grade_11_size, grade_12_size,
+    multigrade_groupings_1, multigrade_size_1,
+    multigrade_groupings_2, multigrade_size_2,
+    multigrade_groupings_3, multigrade_size_3
+  } = data;
 
   if (typeof has_multigrade === 'undefined') {
     return res.status(400).json({ error: 'has_multigrade is required' });
@@ -12462,23 +12500,81 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     try {
       await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_simplified_counts JSONB');
       await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_sections_count INTEGER DEFAULT 0');
-    } catch (e) { }
+      
+      const fixedCols = [
+        'grade_kinder_size', 'grade_1_size', 'grade_2_size', 'grade_3_size', 'grade_4_size',
+        'grade_5_size', 'grade_6_size', 'grade_7_size', 'grade_8_size', 'grade_9_size',
+        'grade_10_size', 'grade_11_size', 'grade_12_size',
+        'multigrade_groupings_1', 'multigrade_size_1',
+        'multigrade_groupings_2', 'multigrade_size_2',
+        'multigrade_groupings_3', 'multigrade_size_3'
+      ];
+      for (const col of fixedCols) {
+        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
+      }
+    } catch (e) { 
+      console.warn("DB Migration Warning for Unit 3:", e.message);
+    }
 
-    const sectionsJson = unit3_simplified_counts || '[]';
+    const sectionsJson = typeof unit3_simplified_counts === 'string' ? unit3_simplified_counts : JSON.stringify(unit3_simplified_counts || []);
+
+    const fields = [
+      'has_multigrade = $1',
+      'multigrade_sections_count = $2',
+      'unit3_simplified_counts = $3::jsonb',
+      'unit3_completed = TRUE',
+      'updated_at = CURRENT_TIMESTAMP',
+      'grade_kinder_size = $4',
+      'grade_1_size = $5',
+      'grade_2_size = $6',
+      'grade_3_size = $7',
+      'grade_4_size = $8',
+      'grade_5_size = $9',
+      'grade_6_size = $10',
+      'grade_7_size = $11',
+      'grade_8_size = $12',
+      'grade_9_size = $13',
+      'grade_10_size = $14',
+      'grade_11_size = $15',
+      'grade_12_size = $16',
+      'multigrade_groupings_1 = $17',
+      'multigrade_size_1 = $18',
+      'multigrade_groupings_2 = $19',
+      'multigrade_size_2 = $20',
+      'multigrade_groupings_3 = $21',
+      'multigrade_size_3 = $22'
+    ];
 
     const query = `
       UPDATE ph_schools
-      SET
-        has_multigrade             = $1,
-        multigrade_sections_count  = $2,
-        unit3_simplified_counts    = $3::jsonb,
-        unit3_completed            = TRUE,
-        updated_at                 = CURRENT_TIMESTAMP
-      WHERE school_id = $4
+      SET ${fields.join(', ')}
+      WHERE school_id = $23
     `;
 
     const values = [
-      has_multigrade, multigrade_sections_count || 0, sectionsJson, schoolId
+      has_multigrade, 
+      multigrade_sections_count || 0, 
+      sectionsJson,
+      grade_kinder_size || null,
+      grade_1_size || null,
+      grade_2_size || null,
+      grade_3_size || null,
+      grade_4_size || null,
+      grade_5_size || null,
+      grade_6_size || null,
+      grade_7_size || null,
+      grade_8_size || null,
+      grade_9_size || null,
+      grade_10_size || null,
+      grade_11_size || null,
+      grade_12_size || null,
+      multigrade_groupings_1 || null,
+      multigrade_size_1 || null,
+      multigrade_groupings_2 || null,
+      multigrade_size_2 || null,
+      multigrade_groupings_3 || null,
+      multigrade_size_3 || null,
+      schoolId
     ];
 
     // Ensure the row exists before updating, in case the user jumped straight to this unit
@@ -12494,7 +12590,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     res.json({ success: true, message: 'Unit 3 Organized Classes data saved successfully!' });
   } catch (err) {
     console.error('Save Unit 3 Error:', err);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
   }
 });
 

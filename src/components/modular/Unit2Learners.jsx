@@ -246,7 +246,9 @@ const Unit2Learners = () => {
 
     // --- Handlers ---
     const handleGradeChange = (gradeId, val) => {
-        setGradeTotals(prev => ({ ...prev, [gradeId]: val }));
+        let limitedVal = val;
+        if (limitedVal.length > 4) limitedVal = limitedVal.slice(0, 4);
+        setGradeTotals(prev => ({ ...prev, [gradeId]: limitedVal }));
     };
 
     const toggleAvailability = (gradeId) => {
@@ -265,9 +267,11 @@ const Unit2Learners = () => {
     };
 
     const handleAralChange = (subject, gradeId, val) => {
-        if (subject === 'math') setAralMath(prev => ({ ...prev, [gradeId]: val }));
-        if (subject === 'reading') setAralReading(prev => ({ ...prev, [gradeId]: val }));
-        if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: val }));
+        let limitedVal = val;
+        if (limitedVal.length > 4) limitedVal = limitedVal.slice(0, 4);
+        if (subject === 'math') setAralMath(prev => ({ ...prev, [gradeId]: limitedVal }));
+        if (subject === 'reading') setAralReading(prev => ({ ...prev, [gradeId]: limitedVal }));
+        if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: limitedVal }));
     };
 
     const handleGenderChange = (field, val) => {
@@ -468,13 +472,12 @@ const Unit2Learners = () => {
                 };
             });
 
-            // For Multigrade combinations, we split the total to the first grade in the combo
-            // to ensure the backend's sum(total) equals the grandTotal (excluding SNED).
+            // For Multigrade combinations, map the individual inputs directly down to the database columns
             const mgGrades = mgCombinations.flatMap(c => {
-                return c.grades.map((id, idx) => ({
+                return c.grades.map((id) => ({
                     grade_level: id,
                     is_active: true,
-                    total: idx === 0 ? (parseInt(c.enrollment) || 0) : 0,
+                    total: parseInt(gradeTotals[id]) || 0,
                     male: 0, female: 0
                 }));
             });
@@ -493,6 +496,24 @@ const Unit2Learners = () => {
                 questionnaire: questionnaire 
             };
 
+            // Calculate the 3 multigrade string slots for DB fixed-column parity
+            const buildMgString = (gradesArray) => {
+                if (!gradesArray || gradesArray.length === 0) return null;
+                const labels = gradesArray.map(gId => gId.replace('g', '')); // 'g1' -> '1'
+                if (labels.length === 1) return `Grade ${labels[0]}`;
+                if (labels.length === 2) return `Grade ${labels[0]} & ${labels[1]}`;
+                
+                const last = labels.pop();
+                return `Grade ${labels.join(', ')} & ${last}`;
+            };
+
+            const mg_1 = mgCombinations.length > 0 ? buildMgString(mgCombinations[0].grades) : null;
+            const mg_2 = mgCombinations.length > 1 ? buildMgString(mgCombinations[1].grades) : null;
+            const mg_3 = mgCombinations.length > 2 ? buildMgString(mgCombinations[2].grades) : null;
+
+            const mg_1_enrollment = mgCombinations.length > 0 ? mgCombinations[0].grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) : null;
+            const mg_2_enrollment = mgCombinations.length > 1 ? mgCombinations[1].grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) : null;
+            const mg_3_enrollment = mgCombinations.length > 2 ? mgCombinations[2].grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) : null;
 
             const res = await fetch(`/api/ph_schools/unit2/${storedId}`, {
                 method: "PUT",
@@ -500,6 +521,12 @@ const Unit2Learners = () => {
                 body: JSON.stringify({ 
                     unit2_simplified_enrollment: payload,
                     sned_self_contained_count: parseInt(sned_self_contained_count) || 0,
+                    multigrade_groupings_1: mg_1,
+                    multigrade_groupings_2: mg_2,
+                    multigrade_groupings_3: mg_3,
+                    multigrade_enrollment_1: mg_1_enrollment,
+                    multigrade_enrollment_2: mg_2_enrollment,
+                    multigrade_enrollment_3: mg_3_enrollment
                 })
             });
 
@@ -591,6 +618,53 @@ const Unit2Learners = () => {
                         <span className="text-3xl font-black text-rose-600 mt-1">{femaleVal}</span>
                     </div>
                 </div>
+
+                {/* Multigrade Combinations */}
+                {mgCombinations.length > 0 && (
+                    <section className="mb-8">
+                        <div className="flex items-center gap-2 mb-4 ml-2">
+                            <div className="w-1 h-4 bg-rose-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Multigrade Joinings</h3>
+                        </div>
+                        <div className="grid gap-3">
+                            {mgCombinations.map((c, idx) => {
+                                const labels = c.grades.map(g => g.replace('g', ''));
+                                let labelStr = "";
+                                if (labels.length === 1) labelStr = `Grade ${labels[0]}`;
+                                else if (labels.length === 2) labelStr = `Grade ${labels[0]} & ${labels[1]}`;
+                                else if (labels.length > 2) {
+                                    const last = labels.pop();
+                                    labelStr = `Grade ${labels.join(', ')} & ${last}`;
+                                }
+                                
+                                const totalJoined = c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0);
+                                return (
+                                    <div key={c.id} className="bg-white rounded-2xl p-4 border-2 border-rose-100 flex items-center justify-between shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-rose-50 rounded-full blur-xl translate-x-4 -translate-y-4" />
+                                        <div className="flex flex-col relative z-10 w-full">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="font-black text-rose-800 text-lg">{labelStr}</span>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[9px] uppercase font-black text-rose-400 tracking-widest mb-1">Joined Enrollment</span>
+                                                    <div className="bg-rose-500 px-4 py-1.5 rounded-xl shadow-md border border-rose-600">
+                                                        <span className="font-black text-white text-lg">{totalJoined}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 border-t border-slate-50 pt-3">
+                                                {c.grades.map(g => (
+                                                    <span key={g} className="text-[10px] bg-slate-50 text-slate-500 border border-slate-100 px-2 py-1 rounded-lg font-bold uppercase tracking-widest">
+                                                        {ALL_GRADES.find(x => x.id === g)?.label}: {parseInt(gradeTotals[g]) || 0}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                )}
 
                 {/* Grade Breakdown */}
                 <section>
@@ -734,7 +808,11 @@ const Unit2Learners = () => {
                                                 type="number" 
                                                 value={kinderEnrollment}
                                                 disabled={!isAvailable}
-                                                onChange={(e) => setKinderEnrollment(e.target.value)}
+                                                onChange={(e) => {
+                                                    let val = e.target.value;
+                                                    if (val.length > 4) val = val.slice(0, 4);
+                                                    setKinderEnrollment(val);
+                                                }}
                                                 placeholder="0"
                                                 className={`${chunkyInput} ${!isAvailable ? 'bg-slate-50 border-slate-100 text-slate-300' : ''}`}
                                                 autoFocus={isAvailable}
@@ -872,16 +950,34 @@ const Unit2Learners = () => {
                                                         })}
                                                     </div>
                                                 </div>
-                                                <div>
-                                                    <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-1">Combined Total</label>
-                                                    <input 
-                                                        type="number"
-                                                        placeholder="0"
-                                                        value={c.enrollment || ""}
-                                                        onChange={(e) => setMgCombinations(prev => prev.map(p => p.id === c.id ? { ...p, enrollment: parseInt(e.target.value) || 0 } : p))}
-                                                        className={chunkyInput}
-                                                    />
-                                                </div>
+                                                {c.grades.length > 0 && (
+                                                    <div className="mt-4 pt-4 border-t-2 border-slate-100">
+                                                        <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-4">Individual Grade Totals</label>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            {c.grades.map(lvl => {
+                                                                const gName = ALL_GRADES.find(x => x.id === lvl)?.label || lvl;
+                                                                return (
+                                                                    <div key={`mg-input-${lvl}`} className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm">
+                                                                        <label className="text-[10px] font-black uppercase text-indigo-400 tracking-widest block mb-2">{gName}</label>
+                                                                        <input 
+                                                                            type="number"
+                                                                            placeholder="0"
+                                                                            value={gradeTotals[lvl] || ""}
+                                                                            onChange={(e) => handleGradeChange(lvl, e.target.value)}
+                                                                            className={`${chunkyInput} !h-16 !text-3xl`}
+                                                                        />
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        <div className="mt-4 flex items-center justify-between bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-100">
+                                                            <span className="text-xs font-black uppercase text-indigo-600 tracking-widest">Total Joined Enrollment</span>
+                                                            <span className="text-2xl font-black text-indigo-800">
+                                                                {c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -890,7 +986,13 @@ const Unit2Learners = () => {
 
                             <button 
                                 onClick={handleNext} 
-                                disabled={mgCombinations.length === 0 || mgCombinations.some(c => c.grades.length === 0 || !c.enrollment)}
+                                disabled={
+                                    mgCombinations.length === 0 || 
+                                    mgCombinations.some(c => 
+                                        c.grades.length === 0 || 
+                                        c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) === 0
+                                    )
+                                }
                                 className="w-full h-20 py-5 rounded-[2.5rem] bg-indigo-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(79,70,229,0.3)] hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                             >
                                 Continue <FiArrowRight className="w-8 h-8" />
@@ -1052,7 +1154,11 @@ const Unit2Learners = () => {
                                                 min="0" 
                                                 placeholder="0" 
                                                 value={sned_self_contained_count} 
-                                                onChange={(e) => setSnedSelfContainedCount(e.target.value)} 
+                                                onChange={(e) => {
+                                                    let val = e.target.value;
+                                                    if (val.length > 4) val = val.slice(0, 4);
+                                                    setSnedSelfContainedCount(val);
+                                                }} 
                                                 className="w-48 h-24 text-5xl font-black text-center rounded-3xl bg-indigo-50 border-4 border-indigo-200 text-indigo-700 outline-none focus:bg-white focus:border-indigo-500 shadow-lg"
                                             />
                                         </motion.div>
