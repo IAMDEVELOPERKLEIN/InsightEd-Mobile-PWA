@@ -1229,6 +1229,87 @@ const Unit2Learners = () => {
                             </button>
                         </motion.div>
                     )}
+
+                    {/* STEP 7: Global Gender Breakdown */}
+                    {currentStep === 7 && (
+                        <motion.div key="step7" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                            <div className="text-center mb-10">
+                                <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                    Step 7 • Final Validation
+                                </span>
+                                <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
+                                    Gender Breakdown
+                                </h1>
+                                <p className="text-slate-500 font-medium">Verify the male and female totals match the grand total of {grandTotal}.</p>
+                            </div>
+
+                            <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border-4 border-indigo-100/50 mb-8">
+                                <div className="space-y-8">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-4 ml-2">
+                                            <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Male Learners 👦</label>
+                                            <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1 rounded-lg uppercase">Auto-calculates</span>
+                                        </div>
+                                        <input 
+                                            type="number" 
+                                            value={genderTotals.male} 
+                                            onChange={(e) => handleGenderChange('male', e.target.value)}
+                                            placeholder="0"
+                                            className={chunkyInput}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <div className="flex items-center justify-between mb-4 ml-2">
+                                            <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Female Learners 👧</label>
+                                            <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-3 py-1 rounded-lg uppercase">Auto-calculates</span>
+                                        </div>
+                                        <input 
+                                            type="number" 
+                                            value={genderTotals.female} 
+                                            onChange={(e) => handleGenderChange('female', e.target.value)}
+                                            placeholder="0"
+                                            className={chunkyInput}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className={`mt-10 p-6 rounded-3xl border-4 transition-all flex items-center gap-4 ${isMathPerfect ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg ${isMathPerfect ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>
+                                        {isMathPerfect ? '✅' : '⚖️'}
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className={`font-black uppercase tracking-widest text-[10px] mb-1 ${isMathPerfect ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                            {isMathPerfect ? 'Verification Pass' : 'Verification Pending'}
+                                        </h4>
+                                        <p className={`text-sm font-bold leading-tight ${isMathPerfect ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                            {isMathPerfect 
+                                                ? "Male + Female perfectly matches the grand enrollment total. You're ready to save!" 
+                                                : `The total (${genderSum}) must exactly match the grand total of ${grandTotal}.`
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={handleSave} 
+                                disabled={isSaving || !isMathPerfect}
+                                className="w-full h-20 py-5 rounded-[2.5rem] bg-emerald-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(16,185,129,0.3)] hover:bg-emerald-700 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:bg-slate-700 disabled:cursor-not-allowed"
+                            >
+                                {isSaving ? (
+                                    <>
+                                        <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Saving Profile...
+                                    </>
+                                ) : (
+                                    <>
+                                        💾 Save School Profile
+                                    </>
+                                )}
+                            </button>
+                        </motion.div>
+                    )}
                         </AnimatePresence>
                     </>
                 )}
