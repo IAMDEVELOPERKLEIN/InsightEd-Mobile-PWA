@@ -320,7 +320,8 @@ const runMigrations = async (client, dbLabel) => {
                 engineer_id TEXT,
                 validated_by TEXT,
                 funding_year INTEGER,
-                funding_year_justification TEXT
+                funding_year_justification TEXT,
+                is_donated BOOLEAN DEFAULT FALSE
             );
         `);
         await client.query(`
@@ -330,7 +331,8 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS longitude TEXT,
             ADD COLUMN IF NOT EXISTS engineer_name TEXT,
             ADD COLUMN IF NOT EXISTS funding_year INTEGER,
-            ADD COLUMN IF NOT EXISTS funding_year_justification TEXT;
+            ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
+            ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE;
         `);
 
         // --- 8b. ENGINEER IMAGE EXTENSIONS ---

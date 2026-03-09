@@ -17,8 +17,10 @@ const EFDHome = () => {
     const [selectedDivision, setSelectedDivision] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedFundingYear, setSelectedFundingYear] = useState('');
+    const [selectedDonated, setSelectedDonated] = useState('All'); // 'All', 'Donated', 'Non-Donated'
     const [fundingYears, setFundingYears] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [efdLocations, setEfdLocations] = useState([]);
 
     const categories = [
         "New Construction",
@@ -57,6 +59,12 @@ const EFDHome = () => {
                     const fyData = await fyResponse.json();
                     setFundingYears(fyData);
                 }
+
+                const locResponse = await fetch('/api/reference/efd-locations');
+                if (locResponse.ok) {
+                    const locData = await locResponse.json();
+                    setEfdLocations(locData);
+                }
             } catch (error) {
                 console.error("Error fetching EFD data:", error);
             } finally {
@@ -67,17 +75,20 @@ const EFDHome = () => {
         fetchData();
     }, []);
 
-    const normalize = (val) => val?.toString().trim() || 'Unassigned';
+    const normalize = (val) => val?.toString().trim().toUpperCase() || 'UNASSIGNED';
 
     const regionalData = useMemo(() => {
         const counts = {};
         const baseProjects = projects.filter(p => {
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
+            const matchesDonated = selectedDonated === 'All' || 
+                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
+                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
             const matchesSearch = !searchTerm || 
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase());
-            return matchesCategory && matchesFundingYear && matchesSearch;
+            return matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
         });
 
         baseProjects.forEach(p => {
@@ -86,7 +97,26 @@ const EFDHome = () => {
         });
         return Object.entries(counts).map(([name, count]) => ({ name, value: count }))
             .sort((a, b) => b.value - a.value);
-    }, [projects, selectedCategory, selectedFundingYear, searchTerm]);
+    }, [projects, selectedCategory, selectedFundingYear, searchTerm, selectedDonated]);
+
+    const allRegions = useMemo(() => {
+        const regions = new Set();
+        efdLocations.forEach(loc => {
+            if (loc.region) regions.add(loc.region.trim().toUpperCase());
+        });
+        return Array.from(regions).sort();
+    }, [efdLocations]);
+
+    const allDivisions = useMemo(() => {
+        if (!selectedRegion) return [];
+        const divisions = new Set();
+        efdLocations
+            .filter(loc => loc.region?.trim().toUpperCase() === selectedRegion.toUpperCase())
+            .forEach(loc => {
+                if (loc.division) divisions.add(loc.division.trim().toUpperCase());
+            });
+        return Array.from(divisions).sort();
+    }, [efdLocations, selectedRegion]);
 
     const divisionData = useMemo(() => {
         const counts = {};
@@ -94,10 +124,13 @@ const EFDHome = () => {
             const matchesRegion = !selectedRegion || normalize(p.region) === normalize(selectedRegion);
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
+            const matchesDonated = selectedDonated === 'All' || 
+                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
+                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
             const matchesSearch = !searchTerm || 
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase());
-            return matchesRegion && matchesCategory && matchesFundingYear && matchesSearch;
+            return matchesRegion && matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
         });
 
         baseProjects.forEach(p => {
@@ -106,7 +139,7 @@ const EFDHome = () => {
         });
         return Object.entries(counts).map(([name, count]) => ({ name, value: count }))
             .sort((a, b) => b.value - a.value);
-    }, [projects, selectedRegion, selectedCategory, selectedFundingYear, searchTerm]);
+    }, [projects, selectedRegion, selectedCategory, selectedFundingYear, searchTerm, selectedDonated]);
 
     const newlyCreatedCount = useMemo(() => {
         return projects.length;
@@ -118,13 +151,16 @@ const EFDHome = () => {
             const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
+            const matchesDonated = selectedDonated === 'All' || 
+                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
+                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
             const matchesSearch = !searchTerm || 
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolId?.toString().includes(searchTerm);
-            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesSearch;
+            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
         });
-    }, [projects, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, searchTerm]);
+    }, [projects, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, searchTerm, selectedDonated]);
 
     if (loading) {
         return (
@@ -196,7 +232,7 @@ const EFDHome = () => {
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
                                     <option value="">All Regions</option>
-                                    {regionalData.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                                    {allRegions.map(r => <option key={r} value={r}>{r}</option>)}
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -208,7 +244,7 @@ const EFDHome = () => {
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all disabled:opacity-40"
                                 >
                                     <option value="">All Divisions</option>
-                                    {divisionData.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                                    {allDivisions.map(d => <option key={d} value={d}>{d}</option>)}
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -235,6 +271,18 @@ const EFDHome = () => {
                                     {fundingYears.map(year => (
                                         <option key={year} value={year}>{year}</option>
                                     ))}
+                                </select>
+                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                            </div>
+                            <div className="relative col-span-1">
+                                <select 
+                                    value={selectedDonated}
+                                    onChange={(e) => setSelectedDonated(e.target.value)}
+                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
+                                >
+                                    <option value="All">All Projects</option>
+                                    <option value="Donated">Donated Projects</option>
+                                    <option value="Non-Donated">Not Donated Projects</option>
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -270,7 +318,7 @@ const EFDHome = () => {
                                     <div className="flex-1 min-h-[300px] w-full">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart 
-                                                data={regionalData.slice(0, 10)} 
+                                                data={regionalData.slice(0, 30)} 
                                                 layout="vertical"
                                                 margin={{ right: 60, left: 10, top: 10, bottom: 10 }}
                                                 onClick={(data) => {
@@ -314,7 +362,7 @@ const EFDHome = () => {
                                     <div className="flex-1 min-h-[300px] w-full">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart 
-                                                data={divisionData.slice(0, 10)}
+                                                data={divisionData.slice(0, 30)}
                                                 layout="vertical"
                                                 margin={{ right: 60, left: 10, top: 10, bottom: 10 }}
                                                 onClick={(data) => {

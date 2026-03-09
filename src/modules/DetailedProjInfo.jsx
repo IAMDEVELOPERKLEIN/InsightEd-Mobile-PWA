@@ -581,6 +581,8 @@ const DetailedProjInfo = () => {
                                 bidAmount: data.bid_amount,
                                 natureOfDelay: data.nature_of_delay
                             },
+                            // Donated status
+                            isDonated: data.is_donated || false,
                             // IMAGES (LGU endpoint returns them included)
                             images: data.images || []
                         };
@@ -850,6 +852,15 @@ const DetailedProjInfo = () => {
                     <div className="mt-8 text-center relative z-10">
                         {/* Premium ID Badges */}
                         <div className="flex flex-wrap justify-center items-center gap-3 mb-4">
+                            {/* Donated Project Badge */}
+                            {(project.isDonated || project.is_donated) && (
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 backdrop-blur-md rounded-xl border border-blue-400/30 shadow-lg shadow-blue-900/20 group hover:bg-blue-500/30 transition-all">
+                                    <span className="text-[10px] text-blue-100 font-black tracking-[0.2em] uppercase">Donated Project</span>
+                                    <div className="h-3 w-[1px] bg-white/20"></div>
+                                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]"></div>
+                                </div>
+                            )}
+
                             {/* School ID Pill */}
                             <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 shadow-lg group hover:bg-white/15 transition-all">
                                 <span className="text-[9px] text-blue-200 uppercase font-black tracking-widest group-hover:text-blue-100 transition-colors">School ID</span>

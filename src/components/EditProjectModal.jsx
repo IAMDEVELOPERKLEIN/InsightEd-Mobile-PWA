@@ -164,10 +164,12 @@ const EditProjectModal = ({
                 time_extension_days: project.time_extension_days || '',
                 revised_expiry_date: project.revised_expiry_date ? project.revised_expiry_date.split('T')[0] : '',
                 caf_reference: project.caf_reference || '',
-                // New Tab State
+                // Tab State
                 isProjectDetailsUpdate: false,
                 fundingYear: project.funding_year || project.fundingYear || '',
                 fundingYearJustification: '',
+                // Donated Status
+                isDonated: project.isDonated || project.is_donated || false,
                 // Justification Hierarchy
                 justification_category: project.justification_category || 'Site Condition',
                 justification_details: project.justification_details || ''
@@ -417,6 +419,25 @@ const EditProjectModal = ({
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Project Name</label>
                     <input name="projectName" value={formData.projectName} onChange={handleChange} disabled={readOnly} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs ${readOnly ? 'bg-slate-100' : ''}`} />
                 </div>
+            </div>
+
+            {/* Donated Project Toggle */}
+            <div className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-xl">
+                <div className={`p-2 rounded-lg ${formData.isDonated ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div className="flex-1">
+                    <h4 className="text-[10px] font-black text-[#004A99] dark:text-blue-400 uppercase tracking-wider">Donated Project</h4>
+                    <p className="text-[9px] text-slate-400 font-medium">Is this project funded by a private donor?</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, isDonated: !prev.isDonated }))}
+                    disabled={readOnly}
+                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${formData.isDonated ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                >
+                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${formData.isDonated ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
             </div>
 
             {/* Scope of Work */}
