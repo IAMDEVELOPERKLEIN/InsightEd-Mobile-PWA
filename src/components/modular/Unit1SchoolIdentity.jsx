@@ -336,25 +336,25 @@ const Unit1SchoolIdentity = () => {
             <main className="flex-1 relative overflow-y-auto px-6 pt-4 pb-32">
                 <AnimatePresence mode="wait">
                     {isReviewMode ? (
-                        <motion.div key="review" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md mx-auto pb-32">
+                        <div key="review" className="max-w-md mx-auto pb-32 mt-4">
                             {/* Header */}
                             <div className="text-center mb-10">
                                 <motion.div 
                                     initial={{ scale: 0 }} 
                                     animate={{ scale: 1 }} 
-                                    className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                                    className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
                                 >
-                                    <span className="text-4xl">🏢</span>
+                                    <span className="text-4xl text-white">🏢</span>
                                 </motion.div>
                                 <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
                                     Unit 1 • School Identity
                                 </span>
-                                <h1 className="text-4xl font-black text-slate-800 leading-tight">Profile Summary</h1>
+                                <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
                                 <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
                             </div>
 
                             {/* Metric Cards Grid */}
-                            <div className="grid grid-cols-2 gap-4 mb-8">
+                            <div className="grid grid-cols-2 gap-4 mb-10">
                                 <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
                                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
                                         📄
@@ -363,7 +363,7 @@ const Unit1SchoolIdentity = () => {
                                     <span className="text-2xl font-black text-slate-800 mt-1">{formData.school_id || "N/A"}</span>
                                 </div>
                                 <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                                    <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
                                         🏷️
                                     </div>
                                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">IERN</span>
@@ -376,7 +376,7 @@ const Unit1SchoolIdentity = () => {
                                 <section>
                                     <div className="flex items-center gap-2 mb-4 ml-2">
                                         <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Registry Details</h3>
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Registry Breakdown</h3>
                                     </div>
                                     <div className="grid gap-3">
                                         <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
@@ -393,8 +393,8 @@ const Unit1SchoolIdentity = () => {
                                                 <span className="font-bold text-slate-700">{formData.division || "N/A"}</span>
                                                 <span className="text-[10px] text-slate-400 font-medium uppercase">Division</span>
                                             </div>
-                                            <div className="bg-purple-50 px-3 py-2 rounded-xl">
-                                                <span className="font-black text-purple-700 text-sm">{formData.region || "Req"}</span>
+                                            <div className="bg-indigo-50 px-3 py-2 rounded-xl">
+                                                <span className="font-black text-indigo-700 text-sm">{formData.region || "Req"}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -422,7 +422,7 @@ const Unit1SchoolIdentity = () => {
                                     Note: Unlocking will allow you to update demographic targets.
                                 </p>
                             </motion.div>
-                        </motion.div>
+                        </div>
                     ) : (
                         <motion.div key={currentStep} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.4, ease: "circOut" }}
                             className="max-w-md mx-auto h-full flex flex-col">

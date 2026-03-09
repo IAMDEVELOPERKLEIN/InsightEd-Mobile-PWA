@@ -98,6 +98,9 @@ const Unit5ShiftingModality = () => {
 
     // ── Saved data (Review Mode) ────────────────────────────────────────────
     const [savedData, setSavedData] = useState(null);
+    // ── Navigation ──────────────────────────────────────────────────────────
+    // Added specific local state properly decoupled from the memoized Curriculum list
+    const [filteredGrades, setFilteredGrades] = useState([]);
 
     // ── Data fetch on mount ─────────────────────────────────────────────────
     useEffect(() => {
@@ -107,35 +110,106 @@ const Unit5ShiftingModality = () => {
             setSchoolId(storedId);
 
             try {
-                const res = await fetch(`/api/ph_schools/${storedId}`);
+                // Prevent aggressive PWA caching using a timestamp buster
+                const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
                 if (res.ok) {
                     const saved = await res.json();
-                    if (saved.exists && saved.data) {
-                        const d = saved.data;
-                        setCurricularOffering(d.curricular_offering || "");
+                    let d = (saved.exists && saved.data) ? saved.data : {};
 
-                        // If there is saved Unit 5 data, jump to review mode
-                        if (d.unit5_completed) {
-                            setSavedData(d);
-                            setHasStandardShifting(d.has_standard_shifting);
+                    // Fallback to local quest progress for curricular offering if missing from DB fetch
+                    if (!d.curricular_offering) {
+                        try {
+                            const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
+                            d.curricular_offering = qp.curricular_offering || "";
+                        } catch (e) {}
+                    }
+
+                    // Base curriculum
+                    setCurricularOffering(d.curricular_offering || "");
+                    
+                    // We must parse activeGrades here locally first since the useMemo needs curricularOffering to mount
+                    let co = d.curricular_offering || "";
+                    let keys = [];
+                    if (co.includes("purely elementary")) keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+                    else if (co.includes("purely junior")) keys = ['g7', 'g8', 'g9', 'g10'];
+                    else if (co.includes("purely senior")) keys = ['g11', 'g12'];
+                    else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) keys = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+                    else if (co.includes("elementary school and junior high school")) keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+                    else keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+
+                    let baseGrades = keys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
+                    let finalGrades = baseGrades;
+
+                    // Filter active grades based on Unit 2 config
+                    if (d.unit2_simplified_enrollment) {
+                        try {
+                            const u2 = typeof d.unit2_simplified_enrollment === 'string' 
+                                ? JSON.parse(d.unit2_simplified_enrollment) 
+                                : d.unit2_simplified_enrollment;
                             
-                            const prefillMap = {};
-                            activeGrades.forEach(g => {
-                                prefillMap[`shift_${g.key}`] = d[`shift_${g.key}`] || "";
-                                prefillMap[`mode_${g.key}`] = d[`mode_${g.key}`] || "";
-                            });
-                            setMapData(prefillMap);
-                            
-                            setHasAdms(d.adm_mdl || d.adm_odl || d.adm_tvi || d.adm_blended);
-                            setAdmData({
-                                adm_mdl: !!d.adm_mdl,
-                                adm_odl: !!d.adm_odl,
-                                adm_tvi: !!d.adm_tvi,
-                                adm_blended: !!d.adm_blended
+                            const q = u2.questionnaire || {};
+                            let processedActiveIds = new Set();
+
+                            // 1. Baseline
+                            baseGrades.forEach(g => {
+                                const isAvail = q.gradeAvailability?.[g.key] !== false;
+                                const hasData = q.gradeTotals?.[g.key] !== undefined || (g.key === 'kinder' && q.kinderEnrollment !== undefined);
+                                if (isAvail && hasData) processedActiveIds.add(g.key);
                             });
 
-                            setIsReviewMode(true);
+                            // 2. Multigrade overrides
+                            (q.mgCombinations || []).forEach(combo => {
+                                (combo.grades || []).forEach(gid => processedActiveIds.add(gid));
+                            });
+
+                            // 3. Fallback array parsing (Source of truth)
+                            let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
+                            u2Array.forEach(item => {
+                                if (item.grade_level) {
+                                    const isAvail = q.gradeAvailability?.[item.grade_level] !== false;
+                                    const isActive = item.is_active !== false;
+                                    
+                                    if (!isAvail || !isActive) {
+                                        processedActiveIds.delete(item.grade_level);
+                                    } else {
+                                        processedActiveIds.add(item.grade_level);
+                                    }
+                                }
+                            });
+
+                            // Only overwrite if Unit 2 actually gave us valid data
+                            if (processedActiveIds.size > 0) {
+                                finalGrades = baseGrades.filter(g => processedActiveIds.has(g.key));
+                            }
+                        } catch (e) {
+                            console.warn("Unit 2 Parse error in Unit 5", e);
                         }
+                    }
+
+                    // Override the standard active grades with the filtered version
+                    setFilteredGrades(finalGrades);
+
+                    // If there is saved Unit 5 data, jump to review mode
+                    if (d.unit5_completed) {
+                        setSavedData(d);
+                        setHasStandardShifting(d.has_standard_shifting);
+                        
+                        const prefillMap = {};
+                        finalGrades.forEach(g => {
+                            prefillMap[`shift_${g.key}`] = d[`shift_${g.key}`] || "";
+                            prefillMap[`mode_${g.key}`] = d[`mode_${g.key}`] || "";
+                        });
+                        setMapData(prefillMap);
+                        
+                        setHasAdms(d.adm_mdl || d.adm_odl || d.adm_tvi || d.adm_blended);
+                        setAdmData({
+                            adm_mdl: !!d.adm_mdl,
+                            adm_odl: !!d.adm_odl,
+                            adm_tvi: !!d.adm_tvi,
+                            adm_blended: !!d.adm_blended
+                        });
+
+                        setIsReviewMode(true);
                     }
                 }
             } catch (e) {
@@ -149,8 +223,9 @@ const Unit5ShiftingModality = () => {
     const isStep1Valid = hasStandardShifting !== null;
     
     const isGradeInputValid = () => {
-        const currentFieldShift = mapData[`shift_${activeGrades[gradeIdx].key}`];
-        const currentFieldMode = mapData[`mode_${activeGrades[gradeIdx].key}`];
+        if (!filteredGrades.length) return true;
+        const currentFieldShift = mapData[`shift_${filteredGrades[gradeIdx]?.key}`];
+        const currentFieldMode = mapData[`mode_${filteredGrades[gradeIdx]?.key}`];
         return !!currentFieldShift && !!currentFieldMode;
     };
 
@@ -159,7 +234,7 @@ const Unit5ShiftingModality = () => {
     // ── Progress ────────────────────────────────────────────────────────────
     const progressPercentage = (() => {
         if (currentChapter === 1) return 15;
-        if (currentChapter === 2) return 15 + ((gradeIdx + 1) / activeGrades.length) * 45; // up to 60
+        if (currentChapter === 2) return 15 + ((gradeIdx + 1) / (filteredGrades.length || 1)) * 45; // up to 60
         if (currentChapter === 3) return 85;
         if (currentChapter === 4) return 100;
         return 0;
@@ -171,7 +246,7 @@ const Unit5ShiftingModality = () => {
             if (hasStandardShifting) {
                 // Auto-fill all grades
                 const autoFill = {};
-                activeGrades.forEach(g => {
+                filteredGrades.forEach(g => {
                     autoFill[`shift_${g.key}`] = "Single Shift";
                     autoFill[`mode_${g.key}`] = "In-Person Classes";
                 });
@@ -182,7 +257,7 @@ const Unit5ShiftingModality = () => {
                 setGradeIdx(0);
             }
         } else if (currentChapter === 2) {
-            if (gradeIdx < activeGrades.length - 1) {
+            if (gradeIdx < filteredGrades.length - 1) {
                 setGradeIdx(prev => prev + 1);
             } else {
                 setCurrentChapter(3);
@@ -227,7 +302,7 @@ const Unit5ShiftingModality = () => {
                 ...mapData,
                 ...finalAdm
             };
-
+            
             const res = await fetch(`/api/ph_schools/unit5/${schoolId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -264,124 +339,138 @@ const Unit5ShiftingModality = () => {
     // ══════════════════════════════════════════════
     if (isReviewMode) {
         return (
-            <div className="min-h-screen bg-gray-50 pb-32">
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6 py-8 pb-32 max-w-md mx-auto">
-                    {/* Header */}
-                    <div className="text-center mb-10">
-                        <motion.div 
-                            initial={{ scale: 0 }} 
-                            animate={{ scale: 1 }} 
-                            className="w-20 h-20 bg-gradient-to-br from-orange-400 to-red-500 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-orange-200"
-                        >
-                            <FiClock className="w-10 h-10 text-white" />
-                        </motion.div>
-                        <span className="inline-block px-4 py-1.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                            Unit 5 • Modality Profile
+            <div className="min-h-screen bg-slate-50/50 font-sans">
+                {/* Exit Header */}
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                    <div className="max-w-md mx-auto flex items-center gap-3">
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                            <FiX className="w-6 h-6" />
+                        </button>
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 5</div>
+                            <h1 className="text-sm font-black text-gray-800">Shifting & Modality</h1>
+                        </div>
+                        <div className="w-10" />
+                    </div>
+                </header>
+
+                <div className="max-w-md mx-auto pb-32 mt-4 px-4">
+                {/* Header */}
+                <div className="text-center mb-10">
+                    <motion.div 
+                        initial={{ scale: 0 }} 
+                        animate={{ scale: 1 }} 
+                        className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                    >
+                        <FiClock className="w-10 h-10 text-white" />
+                    </motion.div>
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                        Unit 5 • Modality Profile
+                    </span>
+                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
+                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                </div>
+
+                {/* Metric Cards Grid */}
+                <div className="grid grid-cols-2 gap-4 mb-10">
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
+                            <span className="text-xl">🏫</span>
+                        </div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Base Setup</span>
+                        <span className="text-xl font-black text-slate-800 mt-1">
+                            {hasStandardShifting ? "Standard" : "Mixed"}
                         </span>
-                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Shifting Summary</h1>
-                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
                     </div>
-
-                    {/* Metric Cards Grid */}
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center mb-3 shadow-inner">
-                                <span className="text-xl">🏫</span>
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Base Setup</span>
-                            <span className="text-xl font-black text-slate-800 mt-1">
-                                {hasStandardShifting ? "Standard" : "Mixed"}
-                            </span>
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center mb-3 shadow-inner">
+                            <FiAlertTriangle className="w-6 h-6 text-rose-600" />
                         </div>
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mb-3 shadow-inner">
-                                <FiAlertTriangle className="w-6 h-6 text-red-600" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Emergency ADMs</span>
-                            <span className="text-xl font-black text-slate-800 mt-1">
-                                {hasAdms ? "Active Tracker" : "None Utilized"}
-                            </span>
-                        </div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Emergency ADMs</span>
+                        <span className="text-xl font-black text-slate-800 mt-1">
+                            {hasAdms ? "Active Tracker" : "None Utilized"}
+                        </span>
                     </div>
+                </div>
 
-                    {/* Detailed Breakdown */}
-                    <div className="space-y-6">
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-orange-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Schedule Mapping</h3>
-                            </div>
-                            
-                            {hasStandardShifting ? (
-                                <div className="bg-white rounded-2xl p-6 border border-slate-50 text-center shadow-sm">
-                                    <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <FiCheckCircle className="w-8 h-8 text-emerald-500" />
-                                    </div>
-                                    <h4 className="font-black text-slate-800 text-lg mb-1">100% Homogeneous</h4>
-                                    <p className="text-sm font-medium text-slate-500">All grades strictly track Single Shift and In-Person classes.</p>
+                {/* Detailed Breakdown */}
+                <div className="space-y-6">
+                    <section>
+                        <div className="flex items-center gap-2 mb-4 ml-2">
+                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Schedule Mapping</h3>
+                        </div>
+                        
+                        {hasStandardShifting ? (
+                            <div className="bg-white rounded-2xl p-6 border border-slate-50 text-center shadow-sm">
+                                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <FiCheckCircle className="w-8 h-8 text-indigo-500" />
                                 </div>
-                            ) : (
-                                <div className="grid gap-3">
-                                    {activeGrades.map(g => (
-                                        <div key={g.key} className="bg-white rounded-2xl p-4 border border-slate-50 flex flex-col shadow-sm">
-                                            <span className="font-bold text-slate-700 text-lg mb-2 pl-1 border-l-4 border-orange-400">{g.label}</span>
-                                            <div className="flex gap-2">
-                                                <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
-                                                    <span className="font-bold text-slate-600 text-xs uppercase">{mapData[`shift_${g.key}`]}</span>
-                                                </div>
-                                                <div className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
-                                                    <span className="font-bold text-indigo-600 text-xs uppercase">{mapData[`mode_${g.key}`]}</span>
-                                                </div>
+                                <h4 className="font-black text-slate-800 text-lg mb-1">100% Homogeneous</h4>
+                                <p className="text-sm font-medium text-slate-500">All grades strictly track Single Shift and In-Person classes.</p>
+                            </div>
+                        ) : (
+                            <div className="grid gap-3">
+                                {filteredGrades.map(g => (
+                                    <div key={g.key} className="bg-white rounded-2xl p-4 border border-slate-50 flex flex-col shadow-sm">
+                                        <span className="font-bold text-slate-700 text-lg mb-2 pl-1 border-l-4 border-indigo-400">{g.label}</span>
+                                        <div className="flex gap-2">
+                                            <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                                                <span className="font-bold text-slate-600 text-[10px] uppercase">{mapData[`shift_${g.key}`]}</span>
+                                            </div>
+                                            <div className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                                                <span className="font-bold text-indigo-600 text-[10px] uppercase">{mapData[`mode_${g.key}`]}</span>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                        </section>
-
-                        {hasAdms && (
-                            <section>
-                                <div className="flex items-center gap-2 mb-4 ml-2">
-                                    <div className="w-1 h-4 bg-red-500 rounded-full" />
-                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Active ADMs</h3>
-                                </div>
-                                <div className="bg-white rounded-2xl p-5 border border-slate-50 shadow-sm">
-                                    <div className="flex flex-wrap gap-2">
-                                        {Object.entries(admData).map(([k, v]) => {
-                                            if (!v) return null;
-                                            const match = ADM_CARDS.find(c => c.id === k);
-                                            return (
-                                                <div key={k} className="bg-red-50 text-red-700 font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-2">
-                                                    {match?.icon && <span className="scale-75">{match.icon}</span>}
-                                                    {match?.label}
-                                                </div>
-                                            );
-                                        })}
                                     </div>
-                                </div>
-                            </section>
-                        )}
-                    </div>
-
-                    {/* Unlock Action */}
-                    <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="mt-12"
-                    >
-                        <button 
-                            onClick={() => { setIsReviewMode(false); setCurrentChapter(1); setIsVerified(false); }}
-                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-orange-100 text-orange-700 font-black text-lg shadow-xl shadow-orange-100/50 hover:border-orange-200 hover:bg-orange-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-orange-500/0 via-orange-500/5 to-orange-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <FiUnlock className="w-5 h-5 text-orange-700" />
+                                ))}
                             </div>
-                            <span>Unlock to Edit Modality</span>
-                        </button>
-                    </motion.div>
+                        )}
+                    </section>
+
+                    {hasAdms && (
+                        <section>
+                            <div className="flex items-center gap-2 mb-4 ml-2">
+                                <div className="w-1 h-4 bg-rose-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Active ADMs</h3>
+                            </div>
+                            <div className="bg-white rounded-2xl p-5 border border-slate-50 shadow-sm">
+                                <div className="flex flex-wrap gap-2">
+                                    {Object.entries(admData).map(([k, v]) => {
+                                        if (!v) return null;
+                                        const match = ADM_CARDS.find(c => c.id === k);
+                                        return (
+                                            <div key={k} className="bg-rose-50 text-rose-700 font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-2">
+                                                {match?.icon && <span className="scale-75">{match.icon}</span>}
+                                                {match?.label}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </section>
+                    )}
+                </div>
+
+                {/* Unlock Action */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="mt-12"
+                >
+                    <button 
+                        onClick={() => { setIsReviewMode(false); setCurrentChapter(1); setIsVerified(false); }}
+                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <FiUnlock className="w-5 h-5 text-indigo-700" />
+                        </div>
+                        <span>Unlock to Edit Modality</span>
+                    </button>
                 </motion.div>
+                </div>
             </div>
         );
     }
@@ -443,7 +532,8 @@ const Unit5ShiftingModality = () => {
                             CHAPTER 2: Grade-by-Grade Mapper
                             ──────────────────────────────────────────────────────── */}
                         {currentChapter === 2 && (() => {
-                            const { key, label } = activeGrades[gradeIdx];
+                            if (!filteredGrades.length || gradeIdx >= filteredGrades.length) return null;
+                            const { key, label } = filteredGrades[gradeIdx];
                             const currentShift = mapData[`shift_${key}`];
                             const currentMode = mapData[`mode_${key}`];
 
@@ -452,7 +542,7 @@ const Unit5ShiftingModality = () => {
                                     
                                     {/* Pagination Mini-Nav */}
                                     <div className="flex justify-center gap-1.5 mb-6 overflow-x-auto pb-2 scrollbar-hide">
-                                        {activeGrades.map((_, i) => (
+                                        {filteredGrades.map((_, i) => (
                                             <div key={i} className={`h-1.5 rounded-full flex-shrink-0 transition-all ${i === gradeIdx ? `w-6 bg-indigo-500` : i < gradeIdx ? `w-3 bg-indigo-300` : `w-2 bg-gray-200`}`} />
                                         ))}
                                     </div>
@@ -640,6 +730,7 @@ const Unit5ShiftingModality = () => {
             <SuccessModal 
                 isOpen={showSuccess} 
                 onClose={() => navigate("/modular-dashboard")} 
+                redirectUrl="/modular-dashboard"
                 title="Amazing!" 
                 message="You've successfully mapped out your Shifting and Modalities." 
                 buttonText="Back to Quest Board" 

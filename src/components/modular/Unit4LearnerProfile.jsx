@@ -103,127 +103,151 @@ const Unit4LearnerProfile = () => {
             setSchoolId(storedId);
 
             try {
-                const res = await fetch(`/api/ph_schools/${storedId}`);
+                // Prevent overzealous PWA caching
+                const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
                 if (res.ok) {
                     const saved = await res.json();
-                    if (saved.exists && saved.data) {
-                        const d = saved.data;
-                        setSavedData(d);
+                    let d = (saved.exists && saved.data) ? saved.data : {};
+                    setSavedData(d);
 
-                        // 1. Process Unit 2 Data for Dynamic Filtering & Validation
-                        let gTotals = {};
-                        let activeGradeIds = new Set();
+                    // 1. Process Unit 2 Data for Dynamic Filtering & Validation
+                    let gTotals = {};
+                    let activeGradeIds = new Set();
+                    let filteredGrades = [];
 
-                        if (d.unit2_simplified_enrollment) {
-                            try {
-                                const u2 = typeof d.unit2_simplified_enrollment === 'string' 
-                                    ? JSON.parse(d.unit2_simplified_enrollment) 
-                                    : d.unit2_simplified_enrollment;
+                    if (d.unit2_simplified_enrollment) {
+                        try {
+                            const u2 = typeof d.unit2_simplified_enrollment === 'string' 
+                                ? JSON.parse(d.unit2_simplified_enrollment) 
+                                : d.unit2_simplified_enrollment;
+                            
+                            const q = u2.questionnaire || {};
+                            
+                            // Reset for processing
+                            let processedActiveIds = new Set();
+                            let processedTotals = {};
+
+                            // 1. Baseline: Check questionnaire data (Primary Source)
+                            ALL_GRADES_REF.forEach(g => {
+                                const gid = g.id;
+                                const isAvail = q.gradeAvailability?.[gid] !== false; // Active by default
+                                const hasData = q.gradeTotals?.[gid] !== undefined || (gid === 'kinder' && q.kinderEnrollment !== undefined);
                                 
-                                const q = u2.questionnaire || {};
-                                
-                                // Reset for processing
-                                let processedActiveIds = new Set();
-                                let processedTotals = {};
-
-                                // 1. Baseline: Check questionnaire data (Primary Source)
-                                // We check all grades. If not explicitly disabled and has a value, it's active.
-                                ALL_GRADES_REF.forEach(g => {
-                                    const gid = g.id;
-                                    const isAvail = q.gradeAvailability?.[gid] !== false; // Active by default
-                                    const hasData = q.gradeTotals?.[gid] !== undefined || (gid === 'kinder' && q.kinderEnrollment !== undefined);
-                                    
-                                    if (isAvail && hasData) {
-                                        processedActiveIds.add(gid);
-                                        processedTotals[gid] = parseInt(q.gradeTotals?.[gid]) || (gid === 'kinder' ? parseInt(q.kinderEnrollment) : 0) || 0;
-                                    }
-                                });
-
-                                // 2. Refinement: Multigrade / Mixed Combinations (Override or add)
-                                (q.mgCombinations || []).forEach(combo => {
-                                    const comboTot = parseInt(combo.enrollment) || 0;
-                                    (combo.grades || []).forEach(gid => {
-                                        processedActiveIds.add(gid);
-                                        processedTotals[gid] = comboTot;
-                                    });
-                                });
-
-                                // 3. Fallback: Check u2.array (The flattened sync source)
-                                if (Array.isArray(u2.array)) {
-                                    u2.array.forEach(item => {
-                                        if (item.is_active && !processedActiveIds.has(item.grade_level)) {
-                                            processedActiveIds.add(item.grade_level);
-                                            processedTotals[item.grade_level] = item.total || 0;
-                                        }
-                                    });
-                                }
-
-                                // Update state
-                                const filteredGrades = ALL_GRADES_REF.filter(g => processedActiveIds.has(g.id));
-                                setDynamicGrades(filteredGrades);
-                                setGradeTotalsMap(processedTotals);
-                                setEnrollmentTotal(parseInt(q.grandTotal) || parseInt(d.total_enrollment) || 0);
-                            } catch (e) {
-                                console.warn("Unit 2 Parse error in Unit 4", e);
-                            }
-                        } else {
-                            // Fallback to old total_enrollment
-                            setEnrollmentTotal(parseInt(d.total_enrollment) || 0);
-                        }
-
-                        if (d.unit4_completed) {
-                            // Pre-fill Chapter 1
-                            if (Array.isArray(d.selected_learner_groups)) {
-                                setSelectedGroups(d.selected_learner_groups);
-                            }
-
-                            // Pre-fill Chapter 2 & 3 Dynamic Columns
-                            const demoObj  = {};
-                            const moveObj  = {};
-                            let hasAnyMove = false;
-
-                            // Ch 2
-                            DEMOGRAPHIC_CARDS.forEach(c => {
-                                if (c.id === 'als') {
-                                    if (d.als_total !== undefined && d.als_total !== null) {
-                                        demoObj['als_total'] = d.als_total.toString();
-                                    }
-                                } else {
-                                    filteredGrades.forEach(g => {
-                                        const key = `${c.id}_${g.id}`;
-                                        if (d[key] !== undefined && d[key] !== null) {
-                                            demoObj[key] = d[key].toString();
-                                        }
-                                    });
+                                if (isAvail && hasData) {
+                                    processedActiveIds.add(gid);
+                                    processedTotals[gid] = parseInt(q.gradeTotals?.[gid]) || (gid === 'kinder' ? parseInt(q.kinderEnrollment) : 0) || 0;
                                 }
                             });
+
+                            // 2. Refinement: Multigrade / Mixed Combinations (Override or add)
+                            (q.mgCombinations || []).forEach(combo => {
+                                const comboTot = parseInt(combo.enrollment) || 0;
+                                (combo.grades || []).forEach(gid => {
+                                    processedActiveIds.add(gid);
+                                    processedTotals[gid] = comboTot;
+                                });
+                            });
+
+                            // 3. Fallback: Check u2.array or u2 itself if it's an array (Source of truth)
+                            let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
+                            u2Array.forEach(item => {
+                                if (item.grade_level) {
+                                    const isAvail = q.gradeAvailability?.[item.grade_level] !== false;
+                                    const isActive = item.is_active !== false;
+
+                                    if (!isAvail || !isActive) {
+                                        processedActiveIds.delete(item.grade_level);
+                                    } else {
+                                        processedActiveIds.add(item.grade_level);
+                                        if (!processedTotals[item.grade_level]) {
+                                            processedTotals[item.grade_level] = parseInt(item.total) || (parseInt(item.male||0) + parseInt(item.female||0)) || 0;
+                                        }
+                                    }
+                                }
+                            });
+
+                            // Update state from Unit 2 config
+                            filteredGrades = ALL_GRADES_REF.filter(g => processedActiveIds.has(g.id));
+                            setDynamicGrades(filteredGrades);
+                            setGradeTotalsMap(processedTotals);
+                            setEnrollmentTotal(parseInt(q.grandTotal) || parseInt(d.total_enrollment) || 0);
+                        } catch (e) {
+                            console.warn("Unit 2 Parse error in Unit 4", e);
+                        }
+                    } else {
+                        // Fallback completely: Initialize default grades using curricular offering tracking if available
+                        try {
+                            const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
+                            const co = (qp.curricular_offering || d.curricular_offering || "").toLowerCase();
                             
-                            // Ch 3
-                            MOVEMENT_TYPES.forEach(m => {
+                            let allowed = [];
+                            if (co.includes("purely elementary")) allowed = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+                            else if (co.includes("purely junior")) allowed = ['g7', 'g8', 'g9', 'g10'];
+                            else if (co.includes("purely senior")) allowed = ['g11', 'g12'];
+                            else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) allowed = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+                            else if (co.includes("elementary school and junior high school")) allowed = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+                            else allowed = ALL_GRADES_REF.map(g => g.id); // Default ALL
+                            
+                            filteredGrades = ALL_GRADES_REF.filter(g => allowed.includes(g.id));
+                            setDynamicGrades(filteredGrades);
+                        } catch(e) {}
+                        
+                        // Fallback to old total_enrollment
+                        setEnrollmentTotal(parseInt(d.total_enrollment) || 0);
+                    }
+
+                    if (d.unit4_completed) {
+                        // Pre-fill Chapter 1
+                        if (Array.isArray(d.selected_learner_groups)) {
+                            setSelectedGroups(d.selected_learner_groups);
+                        }
+
+                        // Pre-fill Chapter 2 & 3 Dynamic Columns
+                        const demoObj  = {};
+                        const moveObj  = {};
+                        let hasAnyMove = false;
+
+                        // Ch 2
+                        DEMOGRAPHIC_CARDS.forEach(c => {
+                            if (c.id === 'als') {
+                                if (d.als_total !== undefined && d.als_total !== null) {
+                                    demoObj['als_total'] = d.als_total.toString();
+                                }
+                            } else {
                                 filteredGrades.forEach(g => {
-                                    const key = `${m.id}_${g.id}`;
+                                    const key = `${c.id}_${g.id}`;
                                     if (d[key] !== undefined && d[key] !== null) {
-                                        moveObj[key] = d[key].toString();
-                                        if (d[key] > 0) hasAnyMove = true;
+                                        demoObj[key] = d[key].toString();
                                     }
                                 });
+                            }
+                        });
+                        
+                        // Ch 3
+                        MOVEMENT_TYPES.forEach(m => {
+                            filteredGrades.forEach(g => {
+                                const key = `${m.id}_${g.id}`;
+                                if (d[key] !== undefined && d[key] !== null) {
+                                    moveObj[key] = d[key].toString();
+                                    if (d[key] > 0) hasAnyMove = true;
+                                }
                             });
+                        });
 
-                            // Ch 4 Pre-fill BMI
-                            setBmiData({
-                                severely_wasted: d.bmi_severely_wasted?.toString() || "",
-                                wasted: d.bmi_wasted?.toString() || "",
-                                overweight_obese: d.bmi_overweight_obese?.toString() || ""
-                            });
+                        // Ch 4 Pre-fill BMI
+                        setBmiData({
+                            severely_wasted: d.bmi_severely_wasted?.toString() || "",
+                            wasted: d.bmi_wasted?.toString() || "",
+                            overweight_obese: d.bmi_overweight_obese?.toString() || ""
+                        });
 
-                            setDemographicsData(demoObj);
-                            setMovementData(moveObj);
-                            
-                            if (hasAnyMove) setHasMovement(true);
-                            else if (d.updated_at) setHasMovement(false);
+                        setDemographicsData(demoObj);
+                        setMovementData(moveObj);
+                        
+                        if (hasAnyMove) setHasMovement(true);
+                        else if (d.updated_at) setHasMovement(false);
 
-                            setIsReviewMode(true);
-                        }
+                        setIsReviewMode(true);
                     }
                 }
             } catch (e) {
@@ -377,14 +401,23 @@ const Unit4LearnerProfile = () => {
             payload.bmi_overweight_obese = parseInt(bmiData.overweight_obese) || 0;
             payload.bmi_normal = normalBmiCount;
 
-            const res = await fetch(`/api/ph_schools/unit4/${schoolId}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
+            console.log("UNIT 4 PAYLOAD BEFORE SUBMISSION:", payload);
+
+            let res;
+            try {
+                res = await fetch(`/api/ph_schools/unit4/${schoolId}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+            } catch (networkErr) {
+                console.error("UNIT 4 NETWORK ERROR:", networkErr);
+                throw new Error("Network error connecting to the server.");
+            }
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
+                console.error("UNIT 4 EXPLICIT SERVER ERROR:", err);
                 throw new Error(err.error || `Server Error ${res.status}`);
             }
 
@@ -397,6 +430,7 @@ const Unit4LearnerProfile = () => {
             }
             setShowSuccess(true);
         } catch (err) {
+            console.error("UNIT 4 BOTTLENECK CATCH:", err);
             alert("Failed to save data. " + err.message);
         } finally {
             setLoading(false);
@@ -465,136 +499,148 @@ const Unit4LearnerProfile = () => {
         const repSum  = sumMove("repeater");
 
         return (
-            <div className="min-h-screen bg-gray-50 pb-32">
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6 py-8 pb-32 max-w-md mx-auto">
-                    {/* Header */}
-                    <div className="text-center mb-10">
-                        <motion.div 
-                            initial={{ scale: 0 }} 
-                            animate={{ scale: 1 }} 
-                            className="w-20 h-20 bg-gradient-to-br from-violet-400 to-fuchsia-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-fuchsia-200"
-                        >
-                            <FiUsers className="w-10 h-10 text-white" />
-                        </motion.div>
-                        <span className="inline-block px-4 py-1.5 rounded-full bg-fuchsia-100 text-fuchsia-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                            Unit 4 • Learner Profile
-                        </span>
-                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Profile Summary</h1>
-                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
-                    </div>
-
-                    {/* Metric Cards Grid */}
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
-                                <FiUsers className="w-6 h-6 text-indigo-600" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Enrolled</span>
-                            <span className="text-3xl font-black text-slate-800 mt-1">{enrollmentTotal}</span>
-                        </div>
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center mb-3 shadow-inner">
-                                <span className="text-xl">🗂️</span>
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Groups Tracked</span>
-                            <span className="text-3xl font-black text-slate-800 mt-1">{displayGroups.length}</span>
-                        </div>
-                    </div>
-
-                    {/* Subsections */}
-                    <div className="space-y-6">
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-fuchsia-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Special Groups</h3>
-                            </div>
-                            <div className="grid gap-3">
-                                {displayGroups.length === 0 ? (
-                                    <div className="bg-white rounded-2xl p-4 border border-slate-50 text-center shadow-sm">
-                                        <span className="text-slate-400 font-medium italic text-sm">No special groups reported.</span>
-                                    </div>
-                                ) : (
-                                    displayGroups.map(g => {
-                                        const total = g.id === 'als' 
-                                            ? (parseInt(savedData?.als_total) || 0)
-                                            : dynamicGrades.reduce((sum, gr) => sum + (parseInt(savedData?.[`${g.id}_${gr.id}`]) || 0), 0);
-                                        return (
-                                            <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-2xl">{g.icon}</span>
-                                                    <span className="font-bold text-slate-700 text-lg">{g.label}</span>
-                                                </div>
-                                                <div className="bg-fuchsia-50 px-3 py-1.5 rounded-xl">
-                                                    <span className="font-black text-fuchsia-700">{total}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        </section>
-
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-blue-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Learner Activity</h3>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest block mb-1">Dropouts</span>
-                                    <span className="text-2xl font-black text-slate-800">{dropSum}</span>
-                                </div>
-                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                    <span className="text-[10px] font-black uppercase text-orange-400 tracking-widest block mb-1">Repeaters</span>
-                                    <span className="text-2xl font-black text-slate-800">{repSum}</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section>
-                            <div className="bg-gradient-to-br from-emerald-500 to-teal-500 p-[3px] rounded-3xl shadow-sm mt-6">
-                                <div className="bg-white rounded-[1.4rem] p-5">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-lg">🥗</span>
-                                            <span className="font-black text-slate-700 text-sm">Health Profile</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Normal BMI</span>
-                                            <span className="text-xl font-black text-slate-800">{savedData?.bmi_normal || 0}</span>
-                                        </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-2xl font-black text-emerald-600">
-                                                {enrollmentTotal > 0 ? (((savedData?.bmi_normal || 0) / enrollmentTotal) * 100).toFixed(0) : 0}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-
-                    {/* Unlock Action */}
-                    <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="mt-12"
-                    >
-                        <button 
-                            onClick={() => { setIsReviewMode(false); setCurrentChapter(1); }}
-                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-fuchsia-100 text-fuchsia-700 font-black text-lg shadow-xl shadow-fuchsia-100/50 hover:border-fuchsia-200 hover:bg-fuchsia-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/0 via-fuchsia-500/5 to-fuchsia-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                            <div className="w-10 h-10 rounded-xl bg-fuchsia-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <FiUnlock className="w-5 h-5 text-fuchsia-700" />
-                            </div>
-                            <span>Unlock to Edit Profile</span>
+            <div className="min-h-screen bg-slate-50/50 font-sans">
+                {/* Exit Header */}
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                    <div className="max-w-md mx-auto flex items-center gap-3">
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                            <FiX className="w-6 h-6" />
                         </button>
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 4</div>
+                            <h1 className="text-sm font-black text-gray-800">Learner Profile</h1>
+                        </div>
+                        <div className="w-10" />
+                    </div>
+                </header>
+
+                <div className="max-w-md mx-auto pb-32 mt-4 px-4">
+                {/* Header */}
+                <div className="text-center mb-10">
+                    <motion.div 
+                        initial={{ scale: 0 }} 
+                        animate={{ scale: 1 }} 
+                        className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                    >
+                        <FiUsers className="w-10 h-10 text-white" />
                     </motion.div>
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                        Unit 4 • Learner Profile
+                    </span>
+                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
+                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                </div>
+
+                {/* Metric Cards Grid */}
+                <div className="grid grid-cols-2 gap-4 mb-10">
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
+                            <FiUsers className="w-6 h-6 text-indigo-600" />
+                        </div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Enrolled</span>
+                        <span className="text-3xl font-black text-slate-800 mt-1">{enrollmentTotal}</span>
+                    </div>
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
+                            <span className="text-xl">🗂️</span>
+                        </div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Groups Tracked</span>
+                        <span className="text-3xl font-black text-slate-800 mt-1">{displayGroups.length}</span>
+                    </div>
+                </div>
+
+                {/* Subsections */}
+                <div className="space-y-6">
+                    <section>
+                        <div className="flex items-center gap-2 mb-4 ml-2">
+                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Special Groups</h3>
+                        </div>
+                        <div className="grid gap-3">
+                            {displayGroups.length === 0 ? (
+                                <div className="bg-white rounded-2xl p-4 border border-slate-50 text-center shadow-sm">
+                                    <span className="text-slate-400 font-medium italic text-sm">No special groups reported.</span>
+                                </div>
+                            ) : (
+                                displayGroups.map(g => {
+                                    const total = g.id === 'als' 
+                                        ? (parseInt(savedData?.als_total) || 0)
+                                        : dynamicGrades.reduce((sum, gr) => sum + (parseInt(savedData?.[`${g.id}_${gr.id}`]) || 0), 0);
+                                    return (
+                                        <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-2xl">{g.icon}</span>
+                                                <span className="font-bold text-slate-700 text-lg">{g.label}</span>
+                                            </div>
+                                            <div className="bg-indigo-50 px-3 py-1.5 rounded-xl">
+                                                <span className="font-black text-indigo-700">{total}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </section>
+
+                    <section>
+                        <div className="flex items-center gap-2 mb-4 ml-2">
+                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Learner Activity</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                <span className="text-[10px] font-black uppercase text-red-400 tracking-widest block mb-1">Dropouts</span>
+                                <span className="text-2xl font-black text-slate-800">{dropSum}</span>
+                            </div>
+                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                <span className="text-[10px] font-black uppercase text-orange-400 tracking-widest block mb-1">Repeaters</span>
+                                <span className="text-2xl font-black text-slate-800">{repSum}</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <div className="bg-white border-2 border-indigo-100 rounded-3xl p-5 shadow-sm mt-6">
+                             <div className="flex justify-between items-center mb-4">
+                                  <div className="flex items-center gap-2">
+                                       <span className="text-xl">🥗</span>
+                                       <span className="font-black text-slate-700 text-sm">Health Profile</span>
+                                   </div>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                   <div className="flex flex-col">
+                                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Normal BMI</span>
+                                       <span className="text-xl font-black text-slate-800">{savedData?.bmi_normal || 0}</span>
+                                   </div>
+                                   <div className="flex flex-col items-end">
+                                       <span className="text-2xl font-black text-emerald-600">
+                                            {enrollmentTotal > 0 ? (((savedData?.bmi_normal || 0) / enrollmentTotal) * 100).toFixed(0) : 0}%
+                                        </span>
+                                   </div>
+                              </div>
+                        </div>
+                    </section>
+                </div>
+
+                {/* Unlock Action */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="mt-12"
+                >
+                    <button 
+                        onClick={() => { setIsReviewMode(false); setCurrentChapter(1); }}
+                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <FiUnlock className="w-5 h-5 text-indigo-700" />
+                        </div>
+                        <span>Unlock to Edit Profile</span>
+                    </button>
                 </motion.div>
+                </div>
             </div>
         );
     }

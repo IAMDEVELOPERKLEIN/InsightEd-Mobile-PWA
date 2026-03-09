@@ -15,7 +15,7 @@ const SuccessModal = ({ isOpen, onClose, message = "Changes Saved Successfully!"
                 setCountdown((prev) => {
                     if (prev <= 1) {
                         clearInterval(timer);
-                        navigate(redirectUrl);
+                        navigate(redirectUrl || "/school-forms");
                         return 0;
                     }
                     return prev - 1;

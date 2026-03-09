@@ -367,63 +367,72 @@ const Unit6TeachingPersonnel = () => {
 
                 {/* ── REVIEW MODE ───────────────────────────────────────────── */}
                 {isReviewMode ? (
-                    <motion.div key="review-tp" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-md mx-auto pb-32">
+                    <div className="max-w-md mx-auto pb-32 mt-4">
                         {/* Header */}
-                        <div className="text-center mb-10 px-6 mt-8">
+                        <div className="text-center mb-10">
                             <motion.div 
                                 initial={{ scale: 0 }} 
                                 animate={{ scale: 1 }} 
-                                className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-emerald-200"
+                                className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
                             >
-                                <span className="text-4xl">👨‍🏫</span>
+                                <span className="text-4xl text-white">👨‍🏫</span>
                             </motion.div>
-                            <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
+                            <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-200">
                                 Unit 6 • Teaching Staff
                             </span>
-                            <h1 className="text-4xl font-black text-slate-800 leading-tight">Personnel Summary</h1>
+                            <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
                             <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
                         </div>
 
                         {/* Metric Cards Grid */}
-                        <div className="grid grid-cols-2 gap-4 mb-8 px-6">
-                            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                                    🌟
+                        <div className="grid grid-cols-2 gap-4 mb-10">
+                            <div className="col-span-2 bg-indigo-600 rounded-[2rem] p-6 text-white shadow-2xl shadow-indigo-200 flex items-center justify-between overflow-hidden relative">
+                                <div className="relative z-10">
+                                    <p className="text-indigo-200 text-xs font-black uppercase tracking-widest mb-1">Grand Total</p>
+                                    <h2 className="text-5xl font-black leading-none">{totalFunding}</h2>
                                 </div>
-                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Staff</span>
-                                <span className="text-3xl font-black text-slate-800 mt-1">{totalFunding}</span>
+                                <div className="text-6xl opacity-20 relative z-10">🌟</div>
+                                <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
                             </div>
+
                             <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                                <div className="w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
                                     🏢
                                 </div>
                                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Dept. Base</span>
                                 <span className="text-3xl font-black text-slate-800 mt-1">{pInt(formData.fund_deped)}</span>
                             </div>
+                            <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                                    💼
+                                </div>
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Deployed</span>
+                                <span className="text-3xl font-black text-slate-800 mt-1">{totalDeployment}</span>
+                            </div>
                         </div>
 
                         {/* Subsections */}
-                        <div className="space-y-6 px-6">
+                        <div className="space-y-6">
                             {(pInt(formData.fund_lgu) > 0 || pInt(formData.fund_others) > 0) && (
                                 <section>
                                     <div className="flex items-center gap-2 mb-4 ml-2">
-                                        <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
                                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Supplemental Funding</h3>
                                     </div>
                                     <div className="grid gap-3">
                                         {pInt(formData.fund_lgu) > 0 && (
                                             <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
                                                 <span className="font-bold text-slate-700">LGU Funded</span>
-                                                <div className="bg-emerald-50 px-3 py-1.5 rounded-xl">
-                                                    <span className="font-black text-emerald-700 text-sm">{formData.fund_lgu}</span>
+                                                <div className="bg-indigo-50 px-3 py-1.5 rounded-xl">
+                                                    <span className="font-black text-indigo-700 text-sm">{formData.fund_lgu}</span>
                                                 </div>
                                             </div>
                                         )}
                                         {pInt(formData.fund_others) > 0 && (
                                             <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
                                                 <span className="font-bold text-slate-700">Other Sources</span>
-                                                <div className="bg-emerald-50 px-3 py-1.5 rounded-xl">
-                                                    <span className="font-black text-emerald-700 text-sm">{formData.fund_others}</span>
+                                                <div className="bg-indigo-50 px-3 py-1.5 rounded-xl">
+                                                    <span className="font-black text-indigo-700 text-sm">{formData.fund_others}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -433,17 +442,26 @@ const Unit6TeachingPersonnel = () => {
 
                             <section>
                                 <div className="flex items-center gap-2 mb-4 ml-2">
-                                    <div className="w-1 h-4 bg-teal-500 rounded-full" />
-                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Workforce Stats</h3>
+                                    <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Experience Profile</h3>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                        <span className="text-[10px] font-black uppercase text-teal-400 tracking-widest block mb-1">Deployed</span>
-                                        <span className="text-2xl font-black text-slate-800">{totalDeployment}</span>
+                                <div className="bg-white border-2 border-indigo-100 rounded-3xl p-5 shadow-sm">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">👩‍🎓</span>
+                                            <span className="font-black text-slate-700 text-sm">Experience Distribution</span>
+                                        </div>
                                     </div>
-                                    <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                        <span className="text-[10px] font-black uppercase text-indigo-400 tracking-widest block mb-1">By Exp.</span>
-                                        <span className="text-2xl font-black text-slate-800">{totalExperience}</span>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Total Counted</span>
+                                            <span className="text-xl font-black text-slate-800">{totalExperience}</span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                            <span className={`text-2xl font-black ${totalExperience === totalFunding ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                {totalFunding > 0 ? ((totalExperience / totalFunding) * 100).toFixed(0) : 0}%
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -454,15 +472,15 @@ const Unit6TeachingPersonnel = () => {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.3 }}
-                            className="mt-12 px-6"
+                            className="mt-12"
                         >
                             <button 
                                 onClick={() => { setIsReviewMode(false); setCurrentStep(1); }}
-                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-emerald-100 text-emerald-700 font-black text-lg shadow-xl shadow-emerald-100/50 hover:border-emerald-200 hover:bg-emerald-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
                             >
-                                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/5 to-emerald-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                    <FiUnlock className="w-5 h-5 text-emerald-700" />
+                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <FiUnlock className="w-5 h-5 text-indigo-700" />
                                 </div>
                                 <span>Unlock to Edit Staff Info</span>
                             </button>
@@ -470,7 +488,7 @@ const Unit6TeachingPersonnel = () => {
                                 Note: Unlocking will require re-saving data.
                             </p>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 ) : (
 
                 <div className="flex-1 max-w-md w-full mx-auto mt-8 px-6">

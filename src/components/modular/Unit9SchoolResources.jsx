@@ -574,110 +574,127 @@ const Unit9SchoolResources = () => {
         const totalWASH = WASH_CATEGORIES.reduce((acc, cat) => acc + (parseInt(washData[`${cat.key}_total`]) || 0), 0);
         
         return (
-            <div className="min-h-screen bg-slate-50 pb-32">
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6 py-8 pb-32 max-w-md mx-auto">
-                    {/* Header */}
-                    <div className="text-center mb-10 mt-8">
-                        <motion.div 
-                            initial={{ scale: 0 }} 
-                            animate={{ scale: 1 }} 
-                            className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
-                        >
-                            <span className="text-4xl">🎒</span>
-                        </motion.div>
-                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                            Unit 9 • School Resources
-                        </span>
-                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Facilities Overview</h1>
-                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
-                    </div>
-
-                    {/* Metric Cards Grid */}
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                                <FiMonitor className="text-blue-600 w-6 h-6" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total ICT Devices</span>
-                            <span className="text-3xl font-black text-slate-800 mt-1">{totalUnitsICT}</span>
-                        </div>
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                                <FiDroplet className="text-emerald-500 w-6 h-6" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WASH Fixtures</span>
-                            <span className="text-3xl font-black text-slate-800 mt-1">{totalWASH}</span>
-                        </div>
-                    </div>
-
-                    {/* Subsections */}
-                    <div className="space-y-6">
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Key Utilities</h3>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                    <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest block mb-1">Energy</span>
-                                    <span className="text-base font-black text-slate-800 text-center leading-tight">
-                                        {utilitiesData.utility_electricity || "N/A"}
-                                    </span>
-                                </div>
-                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                    <span className="text-[10px] font-black uppercase text-blue-500 tracking-widest block mb-1">Internet</span>
-                                    <span className="text-base font-black text-slate-800 text-center leading-tight">
-                                        {utilitiesData.utility_internet_yesno ? "Active" : "None"}
-                                    </span>
-                                </div>
-                            </div>
-                        </section>
-                        
-                        {hasEcart && eCarts.length > 0 && (
-                            <section>
-                                <div className="flex items-center gap-2 mb-4 ml-2">
-                                    <div className="w-1 h-4 bg-purple-500 rounded-full" />
-                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Mobile Labs</h3>
-                                </div>
-                                <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm">
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-bold text-slate-700">eCart Packages</span>
-                                        <span className="bg-purple-100 text-purple-700 font-black px-3 py-1 rounded-xl">{eCarts.length} Active</span>
-                                    </div>
-                                </div>
-                            </section>
-                        )}
-                        
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-emerald-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">School Classification</h3>
-                            </div>
-                            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
-                                <span className="font-black text-emerald-800 text-sm">{utilitiesData.sha_category || "Standardized"}</span>
-                            </div>
-                        </section>
-                    </div>
-
-                    {/* Unlock Action */}
-                    <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="mt-12"
-                    >
-                        <button 
-                            onClick={() => { setIsReviewMode(false); setCurrentPhase(1); }}
-                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <FiUnlock className="w-5 h-5 text-indigo-700" />
-                            </div>
-                            <span>Unlock to Edit Resources</span>
+            <div className="min-h-screen bg-slate-50/50 font-sans">
+                {/* Exit Header */}
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                    <div className="max-w-md mx-auto flex items-center gap-3">
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                            <FiX className="w-6 h-6" />
                         </button>
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 9</div>
+                            <h1 className="text-sm font-black text-gray-800">School Resources</h1>
+                        </div>
+                        <div className="w-10" />
+                    </div>
+                </header>
+
+                <div className="max-w-md mx-auto pb-32 mt-4 px-4">
+                {/* Header */}
+                <div className="text-center mb-10">
+                    <motion.div 
+                        initial={{ scale: 0 }} 
+                        animate={{ scale: 1 }} 
+                        className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                    >
+                        <span className="text-4xl text-white">🎒</span>
                     </motion.div>
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-200">
+                        Unit 9 • School Resources
+                    </span>
+                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
+                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                </div>
+
+                {/* Metric Cards Grid */}
+                <div className="grid grid-cols-2 gap-4 mb-10">
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                            <FiMonitor className="text-indigo-600 w-6 h-6" />
+                        </div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total ICT Devices</span>
+                        <span className="text-3xl font-black text-slate-800 mt-1">{totalUnitsICT}</span>
+                    </div>
+                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3 shadow-inner text-xl">
+                            <FiDroplet className="text-emerald-500 w-6 h-6" />
+                        </div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WASH Fixtures</span>
+                        <span className="text-3xl font-black text-slate-800 mt-1">{totalWASH}</span>
+                    </div>
+                </div>
+
+                {/* Subsections */}
+                <div className="space-y-6">
+                    <section>
+                        <div className="flex items-center gap-2 mb-4 ml-2">
+                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Key Utilities</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest block mb-1">Energy</span>
+                                <span className="text-base font-black text-slate-800 text-center leading-tight">
+                                    {utilitiesData.utility_electricity || "N/A"}
+                                </span>
+                            </div>
+                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
+                                <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest block mb-1">Internet</span>
+                                <span className="text-base font-black text-slate-800 text-center leading-tight">
+                                    {utilitiesData.utility_internet_yesno ? "Active" : "None"}
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+                    
+                    {hasEcart && eCarts.length > 0 && (
+                        <section>
+                            <div className="flex items-center gap-2 mb-4 ml-2">
+                                <div className="w-1 h-4 bg-rose-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Mobile Labs</h3>
+                            </div>
+                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-slate-700">eCart Packages</span>
+                                    <span className="bg-rose-100 text-rose-700 font-black px-3 py-1 rounded-xl">{eCarts.length} Active</span>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+                    
+                    <section>
+                        <div className="flex items-center gap-2 mb-4 ml-2">
+                            <div className="w-1 h-4 bg-emerald-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">School Classification</h3>
+                        </div>
+                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
+                            <span className="font-black text-emerald-800 text-sm">{utilitiesData.sha_category || "Standardized"}</span>
+                        </div>
+                    </section>
+                </div>
+
+                {/* Unlock Action */}
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="mt-12"
+                >
+                    <button 
+                        onClick={() => { setIsReviewMode(false); setCurrentPhase(1); }}
+                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <FiUnlock className="w-5 h-5 text-indigo-700" />
+                        </div>
+                        <span>Unlock to Edit Resources</span>
+                    </button>
+                    <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4">
+                        Note: Unlocking will require re-saving data.
+                    </p>
                 </motion.div>
+                </div>
             </div>
         );
     }

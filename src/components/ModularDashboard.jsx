@@ -1,17 +1,59 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiChevronRight, FiClock } from "react-icons/fi";
-
-import { motion } from "framer-motion";
+import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
 import BarongMascot from "./BarongMascot";
+
+const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, isLocked }) => {
+    const radius = (size - strokeWidth) / 2;
+    const circumference = radius * 2 * Math.PI;
+    const dashoffset = circumference - (progress / 100) * circumference;
+
+    return (
+        <div className="relative flex items-center justify-center font-bold" style={{ width: size, height: size }}>
+            <svg className="absolute top-0 left-0 transform -rotate-90 pointer-events-none" width={size} height={size}>
+                <circle
+                    className={isLocked ? "text-slate-100" : "text-slate-100"}
+                    strokeWidth={strokeWidth}
+                    stroke="currentColor"
+                    fill="transparent"
+                    r={radius}
+                    cx={size / 2}
+                    cy={size / 2}
+                />
+                <circle
+                    className={isLocked ? "text-slate-200" : "text-[#FDB913] transition-all duration-1000 ease-out"}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashoffset}
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="transparent"
+                    r={radius}
+                    cx={size / 2}
+                    cy={size / 2}
+                />
+            </svg>
+            <div className={`absolute inset-0 flex items-center justify-center rounded-full ${isLocked ? 'grayscale opacity-60' : ''}`}>
+                {children}
+            </div>
+        </div>
+    );
+};
+
+const getRank = (xp) => {
+    if (xp >= 500) return { title: 'Platinum', badgeClass: 'bg-slate-800 text-slate-100 border-slate-700 shadow-slate-200', icon: <FiAward /> };
+    if (xp >= 300) return { title: 'Gold', badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 shadow-amber-100', icon: <FiStar /> };
+    if (xp >= 150) return { title: 'Silver', badgeClass: 'bg-slate-100 text-slate-700 border-slate-300 shadow-slate-100', icon: <FiShield /> };
+    return { title: 'Bronze', badgeClass: 'bg-orange-50 text-orange-800 border-orange-200 shadow-sm', icon: <FiShield /> };
+};
 
 const ModularDashboard = () => {
     const navigate = useNavigate();
     const [hasDraft, setHasDraft] = useState(false);
     const [questProgress, setQuestProgress] = useState({ completedUnits: [], xp: 0 });
     const [curricularOffering, setCurricularOffering] = useState('');
-
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -28,7 +70,6 @@ const ModularDashboard = () => {
                 }
             }
 
-            // Sync with backend if schoolId exists
             const schoolId = localStorage.getItem('schoolId');
             if (schoolId) {
                 try {
@@ -39,7 +80,6 @@ const ModularDashboard = () => {
                             if (data.progress.curricular_offering) {
                                 setCurricularOffering(data.progress.curricular_offering);
                             }
-                            // Merge backend Truth with local if backend has more completion
                             if (data.progress.completedUnits.length >= initialProgress.completedUnits.length) {
                                 setQuestProgress(data.progress);
                                 localStorage.setItem('quest_progress', JSON.stringify(data.progress));
@@ -70,238 +110,175 @@ const ModularDashboard = () => {
     const modules = React.useMemo(() => {
         const offering = (curricularOffering || "").toLowerCase();
         
-        // Determine if school offers High School 
         const hasHighSchool = offering.includes('7') || offering.includes('8') || offering.includes('9') || 
                               offering.includes('10') || offering.includes('11') || offering.includes('12') || 
                               offering.includes('high school');
 
-        // Logic to completely remove certain units if highly irrelevant
-        // Currently all units 1-6 apply generally to all levels, but filtering can be added here
         let mods = [
-            {
-                id: 1,
-                title: "School",
-                icon: <FiHome className="w-7 h-7" />,
-                path: "/modular/unit-1",
-                locked: false,
-            },
-            {
-                id: 2,
-                title: hasHighSchool ? "JHS/SHS Enrollment" : "Enroll",
-                icon: <FiUsers className="w-7 h-7" />,
-                path: "/modular/unit-2",
-                locked: false,
-            },
-            {
-                id: 3,
-                title: "Classes",
-                icon: <FiGrid className="w-7 h-7" />,
-                path: "/modular/unit-3",
-                locked: false,
-            },
-            {
-                id: 4,
-                title: hasHighSchool ? "JHS/SHS Profile" : "Learner Profile",
-                icon: <FiBookOpen className="w-7 h-7" />,
-                path: "/modular/unit-4",
-                locked: false,
-            },
-            {
-                id: 5,
-                title: "Shifting & Modality",
-                icon: <FiClock className="w-7 h-7" />,
-                path: "/modular/unit-5",
-                locked: false,
-            },
-            {
-                id: 7,
-                title: "Teaching Personnel",
-                icon: <FiUsers className="w-7 h-7" />,
-                path: "/modular/unit-7",
-                locked: false,
-            },
-            {
-                id: 8,
-                title: "Personnel Registry",
-                icon: <FiUsers className="w-7 h-7" />,
-                path: "/modular/unit-8",
-                locked: false,
-            },
-            {
-                id: 9,
-                title: "School Resources",
-                icon: <FiBookOpen className="w-7 h-7" />,
-                path: "/modular/unit-9",
-                locked: false,
-            },
-            {
-                id: 10,
-                title: "Physical Facilities",
-                icon: <FiBookOpen className="w-7 h-7" />, 
-                path: "/modular/unit-10",
-                locked: false,
-            },
+            { id: 1, title: "School Profile", icon: <FiHome className="w-5 h-5" />, path: "/modular/unit-1", locked: false },
+            { id: 2, title: hasHighSchool ? "JHS/SHS Enrollment" : "Enrollment", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-2", locked: false },
+            { id: 3, title: "Organized Classes", icon: <FiGrid className="w-5 h-5" />, path: "/modular/unit-3", locked: false },
+            { id: 4, title: hasHighSchool ? "JHS/SHS Profile" : "Learner Profile", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-4", locked: false },
+            { id: 5, title: "Shifting & Modality", icon: <FiClock className="w-5 h-5" />, path: "/modular/unit-5", locked: false },
+            { id: 7, title: "Teaching Personnel", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-7", locked: false },
+            { id: 8, title: "Personnel Registry", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-8", locked: false },
+            { id: 9, title: "School Resources", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-9", locked: false },
+            { id: 10, title: "Physical Facilities", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-10", locked: false },
         ];
-
         return mods;
     }, [curricularOffering, questProgress.completedUnits]);
-
-    // Alternating margins for dynamic winding path
-    const getPathOffset = (index) => {
-        if (index === 0) return "ml-0";
-        if (index === modules.length - 1) return "ml-0";
-        // Zig-zag offset
-        return index % 2 === 1 ? "-ml-16" : "ml-16";
-    };
 
     const handleModuleClick = (mod) => {
         if (mod.locked) return;
         navigate(mod.path);
     };
 
-    // Determine mascot message based on progress dynamically
     const getMascotMessage = () => {
         const completed = questProgress.completedUnits.length;
         const total = modules.length;
         const isHighSchool = (curricularOffering || "").toLowerCase().includes('high');
 
-        if (completed === 0) return "Start with the School Profile module! 🏢";
-        if (completed === 1) return `Great job! Let's plot your ${isHighSchool ? 'High School' : ''} Enrollment next!`;
-        if (completed === 2) return "Excellent progress! Log your organized classes and sections! 📈";
-        if (completed === 3) return "Halfway there! Complete the learner demographics profile.";
-        if (completed === 4) return "Almost done! Let's check shifting formulas!";
-        if (completed === total - 1) return "Final stretch! Ready up the Facilities report!";
-        return "You've successfully conquered all modules! 🏆";
+        if (completed === 0) return "Start with your School Profile! 🏢";
+        if (completed === 1) return `Great job! Let's map out ${isHighSchool ? 'High School ' : ''}Enrollment next!`;
+        if (completed === 2) return "Excellent progress! Log your organized classes! 📈";
+        if (completed === 3) return "Halfway there! Complete the learner profile. 📚";
+        if (completed === 4) return "Almost done! Let's configure shifting modalities! ⏱️";
+        if (completed === total - 1) return "Final stretch! Ready up the Facilities report! 🏫";
+        if (completed === total) return "Phenomenal! You've conquered all modules! 🏆";
+        return "Keep up the great work! ✨";
     };
 
-    return (
-        // Task 1: Soft Spotlight Background
-        <div className="min-h-screen flex flex-col items-center pb-20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-gray-50 to-gray-200 overflow-hidden font-sans">
+    const userRank = getRank(questProgress.xp);
 
-            {/* Task 2: Gamified Player Status Header */}
-            <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-sm rounded-b-3xl shadow-[0_4px_20px_rgba(0,0,0,0.06)] px-4 py-3 sm:px-6">
-                <div className="max-w-md mx-auto flex justify-between items-center">
+    return (
+        <div className="min-h-screen flex flex-col items-center bg-slate-50 font-sans pb-32">
+            <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md rounded-b-[2rem] shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-b border-slate-100 px-4 py-4 sm:px-6">
+                <div className="max-w-md mx-auto relative flex items-center justify-between">
                     <button
                         onClick={handleBack}
-                        className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500"
+                        className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors"
                         aria-label="Go back"
                     >
                         <FiArrowLeft className="w-5 h-5" />
                     </button>
 
-                    <h1 className="text-lg font-black text-gray-800 tracking-tight">
-                        Insight<span className="text-indigo-500">Ed</span> Quest
-                    </h1>
+                    <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
+                        <h1 className="text-lg font-black text-[#004A99] tracking-tight">
+                            InsightEd <span className="text-[#FDB913]">Quest</span>
+                        </h1>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Modular Data Flow</p>
+                    </div>
 
-                    <div className="flex items-center gap-3">
-                        {/* Streak */}
-                        <div className="flex items-center gap-1">
-                            <span className="text-base">⚡</span>
-                            <span className="text-sm font-bold text-orange-500">1</span>
+                    <div className="flex flex-col items-end">
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${userRank.badgeClass}`}>
+                            {userRank.icon}
+                            <span className="text-xs font-black uppercase tracking-wider">{userRank.title}</span>
                         </div>
-                        {/* Gems */}
-                        <div className="flex items-center gap-1">
-                            <span className="text-base">💎</span>
-                            <span className="text-sm font-bold text-blue-500">{questProgress.xp}</span>
-                        </div>
-                        {/* Lives */}
-                        <div className="flex items-center gap-1">
-                            <span className="text-base">❤️</span>
-                            <span className="text-sm font-bold text-red-500">5</span>
+                        <div className="flex items-center gap-1 mt-1 text-[#004A99]">
+                            <span className="text-[10px] font-bold text-[#FDB913] uppercase">XP</span>
+                            <span className="text-sm font-black tracking-tight">{questProgress.xp}</span>
                         </div>
                     </div>
                 </div>
             </header>
 
-            {/* Task 3: Winding Path Layout */}
-            <div className="flex flex-col items-center mt-12 space-y-8 w-full max-w-md relative px-4">
+            <div className="flex flex-col mt-10 w-full max-w-md relative px-4">
+                <div className="absolute top-8 bottom-12 left-8 w-[2px] border-l-2 border-dashed border-slate-200 z-0" />
 
-                {/* Decorative dashed path line */}
-                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 border-l-[3px] border-dashed border-gray-200 z-0" />
+                <div className="space-y-4 w-full relative z-10 pl-6">
+                    {modules.map((mod, idx) => {
+                        const isCompleted = questProgress.completedUnits.includes(mod.id);
+                        const isLocked = mod.locked;
+                        const isNextActiveRound = !isCompleted && !isLocked && 
+                                                  modules.slice(0, idx).every(m => questProgress.completedUnits.includes(m.id));
+                        const ringProgress = isCompleted ? 100 : (isNextActiveRound ? 25 : 0);
 
-                {modules.map((mod, idx) => {
-                    const isCompleted = questProgress.completedUnits.includes(mod.id);
-                    const isActive = !mod.locked && !isCompleted;
-
-                    return (
-                        <motion.div
-                            key={mod.id}
-                            initial={{ opacity: 0, y: 30, scale: 0.8 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            transition={{ delay: idx * 0.12, type: "spring", bounce: 0.4 }}
-                            className={`relative z-10 flex flex-col items-center ${getPathOffset(idx)}`}
-                        >
-                            {/* Module Label */}
-                            <motion.p
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: idx * 0.12 + 0.2 }}
-                                className={`mb-2 text-xs font-bold uppercase tracking-widest ${
-                                    mod.locked ? "text-gray-300" : isCompleted ? "text-emerald-500" : "text-indigo-500"
-                                }`}
+                        return (
+                            <motion.div
+                                key={mod.id}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: idx * 0.08, type: "spring", stiffness: 100 }}
                             >
-                                {isCompleted ? "✓ Done" : `Unit ${mod.id}`}
-                            </motion.p>
-
-                            {/* Task 4: Chunky 3D Bouncy Button */}
-                            {mod.locked ? (
-                                // Locked button
-                                <div className="w-24 h-24 rounded-full flex flex-col justify-center items-center text-gray-400 font-bold text-sm bg-gray-200 border-b-[6px] border-gray-300 shadow-sm cursor-not-allowed select-none">
-                                    <span className="text-2xl mb-0.5">🔒</span>
-                                    <span className="text-[10px]">{mod.title}</span>
-                                </div>
-                            ) : isCompleted ? (
-                                // Completed button
                                 <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
+                                    whileHover={!isLocked ? { scale: 1.02 } : {}}
+                                    whileTap={!isLocked ? { scale: 0.98 } : {}}
                                     onClick={() => handleModuleClick(mod)}
-                                    className="w-24 h-24 rounded-full flex flex-col justify-center items-center text-white font-bold text-sm bg-emerald-500 border-b-[6px] border-emerald-700 shadow-lg active:border-b-0 active:translate-y-[6px] transition-all cursor-pointer"
+                                    className={`relative flex items-center gap-4 w-full p-3 rounded-3xl shadow-sm border transition-all duration-300 text-left cursor-pointer
+                                        ${isLocked ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-75' : 
+                                          isCompleted ? 'border-[#004A99]/20 bg-white hover:border-[#004A99]/40 hover:shadow-md' : 
+                                          isNextActiveRound ? 'border-[#FDB913] bg-[#FDB913]/5 shadow-md shadow-[#FDB913]/10 ring-2 ring-[#FDB913]/20 hover:bg-white' : 
+                                          'border-slate-200 bg-white hover:border-[#004A99]/30 hover:shadow-md'}
+                                    `}
                                 >
-                                    {mod.icon}
-                                    <span className="text-[10px] mt-1">{mod.title}</span>
+                                    <div className="flex-shrink-0 -mb-2">
+                                        <CircularProgress progress={ringProgress} size={54} strokeWidth={4} isLocked={isLocked}>
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors
+                                                ${isLocked ? 'bg-slate-200 text-slate-400' :
+                                                  isCompleted ? 'bg-[#004A99] text-white shadow-inner' :
+                                                  isNextActiveRound ? 'bg-[#FDB913] text-[#004A99] shadow-inner shadow-yellow-600/20' :
+                                                  'bg-blue-50 text-[#004A99]'
+                                                }`}>
+                                                {isCompleted ? <FiCheck className="w-5 h-5" /> : mod.icon}
+                                            </div>
+                                        </CircularProgress>
+                                    </div>
+
+                                    <div className="flex flex-col flex-grow py-1">
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className={`text-[10px] font-black uppercase tracking-[0.15em]
+                                                ${isLocked ? 'text-slate-400' : isCompleted ? 'text-slate-400' : 'text-[#004A99]'}
+                                            `}>
+                                                Unit {mod.id}
+                                            </span>
+                                            {isCompleted && (
+                                                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                    Done
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className={`text-sm font-black tracking-tight ${isLocked ? 'text-slate-500' : 'text-slate-800'}`}>
+                                            {mod.title}
+                                        </span>
+                                    </div>
+                                    
+                                    {isNextActiveRound && (
+                                        <div className="absolute inset-0 bg-white/40 rounded-[2rem] -z-10 pointer-events-none" />
+                                    )}
                                 </motion.button>
-                            ) : (
-                                // Active / unlocked button
-                                <div className="relative">
-                                    {/* Pulsing ring behind active node */}
-                                    <div className="absolute inset-0 w-24 h-24 rounded-full border-[3px] border-green-400/40 animate-ping pointer-events-none" />
-                                    <motion.button
-                                        whileHover={{ scale: 1.08 }}
-                                        whileTap={{ scale: 0.92 }}
-                                        animate={{ y: [0, -4, 0] }}
-                                        transition={{ y: { repeat: Infinity, duration: 2, ease: "easeInOut" } }}
-                                        onClick={() => handleModuleClick(mod)}
-                                        className="relative w-24 h-24 rounded-full flex flex-col justify-center items-center text-white font-bold text-sm bg-green-500 border-b-[6px] border-green-700 shadow-lg active:border-b-0 active:translate-y-[6px] transition-all cursor-pointer"
-                                    >
-                                        {mod.icon}
-                                        <span className="text-[10px] mt-1">{mod.title}</span>
-                                    </motion.button>
-                                </div>
-                            )}
-                        </motion.div>
-                    );
-                })}
+                            </motion.div>
+                        );
+                    })}
+                </div>
             </div>
 
-            {/* Task 5: Mascot Cheerleader */}
             <motion.div
-                initial={{ opacity: 0, x: -40 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8, type: "spring" }}
-                className="fixed bottom-6 left-6 flex items-end drop-shadow-xl z-50"
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5, type: "spring", bounce: 0.4 }}
+                className="fixed bottom-6 left-6 flex items-end drop-shadow-xl z-50 pointer-events-none"
             >
-                {/* Speech Bubble */}
-                <div className="relative bg-white rounded-2xl rounded-bl-sm px-4 py-3 shadow-lg border border-gray-100 max-w-[200px] mr-2">
-                    <p className="text-xs text-gray-600 leading-relaxed font-medium">
-                        {getMascotMessage()}
-                    </p>
-                    {/* Pointer */}
-                    <div className="absolute -bottom-1.5 left-3 w-3 h-3 bg-white border-b border-r border-gray-100 rotate-45" />
-                </div>
+                <AnimatePresence>
+                    {!isLoading && (
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.8, x: -20 }}
+                            animate={{ opacity: 1, scale: 1, x: 0 }}
+                            className="relative bg-white rounded-3xl rounded-bl-xl border-2 border-slate-100 px-5 py-4 shadow-2xl max-w-[220px] mr-4 z-10 pointer-events-auto"
+                        >
+                            <p className="text-xs text-slate-700 leading-relaxed font-bold">
+                                {getMascotMessage()}
+                            </p>
+                            <div className="absolute -bottom-2 left-6 w-4 h-4 bg-white border-b-2 border-l-2 border-slate-100 -rotate-45" />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-                {/* Mascot Avatar — Kid in Barong Tagalog */}
-                <BarongMascot className="w-14 h-14 sm:w-16 sm:h-16" />
+                <motion.div 
+                    whileHover={{ scale: 1.05, rotate: [-2, 2, 0] }}
+                    className="pointer-events-auto cursor-pointer"
+                >
+                    <BarongMascot className="w-16 h-16 drop-shadow-md" />
+                </motion.div>
             </motion.div>
         </div>
     );

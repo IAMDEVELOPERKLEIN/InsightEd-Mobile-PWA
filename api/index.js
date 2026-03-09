@@ -12243,6 +12243,7 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM ph_schools WHERE school_id = $1', [schoolId]);
     if (result.rows.length > 0) {
+      console.log(`[GET /api/ph_schools/${schoolId}] RETURNING unit5_completed: `, result.rows[0].unit5_completed);
       res.json({ exists: true, data: result.rows[0] });
     } else {
       res.json({ exists: false, data: null });
@@ -12371,6 +12372,8 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
 
     const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $19`;
 
+    // Ensure row exists before update
+    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
     await pool.query(query, values);
 
     // Auto-update school_summary instantly
@@ -12420,6 +12423,9 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     const values = [
       has_multigrade, multigrade_sections_count || 0, sectionsJson, schoolId
     ];
+
+    // Ensure the row exists before updating, in case the user jumped straight to this unit
+    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
 
     await pool.query(query, values);
 
@@ -12515,6 +12521,10 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
     `;
 
     console.log(`[Unit4 Save] Saving ${setClauses.length} fields for school ${schoolId}`);
+
+    // Ensure the row exists before updating, in case the user jumped straight to this unit
+    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
+
     await pool.query(query, values);
 
     // Auto-update school_summary instantly
@@ -12576,13 +12586,18 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
     dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
     values.push(schoolId); // Last param is the WHERE clause
 
+    // Ensure the row exists before updating, in case the user jumped straight to this unit
+    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
+
     const query = `
         UPDATE ph_schools 
         SET ${dynamicFields.join(', ')} 
         WHERE school_id = $${paramIdx}
+        RETURNING school_id, unit5_completed
       `;
 
-    await pool.query(query, values);
+    const result = await pool.query(query, values);
+    console.log("UNIT 5 UPDATE RESULT:", result.rows);
 
     // Auto-update school_summary instantly
     try {

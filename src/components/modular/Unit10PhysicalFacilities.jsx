@@ -695,64 +695,69 @@ export default function Unit10PhysicalFacilities() {
             goodConditionBuildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0);
 
         return (
-            <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden pb-20">
-                <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
-                    <div className="max-w-3xl mx-auto flex items-center justify-between">
-                        <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 text-gray-400">
-                            <FiChevronLeft className="w-6 h-6" />
-                        </button>
-                        <div className="flex flex-col items-center">
-                            <h1 className="font-bold text-gray-800 text-xl">Unit 10 Summary</h1>
-                            <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Audit Completed ✅</span>
-                        </div>
-                        <div className="w-10"></div>
+            <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden selection:bg-indigo-500/30">
+                {/* Top Navigation */}
+                <header className="px-6 py-4 flex items-center justify-between sticky top-0 bg-gray-50/80 backdrop-blur-md z-50 border-b border-gray-200/50">
+                    <button onClick={handleBack} className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 shadow-sm hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all">
+                        <FiChevronLeft className="w-6 h-6" />
+                    </button>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-black tracking-[0.2em] text-indigo-500 uppercase">Unit 10 Insight</span>
+                        <h1 className="font-black text-gray-800 text-lg uppercase tracking-wide">Physical Facilities</h1>
                     </div>
+                    <div className="w-12" />
                 </header>
 
-                <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col space-y-8 pb-32">
-                    
-                    {/* Header */}
-                    <div className="text-center mb-6 mt-8">
-                        <motion.div 
-                            initial={{ scale: 0 }} 
-                            animate={{ scale: 1 }} 
-                            className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-emerald-500 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
-                        >
+                {/* Hero Section */}
+                <div className="px-6 pt-8 pb-6 text-center">
+                    <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="w-24 h-24 mx-auto mb-4 relative"
+                    >
+                        <div className="absolute inset-0 bg-indigo-500 rounded-[2rem] rotate-45 opacity-20" />
+                        <div className="absolute inset-0 bg-indigo-500 rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-200">
                             <span className="text-4xl">🏢</span>
-                        </motion.div>
-                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                            Unit 10 • Physical Facilities
-                        </span>
-                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Architecture Summary</h1>
-                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
-                    </div>
+                        </div>
+                    </motion.div>
+                    <h2 className="text-3xl font-black text-gray-800 tracking-tight">Facilities Audit</h2>
+                    <p className="text-gray-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                </div>
 
+                <main className="px-6 pb-24 space-y-6 max-w-3xl mx-auto w-full">
+                    
                     {/* 1. Top-Level Metric Cards */}
-                    <div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-4xl font-black text-emerald-600 mb-1">{spaces.length}</span>
-                                <span className="text-sm font-bold text-gray-500 leading-tight">Buildable<br/>Spaces</span>
-                            </div>
-                            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-4xl font-black text-blue-600 mb-1">{totalClassrooms}</span>
-                                <span className="text-sm font-bold text-gray-500 leading-tight">Total Usable<br/>Classrooms</span>
-                            </div>
-                            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-4xl font-black text-amber-500 mb-1">{groupedRepairsArray.length}</span>
-                                <span className="text-sm font-bold text-gray-500 leading-tight">Rooms Needing<br/>Repair</span>
-                            </div>
-                            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-4xl font-black text-rose-600 mb-1">{demolitionRecords.length}</span>
-                                <span className="text-sm font-bold text-gray-500 leading-tight">Buildings to<br/>Demolish</span>
-                            </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <span className="text-4xl font-black text-indigo-600 mb-2">{spaces.length}</span>
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Buildable Spaces</span>
+                        </div>
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+                            <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <span className="text-4xl font-black text-teal-600 mb-2">{totalClassrooms}</span>
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Usable Rooms</span>
+                        </div>
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+                            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <span className="text-4xl font-black text-amber-500 mb-2">{groupedRepairsArray.length}</span>
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">For Repair</span>
+                        </div>
+                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
+                            <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <span className="text-4xl font-black text-rose-600 mb-2">{demolitionRecords.length}</span>
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">For Demolition</span>
                         </div>
                     </div>
 
                     {/* 2. Phase 1: Buildable Space Map View */}
-                    <div className="bg-amber-50 p-6 rounded-[2rem] border-2 border-amber-100 relative overflow-hidden">
-                        <h3 className="text-xl font-black text-amber-900 mb-4 flex items-center gap-2"><FiMapPin /> Phase 1: Buildable Spaces</h3>
-                        <div className="h-[250px] rounded-2xl overflow-hidden shadow-inner mb-4 bg-white border border-amber-200">
+                    <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
+                        <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center"><FiMapPin /></span>
+                            Phase 1: Buildable Spaces
+                        </h3>
+                        <div className="h-[250px] rounded-2xl overflow-hidden shadow-inner mb-4 bg-gray-50 border border-gray-200">
                             {centerMap ? (
                                 <MapContainer center={centerMap} zoom={18} scrollWheelZoom={false} dragging={false} doubleClickZoom={false} zoomControl={false} className="h-full w-full">
                                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -765,132 +770,141 @@ export default function Unit10PhysicalFacilities() {
                                     })}
                                 </MapContainer>
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center text-gray-400 font-medium">Map unvailable</div>
+                                <div className="w-full h-full flex items-center justify-center text-gray-400 font-medium">Map unavailable</div>
                             )}
                         </div>
                         <div className="space-y-3">
                             {spaces.map(s => (
-                                <div key={s.id} className="bg-white/80 backdrop-blur-sm p-4 rounded-xl shadow-sm border border-amber-100/50 flex justify-between items-center">
+                                <div key={s.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-indigo-200 transition-colors">
                                     <div>
-                                        <h4 className="font-bold text-amber-900">{s.space_name}</h4>
-                                        <p className="text-xs text-amber-700 font-medium">{s.length_m}m &times; {s.width_m}m</p>
+                                        <h4 className="font-bold text-gray-800">{s.space_name}</h4>
+                                        <p className="text-xs text-gray-500 font-medium mt-1">{s.length_m}m &times; {s.width_m}m</p>
                                     </div>
-                                    <span className="text-amber-600 font-black bg-amber-100 px-3 py-1 rounded-lg">{parseFloat(s.total_area_sqm).toFixed(1)} m&sup2;</span>
+                                    <span className="text-indigo-600 font-black bg-indigo-100/50 px-3 py-1 rounded-lg border border-indigo-100">{parseFloat(s.total_area_sqm).toFixed(1)} m&sup2;</span>
                                 </div>
                             ))}
+                            {spaces.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No spaces recorded.</p>}
                         </div>
                     </div>
 
                     {/* 3. Phase 2: Inventory Breakdown */}
                     <div className="space-y-6">
-                        <h3 className="text-2xl font-black text-gray-800">Phase 2: Inventory</h3>
+                        <h3 className="text-xl font-black text-gray-800 px-2">Phase 2: Inventory Breakdown</h3>
                         
                         {/* Newly Built */}
-                        <div className="bg-emerald-50 p-6 rounded-[2rem] border-2 border-emerald-100">
-                            <h4 className="font-black text-lg text-emerald-800 mb-4">✨ Newly Built ({newlyBuiltBuildings.length})</h4>
+                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-teal-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
+                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center">✨</span>
+                                Newly Built
+                            </h4>
                             <div className="space-y-3">
                                 {newlyBuiltBuildings.map(b => (
-                                    <div key={b.id} className="bg-white p-4 rounded-2xl shadow-sm border border-emerald-100">
-                                        <h5 className="font-black text-gray-800 text-lg">{b.building_name}</h5>
-                                        <div className="inline-flex bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full mt-2 mb-3">
-                                            {b.storey} Storey(s) | {b.classroom} Classrooms
+                                    <div key={b.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                                        <h5 className="font-black text-gray-800">{b.building_name}</h5>
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.storey} Storey(s)</span>
+                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.classroom} Classrooms</span>
                                         </div>
-                                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-sm">
+                                        <div className="mt-3 bg-white p-3 rounded-xl border border-gray-100 text-sm">
                                             <p className="font-bold text-gray-600">Standard Room Size: <span className="text-gray-800">{b.room_length}m &times; {b.room_width}m</span></p>
-                                            <p className="text-gray-500 mt-1">Area per room: {(parseFloat(b.room_length) * parseFloat(b.room_width)).toFixed(1)} m&sup2;</p>
+                                            <p className="text-gray-500 mt-0.5 text-xs font-medium">Area per room: {(parseFloat(b.room_length) * parseFloat(b.room_width)).toFixed(1)} m&sup2;</p>
                                         </div>
                                     </div>
                                 ))}
-                                {newlyBuiltBuildings.length === 0 && <p className="text-emerald-600/60 font-medium italic text-sm text-center py-2">No newly built structures recorded.</p>}
+                                {newlyBuiltBuildings.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No newly built structures recorded.</p>}
                             </div>
                         </div>
 
                         {/* Good Condition */}
-                        <div className="bg-blue-50 p-6 rounded-[2rem] border-2 border-blue-100">
-                            <h4 className="font-black text-lg text-blue-800 mb-4">✅ Good Condition ({goodConditionBuildings.length})</h4>
+                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
+                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">✅</span>
+                                Good Condition
+                            </h4>
                             <div className="space-y-3">
                                 {goodConditionBuildings.map(b => (
-                                    <div key={b.id} className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100">
-                                        <h5 className="font-black text-gray-800 text-lg">{b.building_name}</h5>
-                                        <div className="inline-flex bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full mt-2 mb-3">
-                                            {b.storey} Storey(s) | {b.classroom} Classrooms
+                                    <div key={b.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                                        <h5 className="font-black text-gray-800">{b.building_name}</h5>
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.storey} Storey(s)</span>
+                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.classroom} Classrooms</span>
                                         </div>
-                                        <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-sm">
+                                        <div className="mt-3 bg-white p-3 rounded-xl border border-gray-100 text-sm">
                                             <p className="font-bold text-gray-600">Standard Room Size: <span className="text-gray-800">{b.room_length}m &times; {b.room_width}m</span></p>
-                                            <p className="text-gray-500 mt-1">Area per room: {(parseFloat(b.room_length) * parseFloat(b.room_width)).toFixed(1)} m&sup2;</p>
+                                            <p className="text-gray-500 mt-0.5 text-xs font-medium">Area per room: {(parseFloat(b.room_length) * parseFloat(b.room_width)).toFixed(1)} m&sup2;</p>
                                         </div>
                                     </div>
                                 ))}
-                                {goodConditionBuildings.length === 0 && <p className="text-blue-600/60 font-medium italic text-sm text-center py-2">No good condition structures recorded.</p>}
+                                {goodConditionBuildings.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No good condition structures recorded.</p>}
                             </div>
                         </div>
                     </div>
 
                     {/* 4. Action Items */}
                     <div className="space-y-6">
-                        <h3 className="text-2xl font-black text-gray-800">Action Items</h3>
+                        <h3 className="text-xl font-black text-gray-800 px-2 mt-4">Required Interventions</h3>
                         
                         {/* Repairs */}
-                        <div className="bg-orange-50 p-6 rounded-[2rem] border-2 border-orange-100">
-                            <h4 className="font-black text-lg text-orange-800 mb-4">🛠️ Repair Assessments ({groupedRepairsArray.length} rooms)</h4>
+                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-amber-100 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
+                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">🛠️</span>
+                                Repair Assessments
+                            </h4>
                             <div className="space-y-3">
                                 {groupedRepairsArray.map(r => (
-                                    <div key={r.roomId} className="bg-white p-4 rounded-2xl shadow-sm border border-orange-100">
-                                        <h5 className="font-black text-gray-800">{r.building_name} &bull; <span className="text-orange-600">{r.room_name}</span></h5>
+                                    <div key={r.roomId} className="bg-amber-50/30 p-4 rounded-2xl border border-amber-100/50">
+                                        <h5 className="font-black text-gray-800">{r.building_name} &bull; <span className="text-amber-600">{r.room_name}</span></h5>
                                         <p className="text-xs font-bold text-gray-400 mt-1 mb-3">Room Dimensions: {r.room_length}m &times; {r.room_width}m</p>
-                                        <div className="bg-orange-50/50 p-3 rounded-xl text-sm border border-orange-50">
-                                            <span className="font-bold text-orange-800 block mb-1">Damaged Items:</span>
-                                            <p className="text-orange-700/80 leading-relaxed font-medium">
+                                        <div className="bg-white p-3 rounded-xl border border-gray-100 text-sm shadow-sm">
+                                            <span className="font-bold text-gray-700 block mb-1">Damaged Items:</span>
+                                            <p className="text-gray-600 font-medium">
                                                 {r.items.map(i => `${i.item} (${i.recommend_action === 'Routine Repair' ? i.damage_ratio + '%' : i.recommend_action})`).join(', ')}
                                             </p>
                                         </div>
                                     </div>
                                 ))}
-                                {groupedRepairsArray.length === 0 && <p className="text-orange-600/60 font-medium italic text-sm text-center py-2">No repairs needed.</p>}
+                                {groupedRepairsArray.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No repairs needed.</p>}
                             </div>
                         </div>
 
                         {/* Demolitions */}
-                        <div className="bg-rose-50 p-6 rounded-[2rem] border-2 border-rose-100">
-                            <h4 className="font-black text-lg text-rose-800 mb-4">🚜 Slated for Demolition ({demolitionRecords.length})</h4>
+                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-rose-100 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-rose-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
+                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">🚜</span>
+                                Slated for Demolition
+                            </h4>
                             <div className="space-y-3">
                                 {demolitionRecords.map(d => (
-                                    <div key={d.id} className="bg-white p-4 rounded-2xl shadow-sm border border-rose-100">
+                                    <div key={d.id} className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100/50">
                                         <h5 className="font-black text-gray-800 text-lg mb-1">{d.building_name}</h5>
                                         <p className="text-sm font-bold text-gray-500 mb-3">Losing {(parseFloat(d.room_length) * parseFloat(d.room_width)).toFixed(1)} m&sup2; footprint</p>
                                         <div className="flex flex-wrap gap-2">
-                                            {d.age && <span className="bg-rose-100 text-rose-800 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Age/Dilapidation</span>}
-                                            {d.safety && <span className="bg-rose-100 text-rose-800 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Safety Hazard</span>}
-                                            {d.calamity && <span className="bg-rose-100 text-rose-800 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Calamity Damage</span>}
-                                            {d.upgrade && <span className="bg-rose-100 text-rose-800 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Site Upgrade</span>}
+                                            {d.age && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Age/Dilapidation</span>}
+                                            {d.safety && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Safety Hazard</span>}
+                                            {d.calamity && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Calamity Damage</span>}
+                                            {d.upgrade && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Site Upgrade</span>}
                                         </div>
                                     </div>
                                 ))}
-                                {demolitionRecords.length === 0 && <p className="text-rose-600/60 font-medium italic text-sm text-center py-2">No demolitions recorded.</p>}
+                                {demolitionRecords.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No demolitions recorded.</p>}
                             </div>
                         </div>
                     </div>
 
                     {/* 5. Unlock Action */}
-                    <div className="pt-6 pb-4">
-                        <motion.div 
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.3 }}
-                            className="mt-6"
+                    <div className="pt-6">
+                        <button 
+                            onClick={() => setIsReadOnly(false)}
+                            className="w-full py-4 rounded-2xl bg-indigo-50 text-indigo-700 font-black text-lg border-2 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                         >
-                            <button 
-                                onClick={() => setIsReadOnly(false)}
-                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                            >
-                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                    <FiUnlock className="w-5 h-5 text-indigo-700" />
-                                </div>
-                                <span>Unlock to Edit Architecture</span>
-                            </button>
-                        </motion.div>
-                        <p className="text-center text-xs font-bold text-gray-400 mt-4">Unlocking allows you to add or modify records in this specific audit unit.</p>
+                            <FiUnlock className="w-5 h-5" />
+                            <span>Unlock to Edit Architecture</span>
+                        </button>
+                        <p className="text-center text-xs font-bold text-gray-400 mt-4">Unlocking allows you to update unit records.</p>
                     </div>
 
                 </main>
