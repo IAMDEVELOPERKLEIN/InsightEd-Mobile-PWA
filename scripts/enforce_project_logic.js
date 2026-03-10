@@ -41,7 +41,7 @@ const isDryRun = process.argv.includes('--dry-run');
  * Validates a project record and returns its highest eligible tier.
  */
 function checkProjectStatus(project) {
-    let currentTier = 'EFD';
+    let currentTier = 'HRODI';
 
     const isMoaMode = project.mode_of_project === 'MOA';
     const hasMoaId = !!(project.moa && String(project.moa).trim());
@@ -73,7 +73,7 @@ async function enforceLogic() {
 
         const stats = {
             total: 0,
-            efd: 0,
+            hrodi: 0,
             finance: 0,
             agency: 0,
             orphans: 0
@@ -96,7 +96,7 @@ async function enforceLogic() {
 
                 if (tier === 'AGENCY') stats.agency++;
                 else if (tier === 'FINANCE') stats.finance++;
-                else if (tier === 'EFD') stats.efd++;
+                else if (tier === 'HRODI') stats.hrodi++;
 
                 if (project.mode_of_project === 'MOA') {
                     const missing = [];
@@ -121,7 +121,7 @@ async function enforceLogic() {
         console.log('\n✅ Processing Complete.');
         console.log('------------------------------------------------');
         console.log(`Total Projects Scanned: ${stats.total}`);
-        console.log(`Tiers: AGENCY: ${stats.agency} | FINANCE: ${stats.finance} | EFD: ${stats.efd}`);
+        console.log(`Tiers: AGENCY: ${stats.agency} | FINANCE: ${stats.finance} | HRODI: ${stats.hrodi}`);
         console.log(`Orphans Identified: ${stats.orphans}`);
         console.log('------------------------------------------------');
 

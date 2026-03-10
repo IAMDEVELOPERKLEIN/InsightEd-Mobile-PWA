@@ -201,7 +201,7 @@ const EFDHome = () => {
                     <div className="relative z-10">
                         <div className="flex justify-between items-center mb-8">
                             <div>
-                                <h1 className="text-2xl font-black tracking-tight leading-none">EFD Dashboard</h1>
+                                <h1 className="text-2xl font-black tracking-tight leading-none">HRODI Dashboard</h1>
                                 <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
                                     {userData?.region || 'Central Office'} • Infrastructure Monitoring
                                 </p>
@@ -457,7 +457,7 @@ const EFDHome = () => {
                                             <p className="text-[10px] text-slate-500 font-medium truncate">{p.schoolName} ({p.schoolId})</p>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${p.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                                        p.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
+                                                    p.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
                                                     }`}>
                                                     {p.status}
                                                 </span>

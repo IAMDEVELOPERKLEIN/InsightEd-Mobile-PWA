@@ -193,263 +193,275 @@ const SuperUserSelector = () => {
                     <p className="text-slate-500 mt-2 font-medium">Select a role to impersonate or view.</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                    {/* CARD 1: Central Office */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
-                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                <div className="space-y-12">
+                    {/* SECTION: General Access */}
+                    <section>
+                        <div className="flex items-center gap-4 mb-8">
+                            <h2 className="text-xl font-bold text-slate-700 whitespace-nowrap">General Access</h2>
+                            <div className="h-px bg-slate-200 w-full"></div>
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">Central Office</h3>
-                        <p className="text-sm text-slate-500 mb-6 flex-grow">View National Aggregated Data</p>
-                        <button onClick={() => handleSelection('Central Office')} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
-                            Select
-                        </button>
-                    </motion.div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* CARD 1: Central Office */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
+                                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Central Office</h3>
+                                <p className="text-sm text-slate-500 mb-6 flex-grow">View National Aggregated Data</p>
+                                <button onClick={() => handleSelection('Central Office')} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
+                                    Select
+                                </button>
+                            </motion.div>
 
-                    {/* CARD 2: Regional Office */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
-                        <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mb-4 text-indigo-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" /></svg>
+                            {/* CARD 2: Regional Office */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
+                                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mb-4 text-indigo-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Regional Office</h3>
+                                <p className="text-sm text-slate-500 mb-4">View Regional Data</p>
+                                <select
+                                    className="w-full p-2 mb-4 border rounded-lg bg-slate-50 text-sm"
+                                    value={selectedRegion}
+                                    onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
+                                >
+                                    <option value="">Select Region</option>
+                                    {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                </select>
+                                <button
+                                    onClick={() => handleSelection('Regional Office', selectedRegion)}
+                                    disabled={!selectedRegion}
+                                    className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition disabled:opacity-50"
+                                >
+                                    Go to Region
+                                </button>
+                            </motion.div>
+
+                            {/* CARD 3: SDO */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
+                                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4 text-purple-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">SDO</h3>
+                                <p className="text-sm text-slate-500 mb-4">View Division Data</p>
+
+                                <select
+                                    className="w-full p-2 mb-2 border rounded-lg bg-slate-50 text-sm"
+                                    value={selectedRegion}
+                                    onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
+                                >
+                                    <option value="">Select Region First</option>
+                                    {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                </select>
+
+                                <select
+                                    className="w-full p-2 mb-4 border rounded-lg bg-slate-50 text-sm"
+                                    value={selectedDivision}
+                                    onChange={(e) => setSelectedDivision(e.target.value)}
+                                    disabled={!selectedRegion || sdoDivisions.length === 0}
+                                >
+                                    <option value="">Select Division</option>
+                                    {sdoDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+
+                                <button
+                                    onClick={() => handleSelection('School Division Office', selectedDivision, { region: selectedRegion })}
+                                    disabled={!selectedDivision}
+                                    className="w-full py-2 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition disabled:opacity-50"
+                                >
+                                    Go to Division
+                                </button>
+                            </motion.div>
+
+                            {/* CARD 4: School Head */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
+                                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 text-green-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">School Head</h3>
+                                <p className="text-sm text-slate-500 mb-6 flex-grow">View Generic School Dashboard</p>
+                                <button onClick={() => handleSelection('School Head')} className="w-full py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition">
+                                    Enter View
+                                </button>
+                            </motion.div>
+
+                            {/* CARD 5: LGU */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
+                                <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mb-4 text-teal-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">LGU</h3>
+                                <p className="text-sm text-slate-500 mb-4">View Local Projects</p>
+
+                                <div className="w-full space-y-2 mb-4">
+                                    <select
+                                        className="w-full p-2 border rounded-lg bg-slate-50 text-sm"
+                                        value={lguRegion}
+                                        onChange={(e) => {
+                                            setLguRegion(e.target.value);
+                                            setLguProvince('');
+                                            setLguMunicipality('');
+                                        }}
+                                    >
+                                        <option value="">Select Region</option>
+                                        {regions.map(r => (
+                                            <option key={r} value={r}>{r}</option>
+                                        ))}
+                                    </select>
+
+                                    <select
+                                        className="w-full p-2 border rounded-lg bg-slate-50 text-sm"
+                                        value={lguProvince}
+                                        onChange={(e) => {
+                                            setLguProvince(e.target.value);
+                                            setLguMunicipality('');
+                                        }}
+                                        disabled={!lguRegion || lguProvinces.length === 0}
+                                    >
+                                        <option value="">Select Province</option>
+                                        {lguProvinces.map(p => (
+                                            <option key={p} value={p}>{p}</option>
+                                        ))}
+                                    </select>
+
+                                    <select
+                                        className="w-full p-2 border rounded-lg bg-slate-50 text-sm"
+                                        value={lguMunicipality}
+                                        onChange={(e) => setLguMunicipality(e.target.value)}
+                                        disabled={!lguProvince || lguMunicipalities.length === 0}
+                                    >
+                                        <option value="">Select Municipality</option>
+                                        {lguMunicipalities.map(m => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="mt-auto w-full">
+                                    <button
+                                        onClick={() => handleSelection('Local Government Unit', lguMunicipality, { region: lguRegion, province: lguProvince })}
+                                        disabled={!lguMunicipality}
+                                        className="w-full py-2 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 transition disabled:opacity-50"
+                                    >
+                                        Enter LGU View
+                                    </button>
+                                </div>
+                            </motion.div>
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">Regional Office</h3>
-                        <p className="text-sm text-slate-500 mb-4">View Regional Data</p>
-                        <select
-                            className="w-full p-2 mb-4 border rounded-lg bg-slate-50 text-sm"
-                            value={selectedRegion}
-                            onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
-                        >
-                            <option value="">Select Region</option>
-                            {regions.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                        <button
-                            onClick={() => handleSelection('Regional Office', selectedRegion)}
-                            disabled={!selectedRegion}
-                            className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition disabled:opacity-50"
-                        >
-                            Go to Region
-                        </button>
-                    </motion.div>
+                    </section>
 
-                    {/* CARD 3: SDO */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
-                        <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4 text-purple-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                    {/* SECTION: Infrastructure Monitoring */}
+                    <section>
+                        <div className="flex items-center gap-4 mb-8">
+                            <h2 className="text-xl font-bold text-slate-700 whitespace-nowrap">Infrastructure Monitoring</h2>
+                            <div className="h-px bg-slate-200 w-full"></div>
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">SDO</h3>
-                        <p className="text-sm text-slate-500 mb-4">View Division Data</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {/* CARD: 2026 Infrastructure Priorities */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
+                                <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mb-4 text-pink-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">2026 Infrastructure Priorities</h3>
+                                <p className="text-sm text-slate-500 mb-4 flex-grow">Partnership Projects Prototype</p>
 
-                        <select
-                            className="w-full p-2 mb-2 border rounded-lg bg-slate-50 text-sm"
-                            value={selectedRegion}
-                            onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
-                        >
-                            <option value="">Select Region First</option>
-                            {regions.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
+                                <div className="mt-auto w-full">
+                                    <button
+                                        onClick={() => handleSelection('Masterlist')}
+                                        className="w-full py-2 bg-pink-600 text-white rounded-lg font-bold hover:bg-pink-700 transition"
+                                    >
+                                        Enter 2026 Infrastructure Priorities View
+                                    </button>
+                                </div>
+                            </motion.div>
 
-                        <select
-                            className="w-full p-2 mb-4 border rounded-lg bg-slate-50 text-sm"
-                            value={selectedDivision}
-                            onChange={(e) => setSelectedDivision(e.target.value)}
-                            disabled={!selectedRegion || sdoDivisions.length === 0}
-                        >
-                            <option value="">Select Division</option>
-                            {sdoDivisions.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
+                            {/* CARD: HRODI Dashboard */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
+                                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">HRODI</h3>
+                                <p className="text-sm text-slate-500 mb-6 flex-grow">Human Resource and Organizational Development</p>
+                                <button onClick={() => handleSelection('EFD')} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
+                                    Select HRODI Dashboard
+                                </button>
+                            </motion.div>
 
-                        <button
-                            onClick={() => handleSelection('School Division Office', selectedDivision, { region: selectedRegion })}
-                            disabled={!selectedDivision}
-                            className="w-full py-2 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition disabled:opacity-50"
-                        >
-                            Go to Division
-                        </button>
-                    </motion.div>
+                            {/* CARD: Finance Dashboard */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
+                                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4 text-emerald-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Finance</h3>
+                                <p className="text-sm text-slate-500 mb-4 flex-grow">Manage Project Financials & Tranches</p>
 
-                    {/* CARD 4: School Head */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 text-green-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                                <div className="mt-auto w-full">
+                                    <button
+                                        onClick={() => handleSelection('Finance')}
+                                        className="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition"
+                                    >
+                                        Enter Finance Dashboard
+                                    </button>
+                                </div>
+                            </motion.div>
+
+                            {/* CARD: Implementing Agency Dashboard */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
+                                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Implementing Agency</h3>
+                                <p className="text-sm text-slate-500 mb-4 flex-grow">Track MOA project distribution & external partners</p>
+
+                                <div className="mt-auto w-full">
+                                    <button
+                                        onClick={() => handleSelection('Implementing Agency')}
+                                        className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition"
+                                    >
+                                        Enter Agency Dashboard
+                                    </button>
+                                </div>
+                            </motion.div>
+
+                            {/* CARD: Division Engineer */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center min-h-[300px]">
+                                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4 text-orange-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">Division Engineer</h3>
+                                <p className="text-sm text-slate-500 mb-4">View Infra Projects</p>
+
+                                <select
+                                    className="w-full p-2 mb-2 border rounded-lg bg-slate-50 text-sm"
+                                    value={engRegion}
+                                    onChange={(e) => { setEngRegion(e.target.value); setEngDivision(''); }}
+                                >
+                                    <option value="">Select Region</option>
+                                    {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                </select>
+
+                                <select
+                                    className="w-full p-2 mb-6 border rounded-lg bg-slate-50 text-sm"
+                                    value={engDivision}
+                                    onChange={(e) => setEngDivision(e.target.value)}
+                                    disabled={!engRegion || engDivisions.length === 0}
+                                >
+                                    <option value="">Select Division</option>
+                                    {engDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+
+                                <div className="mt-auto w-full">
+                                    <button
+                                        onClick={() => handleSelection('Division Engineer', engDivision, { region: engRegion })}
+                                        disabled={!engDivision}
+                                        className="w-full py-2 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 transition disabled:opacity-50"
+                                    >
+                                        Enter Dashboard
+                                    </button>
+                                </div>
+                            </motion.div>
                         </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">School Head</h3>
-                        <p className="text-sm text-slate-500 mb-6 flex-grow">View Generic School Dashboard</p>
-                        <button onClick={() => handleSelection('School Head')} className="w-full py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition">
-                            Enter View
-                        </button>
-                    </motion.div>
-
-                    {/* CARD 5: Division Engineer (Separated) */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center min-h-[300px]">
-                        <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4 text-orange-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">Division Engineer</h3>
-                        <p className="text-sm text-slate-500 mb-4">View Infra Projects</p>
-
-                        {/* Engineer Dropdowns */}
-                        <select
-                            className="w-full p-2 mb-2 border rounded-lg bg-slate-50 text-sm"
-                            value={engRegion}
-                            onChange={(e) => { setEngRegion(e.target.value); setEngDivision(''); }}
-                        >
-                            <option value="">Select Region</option>
-                            {regions.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-
-                        <select
-                            className="w-full p-2 mb-6 border rounded-lg bg-slate-50 text-sm"
-                            value={engDivision}
-                            onChange={(e) => setEngDivision(e.target.value)}
-                            disabled={!engRegion || engDivisions.length === 0}
-                        >
-                            <option value="">Select Division</option>
-                            {engDivisions.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-
-                        <div className="mt-auto w-full">
-                            <button
-                                onClick={() => handleSelection('Division Engineer', engDivision, { region: engRegion })}
-                                disabled={!engDivision}
-                                className="w-full py-2 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 transition disabled:opacity-50"
-                            >
-                                Enter Dashboard
-                            </button>
-                        </div>
-                    </motion.div>
-
-                    {/* CARD EFD: Engineering Facilities Division */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
-                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">EFD</h3>
-                        <p className="text-sm text-slate-500 mb-6 flex-grow">Engineering Facilities Division</p>
-                        <button onClick={() => handleSelection('EFD')} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
-                            Select EFD Dashboard
-                        </button>
-                    </motion.div>
-
-                    {/* CARD 6: LGU (Separated) */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
-                        <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mb-4 text-teal-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">LGU</h3>
-                        <p className="text-sm text-slate-500 mb-4">View Local Projects</p>
-
-                        <div className="w-full space-y-2 mb-4">
-                            {/* 1. Region Dropdown */}
-                            <select
-                                className="w-full p-2 border rounded-lg bg-slate-50 text-sm"
-                                value={lguRegion}
-                                onChange={(e) => {
-                                    setLguRegion(e.target.value);
-                                    setLguProvince('');
-                                    setLguMunicipality('');
-                                }}
-                            >
-                                <option value="">Select Region</option>
-                                {regions.map(r => (
-                                    <option key={r} value={r}>{r}</option>
-                                ))}
-                            </select>
-
-                            {/* 2. Province Dropdown */}
-                            <select
-                                className="w-full p-2 border rounded-lg bg-slate-50 text-sm"
-                                value={lguProvince}
-                                onChange={(e) => {
-                                    setLguProvince(e.target.value);
-                                    setLguMunicipality('');
-                                }}
-                                disabled={!lguRegion || lguProvinces.length === 0}
-                            >
-                                <option value="">Select Province</option>
-                                {lguProvinces.map(p => (
-                                    <option key={p} value={p}>{p}</option>
-                                ))}
-                            </select>
-
-                            {/* 3. Municipality Dropdown */}
-                            <select
-                                className="w-full p-2 border rounded-lg bg-slate-50 text-sm"
-                                value={lguMunicipality}
-                                onChange={(e) => setLguMunicipality(e.target.value)}
-                                disabled={!lguProvince || lguMunicipalities.length === 0}
-                            >
-                                <option value="">Select Municipality</option>
-                                {lguMunicipalities.map(m => (
-                                    <option key={m} value={m}>{m}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="mt-auto w-full">
-                            <button
-                                onClick={() => handleSelection('Local Government Unit', lguMunicipality, { region: lguRegion, province: lguProvince })}
-                                disabled={!lguMunicipality}
-                                className="w-full py-2 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 transition disabled:opacity-50"
-                            >
-                                Enter LGU View
-                            </button>
-                        </div>
-                    </motion.div>
-
-                    {/* CARD 7: Masterlist */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
-                        <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mb-4 text-pink-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">2026 Infrastructure Priorities</h3>
-                        <p className="text-sm text-slate-500 mb-4 flex-grow">Partnership Projects Prototype</p>
-
-                        <div className="mt-auto w-full">
-                            <button
-                                onClick={() => handleSelection('Masterlist')}
-                                className="w-full py-2 bg-pink-600 text-white rounded-lg font-bold hover:bg-pink-700 transition"
-                            >
-                                Enter 2026 Infrastructure Priorities View
-                            </button>
-                        </div>
-                    </motion.div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                    {/* CARD 8: Finance Dashboard */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
-                        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4 text-emerald-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">Finance</h3>
-                        <p className="text-sm text-slate-500 mb-4 flex-grow">Manage Project Financials & Tranches</p>
-
-                        <div className="mt-auto w-full">
-                            <button
-                                onClick={() => handleSelection('Finance')}
-                                className="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition"
-                            >
-                                Enter Finance Dashboard
-                            </button>
-                        </div>
-                    </motion.div>
-                    {/* CARD 9: Implementing Agency Dashboard */}
-                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
-                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800 mb-2">Implementing Agency</h3>
-                        <p className="text-sm text-slate-500 mb-4 flex-grow">Track MOA project distribution & external partners</p>
-
-                        <div className="mt-auto w-full">
-                            <button
-                                onClick={() => handleSelection('Implementing Agency')}
-                                className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition"
-                            >
-                                Enter Agency Dashboard
-                            </button>
-                        </div>
-                    </motion.div>
+                    </section>
                 </div>
             </div>
         </div>
