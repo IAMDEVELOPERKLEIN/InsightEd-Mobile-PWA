@@ -6,18 +6,19 @@ import SuccessModal from "../SuccessModal";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-
-// Fix for default marker icon in react-leaflet
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconUrl: markerIcon,
-    iconRetinaUrl: markerIcon2x,
-    shadowUrl: markerShadow,
+// Fix for default marker icon in react-leaflet using unpkg to bypass rollup bundle errors
+const DefaultIcon = L.icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    tooltipAnchor: [16, -28],
+    shadowSize: [41, 41]
 });
+
+L.Marker.prototype.options.icon = DefaultIcon;
 
 // Helper: fly/zoom to school coordinates when they load
 const RecenterMap = ({ center }) => {
@@ -85,7 +86,7 @@ export default function Unit8PhysicalFacilities() {
     const [hasNewlyBuilt, setHasNewlyBuilt] = useState(null);
     const [newlyBuiltBuildings, setNewlyBuiltBuildings] = useState([]);
     const [showNewBuildingModal, setShowNewBuildingModal] = useState(false);
-    
+
     const currentYear = new Date().getFullYear();
     const [newBuildingFormData, setNewBuildingFormData] = useState({
         building_name: "",
@@ -101,7 +102,7 @@ export default function Unit8PhysicalFacilities() {
     const [hasGoodCondition, setHasGoodCondition] = useState(null);
     const [goodConditionBuildings, setGoodConditionBuildings] = useState([]);
     const [showGoodBuildingModal, setShowGoodBuildingModal] = useState(false);
-    
+
     const [goodBuildingFormData, setGoodBuildingFormData] = useState({
         building_name: "",
         category: "Academic Building",
@@ -114,14 +115,14 @@ export default function Unit8PhysicalFacilities() {
     });
 
     const REPAIR_CATEGORIES = [
-        'Roofing', 'Purlins', 'Trusses', 'Ceiling (Exterior)', 'Ceiling (Interior)', 
+        'Roofing', 'Purlins', 'Trusses', 'Ceiling (Exterior)', 'Ceiling (Interior)',
         'Wall (Exterior)', 'Partition', 'Door', 'Windows', 'Flooring', 'Beams / Columns'
     ];
 
     const [hasRepair, setHasRepair] = useState(null);
     const [repairAssessments, setRepairAssessments] = useState([]);
     const [showRepairModal, setShowRepairModal] = useState(false);
-    
+
     const [repairRoomFormData, setRepairRoomFormData] = useState({
         building_name: "",
         room_name: "",
@@ -134,7 +135,7 @@ export default function Unit8PhysicalFacilities() {
     const [hasDemolition, setHasDemolition] = useState(null);
     const [demolitionRecords, setDemolitionRecords] = useState([]);
     const [showDemolitionModal, setShowDemolitionModal] = useState(false);
-    
+
     const [demolitionFormData, setDemolitionFormData] = useState({
         building_name: "",
         room_length: 9,
@@ -196,7 +197,7 @@ export default function Unit8PhysicalFacilities() {
                 const json = await res.json();
                 if (json.success && json.data) {
                     const { inventory, repairs, demolitions, isCompleted } = json.data;
-                    
+
                     // Filter Inventory
                     const newlyBuilt = inventory.filter(i => i.status === 'Newly Built');
                     const goodCondition = inventory.filter(i => i.status === 'Good Condition');
@@ -282,12 +283,12 @@ export default function Unit8PhysicalFacilities() {
     // ── Calculation Utilities ──────────────────────────────────────────────
     const calculateBounds = (lat, lng, lengthM, widthM) => {
         if (!lat || !lng || !lengthM || !widthM) return null;
-        
+
         // 1 degree lat = ~111.32 km
         const latDiff = (lengthM / 2) / 111320;
         // 1 degree lng = ~111.32 km * cos(lat)
         const lngDiff = (widthM / 2) / (111320 * Math.cos(lat * Math.PI / 180));
-        
+
         return [
             [lat - latDiff, lng - lngDiff], // South-West
             [lat + latDiff, lng + lngDiff]  // North-East
@@ -418,7 +419,7 @@ export default function Unit8PhysicalFacilities() {
         } else {
             setGoodConditionBuildings([...goodConditionBuildings, newEntry]);
         }
-        
+
         setShowGoodBuildingModal(false);
         setEditingGoodBuildingId(null);
         setGoodBuildingFormData({
@@ -492,7 +493,7 @@ export default function Unit8PhysicalFacilities() {
 
         // Flattening Logic: one object per checked category
         const roomId = editingRepairRoomId || Date.now().toString(); // unique ID for the whole room group
-        
+
         const newAssessments = selectedCategories.map(category => ({
             id: roomId + "-" + category.replace(/\s/g, ''),
             roomId: roomId,
@@ -510,7 +511,7 @@ export default function Unit8PhysicalFacilities() {
         } else {
             setRepairAssessments(prev => [...prev, ...newAssessments]);
         }
-        
+
         setShowRepairModal(false);
         setEditingRepairRoomId(null);
         setRepairRoomFormData({
@@ -529,7 +530,7 @@ export default function Unit8PhysicalFacilities() {
             room_length: roomGroup.room_length,
             room_width: roomGroup.room_width
         });
-        
+
         const reconstructedState = {};
         roomGroup.items.forEach(itm => {
             reconstructedState[itm.item] = {
@@ -593,7 +594,7 @@ export default function Unit8PhysicalFacilities() {
         } else {
             setDemolitionRecords(prev => [...prev, newRecord]);
         }
-        
+
         setShowDemolitionModal(false);
         setEditingDemolitionId(null);
         setDemolitionFormData({
@@ -631,13 +632,13 @@ export default function Unit8PhysicalFacilities() {
 
         try {
             setLoading(true);
-            
+
             // Phase 2 Step 1 & 2: Building Inventory
             const inventoryPayload = [...newlyBuiltBuildings, ...goodConditionBuildings];
-            
+
             // Phase 2 Step 3: Repair Assessments
             const repairPayload = [...groupedRepairsArray];
-            
+
             // Phase 2 Step 4: Demolitions
             const demoPayload = [...demolitionRecords];
 
@@ -653,7 +654,7 @@ export default function Unit8PhysicalFacilities() {
             const masterRes = await fetch(`/api/ph_schools/unit10/${schoolId}/master`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     inventory: inventoryPayload,
                     repairs: repairPayload,
                     demolitions: demoPayload
@@ -665,7 +666,7 @@ export default function Unit8PhysicalFacilities() {
                 console.error("Master Submission Error Response:", errorData);
                 throw new Error("Failed to submit Unit 10 master payload.");
             }
-            
+
             // Force Unit 10 completion XP if not done
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
@@ -690,7 +691,7 @@ export default function Unit8PhysicalFacilities() {
 
     // ── Summary Dashboard Component ─────────────────────────────────────────
     const SummaryDashboard = () => {
-        const totalClassrooms = 
+        const totalClassrooms =
             newlyBuiltBuildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0) +
             goodConditionBuildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0);
 
@@ -725,7 +726,7 @@ export default function Unit8PhysicalFacilities() {
                 </div>
 
                 <main className="px-6 pb-24 space-y-6 max-w-3xl mx-auto w-full">
-                    
+
                     {/* 1. Top-Level Metric Cards */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
@@ -790,7 +791,7 @@ export default function Unit8PhysicalFacilities() {
                     {/* 3. Phase 2: Inventory Breakdown */}
                     <div className="space-y-6">
                         <h3 className="text-xl font-black text-gray-800 px-2">Phase 2: Inventory Breakdown</h3>
-                        
+
                         {/* Newly Built */}
                         <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-teal-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
@@ -845,7 +846,7 @@ export default function Unit8PhysicalFacilities() {
                     {/* 4. Action Items */}
                     <div className="space-y-6">
                         <h3 className="text-xl font-black text-gray-800 px-2 mt-4">Required Interventions</h3>
-                        
+
                         {/* Repairs */}
                         <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-amber-100 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
@@ -897,7 +898,7 @@ export default function Unit8PhysicalFacilities() {
 
                     {/* 5. Unlock Action */}
                     <div className="pt-6">
-                        <button 
+                        <button
                             onClick={() => setIsReadOnly(false)}
                             className="w-full py-4 rounded-2xl bg-indigo-50 text-indigo-700 font-black text-lg border-2 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                         >
@@ -934,8 +935,8 @@ export default function Unit8PhysicalFacilities() {
                 {/* Visual Progress Bar */}
                 <div className="max-w-3xl mx-auto mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden flex gap-1">
                     {[1, 2, 3, 4, 5].map(step => (
-                        <div 
-                            key={step} 
+                        <div
+                            key={step}
                             className={`flex-1 h-full transition-all duration-500 ${currentPage >= step ? "bg-indigo-500" : "bg-gray-200"}`}
                         />
                     ))}
@@ -943,7 +944,7 @@ export default function Unit8PhysicalFacilities() {
             </header>
 
             <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col pt-8">
-                
+
                 {currentPage === 1 && (
                     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                         <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
@@ -978,6 +979,7 @@ export default function Unit8PhysicalFacilities() {
                                             );
                                         })}
 
+<<<<<<< HEAD:src/components/modular/Unit8PhysicalFacilities.jsx
                                          {/* Render new drawing space */}
                                          {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
                                              const b = calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0);
@@ -994,6 +996,20 @@ export default function Unit8PhysicalFacilities() {
                                                  </>
                                              );
                                          })()}
+=======
+                                        {/* Render new drawing space */}
+                                        {newSpace.center_lat && newSpace.center_lng && isFormVisible && (
+                                            <>
+                                                <Rectangle
+                                                    bounds={calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0)}
+                                                    pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }}
+                                                />
+                                                <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
+                                                    <Popup>Target Location</Popup>
+                                                </Marker>
+                                            </>
+                                        )}
+>>>>>>> dd14f7f3dfff610097e7a49a283055e6a9e240f9:src/components/modular/Unit10PhysicalFacilities.jsx
                                     </MapContainer>
                                 )}
                             </div>
@@ -1002,7 +1018,7 @@ export default function Unit8PhysicalFacilities() {
                         {/* Form or Add Button */}
                         <AnimatePresence mode="wait">
                             {!isFormVisible ? (
-                                <motion.button 
+                                <motion.button
                                     key="addbtn"
                                     initial={{ opacity: 0, scale: 0.9 }}
                                     animate={{ opacity: 1, scale: 1 }}
@@ -1010,10 +1026,10 @@ export default function Unit8PhysicalFacilities() {
                                     onClick={() => setIsFormVisible(true)}
                                     className="bg-emerald-500 w-full py-4 rounded-2xl text-white font-black text-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-[6px] shadow-lg flex justify-center items-center gap-2 mb-8 transition-all hover:bg-emerald-400"
                                 >
-                                    <FiPlus className="w-6 h-6"/> Add New Space
+                                    <FiPlus className="w-6 h-6" /> Add New Space
                                 </motion.button>
                             ) : (
-                                <motion.div 
+                                <motion.div
                                     key="form"
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
@@ -1022,7 +1038,7 @@ export default function Unit8PhysicalFacilities() {
                                 >
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="font-black text-xl text-gray-800">New Space Details</h3>
-                                        <button onClick={() => setIsFormVisible(false)} className="text-gray-400 hover:text-gray-700"><FiX className="w-6 h-6"/></button>
+                                        <button onClick={() => setIsFormVisible(false)} className="text-gray-400 hover:text-gray-700"><FiX className="w-6 h-6" /></button>
                                     </div>
 
                                     <p className="text-sm font-bold text-amber-600 mb-4 bg-amber-50 p-3 rounded-lg flex items-center gap-2">
@@ -1033,19 +1049,19 @@ export default function Unit8PhysicalFacilities() {
                                     <div className="space-y-4">
                                         <div>
                                             <label className="text-sm font-bold text-gray-500 ml-2">Space Name / ID</label>
-                                            <input type="text" value={newSpace.space_name} onChange={(e) => setNewSpace({...newSpace, space_name: e.target.value})}
+                                            <input type="text" value={newSpace.space_name} onChange={(e) => setNewSpace({ ...newSpace, space_name: e.target.value })}
                                                 className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all" />
                                         </div>
-                                        
+
                                         <div className="flex gap-4">
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Length (meters)</label>
-                                                <input type="number" value={newSpace.length_m} onChange={(e) => setNewSpace({...newSpace, length_m: parseFloat(e.target.value) || 0})}
+                                                <input type="number" value={newSpace.length_m} onChange={(e) => setNewSpace({ ...newSpace, length_m: parseFloat(e.target.value) || 0 })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
                                             </div>
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Width (meters)</label>
-                                                <input type="number" value={newSpace.width_m} onChange={(e) => setNewSpace({...newSpace, width_m: parseFloat(e.target.value) || 0})}
+                                                <input type="number" value={newSpace.width_m} onChange={(e) => setNewSpace({ ...newSpace, width_m: parseFloat(e.target.value) || 0 })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
                                             </div>
                                         </div>
@@ -1076,7 +1092,7 @@ export default function Unit8PhysicalFacilities() {
                                                 <p className="text-sm text-gray-500 font-medium">{s.length_m}m &times; {s.width_m}m &nbsp;&bull;&nbsp; <span className="text-emerald-600 font-bold">{parseFloat(s.total_area_sqm).toFixed(2)} m&sup2;</span></p>
                                             </div>
                                             <button onClick={() => handleDelete(s.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                <FiTrash2 className="w-5 h-5"/>
+                                                <FiTrash2 className="w-5 h-5" />
                                             </button>
                                         </div>
                                     ))}
@@ -1114,7 +1130,7 @@ export default function Unit8PhysicalFacilities() {
                         {/* Inventory Area (If Yes) */}
                         {hasNewlyBuilt && (
                             <div className="space-y-6">
-                                
+
                                 {/* Card List */}
                                 {newlyBuiltBuildings.length > 0 && (
                                     <div className="space-y-4">
@@ -1133,10 +1149,10 @@ export default function Unit8PhysicalFacilities() {
                                                     {true && (
                                                         <>
                                                             <button onClick={() => handleEditNewBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
-                                                                <FiEdit2 className="w-5 h-5"/>
+                                                                <FiEdit2 className="w-5 h-5" />
                                                             </button>
                                                             <button onClick={() => handleDeleteNewBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                                <FiTrash2 className="w-5 h-5"/>
+                                                                <FiTrash2 className="w-5 h-5" />
                                                             </button>
                                                         </>
                                                     )}
@@ -1148,41 +1164,41 @@ export default function Unit8PhysicalFacilities() {
 
                                 {/* Add Button */}
                                 {!showNewBuildingModal ? (
-                                    <motion.button 
+                                    <motion.button
                                         initial={{ opacity: 0, scale: 0.9 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         onClick={() => setShowNewBuildingModal(true)}
                                         className="bg-emerald-50 w-full py-4 rounded-2xl text-emerald-600 font-black text-lg border-2 border-emerald-200 border-dashed hover:bg-emerald-100 hover:border-emerald-300 transition-all flex justify-center items-center gap-2"
                                     >
-                                        <FiPlus className="w-6 h-6"/> Add Newly Built Building
+                                        <FiPlus className="w-6 h-6" /> Add Newly Built Building
                                     </motion.button>
                                 ) : showNewBuildingModal ? (
                                     /* Form Modal Area */
-                                    <motion.div 
+                                    <motion.div
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
                                     >
                                         <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
                                             <h3 className="font-black text-2xl text-gray-800">Newly Built Details</h3>
-                                            <button onClick={() => setShowNewBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6"/></button>
+                                            <button onClick={() => setShowNewBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
                                         </div>
 
                                         <div className="space-y-5">
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input type="text" value={newBuildingFormData.building_name} onChange={(e) => setNewBuildingFormData({...newBuildingFormData, building_name: e.target.value})}
+                                                <input type="text" value={newBuildingFormData.building_name} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, building_name: e.target.value })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all placeholder-gray-300" placeholder="e.g. Marcos Type Bldg" />
                                             </div>
-                                            
+
                                             <div className={`relative ${isNewDropdownOpen ? 'z-50' : 'z-0'}`}>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
                                                 <div className="relative mt-1">
                                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                                         <FiSearch className="text-gray-400 w-5 h-5" />
                                                     </div>
-                                                    <input 
-                                                        type="text" 
+                                                    <input
+                                                        type="text"
                                                         placeholder="Search building type..."
                                                         value={isNewDropdownOpen ? newBuildingSearch : newBuildingFormData.category}
                                                         onFocus={() => {
@@ -1191,11 +1207,11 @@ export default function Unit8PhysicalFacilities() {
                                                         }}
                                                         onChange={(e) => {
                                                             setNewBuildingSearch(e.target.value);
-                                                            setNewBuildingFormData(prev => ({...prev, category: e.target.value}));
+                                                            setNewBuildingFormData(prev => ({ ...prev, category: e.target.value }));
                                                         }}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
                                                     />
-                                                    <div 
+                                                    <div
                                                         className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
                                                         onClick={() => setIsNewDropdownOpen(!isNewDropdownOpen)}
                                                     >
@@ -1205,18 +1221,18 @@ export default function Unit8PhysicalFacilities() {
                                                     <AnimatePresence>
                                                         {isNewDropdownOpen && (
                                                             <>
-                                                                <motion.div 
-                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }} 
-                                                                    animate={{ opacity: 1, y: 0, scale: 1 }} 
+                                                                <motion.div
+                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
                                                                     exit={{ opacity: 0, y: -10, scale: 0.95 }}
                                                                     className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
                                                                 >
                                                                     {(newBuildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(newBuildingSearch.toLowerCase())) : buildingTypes).map(type => (
-                                                                        <button 
-                                                                            key={type} 
+                                                                        <button
+                                                                            key={type}
                                                                             type="button"
                                                                             onClick={() => {
-                                                                                setNewBuildingFormData({...newBuildingFormData, category: type});
+                                                                                setNewBuildingFormData({ ...newBuildingFormData, category: type });
                                                                                 setNewBuildingSearch(type);
                                                                                 setIsNewDropdownOpen(false);
                                                                             }}
@@ -1250,12 +1266,12 @@ export default function Unit8PhysicalFacilities() {
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
-                                                    <input type="number" value={newBuildingFormData.storey} onChange={(e) => setNewBuildingFormData({...newBuildingFormData, storey: parseInt(e.target.value) || 0})}
+                                                    <input type="number" value={newBuildingFormData.storey} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, storey: parseInt(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" min="1" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
-                                                    <input type="number" value={newBuildingFormData.classroom} onChange={(e) => setNewBuildingFormData({...newBuildingFormData, classroom: parseInt(e.target.value) || 0})}
+                                                    <input type="number" value={newBuildingFormData.classroom} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, classroom: parseInt(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" min="1" />
                                                 </div>
                                             </div>
@@ -1263,19 +1279,19 @@ export default function Unit8PhysicalFacilities() {
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
-                                                    <input type="number" value={newBuildingFormData.room_length} onChange={(e) => setNewBuildingFormData({...newBuildingFormData, room_length: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={newBuildingFormData.room_length} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, room_length: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
-                                                    <input type="number" value={newBuildingFormData.room_width} onChange={(e) => setNewBuildingFormData({...newBuildingFormData, room_width: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={newBuildingFormData.room_width} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, room_width: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" />
                                                 </div>
                                             </div>
 
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
-                                                <select value={newBuildingFormData.year_completed} onChange={(e) => setNewBuildingFormData({...newBuildingFormData, year_completed: parseInt(e.target.value)})}
+                                                <select value={newBuildingFormData.year_completed} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, year_completed: parseInt(e.target.value) })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer">
                                                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                                                 </select>
@@ -1283,7 +1299,7 @@ export default function Unit8PhysicalFacilities() {
 
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
-                                                <textarea value={newBuildingFormData.remarks} onChange={(e) => setNewBuildingFormData({...newBuildingFormData, remarks: e.target.value})}
+                                                <textarea value={newBuildingFormData.remarks} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, remarks: e.target.value })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]" placeholder="Optional notes..."></textarea>
                                             </div>
 
@@ -1327,7 +1343,7 @@ export default function Unit8PhysicalFacilities() {
                         {/* Inventory Area (If Yes) */}
                         {hasGoodCondition && (
                             <div className="space-y-6">
-                                
+
                                 {/* Card List */}
                                 {goodConditionBuildings.length > 0 && (
                                     <div className="space-y-4">
@@ -1346,10 +1362,10 @@ export default function Unit8PhysicalFacilities() {
                                                     {true && (
                                                         <>
                                                             <button onClick={() => handleEditGoodBuilding(b)} className="p-3 bg-blue-50 text-blue-500 rounded-xl hover:bg-blue-100 transition-colors">
-                                                                <FiEdit2 className="w-5 h-5"/>
+                                                                <FiEdit2 className="w-5 h-5" />
                                                             </button>
                                                             <button onClick={() => handleDeleteGoodBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                                <FiTrash2 className="w-5 h-5"/>
+                                                                <FiTrash2 className="w-5 h-5" />
                                                             </button>
                                                         </>
                                                     )}
@@ -1361,41 +1377,41 @@ export default function Unit8PhysicalFacilities() {
 
                                 {/* Add Button */}
                                 {!showGoodBuildingModal ? (
-                                    <motion.button 
+                                    <motion.button
                                         initial={{ opacity: 0, scale: 0.9 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         onClick={() => setShowGoodBuildingModal(true)}
                                         className="bg-blue-50 w-full py-4 rounded-2xl text-blue-600 font-black text-lg border-2 border-blue-200 border-dashed hover:bg-blue-100 hover:border-blue-300 transition-all flex justify-center items-center gap-2"
                                     >
-                                        <FiPlus className="w-6 h-6"/> Add Good Condition Building
+                                        <FiPlus className="w-6 h-6" /> Add Good Condition Building
                                     </motion.button>
                                 ) : showGoodBuildingModal ? (
                                     /* Form Modal Area */
-                                    <motion.div 
+                                    <motion.div
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
                                     >
                                         <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
                                             <h3 className="font-black text-2xl text-gray-800">Good Condition Details</h3>
-                                            <button onClick={() => setShowGoodBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6"/></button>
+                                            <button onClick={() => setShowGoodBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
                                         </div>
 
                                         <div className="space-y-5">
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input type="text" value={goodBuildingFormData.building_name} onChange={(e) => setGoodBuildingFormData({...goodBuildingFormData, building_name: e.target.value})}
+                                                <input type="text" value={goodBuildingFormData.building_name} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, building_name: e.target.value })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all placeholder-gray-300" placeholder="e.g. Quezon Type Bldg" />
                                             </div>
-                                            
+
                                             <div className={`relative ${isGoodDropdownOpen ? 'z-50' : 'z-0'}`}>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
                                                 <div className="relative mt-1">
                                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                                         <FiSearch className="text-gray-400 w-5 h-5" />
                                                     </div>
-                                                    <input 
-                                                        type="text" 
+                                                    <input
+                                                        type="text"
                                                         placeholder="Search building type..."
                                                         value={isGoodDropdownOpen ? goodBuildingSearch : goodBuildingFormData.category}
                                                         onFocus={() => {
@@ -1404,11 +1420,11 @@ export default function Unit8PhysicalFacilities() {
                                                         }}
                                                         onChange={(e) => {
                                                             setGoodBuildingSearch(e.target.value);
-                                                            setGoodBuildingFormData(prev => ({...prev, category: e.target.value}));
+                                                            setGoodBuildingFormData(prev => ({ ...prev, category: e.target.value }));
                                                         }}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
                                                     />
-                                                    <div 
+                                                    <div
                                                         className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
                                                         onClick={() => setIsGoodDropdownOpen(!isGoodDropdownOpen)}
                                                     >
@@ -1418,18 +1434,18 @@ export default function Unit8PhysicalFacilities() {
                                                     <AnimatePresence>
                                                         {isGoodDropdownOpen && (
                                                             <>
-                                                                <motion.div 
-                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }} 
-                                                                    animate={{ opacity: 1, y: 0, scale: 1 }} 
+                                                                <motion.div
+                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
                                                                     exit={{ opacity: 0, y: -10, scale: 0.95 }}
                                                                     className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
                                                                 >
                                                                     {(goodBuildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(goodBuildingSearch.toLowerCase())) : buildingTypes).map(type => (
-                                                                        <button 
-                                                                            key={type} 
+                                                                        <button
+                                                                            key={type}
                                                                             type="button"
                                                                             onClick={() => {
-                                                                                setGoodBuildingFormData({...goodBuildingFormData, category: type});
+                                                                                setGoodBuildingFormData({ ...goodBuildingFormData, category: type });
                                                                                 setGoodBuildingSearch(type);
                                                                                 setIsGoodDropdownOpen(false);
                                                                             }}
@@ -1463,12 +1479,12 @@ export default function Unit8PhysicalFacilities() {
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
-                                                    <input type="number" value={goodBuildingFormData.storey} onChange={(e) => setGoodBuildingFormData({...goodBuildingFormData, storey: parseInt(e.target.value) || 0})}
+                                                    <input type="number" value={goodBuildingFormData.storey} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, storey: parseInt(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" min="1" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
-                                                    <input type="number" value={goodBuildingFormData.classroom} onChange={(e) => setGoodBuildingFormData({...goodBuildingFormData, classroom: parseInt(e.target.value) || 0})}
+                                                    <input type="number" value={goodBuildingFormData.classroom} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, classroom: parseInt(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" min="1" />
                                                 </div>
                                             </div>
@@ -1476,19 +1492,19 @@ export default function Unit8PhysicalFacilities() {
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
-                                                    <input type="number" value={goodBuildingFormData.room_length} onChange={(e) => setGoodBuildingFormData({...goodBuildingFormData, room_length: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={goodBuildingFormData.room_length} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, room_length: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
-                                                    <input type="number" value={goodBuildingFormData.room_width} onChange={(e) => setGoodBuildingFormData({...goodBuildingFormData, room_width: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={goodBuildingFormData.room_width} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, room_width: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" />
                                                 </div>
                                             </div>
 
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
-                                                <select value={goodBuildingFormData.year_completed} onChange={(e) => setGoodBuildingFormData({...goodBuildingFormData, year_completed: parseInt(e.target.value)})}
+                                                <select value={goodBuildingFormData.year_completed} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, year_completed: parseInt(e.target.value) })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer">
                                                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                                                 </select>
@@ -1496,7 +1512,7 @@ export default function Unit8PhysicalFacilities() {
 
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
-                                                <textarea value={goodBuildingFormData.remarks} onChange={(e) => setGoodBuildingFormData({...goodBuildingFormData, remarks: e.target.value})}
+                                                <textarea value={goodBuildingFormData.remarks} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, remarks: e.target.value })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all min-h-[100px]" placeholder="Optional notes..."></textarea>
                                             </div>
 
@@ -1521,7 +1537,7 @@ export default function Unit8PhysicalFacilities() {
                             Repair Assessment 🛠️
                         </h2>
                         <p className="text-gray-500 mb-6 font-medium">Log rooms that require attention or minor repairs.</p>
-                        
+
                         {/* Gatekeeper: Repair */}
                         <div className="bg-white p-5 rounded-[2rem] shadow-sm border-2 border-gray-100 mb-8">
                             <h3 className="font-bold text-gray-700 mb-4 px-1 text-lg">Do you have any rooms needing Repair?</h3>
@@ -1540,7 +1556,7 @@ export default function Unit8PhysicalFacilities() {
                         {/* Inventory Area (If Yes) */}
                         {hasRepair && (
                             <div className="space-y-6">
-                                
+
                                 {/* Card List */}
                                 {repairAssessments.length > 0 && (
                                     <div className="space-y-4">
@@ -1554,10 +1570,10 @@ export default function Unit8PhysicalFacilities() {
                                                     {true && (
                                                         <>
                                                             <button onClick={() => handleEditRepairRoom(b)} className="p-3 bg-amber-50 text-amber-500 rounded-xl hover:bg-amber-100 transition-colors">
-                                                                <FiEdit2 className="w-5 h-5"/>
+                                                                <FiEdit2 className="w-5 h-5" />
                                                             </button>
                                                             <button onClick={() => handleDeleteRepairRoom(b.roomId)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                                <FiTrash2 className="w-5 h-5"/>
+                                                                <FiTrash2 className="w-5 h-5" />
                                                             </button>
                                                         </>
                                                     )}
@@ -1569,24 +1585,24 @@ export default function Unit8PhysicalFacilities() {
 
                                 {/* Add Button */}
                                 {!showRepairModal ? (
-                                    <motion.button 
+                                    <motion.button
                                         initial={{ opacity: 0, scale: 0.9 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         onClick={() => setShowRepairModal(true)}
                                         className="bg-amber-50 w-full py-4 rounded-2xl text-amber-600 font-black text-lg border-2 border-amber-200 border-dashed hover:bg-amber-100 hover:border-amber-300 transition-all flex justify-center items-center gap-2"
                                     >
-                                        <FiPlus className="w-6 h-6"/> Add Room for Repair
+                                        <FiPlus className="w-6 h-6" /> Add Room for Repair
                                     </motion.button>
                                 ) : showRepairModal ? (
                                     /* Form Modal Area */
-                                    <motion.div 
+                                    <motion.div
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
                                     >
                                         <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
                                             <h3 className="font-black text-2xl text-gray-800">Room Repair Assessment</h3>
-                                            <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6"/></button>
+                                            <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
                                         </div>
 
                                         {/* Top Section: Room Details */}
@@ -1595,24 +1611,24 @@ export default function Unit8PhysicalFacilities() {
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                    <input type="text" value={repairRoomFormData.building_name} onChange={(e) => setRepairRoomFormData({...repairRoomFormData, building_name: e.target.value})}
+                                                    <input type="text" value={repairRoomFormData.building_name} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, building_name: e.target.value })}
                                                         className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all placeholder-gray-300" placeholder="e.g. Science Bldg" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Name</label>
-                                                    <input type="text" value={repairRoomFormData.room_name} onChange={(e) => setRepairRoomFormData({...repairRoomFormData, room_name: e.target.value})}
+                                                    <input type="text" value={repairRoomFormData.room_name} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, room_name: e.target.value })}
                                                         className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all placeholder-gray-300" placeholder="e.g. Lab 1" />
                                                 </div>
                                             </div>
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
-                                                    <input type="number" value={repairRoomFormData.room_length} onChange={(e) => setRepairRoomFormData({...repairRoomFormData, room_length: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={repairRoomFormData.room_length} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, room_length: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all text-center" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
-                                                    <input type="number" value={repairRoomFormData.room_width} onChange={(e) => setRepairRoomFormData({...repairRoomFormData, room_width: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={repairRoomFormData.room_width} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, room_width: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all text-center" />
                                                 </div>
                                             </div>
@@ -1628,7 +1644,7 @@ export default function Unit8PhysicalFacilities() {
                                                 return (
                                                     <div key={category} className={`border-2 rounded-2xl overflow-hidden transition-all ${isChecked ? 'border-amber-400 bg-amber-50/30' : 'border-gray-100 bg-white'}`}>
                                                         <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50">
-                                                            <input type="checkbox" checked={isChecked} onChange={() => handleToggleRepairItem(category)} 
+                                                            <input type="checkbox" checked={isChecked} onChange={() => handleToggleRepairItem(category)}
                                                                 className="w-6 h-6 rounded text-amber-500 focus:ring-amber-500 border-gray-300" />
                                                             <span className={`font-bold text-lg ${isChecked ? 'text-amber-800' : 'text-gray-600'}`}>{category}</span>
                                                         </label>
@@ -1732,7 +1748,7 @@ export default function Unit8PhysicalFacilities() {
                         {/* Inventory Area (If Yes) */}
                         {hasDemolition && (
                             <div className="space-y-6">
-                                
+
                                 {/* Card List */}
                                 {demolitionRecords.length > 0 && (
                                     <div className="space-y-4">
@@ -1741,7 +1757,7 @@ export default function Unit8PhysicalFacilities() {
                                                 <div className="flex-1">
                                                     <h4 className="font-black text-2xl text-gray-800">{b.building_name}</h4>
                                                     <p className="text-sm font-bold text-gray-500 mt-1">Area Lost: {b.room_length * b.room_width} m&sup2;</p>
-                                                    
+
                                                     <div className="mt-4 flex flex-wrap gap-2">
                                                         {b.age && <span className="inline-flex bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700">Age / Dilapidation</span>}
                                                         {b.safety && <span className="inline-flex bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700">Safety Hazard</span>}
@@ -1753,10 +1769,10 @@ export default function Unit8PhysicalFacilities() {
                                                     {true && (
                                                         <>
                                                             <button onClick={() => handleEditDemolition(b)} className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 hover:text-indigo-500 transition-colors border border-gray-200">
-                                                                <FiEdit2 className="w-5 h-5"/>
+                                                                <FiEdit2 className="w-5 h-5" />
                                                             </button>
                                                             <button onClick={() => handleDeleteDemolition(b.id)} className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 hover:text-rose-500 transition-colors border border-gray-200">
-                                                                <FiTrash2 className="w-5 h-5"/>
+                                                                <FiTrash2 className="w-5 h-5" />
                                                             </button>
                                                         </>
                                                     )}
@@ -1768,44 +1784,44 @@ export default function Unit8PhysicalFacilities() {
 
                                 {/* Add Button */}
                                 {!showDemolitionModal ? (
-                                    <motion.button 
+                                    <motion.button
                                         initial={{ opacity: 0, scale: 0.9 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         onClick={() => setShowDemolitionModal(true)}
                                         className="bg-rose-50 w-full py-4 rounded-2xl text-rose-600 font-black text-lg border-2 border-rose-200 border-dashed hover:bg-rose-100 hover:border-rose-300 transition-all flex justify-center items-center gap-2"
                                     >
-                                        <FiPlus className="w-6 h-6"/> Add Building for Demolition
+                                        <FiPlus className="w-6 h-6" /> Add Building for Demolition
                                     </motion.button>
                                 ) : showDemolitionModal ? (
                                     /* Form Modal Area */
-                                    <motion.div 
+                                    <motion.div
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         className="bg-white p-6 rounded-[2rem] shadow-xl border-2 border-rose-100"
                                     >
                                         <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
                                             <h3 className="font-black text-2xl text-gray-800">Demolition Details</h3>
-                                            <button onClick={() => setShowDemolitionModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6"/></button>
+                                            <button onClick={() => setShowDemolitionModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
                                         </div>
 
                                         <div className="space-y-6">
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input type="text" value={demolitionFormData.building_name} onChange={(e) => setDemolitionFormData({...demolitionFormData, building_name: e.target.value})}
+                                                <input type="text" value={demolitionFormData.building_name} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, building_name: e.target.value })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all placeholder-gray-300" placeholder="e.g. Old Marcos Bldg" />
                                             </div>
-                                            
+
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
                                                     <p className="text-xs text-rose-400 italic ml-2 mb-1">Standard dimension being lost</p>
-                                                    <input type="number" value={demolitionFormData.room_length} onChange={(e) => setDemolitionFormData({...demolitionFormData, room_length: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={demolitionFormData.room_length} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, room_length: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all text-center" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
                                                     <p className="text-xs text-rose-400 italic ml-2 mb-1">Standard dimension being lost</p>
-                                                    <input type="number" value={demolitionFormData.room_width} onChange={(e) => setDemolitionFormData({...demolitionFormData, room_width: parseFloat(e.target.value) || 0})}
+                                                    <input type="number" value={demolitionFormData.room_width} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, room_width: parseFloat(e.target.value) || 0 })}
                                                         className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all text-center" />
                                                 </div>
                                             </div>
@@ -1863,7 +1879,7 @@ export default function Unit8PhysicalFacilities() {
                                 </div>
                                 <h3 className="text-white font-black text-3xl mb-2 relative z-10">Finalize Audit ✨</h3>
                                 <p className="text-indigo-100 font-medium mb-8 relative z-10">Ready to save all your Physical Facilities data for this school?</p>
-                                
+
                                 <button onClick={handleMasterSubmit} disabled={loading}
                                     className="w-full py-5 rounded-2xl bg-white text-indigo-600 font-black text-2xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
                                     {loading ? "Processing..." : "Submit Unit Audit"}
@@ -1877,7 +1893,7 @@ export default function Unit8PhysicalFacilities() {
                 {/* Wizard Navigation Buttons */}
                 <div className="mt-8 flex gap-4 pb-12">
                     {currentPage > 1 && (
-                        <button 
+                        <button
                             onClick={() => setCurrentPage(prev => prev - 1)}
                             className="flex-1 py-4 px-6 rounded-2xl bg-white border-2 border-gray-200 text-gray-600 font-black text-lg flex items-center justify-center gap-2 hover:bg-gray-50 transition-all active:scale-95"
                         >
@@ -1885,7 +1901,7 @@ export default function Unit8PhysicalFacilities() {
                         </button>
                     )}
                     {currentPage < 5 && (
-                        <button 
+                        <button
                             onClick={() => setCurrentPage(prev => prev + 1)}
                             className="flex-[2] py-4 px-6 rounded-2xl bg-indigo-500 text-white font-black text-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
                         >

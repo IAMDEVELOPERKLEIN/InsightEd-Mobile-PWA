@@ -61,6 +61,8 @@ const convertFullFileToBase64 = (file) => {
     });
 };
 
+import { uploadFileInChunks } from '../utils/chunkedUploader';
+
 const EditProjectModal = ({
     project,
     isOpen,
@@ -91,7 +93,7 @@ const EditProjectModal = ({
     userRole = null
 }) => {
     const [formData, setFormData] = useState(null);
-    const [documents, setDocuments] = useState({ 
+    const [documents, setDocuments] = useState({
         POW: null, DUPA: null, CONTRACT: null, VO: null,
         RevisedPOW: null, RevisedDUPA: null, RevisedContract: null,
         RTA: null, MOA: null
@@ -240,7 +242,7 @@ const EditProjectModal = ({
 
             // Handle Numeric Fields with Commas
             const numericFields = [
-                'numberOfClassrooms', 'numberOfStoreys', 'numberOfSites', 
+                'numberOfClassrooms', 'numberOfStoreys', 'numberOfSites',
                 'approved_budget_for_contract', 'contract_amount', 'fundsUtilized', 'tranches_count', 'tranche_amount',
                 'additive_amount', 'deductive_amount', 'net_vo_amount'
             ];
@@ -253,7 +255,7 @@ const EditProjectModal = ({
                     const add = parseFloat(name === 'additive_amount' ? stripped : (prev.additive_amount || 0));
                     const ded = parseFloat(name === 'deductive_amount' ? stripped : (prev.deductive_amount || 0));
                     newData.net_vo_amount = (add - ded).toFixed(2);
-                    
+
                     // Update Revised Contract Amount based on ORIGINAL contract amount from project prop
                     const originalContract = parseFloat(project.contract_amount || project.approved_budget_for_contract || 0);
                     newData.contract_amount = (originalContract + (add - ded)).toFixed(2);
@@ -428,7 +430,7 @@ const EditProjectModal = ({
             {/* Donated Project Toggle */}
             <div className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-xl">
                 <div className={`p-2 rounded-lg ${formData.isDonated ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}`}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                 </div>
                 <div className="flex-1">
                     <h4 className="text-[10px] font-black text-[#004A99] dark:text-blue-400 uppercase tracking-wider">Donated Project</h4>
@@ -452,14 +454,14 @@ const EditProjectModal = ({
                         {formData.scopeOfWork?.length || 0}/200
                     </span>
                 </div>
-                <textarea 
-                    name="scopeOfWork" 
-                    rows="2" 
-                    value={formData.scopeOfWork || ''} 
-                    onChange={handleChange} 
-                    disabled={readOnly} 
+                <textarea
+                    name="scopeOfWork"
+                    rows="2"
+                    value={formData.scopeOfWork || ''}
+                    onChange={handleChange}
+                    disabled={readOnly}
                     maxLength="200"
-                    className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none ${readOnly ? 'bg-slate-100' : ''}`} 
+                    className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none ${readOnly ? 'bg-slate-100' : ''}`}
                 />
             </div>
 
@@ -590,7 +592,7 @@ const EditProjectModal = ({
                     <label className="block text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-1 flex items-center justify-between">
                         Funding Year
                         {isFundingYearLocked ? (
-                            <button 
+                            <button
                                 type="button"
                                 onClick={handleUnlockFundingYear}
                                 className="text-[8px] text-blue-600 underline hover:text-blue-800"
@@ -602,16 +604,16 @@ const EditProjectModal = ({
                         )}
                     </label>
                     <div className="relative">
-                        <input 
-                            type="number" 
-                            name="fundingYear" 
-                            value={formData.fundingYear} 
-                            onChange={handleChange} 
+                        <input
+                            type="number"
+                            name="fundingYear"
+                            value={formData.fundingYear}
+                            onChange={handleChange}
                             disabled={isFundingYearLocked}
-                            placeholder="YYYY" 
-                            className={`w-full p-2 font-black text-sm border rounded-lg transition-all ${isFundingYearLocked 
-                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
-                                : 'bg-white text-emerald-700 border-emerald-400 ring-2 ring-emerald-100 outline-none shadow-sm'}`} 
+                            placeholder="YYYY"
+                            className={`w-full p-2 font-black text-sm border rounded-lg transition-all ${isFundingYearLocked
+                                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                : 'bg-white text-emerald-700 border-emerald-400 ring-2 ring-emerald-100 outline-none shadow-sm'}`}
                         />
                         {isFundingYearLocked && (
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">🔒</div>
@@ -624,37 +626,37 @@ const EditProjectModal = ({
 
     const renderTabs = () => {
         if (mode === 'docs_only') return null;
-        
+
         return (
             <div className="flex p-1 bg-slate-100 rounded-2xl mb-4">
                 <button
                     onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: false, isProjectDetailsUpdate: false }))}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${(!formData.hasVariationOrder && !formData.isRealignment && !formData.isProjectDetailsUpdate) 
-                        ? 'bg-white text-blue-600 shadow-sm' 
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${(!formData.hasVariationOrder && !formData.isRealignment && !formData.isProjectDetailsUpdate)
+                        ? 'bg-white text-blue-600 shadow-sm'
                         : 'text-slate-500 hover:bg-white/50'}`}
                 >
                     Status Update
                 </button>
                 <button
                     onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: false, isProjectDetailsUpdate: true }))}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.isProjectDetailsUpdate 
-                        ? 'bg-blue-600 text-white shadow-md' 
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.isProjectDetailsUpdate
+                        ? 'bg-blue-600 text-white shadow-md'
                         : 'text-slate-500 hover:bg-white/50'}`}
                 >
                     Details Update
                 </button>
                 <button
                     onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: true, isRealignment: false, isProjectDetailsUpdate: false }))}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.hasVariationOrder 
-                        ? 'bg-amber-500 text-white shadow-md' 
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.hasVariationOrder
+                        ? 'bg-amber-500 text-white shadow-md'
                         : 'text-slate-500 hover:bg-white/50'}`}
                 >
                     VO
                 </button>
                 <button
                     onClick={() => setFormData(prev => ({ ...prev, hasVariationOrder: false, isRealignment: true, isProjectDetailsUpdate: false }))}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.isRealignment 
-                        ? 'bg-purple-600 text-white shadow-md' 
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${formData.isRealignment
+                        ? 'bg-purple-600 text-white shadow-md'
                         : 'text-slate-500 hover:bg-white/50'}`}
                 >
                     Realign
@@ -665,15 +667,15 @@ const EditProjectModal = ({
 
     const renderVariationOrderHeader = () => {
         if (!formData.hasVariationOrder) return null;
-        
+
         const originalAmount = parseFloat(project.contract_amount || project.approved_budget_for_contract || 0);
-        
+
         // CUMULATIVE CALCULATION
         const prevVoTotal = (voHistory || []).reduce((sum, vo) => sum + parseFloat(vo.net_vo_amount || 0), 0);
         const currentNetVO = parseFloat(formData.net_vo_amount || 0);
         const cumulativeNetVO = prevVoTotal + currentNetVO;
         const percentChangeCumulative = originalAmount > 0 ? (cumulativeNetVO / originalAmount) * 100 : 0;
-        
+
         const isOverLimit = percentChangeCumulative > 10;
 
         return (
@@ -704,8 +706,8 @@ const EditProjectModal = ({
                                 <span className={`text-[9px] font-black ${isOverLimit ? 'text-red-600' : 'text-amber-600'}`}>{percentChangeCumulative.toFixed(2)}% / 10%</span>
                             </div>
                             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                                <div 
-                                    className={`h-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-amber-500'}`} 
+                                <div
+                                    className={`h-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-amber-500'}`}
                                     style={{ width: `${Math.min(percentChangeCumulative * 10, 100)}%` }}
                                 ></div>
                             </div>
@@ -852,10 +854,10 @@ const EditProjectModal = ({
                     {/* DETAILED DOCUMENT UPLOADS */}
                     <div className="mt-4 pt-4 border-t border-amber-200 space-y-3">
                         <label className="block text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2">Required VO Documentation (Detailed PDFs)</label>
-                        
+
                         <div className="grid grid-cols-1 gap-2">
-                             {/* Revised POW */}
-                             <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedPOW ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
+                            {/* Revised POW */}
+                            <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedPOW ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
                                 <div className="flex items-center gap-2 truncate pr-2">
                                     <span>{documents.RevisedPOW ? '📄' : '📎'}</span>
                                     <span className="truncate">{documents.RevisedPOW ? documents.RevisedPOW.name : 'REVISED PROGRAM OF WORKS (POW)'}</span>
@@ -867,10 +869,10 @@ const EditProjectModal = ({
                                         <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'RevisedPOW')} />
                                     </label>
                                 </div>
-                             </div>
+                            </div>
 
-                             {/* Revised DUPA */}
-                             <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedDUPA ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
+                            {/* Revised DUPA */}
+                            <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedDUPA ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
                                 <div className="flex items-center gap-2 truncate pr-2">
                                     <span>{documents.RevisedDUPA ? '📄' : '📎'}</span>
                                     <span className="truncate">{documents.RevisedDUPA ? documents.RevisedDUPA.name : 'REVISED DUPA (ITEMIZED)'}</span>
@@ -882,10 +884,10 @@ const EditProjectModal = ({
                                         <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'RevisedDUPA')} />
                                     </label>
                                 </div>
-                             </div>
+                            </div>
 
-                             {/* Revised Contract */}
-                             <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedContract ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
+                            {/* Revised Contract */}
+                            <div className={`flex items-center justify-between p-2 rounded-xl border border-dashed text-[10px] font-bold ${documents.RevisedContract ? 'bg-white border-blue-400 text-blue-700' : 'bg-white/50 border-amber-200 text-amber-600'}`}>
                                 <div className="flex items-center gap-2 truncate pr-2">
                                     <span>{documents.RevisedContract ? '📄' : '📎'}</span>
                                     <span className="truncate">{documents.RevisedContract ? documents.RevisedContract.name : 'SUPPLEMENTAL AGREEMENT / REVISED CONTRACT'}</span>
@@ -897,7 +899,7 @@ const EditProjectModal = ({
                                         <input type="file" accept=".pdf" className="hidden" onChange={(e) => handleDocumentSelect(e, 'RevisedContract')} />
                                     </label>
                                 </div>
-                             </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -991,7 +993,7 @@ const EditProjectModal = ({
     const renderLguDetails = () => (
         <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-200 space-y-4">
             <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">LGU Project Details</h3>
-            
+
             {/* Location Details */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
@@ -1031,7 +1033,7 @@ const EditProjectModal = ({
                     </div>
                 </div>
             </div>
-            
+
             {/* Procurement Stage (Optional for VO context but included for "all fields") */}
             <div>
                 <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Procurement Stage</label>
@@ -1089,7 +1091,7 @@ const EditProjectModal = ({
 
     const renderStatusAndProgress = () => {
         // Show status fields even for VO
-        
+
         return (
             <div className="space-y-4">
                 <div className="space-y-2">
@@ -1263,64 +1265,64 @@ const EditProjectModal = ({
                         return true;
                     })
                     .map(([key, label]) => (
-                    <div key={key} className={`p-3 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <p className={`text-[10px] font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                    {label}
-                                </p>
-                                {documents[key] ? (
-                                    <p className="text-[9px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                        {documents[key].name}
+                        <div key={key} className={`p-3 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <p className={`text-[10px] font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                        {label}
                                     </p>
-                                ) : (
-                                    project && project[`${key.toLowerCase()}_pdf`] ? (
-                                        <div className="flex flex-col mt-0.5">
-                                            <p className="text-[9px] text-blue-500 font-bold mb-1">Existing File Available</p>
-                                            <a
-                                                href={project[`${key.toLowerCase()}_pdf`]?.startsWith('data:') ? project[`${key.toLowerCase()}_pdf`] : `data:application/pdf;base64,${project[`${key.toLowerCase()}_pdf`]}`}
-                                                download={`${formData.schoolName}_${label}.pdf`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-block w-fit px-3 py-1.5 bg-blue-50 text-blue-700 text-[9px] font-black rounded-lg border border-blue-100 hover:bg-blue-100 transition-all uppercase tracking-wider"
-                                            >
-                                                View Document
-                                            </a>
-                                        </div>
+                                    {documents[key] ? (
+                                        <p className="text-[9px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                            {documents[key].name}
+                                        </p>
                                     ) : (
-                                        <p className="text-[9px] text-slate-400 mt-0.5">No file uploaded</p>
-                                    )
-                                )}
-                            </div>
-                            <div>
-                                {documents[key] ? (
-                                    <button
-                                        onClick={() => removeDocument(key)}
-                                        className="w-6 h-6 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
-                                    >
-                                        ✕
-                                    </button>
-                                ) : (
-                                    !readOnly && (
-                                        <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-[9px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
-                                            Select PDF
-                                            <input
-                                                type="file"
-                                                accept=".pdf"
-                                                className="hidden"
-                                                onChange={(e) => handleDocumentSelect(e, key)}
-                                            />
-                                        </label>
-                                    )
-                                )}
-                                {readOnly && !documents[key] && !project[`${key.toLowerCase()}_pdf`] && (
-                                    <span className="text-[9px] text-slate-300 font-bold italic px-2">N/A</span>
-                                )}
+                                        project && project[`${key.toLowerCase()}_pdf`] ? (
+                                            <div className="flex flex-col mt-0.5">
+                                                <p className="text-[9px] text-blue-500 font-bold mb-1">Existing File Available</p>
+                                                <a
+                                                    href={project[`${key.toLowerCase()}_pdf`]?.startsWith('data:') ? project[`${key.toLowerCase()}_pdf`] : `data:application/pdf;base64,${project[`${key.toLowerCase()}_pdf`]}`}
+                                                    download={`${formData.schoolName}_${label}.pdf`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-block w-fit px-3 py-1.5 bg-blue-50 text-blue-700 text-[9px] font-black rounded-lg border border-blue-100 hover:bg-blue-100 transition-all uppercase tracking-wider"
+                                                >
+                                                    View Document
+                                                </a>
+                                            </div>
+                                        ) : (
+                                            <p className="text-[9px] text-slate-400 mt-0.5">No file uploaded</p>
+                                        )
+                                    )}
+                                </div>
+                                <div>
+                                    {documents[key] ? (
+                                        <button
+                                            onClick={() => removeDocument(key)}
+                                            className="w-6 h-6 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
+                                        >
+                                            ✕
+                                        </button>
+                                    ) : (
+                                        !readOnly && (
+                                            <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-[9px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
+                                                Select PDF
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    className="hidden"
+                                                    onChange={(e) => handleDocumentSelect(e, key)}
+                                                />
+                                            </label>
+                                        )
+                                    )}
+                                    {readOnly && !documents[key] && !project[`${key.toLowerCase()}_pdf`] && (
+                                        <span className="text-[9px] text-slate-300 font-bold italic px-2">N/A</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
             </div>
         </div>
     );
@@ -1440,60 +1442,60 @@ const EditProjectModal = ({
                     )}
 
                     {/* --- TIMELINE DELAY TRACKING (EFD DEPED PROCESS) --- */}
-                    {(mode === 'quick' || mode === 'full') && 
-                     !['Completed', 'For Final Inspection'].includes(formData.status) && 
-                     formData.targetCompletionDate && 
-                     new Date() > new Date(formData.targetCompletionDate) && (
-                        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl space-y-3 animate-in fade-in zoom-in duration-500">
-                            <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xl">⏳</span>
-                                <div>
-                                    <h3 className="text-xs font-bold text-red-700 uppercase">Timeline Delay Tracking</h3>
-                                    <p className="text-[9px] text-red-600 font-medium">Project has exceeded its original target completion date.</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Time Lapsed (Days)</label>
-                                    <div className="p-3 bg-white border border-red-100 rounded-xl text-sm font-black text-red-700 shadow-sm">
-                                        {Math.floor((new Date() - new Date(formData.targetCompletionDate)) / (1000 * 60 * 60 * 24))} Days
+                    {(mode === 'quick' || mode === 'full') &&
+                        !['Completed', 'For Final Inspection'].includes(formData.status) &&
+                        formData.targetCompletionDate &&
+                        new Date() > new Date(formData.targetCompletionDate) && (
+                            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl space-y-3 animate-in fade-in zoom-in duration-500">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xl">⏳</span>
+                                    <div>
+                                        <h3 className="text-xs font-bold text-red-700 uppercase">Timeline Delay Tracking</h3>
+                                        <p className="text-[9px] text-red-600 font-medium">Project has exceeded its original target completion date.</p>
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Time Lapsed (%)</label>
-                                    <div className="p-3 bg-white border border-red-100 rounded-xl text-sm font-black text-red-700 shadow-sm">
-                                        {formData.accomplishmentPercentage || 0}%
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Time Lapsed (Days)</label>
+                                        <div className="p-3 bg-white border border-red-100 rounded-xl text-sm font-black text-red-700 shadow-sm">
+                                            {Math.floor((new Date() - new Date(formData.targetCompletionDate)) / (1000 * 60 * 60 * 24))} Days
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Time Lapsed (%)</label>
+                                        <div className="p-3 bg-white border border-red-100 rounded-xl text-sm font-black text-red-700 shadow-sm">
+                                            {formData.accomplishmentPercentage || 0}%
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-[10px] font-bold text-red-500 uppercase">Reason for Delay <span className="text-red-600">*</span></label>
-                                <textarea 
-                                    name="delay_reason"
-                                    value={formData.delay_reason || ""}
-                                    onChange={handleChange}
-                                    placeholder="Explain why the project is delayed (EFD DepEd requirement)..."
-                                    rows="2"
-                                    className="w-full p-3 bg-white border border-red-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 outline-none transition-all placeholder:text-red-200 shadow-inner"
-                                    required={new Date() > new Date(formData.targetCompletionDate)}
-                                />
-                            </div>
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-red-500 uppercase">Reason for Delay <span className="text-red-600">*</span></label>
+                                    <textarea
+                                        name="delay_reason"
+                                        value={formData.delay_reason || ""}
+                                        onChange={handleChange}
+                                        placeholder="Explain why the project is delayed (EFD DepEd requirement)..."
+                                        rows="2"
+                                        className="w-full p-3 bg-white border border-red-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 outline-none transition-all placeholder:text-red-200 shadow-inner"
+                                        required={new Date() > new Date(formData.targetCompletionDate)}
+                                    />
+                                </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-[10px] font-bold text-red-500 uppercase">Revised Target Completion Date</label>
-                                <input 
-                                    type="date"
-                                    name="revised_target_completion_date"
-                                    value={formData.revised_target_completion_date || ""}
-                                    onChange={handleChange}
-                                    min={new Date().toISOString().split('T')[0]}
-                                    className="w-full p-3 bg-white border border-red-200 rounded-xl text-sm font-bold text-red-700 focus:ring-2 focus:ring-red-400 outline-none"
-                                />
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-red-500 uppercase">Revised Target Completion Date</label>
+                                    <input
+                                        type="date"
+                                        name="revised_target_completion_date"
+                                        value={formData.revised_target_completion_date || ""}
+                                        onChange={handleChange}
+                                        min={new Date().toISOString().split('T')[0]}
+                                        className="w-full p-3 bg-white border border-red-200 rounded-xl text-sm font-bold text-red-700 focus:ring-2 focus:ring-red-400 outline-none"
+                                    />
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
                     {/* (mode === 'full' || mode === 'quick') Remarks */}
                     {(mode === 'full' || mode === 'quick') && (
@@ -1543,7 +1545,7 @@ const EditProjectModal = ({
                                         });
 
                                         if (!res.ok) throw new Error("Realignment failed");
-                                        
+
                                         alert("✅ SUCCESS\n\nProject realignment completed successfully.");
                                         onClose(); // Close modal on success
                                     } catch (err) {
@@ -1585,27 +1587,39 @@ const EditProjectModal = ({
 
                                 // Mandate Photos for Ongoing/Completed statuses (Exempt VO and Realignment)
                                 const isRequiredStatus = [ProjectStatus.Ongoing, ProjectStatus.ForFinalInspection, ProjectStatus.Completed].includes(formData.status);
-                                 const hasPhotos = (internalPreviews?.length || 0) > 0 || (externalPreviews?.length || 0) > 0;
-                                 const canSkipPhotos = formData.hasVariationOrder || formData.isRealignment || formData.isProjectDetailsUpdate;
-                                
+                                const hasPhotos = (internalPreviews?.length || 0) > 0 || (externalPreviews?.length || 0) > 0;
+                                const canSkipPhotos = formData.hasVariationOrder || formData.isRealignment || formData.isProjectDetailsUpdate;
+
                                 if (isRequiredStatus && !hasPhotos && !canSkipPhotos) {
                                     alert(`⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for projects in ${formData.status} status.`);
                                     return;
                                 }
 
-                                // CONVERT DOCUMENTS (Only relevant for full mode or if docs are handled here)
+                                // CONVERT DOCUMENTS (Replacing Base64 with Chunked Uploads to Cloud)
                                 const finalData = { ...formData };
-                                if (documents.POW) finalData.pow_pdf = await convertFullFileToBase64(documents.POW);
-                                if (documents.DUPA) finalData.dupa_pdf = await convertFullFileToBase64(documents.DUPA);
-                                if (documents.CONTRACT) finalData.contract_pdf = await convertFullFileToBase64(documents.CONTRACT);
-                                if (documents.VO) finalData.variationOrderPdf = await convertFullFileToBase64(documents.VO);
-                                
+
+                                const processDoc = async (docKey, destinationKey) => {
+                                    if (documents[docKey]) {
+                                        try {
+                                            const cloudUrl = await uploadFileInChunks(documents[docKey]);
+                                            if (cloudUrl) finalData[destinationKey] = cloudUrl;
+                                        } catch (e) {
+                                            console.error(`Failed to upload chunked doc: ${docKey}`, e);
+                                        }
+                                    }
+                                };
+
+                                await processDoc('POW', 'pow_pdf');
+                                await processDoc('DUPA', 'dupa_pdf');
+                                await processDoc('CONTRACT', 'contract_pdf');
+                                await processDoc('VO', 'variationOrderPdf');
+
                                 // New VO Documents
-                                if (documents.RevisedPOW) finalData.revised_pow_pdf = await convertFullFileToBase64(documents.RevisedPOW);
-                                if (documents.RevisedDUPA) finalData.revised_dupa_pdf = await convertFullFileToBase64(documents.RevisedDUPA);
-                                if (documents.RevisedContract) finalData.revised_contract_pdf = await convertFullFileToBase64(documents.RevisedContract);
-                                if (documents.RTA) finalData.rta_pdf = await convertFullFileToBase64(documents.RTA);
-                                if (documents.MOA) finalData.moa_pdf = await convertFullFileToBase64(documents.MOA);
+                                await processDoc('RevisedPOW', 'revised_pow_pdf');
+                                await processDoc('RevisedDUPA', 'revised_dupa_pdf');
+                                await processDoc('RevisedContract', 'revised_contract_pdf');
+                                await processDoc('RTA', 'rta_pdf');
+                                await processDoc('MOA', 'moa_pdf');
 
                                 // Ensure delay tracking values are explicitly included for persistence
                                 if (new Date() > new Date(formData.targetCompletionDate)) {
@@ -1615,13 +1629,13 @@ const EditProjectModal = ({
                                     finalData.revised_target_completion_date = formData.targetCompletionDate;
                                 }
 
-                                 // Determine Update Type for tracking
-                                 let updateType = 'Status Update';
-                                 if (formData.isProjectDetailsUpdate) updateType = 'Details Update';
-                                 if (formData.hasVariationOrder) updateType = 'Variation Order';
-                                 if (formData.isRealignment) updateType = 'Realignment';
+                                // Determine Update Type for tracking
+                                let updateType = 'Status Update';
+                                if (formData.isProjectDetailsUpdate) updateType = 'Details Update';
+                                if (formData.hasVariationOrder) updateType = 'Variation Order';
+                                if (formData.isRealignment) updateType = 'Realignment';
 
-                                 onSave({ ...finalData, update_type: updateType, actions: updateType });
+                                onSave({ ...finalData, update_type: updateType, actions: updateType });
                             }}
                             disabled={isUploading || isSubmittingRealignment}
                             className="flex-[2] py-4 text-white font-black text-xs uppercase tracking-widest bg-gradient-to-r from-[#004A99] to-[#003366] rounded-2xl shadow-xl shadow-blue-900/20 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98] transition-all"

@@ -619,7 +619,7 @@ const Register = () => {
                                         <option value="School Division Office">SDO Personnel</option>
                                         <option value="School Head">School Head</option>
                                         <option value="Division Engineer">Division Engineer</option>
-                                        <option value="EFD">EFD (Engineering Facilities Division)</option>
+                                        <option value="HRODI">HRODI (Human Resource and Organizational Development)</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         <option value="Central Office Finance">Central Office Finance</option>
                                         <option value="Beta Tester">Beta Tester</option>
@@ -1033,7 +1033,7 @@ const Register = () => {
                                             {/* ASSIGNMENT */}
                                             <div className="space-y-3">
                                                 <label className="text-xs font-bold text-teal-700 uppercase">Assignment</label>
-                                                
+
                                                 {formData.role !== 'EFD' && (
                                                     <>
                                                         <select

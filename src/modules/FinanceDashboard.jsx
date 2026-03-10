@@ -1,400 +1,358 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FiPlus, FiSearch, FiDollarSign, FiCalendar, FiArrowLeft, FiEdit2 } from 'react-icons/fi';
-import { motion, AnimatePresence } from 'framer-motion';
-import BottomNav from './BottomNav';
+import { FiDollarSign, FiFileText, FiTrendingUp, FiCheckCircle, FiX } from 'react-icons/fi';
+import PageTransition from '../components/PageTransition';
 
 const FinanceDashboard = () => {
-    const navigate = useNavigate();
-    const [projects, setProjects] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [selectedId, setSelectedId] = useState(null);
-
-    const [formData, setFormData] = useState({
-        region: '', division: '', district: '', legislative_district: '', municipality: '',
-        school_id: '', school_name: '', project_name: '',
-        total_funds: '', fund_released: '', date_of_release: ''
+    const [aggregates, setAggregates] = useState({
+        totalProjects: 0,
+        totalTranche1: 0,
+        totalTranche2: 0,
+        totalTranche3: 0
     });
-    const [isLookingUp, setIsLookingUp] = useState(false);
-    
-    // Search State
-    const [searchTerm, setSearchTerm] = useState('');
+    const [projects, setProjects] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-    // Fetch Projects
+    // Modal State
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedProject, setSelectedProject] = useState(null);
+    const [formData, setFormData] = useState({ tranche_1: '', tranche_2: '', tranche_3: '' });
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveMessage, setSaveMessage] = useState({ text: '', type: '' });
+
     useEffect(() => {
-        fetchProjects();
+        fetchData();
     }, []);
 
-    const fetchProjects = async () => {
+    const fetchData = async () => {
         try {
-            const res = await fetch('/api/finance/projects');
+            setLoading(true);
+            setError(null);
+            const res = await fetch('/api/finance-dashboard/projects');
+            if (!res.ok) throw new Error('Failed to fetch finance projects');
             const data = await res.json();
-            if (res.ok) setProjects(data);
+            setAggregates(data.aggregates);
+            setProjects(data.projects);
         } catch (err) {
-            console.error("Failed to fetch finance projects", err);
+            console.error(err);
+            setError(err.message);
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
     };
 
-    // Filter Projects
-    const filteredProjects = projects.filter(p => 
-        p.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.school_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.school_id?.includes(searchTerm)
-    );
-
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        if (['total_funds', 'fund_released'].includes(name)) {
-            // Remove non-digits/decimals first
-            const rawValue = value.replace(/[^0-9.]/g, '');
-            // Format for display
-            const formatted = rawValue.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-            setFormData({ ...formData, [name]: formatted });
-        } else {
-            setFormData({ ...formData, [name]: value });
-        }
-    };
-
-    const handleSchoolLookup = async () => {
-        // 1. Basic Validation (6 digits)
-        if (!formData.school_id) {
-            alert("Please enter a School ID.");
-            return;
-        }
-        if (!/^\d{6}$/.test(formData.school_id)) {
-            alert("Invalid School ID. It must be exactly 6 digits.");
-            return;
-        }
-
-        setIsLookingUp(true);
-        try {
-            // 2. Fetch from Master List (Using existing Engineer Endpoint)
-            const res = await fetch(`/api/school-profile/${formData.school_id}`);
-
-            if (res.ok) {
-                const school = await res.json(); // returns the row directly
-                setFormData(prev => ({
-                    ...prev,
-                    school_name: school.school_name || '',
-                    region: school.region || '',
-                    division: school.division || '',
-                    district: school.district || '',
-                    municipality: school.municipality || school.city || school.town || '', // Try multiple common keys
-                    legislative_district: school.leg_district || school.legislative_district || ''
-                }));
-            } else {
-                alert("School not found in the master database.");
-                // Clear fields if invalid?
-                setFormData(prev => ({
-                    ...prev,
-                    school_name: '',
-                    region: '',
-                    division: '',
-                    district: '',
-                    municipality: '',
-                    legislative_district: ''
-                }));
-            }
-        } catch (err) {
-            console.error("School lookup failed", err);
-            alert("Connection error during lookup.");
-        } finally {
-            setIsLookingUp(false);
-        }
-    };
-
-    const openCreateModal = () => {
-        setIsEditing(false);
-        setSelectedId(null);
+    const openModal = (project) => {
+        setSelectedProject(project);
         setFormData({
-            region: '', division: '', district: '', legislative_district: '', municipality: '',
-            school_id: '', school_name: '', project_name: '',
-            total_funds: '', fund_released: '', date_of_release: ''
+            tranche_1: project.tranche_1 || '',
+            tranche_2: project.tranche_2 || '',
+            tranche_3: project.tranche_3 || ''
         });
-        setShowModal(true);
+        setSaveMessage({ text: '', type: '' });
+        setIsModalOpen(true);
     };
 
-    const openEditModal = (p) => {
-        setIsEditing(true);
-        setSelectedId(p.finance_id);
-        const dateStr = p.date_of_release ? new Date(p.date_of_release).toISOString().split('T')[0] : '';
-        setFormData({
-            ...p,
-            total_funds: p.total_funds ? Number(p.total_funds).toLocaleString() : '',
-            fund_released: p.fund_released ? Number(p.fund_released).toLocaleString() : '',
-            date_of_release: dateStr
-        });
-        setShowModal(true);
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setSelectedProject(null);
     };
 
-    const handleSubmit = async (e) => {
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleSave = async (e) => {
         e.preventDefault();
-        try {
-            const url = isEditing 
-                ? `/api/finance/project/${selectedId}`
-                : '/api/finance/projects';
-            
-            const method = isEditing ? 'PUT' : 'POST';
+        if (!selectedProject) return;
 
-            const res = await fetch(url, {
-                method: method,
+        setIsSaving(true);
+        setSaveMessage({ text: '', type: '' });
+
+        try {
+            const payload = {
+                tranche_1: formData.tranche_1 ? Number(formData.tranche_1) : null,
+                tranche_2: formData.tranche_2 ? Number(formData.tranche_2) : null,
+                tranche_3: formData.tranche_3 ? Number(formData.tranche_3) : null,
+            };
+
+            const res = await fetch(`/api/finance-dashboard/projects/${selectedProject.project_id}/tranches`, {
+                method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(payload)
             });
+
+            if (!res.ok) throw new Error('Failed to update tranches');
+
             const data = await res.json();
-            if (data.success) {
-                alert(isEditing ? "Project Updated!" : "Project Created & Synced to LGU!");
-                setShowModal(false);
-                fetchProjects();
-            } else {
-                alert("Error: " + data.error);
-            }
+
+            // Update local state
+            setProjects(prev => prev.map(p =>
+                p.project_id === selectedProject.project_id
+                    ? { ...p, tranche_1: data.project.tranche_1, tranche_2: data.project.tranche_2, tranche_3: data.project.tranche_3 }
+                    : p
+            ));
+
+            setSaveMessage({ text: 'Tranches updated successfully!', type: 'success' });
+            // Re-fetch data to update aggregates
+            fetchData();
+
+            setTimeout(() => {
+                closeModal();
+            }, 1500);
+
         } catch (err) {
-            console.error("Submission error:", err);
+            console.error(err);
+            setSaveMessage({ text: err.message || 'Error updating tranches', type: 'error' });
+        } finally {
+            setIsSaving(false);
         }
     };
+
+    const formatCurrency = (amount) => {
+        if (amount == null) return 'Not set';
+        return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
+    };
+
+    if (loading && projects.length === 0) {
+        return (
+            <div className="flex justify-center items-center h-screen bg-slate-50">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-20">
-            {/* Header */}
-            <div className="bg-white dark:bg-slate-800 shadow-sm sticky top-0 z-20 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div>
-                        <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">
-                            Finance Dashboard
-                        </h1>
-                        <p className="text-xs text-slate-500 font-medium">
-                            Central Office Finance Monitoring
-                        </p>
-                    </div>
+        <PageTransition>
+            <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-inter">
 
-                    {/* Search Bar */}
-                    <div className="relative hidden md:block ml-6">
-                        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input 
-                            type="text"
-                            placeholder="Search projects..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 pr-4 py-2 rounded-full border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 transition-all"
-                        />
-                    </div>
-                </div>
-                <button
-                    onClick={openCreateModal}
-                    className="bg-[#004A99] hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg shadow-blue-500/30 transition-transform active:scale-95 flex items-center gap-2 text-sm font-bold"
-                >
-                    <FiPlus /> Add Project
-                </button>
-            </div>
-
-            <div className="p-6">
-                {/* Mobile Search - Visible only on small screens */}
-                <div className="md:hidden mb-4 relative">
-                    <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input 
-                        type="text"
-                        placeholder="Search projects..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                {/* Header */}
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-slate-800">Finance Dashboard</h1>
+                    <p className="text-slate-500 mt-1">Manage project tranches and view financial aggregates.</p>
                 </div>
 
-                {/* List - Card Grid */}
-                {isLoading ? (
-                    <div className="text-center py-20">Loading...</div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredProjects.map((p) => (
-                            <motion.div 
-                                key={p.finance_id}
-                                layout
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow p-6 relative group"
-                            >
-                                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
-                                        onClick={() => openEditModal(p)}
-                                        className="p-2 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-full transition-colors"
-                                    >
-                                        <FiEdit2 size={16} />
-                                    </button>
-                                </div>
-
-                                <div className="mb-4">
-                                    <div className="text-xs font-bold text-slate-500 uppercase mb-1 tracking-wider">{p.school_id}</div>
-                                    <h3 className="font-bold text-slate-800 text-lg leading-tight mb-1">{p.project_name}</h3>
-                                    <p className="text-sm text-slate-500">{p.school_name}</p>
-                                </div>
-                                
-                                <div className="space-y-3 mb-4">
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-400">Location</span>
-                                        <span className="font-medium text-slate-700">{p.municipality || '-'}, {p.division || '-'}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-400">Total Funds</span>
-                                        <span className="font-mono font-bold text-[#004A99]">₱{Number(p.total_funds).toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-400">Released</span>
-                                        <span className="font-mono font-bold text-emerald-600">₱{Number(p.fund_released).toLocaleString()}</span>
-                                    </div>
-                                </div>
-
-                                <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                                    <span className="text-xs text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded-md">
-                                        Released: {p.date_of_release ? new Date(p.date_of_release).toLocaleDateString() : 'N/A'}
-                                    </span>
-                                </div>
-                            </motion.div>
-                        ))}
-                        
-                        {filteredProjects.length === 0 && (
-                            <div className="col-span-full py-20 text-center text-slate-400">
-                                {searchTerm ? 'No projects match your search.' : 'No finance projects found. Click "Add Project" to start.'}
-                            </div>
-                        )}
+                {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl mb-6 flex items-center shadow-sm">
+                        <FiX className="mr-2" /> {error}
                     </div>
                 )}
+
+                {/* Aggregate Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center transition-all hover:shadow-md">
+                        <div className="bg-blue-100 p-4 rounded-xl text-blue-600 mr-5">
+                            <FiFileText size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-500">Total Projects</p>
+                            <h3 className="text-2xl font-bold text-slate-800">{aggregates.totalProjects}</h3>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center transition-all hover:shadow-md">
+                        <div className="bg-emerald-100 p-4 rounded-xl text-emerald-600 mr-5">
+                            <FiDollarSign size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-500">W/ Tranche 1</p>
+                            <h3 className="text-2xl font-bold text-slate-800">{aggregates.totalTranche1}</h3>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center transition-all hover:shadow-md">
+                        <div className="bg-indigo-100 p-4 rounded-xl text-indigo-600 mr-5">
+                            <FiTrendingUp size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-500">W/ Tranche 2</p>
+                            <h3 className="text-2xl font-bold text-slate-800">{aggregates.totalTranche2}</h3>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-center transition-all hover:shadow-md">
+                        <div className="bg-purple-100 p-4 rounded-xl text-purple-600 mr-5">
+                            <FiCheckCircle size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-500">W/ Tranche 3</p>
+                            <h3 className="text-2xl font-bold text-slate-800">{aggregates.totalTranche3}</h3>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Data Table */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h2 className="text-lg font-semibold text-slate-800">MOA Projects</h2>
+                        <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full">
+                            {projects.length} Records
+                        </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs text-slate-500 bg-slate-50 uppercase border-b border-slate-100">
+                                <tr>
+                                    <th className="px-6 py-4 font-medium tracking-wider">Project ID</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider">Project Name</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider">Status</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider">Tranche 1</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider">Tranche 2</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider">Tranche 3</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {projects.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="7" className="px-6 py-8 text-center text-slate-500">
+                                            No MOA projects found.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    projects.map((project) => (
+                                        <tr key={project.project_id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                            <td className="px-6 py-4 font-medium text-slate-800">#{project.project_id}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="font-medium text-slate-800 line-clamp-2" title={project.project_name || 'N/A'}>
+                                                    {project.project_name || 'N/A'}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                                                    {project.status || 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{formatCurrency(project.tranche_1)}</td>
+                                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{formatCurrency(project.tranche_2)}</td>
+                                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{formatCurrency(project.tranche_3)}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <button
+                                                    onClick={() => openModal(project)}
+                                                    className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:text-blue-700 transition-colors focus:ring-4 focus:ring-blue-100 outline-none"
+                                                >
+                                                    Update Tranches
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
 
-            {/* Modal */}
-            <AnimatePresence>
-                {showModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-                            className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-                        >
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0">
-                                <h2 className="text-lg font-bold text-slate-800">
-                                    {isEditing ? 'Update Project' : 'Add New Finance Project'}
-                                </h2>
-                                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-                            </div>
-                            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {/* Update Modal */}
+            {isModalOpen && selectedProject && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all">
 
-                                {/* 1. Project Request Info (Priority) */}
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Project Name</label>
+                        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100">
+                            <h3 className="text-lg font-semibold text-slate-800">
+                                Update Tranches
+                            </h3>
+                            <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-full hover:bg-slate-100">
+                                <FiX size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSave} className="p-6">
+                            <div className="mb-6">
+                                <p className="text-sm font-medium text-slate-500 mb-1">Project ID: #{selectedProject.project_id}</p>
+                                <p className="text-base font-semibold text-slate-800 line-clamp-2">{selectedProject.project_name || 'N/A'}</p>
+                            </div>
+
+                            {saveMessage.text && (
+                                <div className={`mb-5 px-4 py-3 rounded-xl border flex items-center gap-2 text-sm ${saveMessage.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                    {saveMessage.type === 'success' ? <FiCheckCircle /> : <FiX />}
+                                    {saveMessage.text}
+                                </div>
+                            )}
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block mb-1.5 text-sm font-medium text-slate-700">Tranche 1 (PHP)</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span className="text-slate-500 sm:text-sm">₱</span>
+                                        </div>
                                         <input
-                                            name="project_name"
-                                            placeholder="Enter Project Name"
-                                            required
-                                            value={formData.project_name}
-                                            onChange={handleInputChange}
-                                            className="w-full p-3 border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                                            type="number"
+                                            step="0.01"
+                                            name="tranche_1"
+                                            value={formData.tranche_1}
+                                            onChange={handleChange}
+                                            className="bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full pl-8 p-3 transition-colors"
+                                            placeholder="0.00"
                                         />
                                     </div>
+                                </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-xs font-bold text-slate-500 uppercase">School ID {isLookingUp && <span className="text-blue-500 animate-pulse">(Validating...)</span>}</label>
-                                            <div className="flex gap-2">
-                                                <div className="relative w-full">
-                                                    <input
-                                                        name="school_id"
-                                                        placeholder="6-Digit ID"
-                                                        required
-                                                        maxLength={6}
-                                                        value={formData.school_id}
-                                                        onChange={(e) => {
-                                                            // Keep as text but regex restrict
-                                                            const val = e.target.value.replace(/\D/g, '');
-                                                            setFormData({ ...formData, school_id: val });
-                                                        }}
-                                                        disabled={isEditing} // Disable ID edit
-                                                        className={`w-full p-3 border border-slate-200 rounded-xl font-mono text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none ${isEditing ? 'bg-slate-100 cursor-not-allowed' : ''}`}
-                                                    />
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleSchoolLookup}
-                                                    disabled={isLookingUp || !formData.school_id || isEditing}
-                                                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-4 rounded-xl transition-colors disabled:opacity-50 text-sm"
-                                                >
-                                                    {isEditing ? 'Locked' : 'Validate'}
-                                                </button>
-                                            </div>
+                                <div>
+                                    <label className="block mb-1.5 text-sm font-medium text-slate-700">Tranche 2 (PHP)</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span className="text-slate-500 sm:text-sm">₱</span>
                                         </div>
-                                        <div>
-                                            <label className="text-xs font-bold text-slate-500 uppercase">School Name</label>
-                                            <input
-                                                name="school_name"
-                                                placeholder="Auto-populated"
-                                                readOnly
-                                                value={formData.school_name}
-                                                className="w-full p-3 border border-slate-200 rounded-xl bg-slate-100 text-slate-600 font-bold focus:outline-none cursor-not-allowed"
-                                            />
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            name="tranche_2"
+                                            value={formData.tranche_2}
+                                            onChange={handleChange}
+                                            className="bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full pl-8 p-3 transition-colors"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block mb-1.5 text-sm font-medium text-slate-700">Tranche 3 (PHP)</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span className="text-slate-500 sm:text-sm">₱</span>
                                         </div>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            name="tranche_3"
+                                            value={formData.tranche_3}
+                                            onChange={handleChange}
+                                            className="bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl focus:ring-blue-500 focus:border-blue-500 block w-full pl-8 p-3 transition-colors"
+                                            placeholder="0.00"
+                                        />
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* 2. Auto-Populated Location Info */}
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Region</label>
-                                        <input name="region" value={formData.region} readOnly className="w-full bg-transparent font-bold text-slate-700 text-sm outline-none" placeholder="-" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Division</label>
-                                        <input name="division" value={formData.division} readOnly className="w-full bg-transparent font-bold text-slate-700 text-sm outline-none" placeholder="-" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Municipality</label>
-                                        <input name="municipality" value={formData.municipality} readOnly className="w-full bg-transparent font-bold text-slate-700 text-sm outline-none" placeholder="-" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">District</label>
-                                        <input name="district" value={formData.district} readOnly className="w-full bg-transparent font-bold text-slate-700 text-sm outline-none" placeholder="-" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Legislative Dist.</label>
-                                        <input name="legislative_district" value={formData.legislative_district} readOnly className="w-full bg-transparent font-bold text-slate-700 text-sm outline-none" placeholder="-" />
-                                    </div>
-                                </div>
-
-                                {/* 3. Funding Info */}
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Total Funds</label>
-                                        <input type="text" name="total_funds" required value={formData.total_funds} onChange={handleInputChange} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Fund Released</label>
-                                        <input type="text" name="fund_released" required value={formData.fund_released} onChange={handleInputChange} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Date Released</label>
-                                        <input type="date" name="date_of_release" required value={formData.date_of_release} onChange={handleInputChange} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
-                                </div>
-
-                                <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
-                                    <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold">Cancel</button>
-                                    <button type="submit" className="px-6 py-2 bg-[#004A99] text-white font-bold rounded-xl hover:bg-blue-800 shadow-lg shadow-blue-900/20">
-                                        {isEditing ? 'Update Changes' : 'Create & Sync'}
-                                    </button>
-                                </div>
-                            </form>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            <BottomNav userRole="Central Office Finance" />
-        </div>
+                            <div className="mt-8 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={closeModal}
+                                    className="px-5 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:text-slate-900 transition-colors focus:ring-4 focus:ring-slate-100 outline-none"
+                                    disabled={isSaving}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSaving}
+                                    className="px-5 py-2.5 flex justify-center items-center min-w-[100px] text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors focus:ring-4 focus:ring-blue-200 outline-none disabled:opacity-70"
+                                >
+                                    {isSaving ? (
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    ) : (
+                                        'Save Changes'
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </PageTransition>
     );
 };
 

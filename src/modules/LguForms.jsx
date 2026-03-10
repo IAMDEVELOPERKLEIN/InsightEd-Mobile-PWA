@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { auth } from '../firebase';
 import { compressImage } from '../utils/imageCompression';
+import { uploadFileInChunks } from '../utils/chunkedUploader'; // NEW CHUNK UPLOADER
 import { FiCamera, FiUpload, FiMapPin, FiSave, FiAlertCircle, FiCheck } from 'react-icons/fi';
 import BottomNav from './BottomNav';
 
@@ -18,6 +19,7 @@ const LguForms = () => {
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLookingUp, setIsLookingUp] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0); // Progress percentage
 
     // --- FORM STATE ---
     const [formData, setFormData] = useState({
@@ -28,7 +30,7 @@ const LguForms = () => {
         division: '',
         district: '',
         project_name: '',
-        
+
         // 2. Project Details
         source_agency: '',
         contractor_name: '',
@@ -39,7 +41,7 @@ const LguForms = () => {
         contract_duration: '',
         date_approved_pow: '',
         approved_contract_budget: '',
-        
+
         // 3. Fund Release
         schedule_of_fund_release: 'Lumpsum', // or 'Tranches'
         number_of_tranches: '',
@@ -230,20 +232,11 @@ const LguForms = () => {
             alert("Please upload a valid PDF file.");
         }
     };
-    
-    const convertToBase64 = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = error => reject(error);
-        });
-    };
 
     // --- SUBMIT ---
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!formData.school_name) {
             alert("Please validate the School ID first.");
             return;
@@ -256,12 +249,12 @@ const LguForms = () => {
         setIsSubmitting(true);
         try {
             // 1. Prepare Payload
-            const payload = { 
+            const payload = {
                 ...formData,
                 created_by_uid: auth.currentUser?.uid // Add User ID
             };
             // Auto-calc some logic if needed
-            
+
             // 2. Submit Project Data
             const res = await fetch('/api/lgu/projects', {
                 method: 'POST',
@@ -269,9 +262,9 @@ const LguForms = () => {
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            
+
             if (!data.success) throw new Error(data.error || "Failed to create project");
-            
+
             const projectId = data.lgu_project_id;
 
             // 3. Upload Images (Internal & External)
@@ -281,8 +274,8 @@ const LguForms = () => {
                     await fetch('/api/lgu/upload-image', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            project_id: projectId, 
+                        body: JSON.stringify({
+                            project_id: projectId,
                             image_data: compressed,
                             uploaded_by: auth.currentUser?.uid || 'LGU',
                             category: category // 'Internal' or 'External'
@@ -296,16 +289,27 @@ const LguForms = () => {
 
             // 4. Upload Documents
             const uploadDoc = async (type, file) => {
-                const base64 = await convertToBase64(file);
-                await fetch('/api/lgu/upload-document', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        project_id: projectId,
-                        doc_type: type,
-                        file_data: base64
-                    })
-                });
+                if (!file) return;
+                try {
+                    const cloudUrl = await uploadFileInChunks(file, (prog) => {
+                        setUploadProgress(prog); // Global progress
+                    });
+
+                    if (!cloudUrl) throw new Error("Upload aborted by user/network");
+
+                    await fetch('/api/lgu/upload-document', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_id: projectId,
+                            doc_type: type,
+                            file_data: cloudUrl // Send the Azure cloud URL instead of Base64
+                        })
+                    });
+                } catch (e) {
+                    console.error("Failed chunked doc upload", e);
+                    throw e;
+                }
             };
 
             await uploadDoc('POW', documents.POW);
@@ -326,7 +330,7 @@ const LguForms = () => {
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 font-sans pb-32">
-                 {/* Header */}
+                {/* Header */}
                 <div className="bg-[#004A99] pt-8 pb-16 px-6 rounded-b-[2rem] shadow-xl">
                     <div className="flex items-center gap-3 text-white mb-4">
                         {hasProjects && (
@@ -340,16 +344,16 @@ const LguForms = () => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="px-6 -mt-10 relative z-10 space-y-6">
-                    
+
                     {/* 1. PROJECT INFO */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <SectionHeader title="Project Info" icon="📂" />
                         <div className="space-y-4">
-                             <div>
+                            <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Project Name <span className="text-red-500">*</span></label>
                                 <input name="project_name" value={formData.project_name} onChange={handleChange} required className="w-full p-3 border border-slate-200 rounded-xl" placeholder="Full Project Title" />
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">School ID <span className="text-red-500">*</span></label>
@@ -366,7 +370,7 @@ const LguForms = () => {
                                 </div>
                             </div>
 
-                             <div>
+                            <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Source Agency</label>
                                 <select name="source_agency" value={formData.source_agency} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl">
                                     <option value="">Select Agency</option>
@@ -389,7 +393,7 @@ const LguForms = () => {
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <SectionHeader title="Documentation" icon="📄" />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <div>
+                            <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">LSB Resolution #</label>
                                 <input name="lsb_resolution_no" value={formData.lsb_resolution_no} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl" />
                             </div>
@@ -413,7 +417,7 @@ const LguForms = () => {
                     </div>
 
                     {/* 3. FINANCE & BUDGET */}
-                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <SectionHeader title="Finance & Budget" icon="💰" />
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
@@ -427,7 +431,7 @@ const LguForms = () => {
                                 </div>
                             </div>
 
-                             <div>
+                            <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Schedule of Fund Release</label>
                                 <select name="schedule_of_fund_release" value={formData.schedule_of_fund_release} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl">
                                     <option value="Lumpsum">Lumpsum</option>
@@ -448,7 +452,7 @@ const LguForms = () => {
                                 </div>
                             )}
 
-                             <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">Total Funds</label>
                                     <input name="total_funds" value={formData.total_funds} onChange={handleNumberChange} type="text" className="w-full p-3 border border-slate-200 rounded-xl font-mono text-blue-600 font-bold" />
@@ -465,13 +469,13 @@ const LguForms = () => {
                                 </div>
                             </div>
                         </div>
-                     </div>
+                    </div>
 
                     {/* 4. PROCUREMENT */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <SectionHeader title="Procurement" icon="⚖️" />
                         <div className="space-y-4">
-                             <div>
+                            <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Mode of Procurement</label>
                                 <select name="mode_of_procurement" value={formData.mode_of_procurement} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl">
                                     <option value="">Select Mode</option>
@@ -482,7 +486,7 @@ const LguForms = () => {
                                     <option value="Small Value Procurement">Small Value Procurement</option>
                                 </select>
                             </div>
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">PhilGEPS Ref #</label>
                                     <input name="philgeps_ref_no" value={formData.philgeps_ref_no} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl" />
@@ -493,7 +497,7 @@ const LguForms = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                 <div>
+                                <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">Notice of Award</label>
                                     <input type="date" name="date_notice_of_award" value={formData.date_notice_of_award} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl" />
                                 </div>
@@ -508,7 +512,7 @@ const LguForms = () => {
                     {/* 5. LOCATION */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <SectionHeader title="Site Location" icon="📍" />
-                         <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="grid grid-cols-2 gap-4 mb-4">
                             <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Latitude</label>
                                 <input name="latitude" value={formData.latitude} readOnly className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600" />
@@ -523,11 +527,11 @@ const LguForms = () => {
                         </button>
                     </div>
 
-                     {/* 6. PROGRESS */}
-                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    {/* 6. PROGRESS */}
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <SectionHeader title="Progress Monitoring" icon="📈" />
                         <div className="space-y-4">
-                             <div>
+                            <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Project Status</label>
                                 <select name="project_status" value={formData.project_status} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl">
                                     <option value="Not Yet Started">Not Yet Started</option>
@@ -554,17 +558,17 @@ const LguForms = () => {
                                 <label className="text-xs font-bold text-slate-500 uppercase">Amount Utilized</label>
                                 <input name="amount_utilized" value={formData.amount_utilized} onChange={handleNumberChange} type="number" className="w-full p-3 border border-slate-200 rounded-xl" />
                             </div>
-                             <div>
+                            <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Nature of Delay (if any)</label>
                                 <textarea name="nature_of_delay" value={formData.nature_of_delay} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl" rows="2" />
                             </div>
                         </div>
                     </div>
 
-                     {/* 7. UPLOADS */}
+                    {/* 7. UPLOADS */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                         <SectionHeader title="Attachments" icon="📎" />
-                        
+
                         <div className="mb-6 space-y-3">
                             <h3 className="text-xs font-bold text-slate-400 uppercase">Required Documents (PDF)</h3>
                             {['POW', 'DUPA', 'CONTRACT'].map(type => (
@@ -579,89 +583,89 @@ const LguForms = () => {
                         </div>
 
                         <div>
-                        {!['Not Yet Started', 'Under Procurement'].includes(formData.project_status) && (
-                            <div className="mt-4 pt-4 border-t border-slate-100">
-                                <SectionHeader title="Site Photos" icon="📸" />
-                                <div className="space-y-6">
+                            {!['Not Yet Started', 'Under Procurement'].includes(formData.project_status) && (
+                                <div className="mt-4 pt-4 border-t border-slate-100">
+                                    <SectionHeader title="Site Photos" icon="📸" />
+                                    <div className="space-y-6">
 
-                                    {/* EXTERNAL PHOTOS */}
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
-                                            <span className="text-[10px] font-bold text-blue-500">{externalFiles.length} Added</span>
-                                        </div>
-                                        <div className="text-[10px] text-slate-400 mb-3 italic">
-                                            Front, Left, Right, Rear (wide shots)
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-3 mb-3">
-                                            <button type="button" onClick={() => triggerFilePicker('camera', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
-                                            </button>
-                                            <button type="button" onClick={() => triggerFilePicker('gallery', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
-                                            </button>
-                                        </div>
-                                        {externalPreviews.length > 0 && (
-                                            <div className="grid grid-cols-4 gap-2">
-                                                {externalPreviews.map((url, index) => (
-                                                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
-                                                        <img src={url} alt="external" className="w-full h-full object-cover" />
-                                                        <button type="button" onClick={() => removeFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
-                                                    </div>
-                                                ))}
+                                        {/* EXTERNAL PHOTOS */}
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
+                                                <span className="text-[10px] font-bold text-blue-500">{externalFiles.length} Added</span>
                                             </div>
-                                        )}
-                                    </div>
-
-                                    {/* INTERNAL PHOTOS */}
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
-                                            <span className="text-[10px] font-bold text-blue-500">{internalFiles.length} Added</span>
-                                        </div>
-                                        <div className="text-[10px] text-slate-400 mb-3 italic">
-                                            Classrooms, Ceiling, Lighting, etc.
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-3 mb-3">
-                                            <button type="button" onClick={() => triggerFilePicker('camera', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
-                                            </button>
-                                            <button type="button" onClick={() => triggerFilePicker('gallery', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
-                                            </button>
-                                        </div>
-                                        {internalPreviews.length > 0 && (
-                                            <div className="grid grid-cols-4 gap-2">
-                                                {internalPreviews.map((url, index) => (
-                                                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
-                                                        <img src={url} alt="internal" className="w-full h-full object-cover" />
-                                                        <button type="button" onClick={() => removeFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
-                                                    </div>
-                                                ))}
+                                            <div className="text-[10px] text-slate-400 mb-3 italic">
+                                                Front, Left, Right, Rear (wide shots)
                                             </div>
-                                        )}
+
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <button type="button" onClick={() => triggerFilePicker('camera', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
+                                                </button>
+                                                <button type="button" onClick={() => triggerFilePicker('gallery', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
+                                                </button>
+                                            </div>
+                                            {externalPreviews.length > 0 && (
+                                                <div className="grid grid-cols-4 gap-2">
+                                                    {externalPreviews.map((url, index) => (
+                                                        <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
+                                                            <img src={url} alt="external" className="w-full h-full object-cover" />
+                                                            <button type="button" onClick={() => removeFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* INTERNAL PHOTOS */}
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
+                                                <span className="text-[10px] font-bold text-blue-500">{internalFiles.length} Added</span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 mb-3 italic">
+                                                Classrooms, Ceiling, Lighting, etc.
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <button type="button" onClick={() => triggerFilePicker('camera', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
+                                                </button>
+                                                <button type="button" onClick={() => triggerFilePicker('gallery', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
+                                                </button>
+                                            </div>
+                                            {internalPreviews.length > 0 && (
+                                                <div className="grid grid-cols-4 gap-2">
+                                                    {internalPreviews.map((url, index) => (
+                                                        <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
+                                                            <img src={url} alt="internal" className="w-full h-full object-cover" />
+                                                            <button type="button" onClick={() => removeFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
+                                    <input type="file" ref={fileInputRef} multiple accept="image/*" className="hidden" onChange={handleFileChange} />
                                 </div>
-                                <input type="file" ref={fileInputRef} multiple accept="image/*" className="hidden" onChange={handleFileChange} />
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* SUBMIT */}
                     <div className="fixed bottom-0 left-0 w-full p-4 bg-white border-t border-slate-100 z-50 flex gap-3">
-                        <button 
-                            type="button" 
-                            onClick={() => navigate('/lgu-dashboard')} 
+                        <button
+                            type="button"
+                            onClick={() => navigate('/lgu-dashboard')}
                             disabled={!hasProjects || checkingProjects}
                             className={`flex-1 py-3 font-bold rounded-xl transition-colors ${(!hasProjects || checkingProjects) ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                         >
                             {checkingProjects ? 'Loading...' : (!hasProjects ? 'Cancel (Required)' : 'Cancel')}
                         </button>
                         <button type="submit" disabled={isSubmitting} className="flex-[2] py-3 bg-[#004A99] text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
-                            {isSubmitting ? 'Saving...' : <><FiSave /> Save Project</>}
+                            {isSubmitting ? `Saving... ${uploadProgress > 0 && uploadProgress < 100 ? `(${uploadProgress}%)` : ''}` : <><FiSave /> Save Project</>}
                         </button>
                     </div>
 
