@@ -14488,3 +14488,5 @@ if (isMain || process.env.FORCE_START === 'true' || process.env.START_SERVER ===
 }
 
 export default app;
+
+// Trigger backend restart
