@@ -102,6 +102,102 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '500mb' }));
+
+// ==================================================================
+//               CORE DASHBOARD ENDPOINTS
+// ==================================================================
+
+// PATCH /api/schools/:school_id/units/:unit_number/complete
+app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res) => {
+  const { school_id, unit_number } = req.params;
+  const unitNum = parseInt(unit_number, 10);
+  if (isNaN(unitNum) || unitNum < 1 || unitNum > 8) {
+    return res.status(400).json({ error: `Invalid unit_number "${unit_number}"` });
+  }
+  const col = `unit${unitNum}`;
+  try {
+    const result = await pool.query(
+      `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1 
+       RETURNING unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit_completion`,
+      [school_id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: "School not found" });
+    const row = result.rows[0];
+    res.json({
+      success: true,
+      data: {
+        unit1: row.unit1, unit2: row.unit2, unit3: row.unit3, unit4: row.unit4,
+        unit5: row.unit5, unit6: row.unit6, unit7: row.unit7, unit8: row.unit8,
+        unit_completion: parseFloat(parseFloat(row.unit_completion || 0).toFixed(2))
+      }
+    });
+  } catch (err) {
+    console.error('PATCH unit complete error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/schools/:schoolId/activity
+app.get('/api/schools/:schoolId/activity', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const schoolRes = await pool.query(
+      `SELECT unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8,
+              unit_completion, region, division
+       FROM ph_schools WHERE school_id = $1`,
+      [schoolId]
+    );
+    if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
+    
+    const row = schoolRes.rows[0];
+    const totalUnits = 8;
+    let completedUnitsCount = 0;
+    let completedFlags = {};
+    for (let i = 1; i <= totalUnits; i++) {
+        const val = parseInt(row[`unit${i}`]) || 0;
+        completedFlags[`unit${i}`] = val === 1;
+        if (val === 1) completedUnitsCount++;
+    }
+    const overall_progress_percentage = row.unit_completion !== null
+      ? parseFloat(parseFloat(row.unit_completion).toFixed(2))
+      : (completedUnitsCount / totalUnits) * 100;
+
+    const sprintRes = await pool.query(
+      `SELECT unit_id, duration_seconds FROM ph_performance_logs 
+       WHERE school_id = $1 ORDER BY duration_seconds ASC LIMIT 1`,
+      [schoolId]
+    );
+    let fastest_sprint = null;
+    if (sprintRes.rows.length > 0) {
+      const r = sprintRes.rows[0];
+      fastest_sprint = { unit: r.unit_id, time_text: `${Math.floor(r.duration_seconds/60)}m ${r.duration_seconds%60}s` };
+    }
+
+    const divRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE division = $1`, [row.division]);
+    const regRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE region = $1`, [row.region]);
+
+    res.json({
+      success: true,
+      data: {
+        progress: { completedUnits: completedUnitsCount, totalUnits, percentage: overall_progress_percentage, flags: completedFlags },
+        gamification: { fastest_sprint },
+        comparative: [
+          { name: 'My School', completed: overall_progress_percentage },
+          { name: 'Division Avg', completed: parseFloat(parseFloat(divRes.rows[0]?.avg || 0).toFixed(1)) },
+          { name: 'Region Avg', completed: parseFloat(parseFloat(regRes.rows[0]?.avg || 0).toFixed(1)) }
+        ]
+      }
+    });
+  } catch (err) {
+    console.error("GET activity error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'online', pid: process.pid });
+});
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // --- DATABASE CONNECTION ---
@@ -728,6 +824,55 @@ const initDB = async () => {
     }
 
     await checkAndAddColumn('ph_schools', 'unit7_completed', 'BOOLEAN DEFAULT FALSE');
+
+    // --- New: My Activity Dashboard Logs ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_performance_logs (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        unit_id INTEGER,
+        duration_seconds INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("✅ DB Init: ph_performance_logs schema verified.");
+
+    // --- New: Integer-based Unit Completion Tracking ---
+    const unitCols = ['unit1','unit2','unit3','unit4','unit5','unit6','unit7','unit8'];
+    for (const col of unitCols) {
+      await checkAndAddColumn('ph_schools', col, 'SMALLINT DEFAULT 0');
+    }
+    // Generated column for auto-calculated completion percentage
+    // PostgreSQL 12+ supports GENERATED ALWAYS AS ... STORED
+    try {
+      await pool.query(`
+        ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit_completion NUMERIC
+          GENERATED ALWAYS AS (
+            (COALESCE(unit1,0) + COALESCE(unit2,0) + COALESCE(unit3,0) + COALESCE(unit4,0) +
+             COALESCE(unit5,0) + COALESCE(unit6,0) + COALESCE(unit7,0) + COALESCE(unit8,0)
+            ) / 8.0 * 100.0
+          ) STORED;
+      `);
+    } catch (genErr) {
+      // Column may already exist or DB version may not support generated columns
+      if (!genErr.message.includes('already exists')) {
+        console.warn('unit_completion generated column warning:', genErr.message);
+      }
+    }
+    console.log("✅ DB Init: unit1-unit8 + unit_completion columns verified.");
+
+    // --- Backfill: Sync existing boolean flags into new integer columns ---
+    try {
+      for (let i = 1; i <= 8; i++) {
+        await pool.query(`
+          UPDATE ph_schools SET unit${i} = 1
+          WHERE unit${i}_completed = TRUE AND COALESCE(unit${i}, 0) = 0;
+        `);
+      }
+      console.log("✅ DB Init: Backfilled unit1-unit8 from boolean flags.");
+    } catch (bfErr) {
+      console.warn("Backfill warning (non-fatal):", bfErr.message);
+    }
 
     console.log("✅ DB Init: All primary migrations completed successfully.");
 
@@ -5720,6 +5865,15 @@ app.post('/api/register-user', async (req, res) => {
     const uid = uuidv4();
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // Auto-determine account_category based on role if not explicitly provided
+    let finalAccountCategory = accountCategory;
+    if (role === 'EFD') {
+      finalAccountCategory = 'EFD Engineer';
+    } else if (role === 'Division Engineer' && !accountCategory) {
+      finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Division Engineers
+    }
+
     const query = `
             INSERT INTO users (
                 uid, email, role, created_at,
@@ -5766,7 +5920,7 @@ app.post('/api/register-user', async (req, res) => {
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
       valueOrNull(office), valueOrNull(position),
       valueOrNull(contactNumber), valueOrNull(altEmail),
-      valueOrNull(accountCategory), passwordHash, 'bcrypt'
+      finalAccountCategory, passwordHash, 'bcrypt'
     ];
 
     await pool.query(query, values);
@@ -5783,12 +5937,33 @@ app.post('/api/register-user', async (req, res) => {
       }
     }
 
-    await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
+    try {
+      await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
+    } catch (logErr) {
+      console.warn('⚠️ logActivity failed (non-fatal):', logErr.message);
+    }
 
     // NATIVE AUTH: Generate Custom Token
-    const customToken = await admin.auth().createCustomToken(uid, {
-      role: role
-    });
+    let customToken;
+    if (admin.apps.length > 0) {
+      // Firebase Admin is initialized — use it
+      customToken = await admin.auth().createCustomToken(uid, { role: role });
+    } else {
+      // Firebase Admin NOT available (local dev without service-account.json)
+      // Generate a signed JWT manually so the frontend can still call signInWithCustomToken
+      console.warn('⚠️ Firebase Admin not initialized — generating fallback custom token');
+      const crypto = await import('crypto');
+      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+      const payload = Buffer.from(JSON.stringify({
+        uid, role,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        iss: 'insighted-local-dev'
+      })).toString('base64url');
+      const secret = process.env.JWT_SECRET || 'insighted-local-secret';
+      const sig = crypto.default.createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
+      customToken = `${header}.${payload}.${sig}`;
+    }
 
     res.json({ success: true, customToken: customToken, message: "User synced to Database" });
   } catch (err) {
@@ -5861,11 +6036,13 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
     }
 
     // 3. Check Firebase Auth for @insighted.app specific account (Priority)
-    try {
-      const fbUser = await admin.auth().getUserByEmail(`${schoolId}@insighted.app`);
-      email = fbUser.email;
-    } catch (fbErr) {
-      // Ignore user-not-found
+    if (admin.apps.length > 0) {
+      try {
+        const fbUser = await admin.auth().getUserByEmail(`${schoolId}@insighted.app`);
+        email = fbUser.email;
+      } catch (fbErr) {
+        // Ignore user-not-found
+      }
     }
 
     if (email) {
@@ -14197,13 +14374,27 @@ app.get('/api/user/progress', async (req, res) => {
 
 // POST /api/user/progress — Marks a unit as completed for a school
 app.post('/api/user/progress', async (req, res) => {
-  const { unitId, schoolId } = req.body;
+  const { unitId, schoolId, duration_seconds } = req.body;
   try {
     // If schoolId was provided, update the flag directly
     if (schoolId && unitId) {
       const col = `unit${unitId}_completed`;
       await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} BOOLEAN DEFAULT FALSE`);
       await pool.query(`UPDATE ph_schools SET ${col} = TRUE WHERE school_id = $1`, [schoolId]);
+      
+      // Also update the new integer-based column (unit1-unit8) for the dashboard
+      const unitNum = parseInt(unitId);
+      if (unitNum >= 1 && unitNum <= 8) {
+        await pool.query(`UPDATE ph_schools SET unit${unitNum} = 1 WHERE school_id = $1`, [schoolId]);
+      }
+      
+      // Log performance for the gamification metric
+      if (duration_seconds !== undefined && duration_seconds !== null) {
+        await pool.query(
+          `INSERT INTO ph_performance_logs (school_id, unit_id, duration_seconds) VALUES ($1, $2, $3)`,
+          [schoolId, parseInt(unitId), parseInt(duration_seconds)]
+        );
+      }
     }
     // Always return success — the frontend treats 404 as an error that blocks navigation
     res.json({ success: true, message: `Unit ${unitId} marked as completed.` });
@@ -14212,6 +14403,10 @@ app.post('/api/user/progress', async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+// --- END OF PATCH UNIT COMPLETION ---
+
+// --- END OF GET ACTIVITY ---
 
 // Health Check
 app.get('/api/health', (req, res) => {

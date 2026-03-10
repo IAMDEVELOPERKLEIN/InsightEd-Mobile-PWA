@@ -1,14 +1,23 @@
 #!/bin/bash
 
-# Simplified Deployment Script for STRIDE-PROD-VM-01
+# Deployment Script for STRIDE-PROD-VM-01
 
-echo "📥 Pulling latest code..."
+echo "------------------------------------------------"
+echo "🚀 Starting Deployment..."
+echo "------------------------------------------------"
+
+echo "📥 1. Pulling latest code from GitHub..."
 git pull origin main
 
-echo "🏗️  Building frontend..."
+echo "📦 2. Installing dependencies (Backend & Frontend)..."
+npm install
+
+echo "🏗️  3. Building frontend PWA..."
 npm run build
 
-echo "🔄 Restarting InsightEd Backend (ID: 3)..."
-pm2 restart 3
+echo "🔄 4. Restarting Backend Service..."
+# Using the name instead of ID since the ID might change
+pm2 restart insighted-backend
 
-echo "✅ Done!"
+echo "✅ Deployment Complete!"
+echo "------------------------------------------------"

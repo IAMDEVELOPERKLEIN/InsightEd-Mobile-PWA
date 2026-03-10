@@ -29,6 +29,7 @@ import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
 import SchoolAuditView from './modules/SchoolAuditView';
 import UserProfile from './modules/UserProfile';
 import Activity from './modules/Activity';
+import MyActivityDashboard from './modules/MyActivityDashboard';
 import ProjectGallery from './modules/ProjectGallery';
 import Outbox from './modules/Outbox';
 import EngineerOutbox from './modules/EngineerOutbox';
@@ -164,87 +165,95 @@ const AnimatedRoutes = () => {
       <Route path="/dummy-forms" element={<DummyDashboard />} />
       <Route path="/psip" element={<PSIP />} />
 
-      {/* Beta Tester Modular Flow */}
-      <Route
-        path="/modular-dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <ModularDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-1"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit1SchoolIdentity />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-2"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit2Learners />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-3"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit3OrganizedClasses />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-4"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit4LearnerProfile />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-5"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit5ShiftingModality />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-6"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <TeachingPersonnelUnit />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-6-summary"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit6Summary />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-7"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit7SchoolResources />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/modular/unit-8"
-        element={
-          <ProtectedRoute allowedRoles={['Beta Tester']}>
-            <Unit8PhysicalFacilities />
-          </ProtectedRoute>
-        }
-      />
+        {/* Beta Tester Modular Flow */}
+        <Route
+          path="/modular-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <ModularDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/activity-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <MyActivityDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-1"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit1SchoolIdentity />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-2"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit2Learners />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-3"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit3OrganizedClasses />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-4"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit4LearnerProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-5"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit5ShiftingModality />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-6"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <TeachingPersonnelUnit />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-6-summary"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit6Summary />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-7"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit7SchoolResources />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-8"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit8PhysicalFacilities />
+            </ProtectedRoute>
+          }
+        />
 
       {/* Menus */}
       <Route path="/school-forms" element={<SchoolForms />} />

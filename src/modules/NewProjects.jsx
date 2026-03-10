@@ -648,8 +648,8 @@ const NewProjects = () => {
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString(),
-                uploader_type: userRole === 'EFD' ? 'EFD' : 
-                               (userRole === 'Division Engineer' && accountCategory === 'Non-DepEd' ? 'Non-DepEd Engineer' : 'Division Engineer')
+                uploader_type: userRole === 'EFD' ? 'EFD Engineer' :
+                               (userRole === 'Division Engineer' && accountCategory === 'Non-DepEd Engineer' ? 'Non-DepEd Engineer' : 'Uploaded by DepEd Engineer')
             };
 
             // --- OFFLINE/ONLINE CHECK ---

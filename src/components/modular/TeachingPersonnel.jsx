@@ -474,10 +474,10 @@ const TeachingPersonnelUnit = () => {
                             {overLimit && <FiAlertTriangle className="text-orange-500 animate-pulse" />}
                         </div>
                     </div>
-                    <div className="flex-1 bg-slate-50 rounded-2xl p-3">
-                        <span className={labelStyle}>Assignments</span>
-                        <span className="text-lg font-black text-slate-700">
-                            {(teacher.workloads || []).length} Classes
+                    <div className="flex-1 bg-slate-50 rounded-2xl p-3 overflow-hidden">
+                        <span className={labelStyle}>Funding Source</span>
+                        <span className="text-sm font-black text-slate-700 truncate block">
+                            {teacher.funding_source || 'DepEd National'}
                         </span>
                     </div>
                 </div>
