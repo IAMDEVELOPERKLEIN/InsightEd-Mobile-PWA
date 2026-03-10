@@ -6,6 +6,7 @@ import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-d
 import { AnimatePresence } from 'framer-motion'; // <--- IMPORT THIS
 import MaintenanceScreen from './components/MaintenanceScreen'; // <--- IMPORT MAINTENANCE SCREEN
 import SuperUserFloatingSwitch from './components/SuperUserFloatingSwitch'; // Super User Switch
+import ChatWidget from './components/ChatWidget'; // Chatbot Widget
 import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 
 // Auth
@@ -28,6 +29,7 @@ import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
 import SchoolAuditView from './modules/SchoolAuditView';
 import UserProfile from './modules/UserProfile';
 import Activity from './modules/Activity';
+import MyActivityDashboard from './modules/MyActivityDashboard';
 import ProjectGallery from './modules/ProjectGallery';
 import Outbox from './modules/Outbox';
 import EngineerOutbox from './modules/EngineerOutbox';
@@ -120,9 +122,9 @@ const AnimatedRoutes = () => {
 
   return (
     <Routes>
-        {/* Authentication */}
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+      {/* Authentication */}
+      <Route path="/" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
@@ -137,32 +139,32 @@ const AnimatedRoutes = () => {
         <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
         <Route path="/lgu-project-details/:id" element={<LguProjectDetails />} />
 
-        {/* Super User Selector (Protected) */}
-        <Route
-          path="/super-user-selector"
-          element={
-            <ProtectedRoute allowedRoles={['Super User']}>
-              <SuperUserSelector />
-            </ProtectedRoute>
-          }
-        />
+      {/* Super User Selector (Protected) */}
+      <Route
+        path="/super-user-selector"
+        element={
+          <ProtectedRoute allowedRoles={['Super User']}>
+            <SuperUserSelector />
+          </ProtectedRoute>
+        }
+      />
 
-        <Route path="/schoolhead-dashboard" element={<SchoolHeadDashboard />} />
-        <Route path="/hr-dashboard" element={<HRDashboard />} />
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
-        <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
-        <Route path="/efd-dashboard" element={<EFDHome />} />
-        <Route path="/finance-dashboard" element={<FinanceDashboard />} />
-        <Route path="/agency-dashboard" element={<AgencyDashboard />} />
-        <Route path="/efd-monitoring" element={<EFDMonitoring />} />
-        <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />
-        <Route path="/school-management" element={<SchoolManagement />} />
-        <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
-        <Route path="/school-audit" element={<SchoolAuditView />} />
-        <Route path="/dummy-forms" element={<DummyDashboard />} />
+      <Route path="/schoolhead-dashboard" element={<SchoolHeadDashboard />} />
+      <Route path="/hr-dashboard" element={<HRDashboard />} />
+      <Route path="/admin-dashboard" element={<AdminDashboard />} />
+      <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
+      <Route path="/efd-dashboard" element={<EFDHome />} />
+      <Route path="/finance-dashboard" element={<FinanceDashboard />} />
+      <Route path="/agency-dashboard" element={<AgencyDashboard />} />
+      <Route path="/efd-monitoring" element={<EFDMonitoring />} />
+      <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />
+      <Route path="/school-management" element={<SchoolManagement />} />
+      <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
+      <Route path="/school-audit" element={<SchoolAuditView />} />
+      <Route path="/dummy-forms" element={<DummyDashboard />} />
 
-        <Route path="/dummy-forms" element={<DummyDashboard />} />
-        <Route path="/psip" element={<PSIP />} />
+      <Route path="/dummy-forms" element={<DummyDashboard />} />
+      <Route path="/psip" element={<PSIP />} />
 
         {/* Beta Tester Modular Flow */}
         <Route
@@ -170,6 +172,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
               <ModularDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/activity-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <MyActivityDashboard />
             </ProtectedRoute>
           }
         />
@@ -246,45 +256,45 @@ const AnimatedRoutes = () => {
           }
         />
 
-        {/* Menus */}
-        <Route path="/school-forms" element={<SchoolForms />} />
-        <Route path="/engineer-forms" element={<EngineerForms />} />
+      {/* Menus */}
+      <Route path="/school-forms" element={<SchoolForms />} />
+      <Route path="/engineer-forms" element={<EngineerForms />} />
 
-        {/* Utilities */}
-        <Route path="/profile" element={<UserProfile />} />
-        <Route path="/activities" element={<Activity />} />
-        <Route path="/outbox" element={<Outbox />} />
-        <Route path="/engineer-outbox" element={<EngineerOutbox />} />
+      {/* Utilities */}
+      <Route path="/profile" element={<UserProfile />} />
+      <Route path="/activities" element={<Activity />} />
+      <Route path="/outbox" element={<Outbox />} />
+      <Route path="/engineer-outbox" element={<EngineerOutbox />} />
 
-        {/* School Head Forms */}
-        <Route path="/school-profile" element={<SchoolProfile />} />
-        <Route path="/school-information" element={<SchoolInformation />} />
-        <Route path="/enrolment" element={<Enrolement />} />
-        <Route path="/organized-classes" element={<OrganizedClasses />} />
-        <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
-        <Route path="/school-resources" element={<SchoolResources />} />
-        <Route path="/physical-facilities" element={<PhysicalFacilities />} />
-        <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
-        <Route path="/shifting-modalities" element={<ShiftingModalities />} />
-        <Route path="/learner-statistics" element={<LearnerStatistics />} />
-        <Route path="/project-validation" element={<ProjectValidation />} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
+      {/* School Head Forms */}
+      <Route path="/school-profile" element={<SchoolProfile />} />
+      <Route path="/school-information" element={<SchoolInformation />} />
+      <Route path="/enrolment" element={<Enrolement />} />
+      <Route path="/organized-classes" element={<OrganizedClasses />} />
+      <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
+      <Route path="/school-resources" element={<SchoolResources />} />
+      <Route path="/physical-facilities" element={<PhysicalFacilities />} />
+      <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
+      <Route path="/shifting-modalities" element={<ShiftingModalities />} />
+      <Route path="/learner-statistics" element={<LearnerStatistics />} />
+      <Route path="/project-validation" element={<ProjectValidation />} />
+      <Route path="/leaderboard" element={<Leaderboard />} />
 
-        {/* Division Engineer Forms */}
-        <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
-        <Route path="/damage-assessment" element={<DamageAssessment />} />
-        <Route path="/project-monitoring" element={<ProjectMonitoring />} />
-        <Route path="/site-inspection" element={<SiteInspection />} />
-        <Route path="/material-inventory" element={<MaterialInventory />} />
-        <Route path="/new-project" element={<NewProjects />} />
-        <Route path="/project-details/:id" element={<DetailedProjInfo />} />
-        <Route path="/project-gallery" element={<ProjectGallery />} />
-        <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
-        <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
+      {/* Division Engineer Forms */}
+      <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
+      <Route path="/damage-assessment" element={<DamageAssessment />} />
+      <Route path="/project-monitoring" element={<ProjectMonitoring />} />
+      <Route path="/site-inspection" element={<SiteInspection />} />
+      <Route path="/material-inventory" element={<MaterialInventory />} />
+      <Route path="/new-project" element={<NewProjects />} />
+      <Route path="/project-details/:id" element={<DetailedProjInfo />} />
+      <Route path="/project-gallery" element={<ProjectGallery />} />
+      <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
+      <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
 
-        {/* Hidden Admin Login Route */}
-        <Route path="/adminlogin" element={<Login />} />
-      </Routes>
+      {/* Hidden Admin Login Route */}
+      <Route path="/adminlogin" element={<Login />} />
+    </Routes>
   );
 };
 
@@ -297,6 +307,7 @@ function App() {
       <Router>
         <ScrollToTop />
         <SuperUserFloatingSwitch />
+        <ChatWidget />
         <AnimatedRoutes />
       </Router>
     </GlobalErrorBoundary>

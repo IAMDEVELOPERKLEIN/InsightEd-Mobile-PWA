@@ -19,6 +19,7 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
+import { teachChatbot, chatWithKnowledge, setPool } from './chatbot.js';
 
 
 // Load environment variables
@@ -101,6 +102,102 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '500mb' }));
+
+// ==================================================================
+//               CORE DASHBOARD ENDPOINTS
+// ==================================================================
+
+// PATCH /api/schools/:school_id/units/:unit_number/complete
+app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res) => {
+  const { school_id, unit_number } = req.params;
+  const unitNum = parseInt(unit_number, 10);
+  if (isNaN(unitNum) || unitNum < 1 || unitNum > 8) {
+    return res.status(400).json({ error: `Invalid unit_number "${unit_number}"` });
+  }
+  const col = `unit${unitNum}`;
+  try {
+    const result = await pool.query(
+      `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1 
+       RETURNING unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit_completion`,
+      [school_id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: "School not found" });
+    const row = result.rows[0];
+    res.json({
+      success: true,
+      data: {
+        unit1: row.unit1, unit2: row.unit2, unit3: row.unit3, unit4: row.unit4,
+        unit5: row.unit5, unit6: row.unit6, unit7: row.unit7, unit8: row.unit8,
+        unit_completion: parseFloat(parseFloat(row.unit_completion || 0).toFixed(2))
+      }
+    });
+  } catch (err) {
+    console.error('PATCH unit complete error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// GET /api/schools/:schoolId/activity
+app.get('/api/schools/:schoolId/activity', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const schoolRes = await pool.query(
+      `SELECT unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8,
+              unit_completion, region, division
+       FROM ph_schools WHERE school_id = $1`,
+      [schoolId]
+    );
+    if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
+
+    const row = schoolRes.rows[0];
+    const totalUnits = 8;
+    let completedUnitsCount = 0;
+    let completedFlags = {};
+    for (let i = 1; i <= totalUnits; i++) {
+      const val = parseInt(row[`unit${i}`]) || 0;
+      completedFlags[`unit${i}`] = val === 1;
+      if (val === 1) completedUnitsCount++;
+    }
+    const overall_progress_percentage = row.unit_completion !== null
+      ? parseFloat(parseFloat(row.unit_completion).toFixed(2))
+      : (completedUnitsCount / totalUnits) * 100;
+
+    const sprintRes = await pool.query(
+      `SELECT unit_id, duration_seconds FROM ph_performance_logs 
+       WHERE school_id = $1 ORDER BY duration_seconds ASC LIMIT 1`,
+      [schoolId]
+    );
+    let fastest_sprint = null;
+    if (sprintRes.rows.length > 0) {
+      const r = sprintRes.rows[0];
+      fastest_sprint = { unit: r.unit_id, time_text: `${Math.floor(r.duration_seconds / 60)}m ${r.duration_seconds % 60}s` };
+    }
+
+    const divRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE division = $1`, [row.division]);
+    const regRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE region = $1`, [row.region]);
+
+    res.json({
+      success: true,
+      data: {
+        progress: { completedUnits: completedUnitsCount, totalUnits, percentage: overall_progress_percentage, flags: completedFlags },
+        gamification: { fastest_sprint },
+        comparative: [
+          { name: 'My School', completed: overall_progress_percentage },
+          { name: 'Division Avg', completed: parseFloat(parseFloat(divRes.rows[0]?.avg || 0).toFixed(1)) },
+          { name: 'Region Avg', completed: parseFloat(parseFloat(regRes.rows[0]?.avg || 0).toFixed(1)) }
+        ]
+      }
+    });
+  } catch (err) {
+    console.error("GET activity error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'online', pid: process.pid });
+});
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // --- DATABASE CONNECTION ---
@@ -136,6 +233,9 @@ const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false }
 });
+
+// Inject pool into chatbot module
+setPool(pool);
 
 // --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
 let poolNew = null;
@@ -728,6 +828,55 @@ const initDB = async () => {
 
     await checkAndAddColumn('ph_schools', 'unit7_completed', 'BOOLEAN DEFAULT FALSE');
 
+    // --- New: My Activity Dashboard Logs ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ph_performance_logs (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        unit_id INTEGER,
+        duration_seconds INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("✅ DB Init: ph_performance_logs schema verified.");
+
+    // --- New: Integer-based Unit Completion Tracking ---
+    const unitCols = ['unit1', 'unit2', 'unit3', 'unit4', 'unit5', 'unit6', 'unit7', 'unit8'];
+    for (const col of unitCols) {
+      await checkAndAddColumn('ph_schools', col, 'SMALLINT DEFAULT 0');
+    }
+    // Generated column for auto-calculated completion percentage
+    // PostgreSQL 12+ supports GENERATED ALWAYS AS ... STORED
+    try {
+      await pool.query(`
+        ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit_completion NUMERIC
+          GENERATED ALWAYS AS (
+            (COALESCE(unit1,0) + COALESCE(unit2,0) + COALESCE(unit3,0) + COALESCE(unit4,0) +
+             COALESCE(unit5,0) + COALESCE(unit6,0) + COALESCE(unit7,0) + COALESCE(unit8,0)
+            ) / 8.0 * 100.0
+          ) STORED;
+      `);
+    } catch (genErr) {
+      // Column may already exist or DB version may not support generated columns
+      if (!genErr.message.includes('already exists')) {
+        console.warn('unit_completion generated column warning:', genErr.message);
+      }
+    }
+    console.log("✅ DB Init: unit1-unit8 + unit_completion columns verified.");
+
+    // --- Backfill: Sync existing boolean flags into new integer columns ---
+    try {
+      for (let i = 1; i <= 8; i++) {
+        await pool.query(`
+          UPDATE ph_schools SET unit${i} = 1
+          WHERE unit${i}_completed = TRUE AND COALESCE(unit${i}, 0) = 0;
+        `);
+      }
+      console.log("✅ DB Init: Backfilled unit1-unit8 from boolean flags.");
+    } catch (bfErr) {
+      console.warn("Backfill warning (non-fatal):", bfErr.message);
+    }
+
     console.log("✅ DB Init: All primary migrations completed successfully.");
 
   } catch (err) {
@@ -1283,7 +1432,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     console.log(`[MIGRATE LOGIN] Attempting login for: ${normalizedEmail}`);
 
     // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
-    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version, account_category FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
 
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
@@ -1358,14 +1507,9 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
     // until the frontend is fully decoupled from the Firebase SDK.
-    let customToken = null;
-    if (admin.apps.length > 0) {
-      customToken = await admin.auth().createCustomToken(user.uid, {
-        role: user.role // Embed role into token if you like
-      });
-    } else {
-      console.warn('⚠️ Firebase Admin not initialized — skipping custom token generation');
-    }
+    const customToken = await admin.auth().createCustomToken(user.uid, {
+      role: user.role // Embed role into token if you like
+    });
 
     return res.json({
       success: true,
@@ -4660,6 +4804,57 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
 });
 
 // POST - Admin Approve School
+// --- CHATBOT KNOWLEDGE TEACHING ---
+app.post('/api/admin/teach', async (req, res) => {
+  const bb = busboy({ headers: req.headers });
+  let content = "";
+  let filePath = null;
+  const tempFiles = [];
+
+  bb.on('file', (name, file, info) => {
+    const { filename, mimeType } = info;
+    if (mimeType === 'application/pdf') {
+      const savePath = path.join(process.cwd(), 'storage', `teach_${Date.now()}_${filename}`);
+      filePath = savePath;
+      tempFiles.push(savePath);
+      file.pipe(fs.createWriteStream(savePath));
+    } else {
+      file.resume();
+    }
+  });
+
+  bb.on('field', (name, val) => {
+    if (name === 'content') content = val;
+  });
+
+  bb.on('finish', async () => {
+    try {
+      const result = await teachChatbot(content, filePath);
+      // Cleanup temp files
+      tempFiles.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
+      res.json(result);
+    } catch (err) {
+      console.error("Chatbot Teaching Failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  req.pipe(bb);
+});
+
+// --- CHATBOT CHAT ---
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: "Question is required" });
+    const answer = await chatWithKnowledge(question);
+    res.json({ answer });
+  } catch (err) {
+    console.error("Chatbot Error:", err);
+    res.status(500).json({ error: "Failed to get answer from chatbot" });
+  }
+});
+
 app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
   const { pending_id } = req.params;
   const { reviewed_by, reviewed_by_name } = req.body;
@@ -14199,13 +14394,27 @@ app.get('/api/user/progress', async (req, res) => {
 
 // POST /api/user/progress — Marks a unit as completed for a school
 app.post('/api/user/progress', async (req, res) => {
-  const { unitId, schoolId } = req.body;
+  const { unitId, schoolId, duration_seconds } = req.body;
   try {
     // If schoolId was provided, update the flag directly
     if (schoolId && unitId) {
       const col = `unit${unitId}_completed`;
       await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} BOOLEAN DEFAULT FALSE`);
       await pool.query(`UPDATE ph_schools SET ${col} = TRUE WHERE school_id = $1`, [schoolId]);
+
+      // Also update the new integer-based column (unit1-unit8) for the dashboard
+      const unitNum = parseInt(unitId);
+      if (unitNum >= 1 && unitNum <= 8) {
+        await pool.query(`UPDATE ph_schools SET unit${unitNum} = 1 WHERE school_id = $1`, [schoolId]);
+      }
+
+      // Log performance for the gamification metric
+      if (duration_seconds !== undefined && duration_seconds !== null) {
+        await pool.query(
+          `INSERT INTO ph_performance_logs (school_id, unit_id, duration_seconds) VALUES ($1, $2, $3)`,
+          [schoolId, parseInt(unitId), parseInt(duration_seconds)]
+        );
+      }
     }
     // Always return success — the frontend treats 404 as an error that blocks navigation
     res.json({ success: true, message: `Unit ${unitId} marked as completed.` });
@@ -14214,6 +14423,10 @@ app.post('/api/user/progress', async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+// --- END OF PATCH UNIT COMPLETION ---
+
+// --- END OF GET ACTIVITY ---
 
 // Health Check
 app.get('/api/health', (req, res) => {

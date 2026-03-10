@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings, FiCheckSquare } from "react-icons/fi"; // Changed to Gear icon
+import { FiSettings, FiCheckSquare, FiLogOut } from "react-icons/fi"; // Changed to Gear icon
 
 const BottomNav = ({ userRole }) => {
     const navigate = useNavigate();
@@ -109,6 +109,12 @@ const BottomNav = ({ userRole }) => {
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
+        'Beta Tester': [
+            { label: 'Dashboard', path: '/activity-dashboard', icon: TbChartBar },
+            { label: 'Modules', path: '/modular-dashboard', icon: TbClipboardList },
+            { label: 'Profile', path: '/profile', icon: FiSettings },
+        ],
+
     };
 
     const currentNavItems = navConfigs[effectiveRole];
@@ -133,7 +139,15 @@ const BottomNav = ({ userRole }) => {
                         <button
                             key={item.label}
                             style={styles.navButton}
-                            onClick={() => navigate(item.path, { state: { ...(item.state || {}), refreshTrigger: Date.now() } })}
+                        onClick={() => {
+                            if (item.logout) {
+                                localStorage.clear();
+                                sessionStorage.clear();
+                                navigate('/');
+                                return;
+                            }
+                            navigate(item.path, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });
+                        }}
                         >
                             <Icon
                                 size={24}

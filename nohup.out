@@ -32,3 +32,41 @@ Force Start Env? undefined
 👉 CORS Allowed Origins: http://localhost:5173, http://localhost:5174, https://insight-ed-mobile-pwa.vercel.app
 DEBUG: FETCHING DIV STATS FOR REGION: MIMAROPA
 DEBUG: FETCHING DIV STATS FOR REGION: MIMAROPA
+[MIGRATE LOGIN] Attempting login for: 502227@deped.gov.ph
+[MIGRATE LOGIN] Success for: 502227@deped.gov.ph (Role: Beta Tester)
+ðŸ“ Audit Logged: LOGIN - undefined 
+[MIGRATE LOGIN] Attempting login for: 502227@deped.gov.ph
+[MIGRATE LOGIN] Success for: 502227@deped.gov.ph (Role: Beta Tester)
+ðŸ“ Audit Logged: LOGIN - undefined 
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[MIGRATE LOGIN] Attempting login for: 502227@deped.gov.ph
+[MIGRATE LOGIN] Success for: 502227@deped.gov.ph (Role: Beta Tester)
+ðŸ“ Audit Logged: LOGIN - undefined 
+ðŸ“ Audit Logged: LOGIN - undefined 
+ðŸ“ Audit Logged: LOGIN - undefined 
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+ðŸ“ Audit Logged: LOGIN - undefined 
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[MIGRATE LOGIN] Attempting login for: 502227@deped.gov.ph
+[MIGRATE LOGIN] Attempting login for: 502227@deped.gov.ph
+[MIGRATE LOGIN] Success for: 502227@deped.gov.ph (Role: Beta Tester)
+ðŸ“ Audit Logged: LOGIN - undefined 
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false
+[GET /api/ph_schools/502227] RETURNING unit5_completed:  false

@@ -29,7 +29,7 @@ const getDashboardPath = (role, accountCategory) => {
         'Central Office': '/monitoring-dashboard',
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
-        'Beta Tester': '/modular-dashboard',
+        'Beta Tester': '/activity-dashboard',
         'EFD': '/efd-dashboard',
         'HRODI': '/efd-dashboard',
     };
