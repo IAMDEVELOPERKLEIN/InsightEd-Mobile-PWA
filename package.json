@@ -14,11 +14,8 @@
   "dependencies": {
     "@azure/storage-blob": "^12.31.0",
     "@google/generative-ai": "^0.24.1",
-<<<<<<< HEAD
     "bcrypt": "^6.0.0",
-=======
     "busboy": "^1.6.0",
->>>>>>> dd14f7f3dfff610097e7a49a283055e6a9e240f9
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
@@ -44,11 +41,8 @@
     "react-router-dom": "^7.10.1",
     "recharts": "^3.5.1",
     "swiper": "^12.0.3",
-<<<<<<< HEAD
     "uuid": "^13.0.0",
-=======
     "winston": "^3.19.0",
->>>>>>> dd14f7f3dfff610097e7a49a283055e6a9e240f9
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -979,7 +979,6 @@ export default function Unit8PhysicalFacilities() {
                                             );
                                         })}
 
-<<<<<<< HEAD:src/components/modular/Unit8PhysicalFacilities.jsx
                                          {/* Render new drawing space */}
                                          {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
                                              const b = calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0);
@@ -996,20 +995,6 @@ export default function Unit8PhysicalFacilities() {
                                                  </>
                                              );
                                          })()}
-=======
-                                        {/* Render new drawing space */}
-                                        {newSpace.center_lat && newSpace.center_lng && isFormVisible && (
-                                            <>
-                                                <Rectangle
-                                                    bounds={calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0)}
-                                                    pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }}
-                                                />
-                                                <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
-                                                    <Popup>Target Location</Popup>
-                                                </Marker>
-                                            </>
-                                        )}
->>>>>>> dd14f7f3dfff610097e7a49a283055e6a9e240f9:src/components/modular/Unit10PhysicalFacilities.jsx
                                     </MapContainer>
                                 )}
                             </div>
