@@ -12,6 +12,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/storage-blob": "^12.31.0",
+    "@google/generative-ai": "^0.24.1",
+    "busboy": "^1.6.0",
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
@@ -21,11 +24,12 @@
     "firebase-admin": "^13.6.0",
     "framer-motion": "^12.24.12",
     "idb": "^8.0.3",
+    "knex": "^3.1.0",
     "leaflet": "^1.9.4",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",
     "papaparse": "^5.5.3",
-    "pg": "^8.16.3",
+    "pg": "^8.20.0",
     "pm2": "^6.0.14",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -33,7 +37,9 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.10.1",
     "recharts": "^3.5.1",
-    "swiper": "^12.0.3"
+    "swiper": "^12.0.3",
+    "winston": "^3.19.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

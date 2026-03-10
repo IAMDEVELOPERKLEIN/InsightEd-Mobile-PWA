@@ -5,6 +5,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool, FiKey, FiCopy, FiX, FiMapPin, FiCheck } from "react-icons/fi";
 import { TbSchool } from "react-icons/tb";
+import KnowledgeManager from '../components/KnowledgeManager';
 
 
 // --- REUSABLE STAT COMPONENT ---
@@ -955,7 +956,7 @@ const AdminDashboard = () => {
                 <div className="flex flex-col md:flex-row gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-gray-100 shadow-sm">
                     <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block ml-1">User Role</label>
-                        <select 
+                        <select
                             value={roleFilter}
                             onChange={(e) => {
                                 setRoleFilter(e.target.value);
@@ -971,7 +972,7 @@ const AdminDashboard = () => {
                     </div>
                     <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block ml-1">Regional Office</label>
-                        <select 
+                        <select
                             value={geoRegionFilter}
                             onChange={(e) => {
                                 setGeoRegionFilter(e.target.value);
@@ -987,7 +988,7 @@ const AdminDashboard = () => {
                     </div>
                     <div className="flex-1">
                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block ml-1">School Division Office</label>
-                        <select 
+                        <select
                             value={geoDivisionFilter}
                             onChange={(e) => setGeoDivisionFilter(e.target.value)}
                             className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 transition-colors"
@@ -999,7 +1000,7 @@ const AdminDashboard = () => {
                         </select>
                     </div>
                     <div className="flex items-end">
-                        <button 
+                        <button
                             onClick={() => {
                                 setGeoRegionFilter('');
                                 setGeoDivisionFilter('');
@@ -1032,7 +1033,7 @@ const AdminDashboard = () => {
                     </div>
                     <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
                         {/* Total Card */}
-                        <div 
+                        <div
                             onClick={() => setRoleFilter('')}
                             className={`min-w-[140px] p-3 rounded-xl border transition-all cursor-pointer ${roleFilter === '' ? 'bg-[#004A99] border-blue-600 shadow-md' : 'bg-white border-gray-100 hover:border-blue-200'}`}
                         >
@@ -1041,10 +1042,10 @@ const AdminDashboard = () => {
                             </p>
                             <p className={`text-xl font-black mt-0.5 ${roleFilter === '' ? 'text-white' : 'text-gray-800'}`}>{userStats.total}</p>
                         </div>
-                        
+
                         {/* Role Breakdown Cards */}
                         {userStats.breakdown.map((item, idx) => (
-                            <div 
+                            <div
                                 key={idx}
                                 onClick={() => { setRoleFilter(item.role); setSearchTerm(''); }}
                                 className={`min-w-[120px] p-3 rounded-xl border transition-all cursor-pointer ${roleFilter === item.role ? 'bg-blue-600 border-blue-700 shadow-md' : 'bg-white border-gray-100 hover:border-blue-200'}`}
@@ -1391,6 +1392,12 @@ const AdminDashboard = () => {
                             >
                                 Account Management
                             </button>
+                            <button
+                                onClick={() => { setActiveTab('knowledge'); setSearchTerm(''); }}
+                                className={`px-4 py-2 text-xs font-bold rounded-lg whitespace-nowrap transition-all ${activeTab === 'knowledge' ? 'bg-[#004A99] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                Knowledge Base
+                            </button>
                         </div>
 
                         {/* CONTENT AREA */}
@@ -1408,6 +1415,7 @@ const AdminDashboard = () => {
                                     {activeTab === 'audit' && renderAuditTable()}
                                     {activeTab === 'feedback' && renderFeedbackView()}
                                     {activeTab === 'accounts' && renderAccountManagement()}
+                                    {activeTab === 'knowledge' && <KnowledgeManager />}
                                 </>
                             )}
                         </div>

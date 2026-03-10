@@ -19,6 +19,7 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
+import { teachChatbot, chatWithKnowledge } from './chatbot.js';
 
 
 // Load environment variables
@@ -1429,7 +1430,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
     const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
-    
+
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
@@ -1486,7 +1487,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
     // until the frontend is fully decoupled from the Firebase SDK.
     const customToken = await admin.auth().createCustomToken(user.uid, {
-        role: user.role // Embed role into token if you like
+      role: user.role // Embed role into token if you like
     });
 
     return res.json({
@@ -4781,6 +4782,57 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
 });
 
 // POST - Admin Approve School
+// --- CHATBOT KNOWLEDGE TEACHING ---
+app.post('/api/admin/teach', async (req, res) => {
+  const bb = busboy({ headers: req.headers });
+  let content = "";
+  let filePath = null;
+  const tempFiles = [];
+
+  bb.on('file', (name, file, info) => {
+    const { filename, mimeType } = info;
+    if (mimeType === 'application/pdf') {
+      const savePath = path.join(process.cwd(), 'storage', `teach_${Date.now()}_${filename}`);
+      filePath = savePath;
+      tempFiles.push(savePath);
+      file.pipe(fs.createWriteStream(savePath));
+    } else {
+      file.resume();
+    }
+  });
+
+  bb.on('field', (name, val) => {
+    if (name === 'content') content = val;
+  });
+
+  bb.on('finish', async () => {
+    try {
+      const result = await teachChatbot(content, filePath);
+      // Cleanup temp files
+      tempFiles.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
+      res.json(result);
+    } catch (err) {
+      console.error("Chatbot Teaching Failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  req.pipe(bb);
+});
+
+// --- CHATBOT CHAT ---
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: "Question is required" });
+    const answer = await chatWithKnowledge(question);
+    res.json({ answer });
+  } catch (err) {
+    console.error("Chatbot Error:", err);
+    res.status(500).json({ error: "Failed to get answer from chatbot" });
+  }
+});
+
 app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
   const { pending_id } = req.params;
   const { reviewed_by, reviewed_by_name } = req.body;
@@ -12845,8 +12897,85 @@ app.get('/api/reports/insights', async (req, res) => {
 
 // Force start for PM2 (since isMainModule is false in PM2 fork mode)
 
-// Redundant initialization block removed to prevent route shadowing and port conflicts.
-// The main server startup is handled by startServer() at the end of the file.
+// --- UNIFIED INITIALIZATION & STARTUP ---
+const initializeAndStart = async () => {
+  console.log("🚀 Starting InsightEd API Initialization...");
+
+  try {
+    // 1. Initial Primary Connection
+    const client = await pool.connect();
+    isDbConnected = true;
+    console.log('✅ Connected to Postgres Database (Primary) successfully!');
+
+    try {
+      // 2. Sequential Migrations
+      console.log("📦 Starting Database Initializations...");
+
+      console.log("  -> Initializing OTP Table...");
+      await initOtpTable(pool);
+
+      console.log("  -> Initializing Core DB...");
+      console.log(`     (Pool Status: Total=${pool.totalCount}, Idle=${pool.idleCount}, Waiting=${pool.waitingCount})`);
+      await initDB();
+
+      console.log("  -> Initializing Finance DB...");
+      await initFinanceDB();
+
+      console.log("  -> Initializing Masterlist DB...");
+      await initMasterlistDB();
+
+      console.log("🛠️ Running Advanced Migrations (Primary)...");
+      await runLegacyMigrations(); // Legacy blob
+      await runMigrations(client, "Primary"); // Versioned migrations
+
+      // 3. Secondary Database (Optional/Dual-Write)
+      if (poolNew) {
+        console.log("🔄 Initializing Secondary Database...");
+        const clientNew = await poolNew.connect();
+        try {
+          await runMigrations(clientNew, "Secondary");
+        } finally {
+          clientNew.release();
+        }
+      }
+
+    } finally {
+      client.release();
+    }
+
+    console.log("✨ All Initializations Complete.");
+
+    // 4. Start Listener
+    const PORT = process.env.PORT || 3000;
+    const server = app.listen(PORT, () => {
+      console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
+      console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
+      console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+    });
+
+    server.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+      } else {
+        console.error("❌ Server Error:", e);
+      }
+    });
+
+  } catch (err) {
+    console.error('❌ FATAL: Initialization Failed:', err.message);
+    console.warn('⚠️  Server might be in an inconsistent state.');
+
+    // Attempt fallback start if possible or exit
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    } else {
+      console.log("⚠️ Continuing in Degraded/Mock mode for development...");
+      isDbConnected = false;
+      const PORT = process.env.PORT || 3000;
+      app.listen(PORT, () => console.log(`🚀 DEGRADED SERVER RUNNING ON PORT ${PORT}`));
+    }
+  }
+};
 
 
 
@@ -14281,8 +14410,8 @@ app.post('/api/user/progress', async (req, res) => {
 
 // Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'online', 
+  res.json({
+    status: 'online',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     pid: process.pid
