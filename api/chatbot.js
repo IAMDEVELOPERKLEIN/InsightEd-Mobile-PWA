@@ -9,26 +9,14 @@ dotenv.config();
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const EMBEDDING_MODEL = process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text";
 const CHAT_MODEL = process.env.OLLAMA_CHAT_MODEL || "llama3";
-const STORAGE_PATH = path.join(process.cwd(), 'storage', 'chatbot_knowledge_ollama.json');
 
-// --- DATABASE SIMULATION (InMemory Vector Store) ---
-let knowledgeBase = [];
+let pool = null;
 
-// Load existing knowledge if any
-if (fs.existsSync(STORAGE_PATH)) {
-    try {
-        knowledgeBase = JSON.parse(fs.readFileSync(STORAGE_PATH, 'utf8'));
-        console.log(`Loaded ${knowledgeBase.length} knowledge chunks.`);
-    } catch (e) {
-        console.error("Error loading knowledge base:", e);
-    }
-}
-
-const saveKnowledge = () => {
-    if (!fs.existsSync(path.dirname(STORAGE_PATH))) {
-        fs.mkdirSync(path.dirname(STORAGE_PATH), { recursive: true });
-    }
-    fs.writeFileSync(STORAGE_PATH, JSON.stringify(knowledgeBase, null, 2));
+/**
+ * Injects the database pool into the chatbot module.
+ */
+export const setPool = (dbPool) => {
+    pool = dbPool;
 };
 
 // --- SIMILARITY SEARCH ---
@@ -52,8 +40,8 @@ function cosineSimilarity(A, B) {
  * Ingests text or PDF files into the knowledge base.
  */
 export const teachChatbot = async (text, filePath = null) => {
-    // No external API key needed for Ollama
-    // But we check if the Ollama server is accessible
+    if (!pool) throw new Error("Database pool not initialized.");
+
     try {
         await fetch(`${OLLAMA_BASE_URL}/api/tags`);
     } catch (e) {
@@ -80,7 +68,6 @@ export const teachChatbot = async (text, filePath = null) => {
 
     if (!content.trim()) return { success: false, message: "No content to ingest." };
 
-    // Simple chunking (by paragraphs or fixed length)
     const chunks = content.split(/\n\s*\n/).filter(c => c.trim().length > 10);
 
     for (const chunk of chunks) {
@@ -93,24 +80,21 @@ export const teachChatbot = async (text, filePath = null) => {
 
             if (!resp.ok) {
                 const errText = await resp.text();
-                console.error("Embedding API Error:", errText);
                 throw new Error(errText);
             }
 
             const result = await resp.json();
             const embedding = result.embedding;
 
-            knowledgeBase.push({
-                text: chunk,
-                embedding: embedding,
-                metadata: { source, timestamp: new Date().toISOString() }
-            });
+            await pool.query(
+                'INSERT INTO chatbot_knowledge (content, embedding, metadata) VALUES ($1, $2, $3)',
+                [chunk, JSON.stringify(embedding), JSON.stringify({ source, timestamp: new Date().toISOString() })]
+            );
         } catch (e) {
-            console.error("Embedding error for chunk:", e);
+            console.error("Embedding/DB error for chunk:", e);
         }
     }
 
-    saveKnowledge();
     return { success: true, count: chunks.length };
 };
 
@@ -118,12 +102,29 @@ export const teachChatbot = async (text, filePath = null) => {
  * Queries the knowledge base and generates an answer using Gemini.
  */
 export const chatWithKnowledge = async (question) => {
-    if (knowledgeBase.length === 0) {
-        return "I'm sorry, I don't have information on that yet. Please contact the helpdesk for further assistance.";
-    }
+    if (!pool) return "I'm sorry, my database is currently offline. Please try again later.";
+
+    console.log(`\n🤖 Chatbot Processing Question: "${question}"`);
+    const startTime = performance.now();
 
     try {
-        // 1. Get embedding for the question via Ollama
+        // 1. Fetch all knowledge base items (since we rank in-memory)
+        const dbStart = performance.now();
+        const kbResult = await pool.query('SELECT content, embedding FROM chatbot_knowledge');
+        const dbEnd = performance.now();
+
+        const kbItems = kbResult.rows.map(item => ({
+            text: item.content,
+            embedding: typeof item.embedding === 'string' ? JSON.parse(item.embedding) : item.embedding
+        }));
+        console.log(`⏱️ DB Fetch: ${(dbEnd - dbStart).toFixed(2)}ms (${kbItems.length} items)`);
+
+        if (kbItems.length === 0) {
+            return "I'm sorry, I don't have information on that yet. Please contact the helpdesk for further assistance.";
+        }
+
+        // 2. Get embedding for the question
+        const embedStart = performance.now();
         const embedResp = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -136,14 +137,19 @@ export const chatWithKnowledge = async (question) => {
 
         const embedResult = await embedResp.json();
         const qEmbedding = embedResult.embedding;
+        const embedEnd = performance.now();
+        console.log(`⏱️ Embedding Gen: ${(embedEnd - embedStart).toFixed(2)}ms`);
 
-        // 2. Search for relevant chunks
-        const scoredChunks = knowledgeBase.map(item => ({
+        // 3. Search for relevant chunks
+        const searchStart = performance.now();
+        const scoredChunks = kbItems.map(item => ({
             ...item,
             score: cosineSimilarity(qEmbedding, item.embedding)
         })).sort((a, b) => b.score - a.score);
 
-        const topChunks = scoredChunks.slice(0, 3).filter(c => c.score > 0.4); // Threshold
+        const topChunks = scoredChunks.slice(0, 3).filter(c => c.score > 0.4);
+        const searchEnd = performance.now();
+        console.log(`⏱️ Similarity Search: ${(searchEnd - searchStart).toFixed(2)}ms`);
 
         if (topChunks.length === 0) {
             return "I'm sorry, I don't have information on that yet. Please contact the helpdesk for further assistance.";
@@ -151,7 +157,7 @@ export const chatWithKnowledge = async (question) => {
 
         const context = topChunks.map(c => c.text).join("\n\n");
 
-        // 3. Generate answer via Ollama
+        // 4. Generate answer
         const prompt = `
 Answer the user's question ONLY using the provided context. 
 If the answer isn't in the context, say "I'm sorry, I don't have information on that yet. Please contact the helpdesk for further assistance."
@@ -163,6 +169,7 @@ ${context}
 User Question: ${question}
 `;
 
+        const genStart = performance.now();
         const generateResp = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -178,6 +185,12 @@ User Question: ${question}
         }
 
         const genResult = await generateResp.json();
+        const genEnd = performance.now();
+        console.log(`⏱️ LLM Generation: ${(genEnd - genStart).toFixed(2)}ms`);
+
+        const totalTime = (performance.now() - startTime).toFixed(2);
+        console.log(`✅ Chatbot Total Response Time: ${totalTime}ms\n`);
+
         return genResult.response;
     } catch (e) {
         console.error("Chat Error:", e);

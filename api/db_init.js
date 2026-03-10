@@ -680,6 +680,22 @@ const runMigrations = async (client, dbLabel) => {
             console.error(`❌ [${dbLabel}] Failed to migrate ph_schools columns:`, migErr.message);
         }
     }
+
+    // --- 18. CHATBOT KNOWLEDGE TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS chatbot_knowledge (
+                id SERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                embedding JSONB,
+                metadata JSONB DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log(`✅ [${dbLabel}] Chatbot Knowledge Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init chatbot_knowledge table:`, migErr.message);
+    }
 };
 
 export { initOtpTable, runMigrations };
