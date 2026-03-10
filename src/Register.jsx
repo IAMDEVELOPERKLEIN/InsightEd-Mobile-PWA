@@ -536,8 +536,18 @@ const Register = () => {
                     }
 
                     // Authenticate frontend using Custom Token
-                    const userCredential = await signInWithCustomToken(auth, regData.customToken);
-                    user = userCredential.user;
+                    // If Firebase Admin is not initialized (local dev), signInWithCustomToken may fail.
+                    // In that case, navigate to login page — the account was created successfully in DB.
+                    try {
+                        const userCredential = await signInWithCustomToken(auth, regData.customToken);
+                        user = userCredential.user;
+                    } catch (tokenErr) {
+                        console.warn("signInWithCustomToken failed (likely no Firebase Admin locally):", tokenErr.message);
+                        // Account was created in DB — redirect user to login
+                        alert("✅ Account created successfully!\n\nPlease log in with your new credentials.");
+                        navigate('/login');
+                        return;
+                    }
 
                 } catch (backendErr) {
                     console.error("Native Registration Failed:", backendErr);
@@ -545,21 +555,25 @@ const Register = () => {
                 }
 
                 // Persist to Firestore using the Native Backend UID
-                await setDoc(doc(db, "users", user.uid), {
-                    email: user.email,
-                    role: formData.role,
-                    firstName: formData.firstName || "User",
-                    lastName: formData.lastName || "",
-                    authProvider: "native",
-                    createdAt: new Date(),
-                    region: formData.region,
-                    division: formData.division,
-                    office: formData.office,
-                    position: formData.position,
-                    contactNumber: formData.contactNumber,
-                    altEmail: formData.altEmail,
-                    accountCategory: formData.accountCategory
-                });
+                try {
+                    await setDoc(doc(db, "users", user.uid), {
+                        email: user.email,
+                        role: formData.role,
+                        firstName: formData.firstName || "User",
+                        lastName: formData.lastName || "",
+                        authProvider: "native",
+                        createdAt: new Date(),
+                        region: formData.region,
+                        division: formData.division,
+                        office: formData.office,
+                        position: formData.position,
+                        contactNumber: formData.contactNumber,
+                        altEmail: formData.altEmail,
+                        accountCategory: formData.accountCategory
+                    });
+                } catch (fsErr) {
+                    console.warn("Firestore setDoc failed (non-fatal):", fsErr.message);
+                }
             }
 
             // STEP D: Success
@@ -1094,8 +1108,8 @@ const Register = () => {
                                                         required
                                                     >
                                                         <option value="">Select Account Category</option>
-                                                        <option value="DepEd">DepEd Division Engineer</option>
-                                                        <option value="Non-DepEd">Non-DepEd Engineer</option>
+                                                        <option value="DepEd Engineer">DepEd Division Engineer</option>
+                                                        <option value="Non-DepEd Engineer">Non-DepEd Engineer</option>
                                                     </select>
                                                 )}
                                             </div>

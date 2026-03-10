@@ -15,12 +15,16 @@ export const ServiceWorkerProvider = ({ children }) => {
         if ('serviceWorker' in navigator) {
             // Dynamically determine the base path from Vite's import.meta.env
             const basePath = import.meta.env.BASE_URL || '/';
-            // Construct the SW path. If base is '/', path is '/sw.js'. If base is '/foo/', path is '/foo/sw.js'
-            const swUrl = `${basePath}sw.js`.replace('//', '/');
+            // In Vite Dev mode, the PWA plugin exposes the SW at 'dev-sw.js?dev-sw' with ES module type.
+            const swFileName = import.meta.env.DEV ? 'dev-sw.js?dev-sw' : 'sw.js';
+            const swUrl = `${basePath}${swFileName}`.replace('//', '/');
 
             const registerSW = async () => {
                 try {
-                    const reg = await navigator.serviceWorker.register(swUrl, { scope: basePath });
+                    const reg = await navigator.serviceWorker.register(swUrl, { 
+                        scope: basePath,
+                        type: import.meta.env.DEV ? 'module' : 'classic'
+                    });
                     setRegistration(reg);
                     console.log('InsightEd PWA Registered at:', reg.scope);
 
