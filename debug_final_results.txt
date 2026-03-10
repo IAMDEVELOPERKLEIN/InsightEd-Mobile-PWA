@@ -1,0 +1,64 @@
+TOTAL_RECORDS: 9
+-----------------------------------
+Project ID: 419
+IPC: INF-2026-00019
+School ID: 105082
+School Name: Partida Elementary School
+Project Name: PROPOSED ONE (1) STOREY CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 05:31:07 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 418
+IPC: INF-2026-00019
+School ID: 105082
+School Name: Partida Elementary School
+Project Name: PROPOSED ONE (1) STOREY CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 05:06:41 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 417
+IPC: INF-2026-00019
+School ID: 105082
+School Name: Partida Elementary School
+Project Name: PROPOSED ONE (1) STOREY CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 05:01:24 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 416
+IPC: INF-2026-00018
+School ID: 306617
+School Name: Mariveles NHS Cab. Annex-Alasasin
+Project Name: CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 01:24:39 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 415
+IPC: INF-2026-00018
+School ID: 306617
+School Name: Mariveles NHS Cab. Annex-Alasasin
+Project Name: CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 01:09:35 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 414
+IPC: INF-2026-00018
+School ID: 306617
+School Name: Mariveles NHS Cab. Annex-Alasasin
+Project Name: CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 01:01:31 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 413
+IPC: INF-2026-00018
+School ID: 306617
+School Name: Mariveles NHS Cab. Annex-Alasasin
+Project Name: CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 00:56:44 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 412
+IPC: INF-2026-00018
+School ID: 306617
+School Name: Mariveles NHS Cab. Annex-Alasasin
+Project Name: CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 00:54:01 GMT+0800 (Philippine Standard Time)
+-----------------------------------
+Project ID: 411
+IPC: INF-2026-00018
+School ID: 306617
+School Name: Mariveles NHS Cab. Annex-Alasasin
+Project Name: CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING
+Created At: Mon Mar 09 2026 00:42:23 GMT+0800 (Philippine Standard Time)

@@ -22,6 +22,15 @@ const EFDHome = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [efdLocations, setEfdLocations] = useState([]);
 
+    const handleClearFilters = () => {
+        setSelectedRegion('');
+        setSelectedDivision('');
+        setSelectedCategory('');
+        setSelectedFundingYear('');
+        setSelectedDonated('All');
+        setSearchTerm('');
+    };
+
     const categories = [
         "New Construction",
         "Repair and Rehab",
@@ -219,9 +228,19 @@ const EFDHome = () => {
                     </div>
 
                     <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4 max-w-7xl mx-auto w-full">
-                        <div className="flex items-center gap-2 mb-1 px-1">
-                            <FiFilter className="text-blue-500" />
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Advanced Filters</span>
+                        <div className="flex items-center justify-between mb-1 px-1">
+                            <div className="flex items-center gap-2">
+                                <FiFilter className="text-blue-500" />
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Advanced Filters</span>
+                            </div>
+                            {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || searchTerm) && (
+                                <button 
+                                    onClick={handleClearFilters}
+                                    className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full transition-all active:scale-95"
+                                >
+                                    Clear Filters
+                                </button>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

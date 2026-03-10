@@ -143,6 +143,7 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS position TEXT,
             ADD COLUMN IF NOT EXISTS contact_number TEXT,
             ADD COLUMN IF NOT EXISTS alt_email TEXT,
+            ADD COLUMN IF NOT EXISTS account_category TEXT, -- DepEd vs Non-DepEd
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
         console.log(`✅ [${dbLabel}] Users Table Schema Updated`);
@@ -332,6 +333,9 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS engineer_name TEXT,
             ADD COLUMN IF NOT EXISTS funding_year INTEGER,
             ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
+            ADD COLUMN IF NOT EXISTS uploader_type TEXT, -- EFD, Division Engineer, Non-DepEd Engineer
+            ADD COLUMN IF NOT EXISTS rta_pdf TEXT,
+            ADD COLUMN IF NOT EXISTS moa_pdf TEXT,
             ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE;
         `);
 

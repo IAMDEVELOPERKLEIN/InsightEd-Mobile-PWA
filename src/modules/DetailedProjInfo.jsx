@@ -9,6 +9,7 @@ import { auth } from '../firebase';
 import EditProjectModal from '../components/EditProjectModal';
 import { compressImage } from '../utils/imageCompression';
 import { LuHistory, LuUser, LuCalendar, LuX } from "react-icons/lu";
+import { FiSettings } from 'react-icons/fi';
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
 const RemarksHistory = ({ history, loading, currentRemarks }) => {
@@ -432,6 +433,8 @@ const DetailedProjInfo = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [selectedZoomImage, setSelectedZoomImage] = useState(null);
     const [activeCategory, setActiveCategory] = useState('Internal');
+    const [userRole, setUserRole] = useState(null);
+
 
     // Helper to extract image source correctly
     const getImageSrc = (imageItem) => {
@@ -623,7 +626,22 @@ const DetailedProjInfo = () => {
             }
         };
 
+        const fetchUserRole = async () => {
+            if (auth.currentUser) {
+                try {
+                    const res = await fetch(`/api/user-info/${auth.currentUser.uid}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setUserRole(data.role);
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch user role:", err);
+                }
+            }
+        };
 
+        fetchUserRole();
+        fetchProjectDetails();
         const fetchImages = async () => {
             if (type === 'LGU') return; // LGU images handled in main fetch
 
@@ -846,8 +864,6 @@ const DetailedProjInfo = () => {
                     <button onClick={() => navigate(-1)} className="absolute top-8 left-6 text-blue-200 hover:text-white text-sm font-bold flex items-center gap-1">
                         ← Back
                     </button>
-
-                    {/* EDIT BUTTON REMOVED PER USER REQUEST */}
 
                     <div className="mt-8 text-center relative z-10">
                         {/* Premium ID Badges */}
@@ -1267,7 +1283,7 @@ const DetailedProjInfo = () => {
                     <div>
                         <h3 className="text-slate-700 font-bold text-sm mb-2 ml-1">Project Documents</h3>
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-2">
-                            {['pow_pdf', 'dupa_pdf', 'contract_pdf'].map(docKey => {
+                            {['pow_pdf', 'dupa_pdf', 'contract_pdf', 'rta_pdf', 'moa_pdf'].map(docKey => {
                                 const docValue = project[docKey];
                                 let label = docKey.replace('_pdf', '').toUpperCase();
                                 return (
@@ -1440,6 +1456,7 @@ const DetailedProjInfo = () => {
                     onRemoveFile={removeFile}
                     isUploading={isUploading}
                     voHistory={voHistory}
+                    userRole={userRole}
                 />
                 {/* --- ZOOM MODAL (PORTALLED) --- */}
                 {selectedZoomImage && createPortal(

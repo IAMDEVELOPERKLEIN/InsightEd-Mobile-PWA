@@ -52,8 +52,8 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // --- DATABASE CONNECTION ---
 // Robust .env parsing for UTF-16LE support
@@ -147,12 +147,7 @@ const initDB = async () => {
       -- Add savings column
       ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
 
-      DO $$
-      BEGIN
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='status') THEN
-          ALTER TABLE engineer_form RENAME COLUMN status TO status_of_construction_phase;
-        END IF;
-      END $$;
+      -- Column 'status' is already correct.
 
       ALTER TABLE engineer_form 
       ADD COLUMN IF NOT EXISTS status_design_phase TEXT,
@@ -5436,7 +5431,7 @@ app.post('/api/register-beta', async (req, res) => {
 
 // --- 3f. POST: Register Generic User (Engineer, RO, SDO) ---
 app.post('/api/register-user', async (req, res) => {
-  const { uid, email, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail } = req.body;
+  const { uid, email, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
 
   if (!uid || !email || !role) {
     return res.status(400).json({ error: "Missing required fields (uid, email, role)" });
@@ -5448,10 +5443,11 @@ app.post('/api/register-user', async (req, res) => {
                 uid, email, role, created_at,
                 first_name, last_name,
                 region, division, province, city, barangay,
-                office, position, contact_number, alt_email
+                office, position, contact_number, alt_email,
+                account_category
             ) VALUES (
                 $1, $2, $3, CURRENT_TIMESTAMP,
-                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -5466,8 +5462,18 @@ app.post('/api/register-user', async (req, res) => {
                 office = EXCLUDED.office,
                 position = EXCLUDED.position,
                 contact_number = EXCLUDED.contact_number,
-                alt_email = EXCLUDED.alt_email;
+                alt_email = EXCLUDED.alt_email,
+                account_category = EXCLUDED.account_category;
         `;
+
+    await pool.query(query, [
+      uid, email, role,
+      firstName, lastName,
+      region, division, province, city, barangay,
+      office, position, contactNumber, altEmail,
+      accountCategory
+    ]);
+
 
     const values = [
       uid, email, role,
@@ -6538,7 +6544,8 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.revised_target_completion_date) || null, // $47
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed) || null, // $48
       valueOrNull(data.time_lapsed_percentage) || null, // $49
-      data.is_donated || false // $50
+      data.is_donated || false, // $50
+      data.uploader_type || null // $51
     ];
 
     const projectQuery = `
@@ -6556,8 +6563,8 @@ app.post('/api/save-project', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -6791,7 +6798,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.revised_target_completion_date) || oldData.revised_target_completion_date, // $47
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed || data.days_lapsed) || oldData.time_lapsed_days || oldData.time_lapsed, // $48
       valueOrNull(data.time_lapsed_percentage) || oldData.time_lapsed_percentage, // $49
-      data.isDonated !== undefined ? data.isDonated : (data.is_donated !== undefined ? data.is_donated : oldData.is_donated) // $50
+      data.isDonated !== undefined ? data.isDonated : (data.is_donated !== undefined ? data.is_donated : oldData.is_donated), // $50
+      data.uploader_type || oldData.uploader_type // $51
     ];
 
     const insertQuery = `
@@ -6809,8 +6817,8 @@ app.put('/api/update-project/:id', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
       RETURNING *;
     `;
 
@@ -6864,7 +6872,7 @@ app.put('/api/update-project/:id', async (req, res) => {
             additive_amount, deductive_amount, net_vo_amount, revised_contract_amount,
             original_target_completion_date, revised_target_completion_date,
             time_extension_days, revised_expiry_date, justification, caf_reference, 
-            status, revised_pow_pdf, revised_dupa_pdf, revised_contract_pdf, created_by,
+            status_of_construction_phase, revised_pow_pdf, revised_dupa_pdf, revised_contract_pdf, created_by,
             justification_category, justification_details, previous_vo_total, original_expiry_date
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
         `;
@@ -6892,7 +6900,7 @@ app.put('/api/update-project/:id', async (req, res) => {
         // The `insertQuery` is an INSERT (Append Only).
         // It relies on `oldData` which came from Primary DB.
         // We can use the SAME `insertValues`!
-        // The `insertValues` contains primitive data (status, etc.) and `finalUserName`.
+        // The `insertValues` contains primitive data (status_of_construction_phase, etc.) and `finalUserName`.
         // It does NOT contain `project_id` reference (except implicitly? No, engineer_form PK is `project_id` serial).
         // Wait, `insertQuery` inserts a NEW row. 
         // Is `engineer_form` storing `school_id`? Yes.
@@ -6913,7 +6921,7 @@ app.put('/api/update-project/:id', async (req, res) => {
 
     // 3. Track Changes (History)
     const changes = [];
-    if (oldData.status_of_construction_phase !== newData.status_of_construction_phase) changes.push(`Status: '${oldData.status_of_construction_phase}' -> '${newData.status_of_construction_phase}'`);
+    if (oldData.status_of_construction_phase !== newData.status) changes.push(`Status: '${oldData.status_of_construction_phase}' -> '${newData.status_of_construction_phase}'`);
     if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
     if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
 
@@ -7133,29 +7141,26 @@ app.get('/api/projects', async (req, res) => {
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-            pow_pdf, dupa_pdf, contract_pdf,
+            pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf,
             actions, savings, funding_year, funding_year_justification, is_donated
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
       SELECT
         p.project_id AS "id", p.school_name AS "schoolName", p.project_name AS "projectName",
-        p.school_id AS "schoolId", p.division, p.region, p.status, p.ipc, p.engineer_name AS "engineerName",
+        p.school_id AS "schoolId", p.division, p.region, p.status AS "status", p.ipc, p.engineer_name AS "engineerName",
         p.accomplishment_percentage AS "accomplishmentPercentage",
         p.approved_budget_for_contract AS "projectAllocation", 
         p.contract_amount AS "contractAmount", p.contract_amount AS "contract_amount",
         p.batch_of_funds AS "batchOfFunds",
         p.contractor_name AS "contractorName", p.other_remarks AS "otherRemarks",
-        TO_CHAR(p.status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
-        TO_CHAR(p.target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
-        TO_CHAR(p.actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
-        TO_CHAR(p.notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
-        TO_CHAR(p.construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
+        p.status_as_of AS "statusAsOf", p.target_completion_date AS "targetCompletionDate",
+        p.actual_completion_date AS "actualCompletionDate", p.notice_to_proceed AS "noticeToProceed",
+        p.latitude, p.longitude, p.construction_start_date AS "constructionStartDate",
         p.project_category AS "projectCategory", p.scope_of_work AS "scopeOfWork",
         p.number_of_classrooms AS "numberOfClassrooms", p.number_of_storeys AS "numberOfStoreys",
         p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
-        p.pow_pdf, p.dupa_pdf, p.contract_pdf,
-        p.latitude, p.longitude,
+        p.pow_pdf, p.dupa_pdf, p.contract_pdf, p.rta_pdf, p.moa_pdf,
         p.actions AS "updateType",
         (p.actions LIKE 'Realignment%') AS "isRealigned",
         p.savings,
@@ -7298,7 +7303,7 @@ app.get('/api/projects/:id', async (req, res) => {
         project_category AS "projectCategory", scope_of_work AS "scopeOfWork",
         number_of_classrooms AS "numberOfClassrooms", number_of_storeys AS "numberOfStoreys",
         number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
-        pow_pdf, dupa_pdf, contract_pdf,
+        pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf,
         latitude, longitude,
         actions AS "updateType",
         (actions IS NOT NULL AND actions LIKE 'Realignment%') AS "isRealigned",
@@ -7333,7 +7338,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
     const query = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status_of_construction_phase AS "status", validation_status, ipc,
+        school_id AS "schoolId", division, region, status_of_construction_phase AS "status", validation_status_of_construction_phase, ipc,
         validation_remarks AS "validationRemarks", validated_by AS "validatedBy",
         accomplishment_percentage AS "accomplishmentPercentage",
         approved_budget_for_contract AS "approved_budget_for_contract",
@@ -7430,14 +7435,14 @@ app.delete('/api/projects/:id', async (req, res) => {
 
 // --- 11c. POST: Validate Project (School Head) ---
 app.post('/api/validate-project', async (req, res) => {
-  const { projectId, status, userUid, userName, remarks } = req.body;
+  const { projectId, status_of_construction_phase, userUid, userName, remarks } = req.body;
   try {
     const query = `
       UPDATE "engineer_form" 
       SET validation_status = $1, validation_remarks = $3, validated_by = $4
       WHERE project_id = $2;
     `;
-    await pool.query(query, [status, projectId, remarks || '', userName]);
+    await pool.query(query, [status_of_construction_phase, projectId, remarks || '', userName]);
 
     await logActivity(
       userUid,
@@ -7454,7 +7459,7 @@ app.post('/api/validate-project', async (req, res) => {
     if (poolNew) {
       try {
         console.log("ðŸ”„ Dual-Write: Syncing Project Validation...");
-        await poolNew.query(query, [status, projectId, remarks || '', userName]);
+        await poolNew.query(query, [status_of_construction_phase, projectId, remarks || '', userName]);
         console.log("âœ… Dual-Write: Project Validation Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Validate Project):", dwErr.message);
@@ -7583,17 +7588,31 @@ app.post('/api/upload-image', async (req, res) => {
 // --- 20b. POST: Upload Project Document (Sequential) ---
 app.post('/api/upload-project-document', async (req, res) => {
   const { projectId, type, base64, uid } = req.body;
-  if (!projectId || !type || !base64) return res.status(400).json({ error: "Missing required data" });
+
+  console.log(`📂 Incoming Doc Upload: [${type}] for Project [${projectId}]`);
+  console.log(`   - Payload Size: ${(JSON.stringify(req.body).length / (1024 * 1024)).toFixed(2)} MB`);
+
+  if (!projectId || !type || !base64) {
+    console.error("❌ Missing required data for upload", { projectId, type, hasBase64: !!base64 });
+    return res.status(400).json({ error: "Missing required data" });
+  }
 
   let column = '';
   if (type === 'POW') column = 'pow_pdf';
   else if (type === 'DUPA') column = 'dupa_pdf';
   else if (type === 'CONTRACT') column = 'contract_pdf';
-  else return res.status(400).json({ error: "Invalid document type" });
+  else if (type === 'RTA') column = 'rta_pdf';
+  else if (type === 'MOA') column = 'moa_pdf';
+  else {
+    console.error(`❌ Invalid document type: ${type}`);
+    return res.status(400).json({ error: "Invalid document type" });
+  }
 
   try {
     const query = `UPDATE engineer_form SET ${column} = $1 WHERE project_id = $2`;
-    await pool.query(query, [base64, projectId]);
+    const result = await pool.query(query, [base64, parseInt(projectId)]);
+
+    console.log(`✅ Database Update Result: ${result.rowCount} row(s) updated.`);
 
     // Optional: Log activity
     // await logActivity(uid, 'Engineer', 'Engineer', 'UPLOAD', \`Project ID: \${projectId}\`, \`Uploaded \${type}\`);
@@ -7602,7 +7621,7 @@ app.post('/api/upload-project-document', async (req, res) => {
     if (poolNew) {
       try {
         // Get IPC to find project on secondary
-        const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+        const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
         if (ipcRes.rows.length > 0) {
           const ipc = ipcRes.rows[0].ipc;
           await poolNew.query(`UPDATE engineer_form SET ${column} = $1 WHERE ipc = $2`, [base64, ipc]);
@@ -8674,12 +8693,12 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       for (const inv of data.inventoryEntries) {
         await client.query(`
                 INSERT INTO facility_inventory (
-                    school_id, iern, building_name, category, status,
+                    school_id, iern, building_name, category, status_of_construction_phase,
                     no_of_storeys, no_of_classrooms, year_completed, remarks
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             `, [
           data.schoolId, data.iern || data.schoolId,
-          inv.building_name, inv.category, inv.status,
+          inv.building_name, inv.category, inv.status_of_construction_phase,
           sanitize(inv.no_of_storeys) || 1, sanitize(inv.no_of_classrooms),
           inv.year_completed || null, inv.remarks || ''
         ]);
@@ -8751,12 +8770,12 @@ app.post('/api/save-physical-facilities', async (req, res) => {
             for (const inv of data.inventoryEntries) {
               await clientNew.query(`
                         INSERT INTO facility_inventory (
-                            school_id, iern, building_name, category, status,
+                            school_id, iern, building_name, category, status_of_construction_phase,
                             no_of_storeys, no_of_classrooms, year_completed, remarks
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     `, [
                 data.schoolId, data.iern || data.schoolId,
-                inv.building_name, inv.category, inv.status,
+                inv.building_name, inv.category, inv.status_of_construction_phase,
                 sanitize(inv.no_of_storeys) || 1, sanitize(inv.no_of_classrooms),
                 inv.year_completed || null, inv.remarks || ''
               ]);
@@ -8902,15 +8921,15 @@ app.get('/api/super-user/export-summary', async (req, res) => {
 
     if (region) {
       schoolParams.push(region);
-      schoolWhere.push(`TRIM(s.region) = TRIM($${schoolParams.length})`);
+      schoolWhere.push(`UPPER(TRIM(s.region)) = UPPER(TRIM($${schoolParams.length}))`);
     }
     if (division) {
       schoolParams.push(division);
-      schoolWhere.push(`TRIM(s.division) = TRIM($${schoolParams.length})`);
+      schoolWhere.push(`UPPER(TRIM(s.division)) = UPPER(TRIM($${schoolParams.length}))`);
     }
     if (district) {
       schoolParams.push(district);
-      schoolWhere.push(`TRIM(s.district) = TRIM($${schoolParams.length})`);
+      schoolWhere.push(`UPPER(TRIM(s.district)) = UPPER(TRIM($${schoolParams.length}))`);
     }
 
     if (schoolWhere.length > 0) schoolSql += ' WHERE ' + schoolWhere.join(' AND ');
@@ -8948,7 +8967,7 @@ app.get('/api/super-user/export-summary', async (req, res) => {
         COUNT(CASE WHEN status = 'Under Procurement' THEN 1 END) as under_procurement,
         COUNT(CASE WHEN status = 'For Final Inspection' THEN 1 END) as for_final_inspection
       FROM (
-        SELECT DISTINCT ON (ipc) project_id, status, region, division
+        SELECT DISTINCT ON (ipc) project_id, status_of_construction_phase, region, division
         FROM engineer_form
         ORDER BY ipc, project_id DESC
       ) latest
@@ -8958,11 +8977,11 @@ app.get('/api/super-user/export-summary', async (req, res) => {
 
     if (region) {
       engParams.push(region);
-      engWhere.push(`TRIM(latest.region) = TRIM($${engParams.length})`);
+      engWhere.push(`UPPER(TRIM(latest.region)) = UPPER(TRIM($${engParams.length}))`);
     }
     if (division) {
       engParams.push(division);
-      engWhere.push(`TRIM(latest.division) = TRIM($${engParams.length})`);
+      engWhere.push(`UPPER(TRIM(latest.division)) = UPPER(TRIM($${engParams.length}))`);
     }
 
     if (engWhere.length > 0) engSql += ' WHERE ' + engWhere.join(' AND ');
@@ -9021,17 +9040,17 @@ app.get('/api/monitoring/stats', async (req, res) => {
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE TRIM(s.region) = TRIM($1)
+      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1))
     `;
     let params = [region];
 
     if (division) {
-      statsQuery += ` AND TRIM(s.division) = TRIM($2)`;
+      statsQuery += ` AND UPPER(TRIM(s.division)) = UPPER(TRIM($2))`;
       params.push(division);
     }
 
     if (req.query.district) {
-      statsQuery += ` AND TRIM(s.district) = TRIM($${params.length + 1})`;
+      statsQuery += ` AND UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`;
       params.push(req.query.district);
     }
 
@@ -10198,7 +10217,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
 
     // common SELECT fields with SAFE casting
     // We use schools table (s) for identity
-    // We use school_profiles (sp) for status, handling NULLs with COALESCE
+    // We use school_profiles (sp) for status_of_construction_phase, handling NULLs with COALESCE
     const selectFields = `
       sp.*,
       s.school_name,
@@ -10274,7 +10293,7 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
     let query = `
       WITH LatestProjects AS (
         SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-          school_id, accomplishment_percentage, status_of_construction_phase, approved_budget_for_contract, contract_amount, region, division
+          school_id, accomplishment_percentage, status_of_construction_phase AS status, approved_budget_for_contract, contract_amount, region, division
         FROM engineer_form
         ORDER BY COALESCE(ipc, project_id::text), created_at DESC
       )
@@ -10288,17 +10307,17 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
         COALESCE(SUM(p.contract_amount), 0) as total_contract_amount
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
-      WHERE TRIM(p.region) = TRIM($1)
+      WHERE UPPER(TRIM(p.region)) = UPPER(TRIM($1))
     `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(p.division) = TRIM($2)`;
+      query += ` AND UPPER(TRIM(p.division)) = UPPER(TRIM($2))`;
       params.push(division);
     }
 
     if (req.query.district) {
-      query += ` AND TRIM(sp.district) = TRIM($${params.length + 1})`;
+      query += ` AND UPPER(TRIM(sp.district)) = UPPER(TRIM($${params.length + 1}))`;
       params.push(req.query.district);
     }
 
@@ -10317,25 +10336,25 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
     let query = `
       WITH LatestProjects AS (
          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-            project_id, project_name, school_id, school_name, accomplishment_percentage, status_of_construction_phase, 
+            project_id, project_name, school_id, school_name, accomplishment_percentage, status_of_construction_phase AS status, 
             approved_budget_for_contract, contract_amount, validation_status, status_as_of, region, division, created_at
          FROM engineer_form
          ORDER BY COALESCE(ipc, project_id::text), created_at DESC
       )
       SELECT
         p.project_id as id, p.project_name as "projectName", p.school_id as "schoolId", p.school_name as "schoolName",
-        p.accomplishment_percentage as "accomplishmentPercentage", p.status_of_construction_phase as status, 
+        p.accomplishment_percentage as "accomplishmentPercentage", p.status_of_construction_phase as status_of_construction_phase, 
         p.approved_budget_for_contract as "projectAllocation",
         p.contract_amount as "contractAmount",
         p.validation_status as "validation_status", p.status_as_of as "statusAsOfDate"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
-      WHERE TRIM(p.region) = TRIM($1)
+      WHERE UPPER(TRIM(p.region)) = UPPER(TRIM($1))
     `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(p.division) = TRIM($2)`;
+      query += ` AND UPPER(TRIM(p.division)) = UPPER(TRIM($2))`;
       params.push(division);
     }
 
@@ -10486,7 +10505,7 @@ app.get('/api/monitoring/regions', async (req, res) => {
           COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Delayed' THEN 1 END) as delayed_projects
         FROM (
           SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-            region, approved_budget_for_contract, contract_amount, accomplishment_percentage, status_of_construction_phase
+            region, approved_budget_for_contract, contract_amount, accomplishment_percentage, status
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), created_at DESC
         ) LatestProjects
@@ -11015,7 +11034,7 @@ app.get('/api/debug/health-stats', async (req, res) => {
   try {
     const query = `
       SELECT 
-        COALESCE(data_health_description, 'NULL') as status, 
+        COALESCE(data_health_description, 'NULL') as status_of_construction_phase, 
         COUNT(*) as count 
       FROM school_profiles 
       WHERE completion_percentage = 100 
@@ -11034,7 +11053,7 @@ app.get('/api/debug/health-stats', async (req, res) => {
 app.get('/api/user-info/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT role, first_name, last_name FROM users WHERE uid = $1', [uid]);
+    const result = await pool.query('SELECT role, first_name, last_name, account_category FROM users WHERE uid = $1', [uid]);
     if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
     res.json(result.rows[0]);
   } catch (err) {
@@ -11158,7 +11177,7 @@ app.post('/api/lgu/save-project', async (req, res) => {
     const projectQuery = `
       INSERT INTO "lgu_forms" (
         project_name, school_name, school_id, region, division,
-        status, accomplishment_percentage, status_as_of,
+        status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
         lgu_id, ipc, lgu_name, latitude, longitude,
@@ -11234,7 +11253,7 @@ app.post('/api/lgu/save-project', async (req, res) => {
     const logDetails = {
       action: "LGU Project Created",
       ipc: newIpc,
-      status: data.status,
+      status: data.status_of_construction_phase,
       timestamp: new Date().toISOString()
     };
 
@@ -11320,7 +11339,7 @@ app.post('/api/finance/projects', async (req, res) => {
             root_project_id, 
             school_id, school_name, project_name, region, division, municipality, district, legislative_district,
             total_funds, fund_released, date_of_release,
-            source_agency, project_status, accomplishment_percentage
+            source_agency, project_status_of_construction_phase, accomplishment_percentage
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
     `;
 
@@ -11445,6 +11464,8 @@ app.post('/api/lgu/upload-project-document', async (req, res) => {
   if (type === 'POW') column = 'pow_pdf';
   else if (type === 'DUPA') column = 'dupa_pdf';
   else if (type === 'CONTRACT') column = 'contract_pdf';
+  else if (type === 'RTA') column = 'rta_pdf';
+  else if (type === 'MOA') column = 'moa_pdf';
   else return res.status(400).json({ error: "Invalid document type" });
 
   try {
@@ -11681,7 +11702,7 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
 
     const values = [
       data.projectName, data.schoolName, data.schoolId,
-      data.status, parseIntOrNull(data.accomplishmentPercentage),
+      data.status_of_construction_phase, parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),

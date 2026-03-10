@@ -10,7 +10,9 @@ import { addEngineerToOutbox, getCachedProjects } from '../db';
 const DOC_TYPES = {
     POW: "Program of Works",
     DUPA: "DUPA",
-    CONTRACT: "Signed Contract"
+    CONTRACT: "Signed Contract",
+    RTA: "Resolution to Award (RTA)",
+    MOA: "Memorandum of Agreement (MOA)"
 };
 
 // Kept for offline fallback provided logic exists elsewhere, or for images if needed (though images use compressImage)
@@ -38,6 +40,7 @@ const NewProjects = () => {
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
     const [userRole, setUserRole] = useState(null);
+    const [accountCategory, setAccountCategory] = useState(null);
 
     // --- FETCH ROLE ---
     useEffect(() => {
@@ -56,6 +59,7 @@ const NewProjects = () => {
                     if (res.ok) {
                         const data = await res.json();
                         setUserRole(data.role);
+                        setAccountCategory(data.account_category);
                         // Double check API role too
                         if (data.role === 'Super User') {
                             alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access.");
@@ -95,7 +99,9 @@ const NewProjects = () => {
     const [documents, setDocuments] = useState({
         POW: null,
         DUPA: null,
-        CONTRACT: null
+        CONTRACT: null,
+        RTA: null,
+        MOA: null
     });
 
     // 1.) Category Choices
@@ -641,7 +647,9 @@ const NewProjects = () => {
                 images: compressedImages,
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
-                statusAsOfDate: new Date().toISOString()
+                statusAsOfDate: new Date().toISOString(),
+                uploader_type: userRole === 'EFD' ? 'EFD' : 
+                               (userRole === 'Division Engineer' && accountCategory === 'Non-DepEd' ? 'Non-DepEd Engineer' : 'Division Engineer')
             };
 
             // --- OFFLINE/ONLINE CHECK ---
@@ -727,6 +735,8 @@ const NewProjects = () => {
             if (documents.POW) await uploadDoc('POW', documents.POW);
             if (documents.DUPA) await uploadDoc('DUPA', documents.DUPA);
             if (documents.CONTRACT) await uploadDoc('CONTRACT', documents.CONTRACT);
+            if (documents.RTA && userRole === 'EFD') await uploadDoc('RTA', documents.RTA);
+            if (documents.MOA && userRole === 'EFD') await uploadDoc('MOA', documents.MOA);
             const ipc = projectData.ipc;
 
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
@@ -1141,10 +1151,7 @@ const NewProjects = () => {
                                                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Awarding Date</label>
                                                 <input type="date" name="awarding_date" value={formData.awarding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
                                             </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Resolution to Award</label>
-                                                <input type="date" name="resolution_award_date" value={formData.resolution_award_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
-                                            </div>
+
                                         </div>
                                     </div>
                                 </div>
@@ -1391,8 +1398,15 @@ const NewProjects = () => {
                             </div>
                             <p className="text-xs text-slate-400 -mt-2 mb-2">Each document must be a PDF file.</p>
 
-                            {Object.entries(DOC_TYPES).map(([key, label]) => (
-                                <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                            {Object.entries(DOC_TYPES)
+                                .filter(([key]) => {
+                                    if (['RTA', 'MOA'].includes(key)) {
+                                        return userRole === 'EFD';
+                                    }
+                                    return true;
+                                })
+                                .map(([key, label]) => (
+                                    <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
