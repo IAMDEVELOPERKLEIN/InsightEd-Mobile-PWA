@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
-import { teachChatbot, chatWithKnowledge } from './chatbot.js';
+import { teachChatbot, chatWithKnowledge, setPool } from './chatbot.js';
 
 
 // Load environment variables
@@ -148,15 +148,15 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
       [schoolId]
     );
     if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
-    
+
     const row = schoolRes.rows[0];
     const totalUnits = 8;
     let completedUnitsCount = 0;
     let completedFlags = {};
     for (let i = 1; i <= totalUnits; i++) {
-        const val = parseInt(row[`unit${i}`]) || 0;
-        completedFlags[`unit${i}`] = val === 1;
-        if (val === 1) completedUnitsCount++;
+      const val = parseInt(row[`unit${i}`]) || 0;
+      completedFlags[`unit${i}`] = val === 1;
+      if (val === 1) completedUnitsCount++;
     }
     const overall_progress_percentage = row.unit_completion !== null
       ? parseFloat(parseFloat(row.unit_completion).toFixed(2))
@@ -170,7 +170,7 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
     let fastest_sprint = null;
     if (sprintRes.rows.length > 0) {
       const r = sprintRes.rows[0];
-      fastest_sprint = { unit: r.unit_id, time_text: `${Math.floor(r.duration_seconds/60)}m ${r.duration_seconds%60}s` };
+      fastest_sprint = { unit: r.unit_id, time_text: `${Math.floor(r.duration_seconds / 60)}m ${r.duration_seconds % 60}s` };
     }
 
     const divRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE division = $1`, [row.division]);
@@ -233,6 +233,9 @@ const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false }
 });
+
+// Inject pool into chatbot module
+setPool(pool);
 
 // --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
 let poolNew = null;
@@ -838,7 +841,7 @@ const initDB = async () => {
     console.log("✅ DB Init: ph_performance_logs schema verified.");
 
     // --- New: Integer-based Unit Completion Tracking ---
-    const unitCols = ['unit1','unit2','unit3','unit4','unit5','unit6','unit7','unit8'];
+    const unitCols = ['unit1', 'unit2', 'unit3', 'unit4', 'unit5', 'unit6', 'unit7', 'unit8'];
     for (const col of unitCols) {
       await checkAndAddColumn('ph_schools', col, 'SMALLINT DEFAULT 0');
     }
@@ -14381,13 +14384,13 @@ app.post('/api/user/progress', async (req, res) => {
       const col = `unit${unitId}_completed`;
       await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} BOOLEAN DEFAULT FALSE`);
       await pool.query(`UPDATE ph_schools SET ${col} = TRUE WHERE school_id = $1`, [schoolId]);
-      
+
       // Also update the new integer-based column (unit1-unit8) for the dashboard
       const unitNum = parseInt(unitId);
       if (unitNum >= 1 && unitNum <= 8) {
         await pool.query(`UPDATE ph_schools SET unit${unitNum} = 1 WHERE school_id = $1`, [schoolId]);
       }
-      
+
       // Log performance for the gamification metric
       if (duration_seconds !== undefined && duration_seconds !== null) {
         await pool.query(
