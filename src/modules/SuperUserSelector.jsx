@@ -148,6 +148,12 @@ const SuperUserSelector = () => {
                 case 'EFD':
                     navigate('/efd-dashboard');
                     break;
+                case 'Finance':
+                    navigate('/finance-dashboard');
+                    break;
+                case 'Implementing Agency':
+                    navigate('/agency-dashboard');
+                    break;
                 default:
                     break;
             }
@@ -311,11 +317,11 @@ const SuperUserSelector = () => {
                             </button>
                         </div>
                     </motion.div>
-                    
+
                     {/* CARD EFD: Engineering Facilities Division */}
                     <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
                         <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
-                             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                         </div>
                         <h3 className="text-xl font-bold text-slate-800 mb-2">EFD</h3>
                         <p className="text-sm text-slate-500 mb-6 flex-grow">Engineering Facilities Division</p>
@@ -404,6 +410,43 @@ const SuperUserSelector = () => {
                                 className="w-full py-2 bg-pink-600 text-white rounded-lg font-bold hover:bg-pink-700 transition"
                             >
                                 Enter 2026 Infrastructure Priorities View
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                    {/* CARD 8: Finance Dashboard */}
+                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
+                        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4 text-emerald-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-800 mb-2">Finance</h3>
+                        <p className="text-sm text-slate-500 mb-4 flex-grow">Manage Project Financials & Tranches</p>
+
+                        <div className="mt-auto w-full">
+                            <button
+                                onClick={() => handleSelection('Finance')}
+                                className="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition"
+                            >
+                                Enter Finance Dashboard
+                            </button>
+                        </div>
+                    </motion.div>
+                    {/* CARD 9: Implementing Agency Dashboard */}
+                    <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
+                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-800 mb-2">Implementing Agency</h3>
+                        <p className="text-sm text-slate-500 mb-4 flex-grow">Track MOA project distribution & external partners</p>
+
+                        <div className="mt-auto w-full">
+                            <button
+                                onClick={() => handleSelection('Implementing Agency')}
+                                className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition"
+                            >
+                                Enter Agency Dashboard
                             </button>
                         </div>
                     </motion.div>

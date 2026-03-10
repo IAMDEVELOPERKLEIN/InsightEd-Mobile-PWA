@@ -33,8 +33,9 @@ import Outbox from './modules/Outbox';
 import EngineerOutbox from './modules/EngineerOutbox';
 import SuperAdminDashboard from './modules/SuperAdminDashboard';
 import SuperUserSelector from './modules/SuperUserSelector';
-import FinanceDashboard from './modules/FinanceDashboard'; // Import FinanceDashboard
-import LguDashboard from './modules/LguDashboard'; // Import LguDashboard
+import FinanceDashboard from './modules/FinanceDashboard';
+import AgencyDashboard from './modules/AgencyDashboard';
+import LguDashboard from './modules/LguDashboard';
 import LguForms from './modules/LguForms'; // Import newly created LguForms
 import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
 import PSIP from './modules/PSIP'; // Import PSIP
@@ -152,6 +153,8 @@ const AnimatedRoutes = () => {
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
         <Route path="/efd-dashboard" element={<EFDHome />} />
+        <Route path="/finance-dashboard" element={<FinanceDashboard />} />
+        <Route path="/agency-dashboard" element={<AgencyDashboard />} />
         <Route path="/efd-monitoring" element={<EFDMonitoring />} />
         <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />
         <Route path="/school-management" element={<SchoolManagement />} />

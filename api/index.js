@@ -12,6 +12,8 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs'; // Added for seed
 import csv from 'csv-parser'; // Added for seed
+import { BlobServiceClient } from '@azure/storage-blob'; // --- AZURE BLOB STORAGE ---
+import busboy from 'busboy'; // --- FAST FILE PARSER ---
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
@@ -28,6 +30,19 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS
   }
 });
+
+// --- AZURE BLOB CLIENT ---
+let blobServiceClient;
+try {
+  if (process.env.AZURE_STORAGE_CONNECTION_STRING && process.env.AZURE_STORAGE_CONNECTION_STRING !== "ReplaceWithYourAzureStorageConnectionString") {
+    blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
+    console.log("✅ Azure Blob Storage Client Initialized");
+  } else {
+    console.warn("⚠️ AZURE_STORAGE_CONNECTION_STRING missing or invalid. PDF Streaming will be disabled.");
+  }
+} catch (error) {
+  console.error("❌ Failed to initialize Azure Blob Storage:", error.message);
+}
 
 // Destructure Pool from pg
 const { Pool } = pg;
@@ -165,7 +180,17 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS delay_reason TEXT,
       ADD COLUMN IF NOT EXISTS revised_target_completion_date DATE,
       ADD COLUMN IF NOT EXISTS time_lapsed_days INTEGER,
-      ADD COLUMN IF NOT EXISTS time_lapsed_percentage NUMERIC;
+      ADD COLUMN IF NOT EXISTS time_lapsed_percentage NUMERIC,
+      ADD COLUMN IF NOT EXISTS mode_of_project VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS tranche_1 NUMERIC,
+      ADD COLUMN IF NOT EXISTS tranche_2 NUMERIC,
+      ADD COLUMN IF NOT EXISTS tranche_3 NUMERIC,
+      ADD COLUMN IF NOT EXISTS implementing_agencies TEXT,
+      ADD COLUMN IF NOT EXISTS rta TEXT,
+      ADD COLUMN IF NOT EXISTS date_assigned DATE,
+      ADD COLUMN IF NOT EXISTS liquidated_tranche_1 NUMERIC DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS liquidated_tranche_2 NUMERIC DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS liquidated_tranche_3 NUMERIC DEFAULT 0;
 
       -- Backfill time_lapsed_days and drop old column
       DO $$
@@ -7125,6 +7150,161 @@ app.post('/api/projects/realign', async (req, res) => {
   }
 });
 
+// ==================================================================
+//               FINANCE DASHBOARD ENDPOINTS
+// ==================================================================
+app.get('/api/finance-dashboard/projects', async (req, res) => {
+  try {
+    const aggregateQuery = `
+      SELECT 
+        COUNT(*) as total_projects,
+        COUNT(tranche_1) as total_tranche_1,
+        COUNT(tranche_2) as total_tranche_2,
+        COUNT(tranche_3) as total_tranche_3
+      FROM engineer_form
+    `;
+    const aggResult = await pool.query(aggregateQuery);
+
+    const tableQuery = `
+      WITH LatestProjects AS (
+          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+            project_id, project_name, status_of_construction_phase AS status,
+            mode_of_project, tranche_1, tranche_2, tranche_3
+          FROM engineer_form
+          ORDER BY COALESCE(ipc, project_id::text), project_id DESC
+      )
+      SELECT * FROM LatestProjects
+      WHERE mode_of_project = 'MOA'
+      ORDER BY project_id DESC
+    `;
+    const tableResult = await pool.query(tableQuery);
+
+    res.json({
+      aggregates: {
+        totalProjects: parseInt(aggResult.rows[0].total_projects, 10),
+        totalTranche1: parseInt(aggResult.rows[0].total_tranche_1, 10),
+        totalTranche2: parseInt(aggResult.rows[0].total_tranche_2, 10),
+        totalTranche3: parseInt(aggResult.rows[0].total_tranche_3, 10)
+      },
+      projects: tableResult.rows
+    });
+  } catch (err) {
+    console.error("❌ Error fetching finance projects:", err.message);
+    res.status(500).json({ error: "Failed to fetch finance projects" });
+  }
+});
+
+app.patch('/api/finance-dashboard/projects/:id/tranches', async (req, res) => {
+  const { id } = req.params;
+  const { tranche_1, tranche_2, tranche_3 } = req.body;
+  try {
+    const query = `
+      UPDATE engineer_form 
+      SET 
+        tranche_1 = COALESCE($1, tranche_1), 
+        tranche_2 = COALESCE($2, tranche_2), 
+        tranche_3 = COALESCE($3, tranche_3)
+      WHERE project_id = $4
+      RETURNING project_id, tranche_1, tranche_2, tranche_3
+    `;
+    const result = await pool.query(query, [tranche_1, tranche_2, tranche_3, id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    res.json({ success: true, project: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Error updating project tranches:", err.message);
+    res.status(500).json({ error: "Failed to update project tranches" });
+  }
+});
+
+// ==================================================================
+//               IMPLEMENTING AGENCY DASHBOARD ENDPOINTS
+// ==================================================================
+app.get('/api/agency-dashboard/projects', async (req, res) => {
+  try {
+    const aggregateQuery = `
+      WITH ValidProjects AS (
+          SELECT DISTINCT ON (COALESCE(ipc, project_id::text))
+            project_id, implementing_agencies, tranche_1, status_of_construction_phase AS status
+          FROM engineer_form
+          WHERE mode_of_project = 'MOA'
+            AND implementing_agencies IS NOT NULL
+            AND tranche_1 IS NOT NULL
+            AND moa IS NOT NULL
+            AND rta IS NOT NULL
+          ORDER BY COALESCE(ipc, project_id::text), project_id DESC
+      )
+      SELECT 
+        COUNT(DISTINCT implementing_agencies) as total_active_agencies,
+        COUNT(*) as total_moa_projects,
+        SUM(tranche_1) as total_tranche_1_value,
+        COUNT(*) FILTER (WHERE status != 'Completed' AND status IS NOT NULL) as pending_moa_tasks
+      FROM ValidProjects
+    `;
+    const aggResult = await pool.query(aggregateQuery);
+
+    const tableQuery = `
+      WITH LatestProjects AS (
+          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+            project_id, implementing_agencies, project_name, moa, rta, tranche_1, date_assigned, mode_of_project, status_of_construction_phase AS status,
+            liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3
+          FROM engineer_form
+          ORDER BY COALESCE(ipc, project_id::text), project_id DESC
+      )
+      SELECT * FROM LatestProjects
+      WHERE mode_of_project = 'MOA'
+        AND implementing_agencies IS NOT NULL
+        AND tranche_1 IS NOT NULL
+        AND moa IS NOT NULL
+        AND rta IS NOT NULL
+      ORDER BY project_id DESC
+    `;
+    const tableResult = await pool.query(tableQuery);
+
+    res.json({
+      aggregates: {
+        totalActiveAgencies: parseInt(aggResult.rows[0].total_active_agencies || 0, 10),
+        totalMoaProjects: parseInt(aggResult.rows[0].total_moa_projects || 0, 10),
+        totalTranche1Value: parseFloat(aggResult.rows[0].total_tranche_1_value || 0),
+        pendingMoaTasks: parseInt(aggResult.rows[0].pending_moa_tasks || 0, 10)
+      },
+      projects: tableResult.rows
+    });
+  } catch (err) {
+    console.error("❌ Error fetching agency projects:", err.message);
+    res.status(500).json({ error: "Failed to fetch agency projects" });
+  }
+});
+
+app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => {
+  const { id } = req.params;
+  const { liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3 } = req.body;
+  try {
+    const query = `
+      UPDATE engineer_form 
+      SET 
+        liquidated_tranche_1 = COALESCE($1, liquidated_tranche_1), 
+        liquidated_tranche_2 = COALESCE($2, liquidated_tranche_2), 
+        liquidated_tranche_3 = COALESCE($3, liquidated_tranche_3)
+      WHERE project_id = $4
+      RETURNING project_id, liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3
+    `;
+    const result = await pool.query(query, [liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3, id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    res.json({ success: true, project: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Error updating project liquidation:", err.message);
+    res.status(500).json({ error: "Failed to update project liquidation" });
+  }
+});
+
 // --- 11. GET: Get Projects (Filtered by Engineer) ---
 app.get('/api/projects', async (req, res) => {
   try {
@@ -7141,7 +7321,6 @@ app.get('/api/projects', async (req, res) => {
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-            pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf,
             actions, savings, funding_year, funding_year_justification, is_donated
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
@@ -7160,7 +7339,6 @@ app.get('/api/projects', async (req, res) => {
         p.project_category AS "projectCategory", p.scope_of_work AS "scopeOfWork",
         p.number_of_classrooms AS "numberOfClassrooms", p.number_of_storeys AS "numberOfStoreys",
         p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
-        p.pow_pdf, p.dupa_pdf, p.contract_pdf, p.rta_pdf, p.moa_pdf,
         p.actions AS "updateType",
         (p.actions LIKE 'Realignment%') AS "isRealigned",
         p.savings,
@@ -7225,6 +7403,122 @@ app.get('/api/projects', async (req, res) => {
   } catch (err) {
     console.error("âŒ Error fetching projects:", err.message);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// GET: Fetch a specific project document on demand
+app.get('/api/projects/:id/document/:type', async (req, res) => {
+  const { id, type } = req.params;
+  const allowedTypes = ['pow_pdf', 'dupa_pdf', 'contract_pdf', 'rta_pdf', 'moa_pdf'];
+
+  if (!allowedTypes.includes(type)) {
+    return res.status(400).json({ error: 'Invalid document type requested' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT ${type} as document FROM engineer_form WHERE project_id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0].document });
+  } catch (err) {
+    console.error(`❌ Error fetching project document (${type}):`, err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// ==================================================================
+//         INFINITE-SIZE (2GB+) PDF CHUNKED UPLOADING ROUTES
+// ==================================================================
+
+// 1. Receive and Stream Chunk
+app.post('/api/upload/pdf-chunk', (req, res) => {
+  if (!blobServiceClient) return res.status(500).json({ error: "Azure config missing" });
+
+  const bb = busboy({ headers: req.headers });
+  let uploadMetadata = {};
+
+  bb.on('field', (name, val) => {
+    uploadMetadata[name] = val;
+  });
+
+  bb.on('file', async (name, file, info) => {
+    try {
+      const { fileUUID, chunkIndex } = uploadMetadata;
+      if (!fileUUID || chunkIndex === undefined) {
+        throw new Error("Missing UUID or chunkIndex metadata");
+      }
+
+      const containerClient = blobServiceClient.getContainerClient('project-pdfs');
+      await containerClient.createIfNotExists({ access: 'blob' }); // Ensure container is public 'blob'
+
+      const blockBlobClient = containerClient.getBlockBlobClient(`${fileUUID}.pdf`);
+
+      // Azure requires Base64-encoded block IDs of identical length.
+      // Pad chunkIndex to 5 digits -> '00001', '00002', then base64 encode.
+      const blockIdObj = String(chunkIndex).padStart(5, '0');
+      const blockId = Buffer.from(blockIdObj).toString('base64');
+
+      // We don't read to memory buffer. We stream the file chunk using busboy directly.
+      const streamPipeline = []
+      for await (const data of file) {
+        streamPipeline.push(data)
+      }
+      const completeChunk = Buffer.concat(streamPipeline);
+
+      await blockBlobClient.stageBlock(blockId, completeChunk, completeChunk.length);
+
+      res.status(200).json({ success: true, chunkIndex });
+    } catch (err) {
+      console.error(`❌ Chunk Upload Error:`, err.message);
+      res.status(500).json({ error: 'Chunk upload failed' });
+    }
+  });
+
+  bb.on('error', (err) => {
+    console.error('Busboy error:', err);
+    res.status(500).send('Upload Failed');
+  });
+
+  req.pipe(bb);
+});
+
+// 2. Finalize Multipart Upload
+app.post('/api/upload/multipart-finalize', async (req, res) => {
+  if (!blobServiceClient) return res.status(500).json({ error: "Azure config missing" });
+
+  const { fileUUID, totalChunks, contentType } = req.body;
+  if (!fileUUID || !totalChunks) return res.status(400).json({ error: "Missing required metadata" });
+
+  try {
+    const containerClient = blobServiceClient.getContainerClient('project-pdfs');
+    const blockBlobClient = containerClient.getBlockBlobClient(`${fileUUID}.pdf`);
+
+    // Re-generate the identical block IDs
+    const blockList = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const blockIdObj = String(i).padStart(5, '0');
+      blockList.push(Buffer.from(blockIdObj).toString('base64'));
+    }
+
+    // Merge everything!
+    const commitRes = await blockBlobClient.commitBlockList(blockList, {
+      blobHTTPHeaders: { blobContentType: contentType || 'application/pdf' }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Upload complete',
+      url: blockBlobClient.url // This is the final public URL!
+    });
+  } catch (err) {
+    console.error(`❌ Finalize Error:`, err.message);
+    res.status(500).json({ error: "Failed to merge chunk blocks" });
   }
 });
 // --- 11f. GET: List Engineers (For EFD Assignment) ---
@@ -12499,10 +12793,10 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
 app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
-  
-  const { 
-    has_multigrade, 
-    multigrade_sections_count, 
+
+  const {
+    has_multigrade,
+    multigrade_sections_count,
     unit3_simplified_counts,
     grade_kinder_size, grade_1_size, grade_2_size, grade_3_size, grade_4_size,
     grade_5_size, grade_6_size, grade_7_size, grade_8_size, grade_9_size,
@@ -12521,7 +12815,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     try {
       await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_simplified_counts JSONB');
       await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS multigrade_sections_count INTEGER DEFAULT 0');
-      
+
       const fixedCols = [
         'grade_kinder_size', 'grade_1_size', 'grade_2_size', 'grade_3_size', 'grade_4_size',
         'grade_5_size', 'grade_6_size', 'grade_7_size', 'grade_8_size', 'grade_9_size',
@@ -12533,7 +12827,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
       for (const col of fixedCols) {
         await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
       }
-    } catch (e) { 
+    } catch (e) {
       console.warn("DB Migration Warning for Unit 3:", e.message);
     }
 
@@ -12573,8 +12867,8 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     `;
 
     const values = [
-      has_multigrade, 
-      multigrade_sections_count || 0, 
+      has_multigrade,
+      multigrade_sections_count || 0,
       sectionsJson,
       grade_kinder_size || null,
       grade_1_size || null,

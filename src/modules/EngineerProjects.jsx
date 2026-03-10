@@ -9,6 +9,7 @@ import { auth, db } from "../firebase";
 import { doc, getDoc, query, collection, where, getDocs } from "firebase/firestore";
 import { addEngineerToOutbox, cacheProjects, getCachedProjects } from "../db";
 import { compressImage } from "../utils/imageCompression";
+import { uploadFileInChunks } from '../utils/chunkedUploader'; // NEW CHUNK UPLOADER
 
 import LocationPickerMap from '../components/LocationPickerMap';
 
@@ -27,13 +28,16 @@ const DOC_TYPES = {
   CONTRACT: "Signed Contract"
 };
 
-const convertFullFileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = (error) => reject(error);
-  });
+// -----------------------
+//   HELPER FUNCTION: File input to Chunked Uploader
+// -----------------------
+const processPdfFileChunked = async (file, onProgress) => {
+  if (!file) return null;
+  if (!file.type.includes('pdf')) {
+    alert("Only PDF files are allowed.");
+    return null;
+  }
+  return await uploadFileInChunks(file, onProgress);
 };
 
 // --- HELPERS ---
@@ -54,7 +58,7 @@ const formatDateShort = (dateString) => {
 
 // --- SUB-COMPONENTS ---
 
-const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading, searchQuery, readOnly }) => {
+const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading, searchQuery, readOnly, uploadProgress, handlePdfUpload }) => {
   const navigate = useNavigate();
 
   const getStatusColor = (status) => {
@@ -258,14 +262,56 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
                   <td className="sticky right-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-l border-slate-50 dark:border-slate-700 text-center">
                     <div className="flex flex-col gap-2">
                       {/* CONDITIONAL ACTION: Upload Docs / View Docs */}
+                      <div className="flex flex-col items-center">
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          style={{ display: 'none' }}
+                          id={`upload-pow-${p.id}`}
+                          onChange={(e) => handlePdfUpload(p.id, 'pow_pdf', e.target.files[0], p)}
+                        />
+                        {uploadProgress[`${p.id}-pow_pdf`] !== undefined ? (
+                          <div className="text-[10px] text-blue-600 font-bold">{uploadProgress[`${p.id}-pow_pdf`]}% Uploading...</div>
+                        ) : (
+                          <button onClick={() => document.getElementById(`upload-pow-${p.id}`).click()} className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline font-medium">Update POW</button>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          style={{ display: 'none' }}
+                          id={`upload-dupa-${p.id}`}
+                          onChange={(e) => handlePdfUpload(p.id, 'dupa_pdf', e.target.files[0], p)}
+                        />
+                        {uploadProgress[`${p.id}-dupa_pdf`] !== undefined ? (
+                          <div className="text-[10px] text-blue-600 font-bold">{uploadProgress[`${p.id}-dupa_pdf`]}% Uploading...</div>
+                        ) : (
+                          <button onClick={() => document.getElementById(`upload-dupa-${p.id}`).click()} className="mt-2 text-[10px] text-blue-600 hover:text-blue-800 underline font-medium">Update DUPA</button>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          style={{ display: 'none' }}
+                          id={`upload-contract-${p.id}`}
+                          onChange={(e) => handlePdfUpload(p.id, 'contract_pdf', e.target.files[0], p)}
+                        />
+                        {uploadProgress[`${p.id}-contract_pdf`] !== undefined ? (
+                          <div className="text-[10px] text-blue-600 font-bold">{uploadProgress[`${p.id}-contract_pdf`]}% Uploading...</div>
+                        ) : (
+                          <button onClick={() => document.getElementById(`upload-contract-${p.id}`).click()} className="mt-2 text-[10px] text-blue-600 hover:text-blue-800 underline font-medium">Update Contract</button>
+                        )}
+                      </div>
 
 
 
 
                       <button
                         onClick={() => onView(p)}
-                        className={`w-full py-1.5 text-[10px] font-bold rounded-lg border transition-all active:scale-95 flex items-center justify-center gap-1 ${p.hasVariationOrder 
-                          ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 shadow-sm shadow-amber-900/10" 
+                        className={`w-full py-1.5 text-[10px] font-bold rounded-lg border transition-all active:scale-95 flex items-center justify-center gap-1 ${p.hasVariationOrder
+                          ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 shadow-sm shadow-amber-900/10"
                           : "bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-100 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-600 hover:shadow-md"}`}
                       >
                         {p.hasVariationOrder ? (
@@ -338,6 +384,8 @@ const EngineerProjects = () => {
   const [externalPreviews, setExternalPreviews] = useState([]);
   const [activeCategory, setActiveCategory] = useState('Internal');
 
+  // PDF Upload Progress State
+  const [uploadProgress, setUploadProgress] = useState({});
 
   // AI Modal State
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -501,7 +549,7 @@ const EngineerProjects = () => {
 
   const handleDeleteProject = async (projectId) => {
     const isConfirmed = window.confirm("⚠️ DELETE PROJECT\n\nAre you sure you want to delete this project? This will permanently remove all associated progress, photos, and documents. This action cannot be undone.");
-    
+
     if (!isConfirmed) return;
 
     try {
@@ -534,12 +582,52 @@ const EngineerProjects = () => {
     setEditModalOpen(true);
   };
 
+  const handlePdfUpload = async (projectId, type, file, item) => {
+    // Create local progress state mapping
+    setUploadProgress(prev => ({ ...prev, [`${projectId}-${type}`]: 0 }));
+
+    try {
+      const cloudUrl = await processPdfFileChunked(file, (prog) => {
+        setUploadProgress(prev => ({ ...prev, [`${projectId}-${type}`]: prog }));
+      });
+
+      if (!cloudUrl) {
+        setUploadProgress(prev => { const n = { ...prev }; delete n[`${projectId}-${type}`]; return n; });
+        return; // Canceled
+      }
+
+      // Merge into save payload
+      const updatedDocs = { [type]: cloudUrl };
+
+      const response = await fetch(`${API_BASE}/api/update-project/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedDocs),
+      });
+
+      if (!response.ok) throw new Error("PDF upload failed");
+
+      // Update the project in the local state with the new PDF URL
+      setProjects(prev => prev.map(p =>
+        p.id === projectId ? { ...p, [type]: cloudUrl } : p
+      ));
+
+      alert(`${type.toUpperCase()} uploaded successfully!`);
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to upload document chunk.");
+    } finally {
+      setUploadProgress(prev => { const n = { ...prev }; delete n[`${projectId}-${type}`]; return n; });
+    }
+  };
+
   const handleSaveProject = async (updatedProject) => {
     console.log("DEBUG SAVE PROJECT PAYLOAD:", {
-       id: updatedProject.id, 
-       pow_len: updatedProject.pow_pdf?.length, 
-       dupa_len: updatedProject.dupa_pdf?.length, 
-       contract_len: updatedProject.contract_pdf?.length 
+      id: updatedProject.id,
+      pow_len: updatedProject.pow_pdf?.length,
+      dupa_len: updatedProject.dupa_pdf?.length,
+      contract_len: updatedProject.contract_pdf?.length
     });
 
     const user = auth.currentUser;
@@ -548,7 +636,7 @@ const EngineerProjects = () => {
     // OPTIMIZATION: Check if progress changed
     const originalProject = projects.find(p => p.id === updatedProject.id);
     const isProgressUpdated = originalProject && (
-      originalProject.status !== updatedProject.status || 
+      originalProject.status !== updatedProject.status ||
       Number(originalProject.accomplishmentPercentage) !== Number(updatedProject.accomplishmentPercentage)
     );
 
@@ -581,11 +669,15 @@ const EngineerProjects = () => {
 
       // OPTIMIZATION: Remove large existing docs if they haven't changed
       // This prevents 413 Payload Too Large errors on servers with low limits
+      // Using Cloud URLs, these fields are small anyway compared to base64, but we strip them if identical to save bytes.
       const original = projects.find(p => p.id === updatedProject.id);
       if (original) {
-        if (original.pow_pdf === payload.pow_pdf) delete payload.pow_pdf;
-        if (original.dupa_pdf === payload.dupa_pdf) delete payload.dupa_pdf;
-        if (original.contract_pdf === payload.contract_pdf) delete payload.contract_pdf;
+        // PDF fields are now handled asynchronously via handlePdfUpload, so they should not be part of the main project update payload.
+        // If they are present, it means they were updated via the separate PDF upload mechanism.
+        // We can safely remove them from the main payload to avoid sending large base64 strings.
+        delete payload.pow_pdf;
+        delete payload.dupa_pdf;
+        delete payload.contract_pdf;
       }
 
       const body = payload;
@@ -632,8 +724,8 @@ const EngineerProjects = () => {
       });
       if (!response.ok) throw new Error("Update failed");
       const resData = await response.json();
-      const finalProject = { 
-        ...updatedProject, 
+      const finalProject = {
+        ...updatedProject,
         id: resData.project.project_id,
         otherRemarks: resData.project.other_remarks // Ensure latest remarks are in state
       };

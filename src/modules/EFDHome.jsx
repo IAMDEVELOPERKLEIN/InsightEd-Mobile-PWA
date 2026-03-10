@@ -45,35 +45,40 @@ const EFDHome = () => {
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
             try {
                 const user = auth.currentUser;
-                if (!user) return;
+                if (!user) {
+                    setLoading(false);
+                    return;
+                }
 
+                // Fetch user data first to set region/division defaults
                 const userDoc = await getDoc(doc(db, 'users', user.uid));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     setUserData(data);
-                    setSelectedRegion(data.region || '');
+                    if (data.region) setSelectedRegion(data.region);
                     if (data.division) setSelectedDivision(data.division);
                 }
 
-                const response = await fetch('/api/projects');
-                if (response.ok) {
-                    const data = await response.json();
-                    setProjects(data);
-                }
+                // Concurrent fetch for project and reference data
+                const [pRes, fyRes, locRes] = await Promise.all([
+                    fetch('/api/projects'),
+                    fetch('/api/reference/funding-years'),
+                    fetch('/api/reference/efd-locations')
+                ]);
 
-                const fyResponse = await fetch('/api/reference/funding-years');
-                if (fyResponse.ok) {
-                    const fyData = await fyResponse.json();
-                    setFundingYears(fyData);
-                }
+                const [pData, fyData, locData] = await Promise.all([
+                    pRes.ok ? pRes.json() : [],
+                    fyRes.ok ? fyRes.json() : [],
+                    locRes.ok ? locRes.json() : []
+                ]);
 
-                const locResponse = await fetch('/api/reference/efd-locations');
-                if (locResponse.ok) {
-                    const locData = await locResponse.json();
-                    setEfdLocations(locData);
-                }
+                setProjects(pData);
+                setFundingYears(fyData);
+                setEfdLocations(locData);
+
             } catch (error) {
                 console.error("Error fetching EFD data:", error);
             } finally {
@@ -81,7 +86,15 @@ const EFDHome = () => {
             }
         };
 
-        fetchData();
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (user) {
+                fetchData();
+            } else {
+                setLoading(false);
+            }
+        });
+
+        return () => unsubscribe();
     }, []);
 
     const normalize = (val) => val?.toString().trim().toUpperCase() || 'UNASSIGNED';
@@ -91,10 +104,10 @@ const EFDHome = () => {
         const baseProjects = projects.filter(p => {
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
-            const matchesDonated = selectedDonated === 'All' || 
+            const matchesDonated = selectedDonated === 'All' ||
                 (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
                 (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
-            const matchesSearch = !searchTerm || 
+            const matchesSearch = !searchTerm ||
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase());
             return matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
@@ -133,10 +146,10 @@ const EFDHome = () => {
             const matchesRegion = !selectedRegion || normalize(p.region) === normalize(selectedRegion);
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
-            const matchesDonated = selectedDonated === 'All' || 
+            const matchesDonated = selectedDonated === 'All' ||
                 (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
                 (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
-            const matchesSearch = !searchTerm || 
+            const matchesSearch = !searchTerm ||
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase());
             return matchesRegion && matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
@@ -160,10 +173,10 @@ const EFDHome = () => {
             const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
-            const matchesDonated = selectedDonated === 'All' || 
+            const matchesDonated = selectedDonated === 'All' ||
                 (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
                 (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
-            const matchesSearch = !searchTerm || 
+            const matchesSearch = !searchTerm ||
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolId?.toString().includes(searchTerm);
@@ -184,7 +197,7 @@ const EFDHome = () => {
             <div className="min-h-screen bg-slate-50 pb-24">
                 <div className="bg-[#004A99] text-white pt-8 pb-10 px-6 rounded-b-[3rem] shadow-xl mb-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
-                    
+
                     <div className="relative z-10">
                         <div className="flex justify-between items-center mb-8">
                             <div>
@@ -213,13 +226,13 @@ const EFDHome = () => {
 
                 <div className="px-5 mb-8 space-y-4">
                     <div className="bg-slate-200/50 p-1.5 rounded-2xl flex border border-slate-200 gap-1.5">
-                        <button 
+                        <button
                             onClick={() => setActiveTab('granular')}
                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === 'granular' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <FiLayers size={14} /> Analytics
                         </button>
-                        <button 
+                        <button
                             onClick={() => setActiveTab('list')}
                             className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
@@ -234,7 +247,7 @@ const EFDHome = () => {
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Advanced Filters</span>
                             </div>
                             {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || searchTerm) && (
-                                <button 
+                                <button
                                     onClick={handleClearFilters}
                                     className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full transition-all active:scale-95"
                                 >
@@ -245,7 +258,7 @@ const EFDHome = () => {
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div className="relative md:col-span-1">
-                                <select 
+                                <select
                                     value={selectedRegion}
                                     onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
@@ -256,7 +269,7 @@ const EFDHome = () => {
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
                             <div className="relative md:col-span-1">
-                                <select 
+                                <select
                                     value={selectedDivision}
                                     onChange={(e) => setSelectedDivision(e.target.value)}
                                     disabled={!selectedRegion}
@@ -268,7 +281,7 @@ const EFDHome = () => {
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
                             <div className="relative col-span-2 md:col-span-1">
-                                <select 
+                                <select
                                     value={selectedCategory}
                                     onChange={(e) => setSelectedCategory(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
@@ -281,7 +294,7 @@ const EFDHome = () => {
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
                             <div className="relative col-span-1">
-                                <select 
+                                <select
                                     value={selectedFundingYear}
                                     onChange={(e) => setSelectedFundingYear(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
@@ -294,7 +307,7 @@ const EFDHome = () => {
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
                             <div className="relative col-span-1">
-                                <select 
+                                <select
                                     value={selectedDonated}
                                     onChange={(e) => setSelectedDonated(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
@@ -308,7 +321,7 @@ const EFDHome = () => {
 
                             {activeTab === 'list' ? (
                                 <div className="relative animate-in slide-in-from-top-2 duration-300 col-span-2 md:col-span-1">
-                                    <input 
+                                    <input
                                         type="text"
                                         placeholder="Search Project, School, or ID..."
                                         value={searchTerm}
@@ -336,8 +349,8 @@ const EFDHome = () => {
                                     </h3>
                                     <div className="flex-1 min-h-[300px] w-full">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart 
-                                                data={regionalData.slice(0, 30)} 
+                                            <BarChart
+                                                data={regionalData.slice(0, 30)}
                                                 layout="vertical"
                                                 margin={{ right: 60, left: 10, top: 10, bottom: 10 }}
                                                 onClick={(data) => {
@@ -350,15 +363,15 @@ const EFDHome = () => {
                                             >
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                                 <XAxis type="number" hide />
-                                                <YAxis 
-                                                    dataKey="name" 
-                                                    type="category" 
-                                                    tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} 
+                                                <YAxis
+                                                    dataKey="name"
+                                                    type="category"
+                                                    tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
                                                     width={80}
                                                 />
-                                                <Tooltip 
-                                                    cursor={{fill: '#f8fafc'}}
-                                                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                                                <Tooltip
+                                                    cursor={{ fill: '#f8fafc' }}
+                                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                                 />
                                                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                                                     {regionalData.map((entry, index) => (
@@ -380,7 +393,7 @@ const EFDHome = () => {
                                     </h3>
                                     <div className="flex-1 min-h-[300px] w-full">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart 
+                                            <BarChart
                                                 data={divisionData.slice(0, 30)}
                                                 layout="vertical"
                                                 margin={{ right: 60, left: 10, top: 10, bottom: 10 }}
@@ -393,15 +406,15 @@ const EFDHome = () => {
                                             >
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                                 <XAxis type="number" hide />
-                                                <YAxis 
-                                                    dataKey="name" 
-                                                    type="category" 
-                                                    tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} 
+                                                <YAxis
+                                                    dataKey="name"
+                                                    type="category"
+                                                    tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
                                                     width={100}
                                                 />
-                                                <Tooltip 
-                                                    cursor={{fill: '#f8fafc'}}
-                                                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                                                <Tooltip
+                                                    cursor={{ fill: '#f8fafc' }}
+                                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                                 />
                                                 <Bar dataKey="value" fill="#fbbf24" radius={[0, 4, 4, 0]}>
                                                     <LabelList dataKey="value" position="right" style={{ fontSize: '10px', fontWeight: 'bold', fill: '#64748b' }} />
@@ -414,7 +427,7 @@ const EFDHome = () => {
 
                             {/* Centered Navigation Button */}
                             <div className="max-w-7xl mx-auto w-full mt-6">
-                                <button 
+                                <button
                                     onClick={() => setActiveTab('list')}
                                     className="w-full bg-white shadow-sm border border-slate-100 hover:bg-slate-100 hover:border-slate-200 text-slate-600 py-4 rounded-3xl text-sm font-black transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-[0.98]"
                                 >
@@ -431,8 +444,8 @@ const EFDHome = () => {
                                 </div>
                             ) : (
                                 filteredProjects.map((p) => (
-                                    <div 
-                                        key={p.id} 
+                                    <div
+                                        key={p.id}
                                         onClick={() => navigate(`/project-details/${p.id}`)}
                                         className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 active:scale-[0.98] transition-all hover:border-blue-200 hover:shadow-md cursor-pointer h-full"
                                     >
@@ -443,10 +456,9 @@ const EFDHome = () => {
                                             <h4 className="text-sm font-bold text-slate-800 truncate">{p.projectName}</h4>
                                             <p className="text-[10px] text-slate-500 font-medium truncate">{p.schoolName} ({p.schoolId})</p>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
-                                                    p.status === 'Completed' ? 'bg-green-100 text-green-700' : 
-                                                    p.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
-                                                }`}>
+                                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${p.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                                        p.status === 'Ongoing' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'
+                                                    }`}>
                                                     {p.status}
                                                 </span>
                                                 <span className="text-[8px] font-bold text-slate-400">{p.division}</span>
@@ -461,8 +473,8 @@ const EFDHome = () => {
                                         <div className="text-right shrink-0">
                                             <p className="text-xs font-black text-slate-800">{p.accomplishmentPercentage}%</p>
                                             <div className="w-16 bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
-                                                <div 
-                                                    className="h-full bg-blue-500 transition-all" 
+                                                <div
+                                                    className="h-full bg-blue-500 transition-all"
                                                     style={{ width: `${p.accomplishmentPercentage}%` }}
                                                 ></div>
                                             </div>
