@@ -369,6 +369,7 @@ const EngineerProjects = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("Division Engineer");
   const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Division Engineer");
+  const [accountCategory, setAccountCategory] = useState(null);
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -404,7 +405,7 @@ const EngineerProjects = () => {
     const fetchUserDataAndProjects = async () => {
       const user = auth.currentUser;
       if (user) {
-        // 1. Get User Name
+        // 1. Get User Name & Account Category
         try {
           const docRef = doc(db, "users", user.uid);
           const docSnap = await getDoc(docRef);
@@ -413,6 +414,17 @@ const EngineerProjects = () => {
           }
         } catch (e) {
           console.error("Error fetching user profile:", e);
+        }
+
+        // 2. Fetch account_category from backend
+        try {
+          const infoRes = await fetch(`/api/user-info/${user.uid}`);
+          if (infoRes.ok) {
+            const info = await infoRes.json();
+            setAccountCategory(info.account_category);
+          }
+        } catch (e) {
+          console.error("Error fetching user info:", e);
         }
 
         try {
@@ -665,7 +677,12 @@ const EngineerProjects = () => {
     setIsUploading(true);
     try {
       // Create payload copy
-      const payload = { ...updatedProject, uid: user.uid, modifiedBy: userName };
+      // Determine uploader_type from the logged-in user's role and account category
+      let uploaderType = 'Uploaded by DepEd Engineer'; // Default
+      if (userRole === 'EFD') uploaderType = 'EFD Engineer';
+      else if (userRole === 'Division Engineer' && accountCategory === 'Non-DepEd Engineer') uploaderType = 'Non-DepEd Engineer';
+
+      const payload = { ...updatedProject, uid: user.uid, modifiedBy: userName, uploader_type: uploaderType };
 
       // OPTIMIZATION: Remove large existing docs if they haven't changed
       // This prevents 413 Payload Too Large errors on servers with low limits

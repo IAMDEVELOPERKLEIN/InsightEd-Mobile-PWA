@@ -57,16 +57,16 @@ const EFDMonitoring = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [projRes, engRes, fyRes, locRes] = await Promise.all([
-                    fetch('/api/projects'),
-                    fetch('/api/engineers'),
-                    fetch('/api/reference/funding-years'),
-                    fetch('/api/reference/efd-locations')
-                ]);
-
+                const projRes = await fetch('/api/projects');
                 if (projRes.ok) setProjects(await projRes.json());
+
+                const engRes = await fetch('/api/engineers');
                 if (engRes.ok) setEngineers(await engRes.json());
+                
+                const fyRes = await fetch('/api/reference/funding-years');
                 if (fyRes.ok) setFundingYears(await fyRes.json());
+                
+                const locRes = await fetch('/api/reference/efd-locations');
                 if (locRes.ok) setEfdLocations(await locRes.json());
             } catch (error) {
                 console.error("Error fetching monitoring data:", error);
