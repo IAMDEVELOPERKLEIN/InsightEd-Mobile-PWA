@@ -1,70 +1,104 @@
 [
   {
-    "column_name": "Unnamed: 0",
-    "data_type": "bigint"
+    "column_name": "uid",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "NO"
   },
   {
-    "column_name": "school.id",
-    "data_type": "bigint"
+    "column_name": "email",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "school.name",
-    "data_type": "text"
+    "column_name": "role",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "first_name",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "last_name",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
     "column_name": "region",
-    "data_type": "text"
-  },
-  {
-    "column_name": "old.region",
-    "data_type": "text"
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
     "column_name": "division",
-    "data_type": "text"
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "district",
-    "data_type": "text"
+    "column_name": "province",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "modified.coc",
-    "data_type": "text"
+    "column_name": "city",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "control_num",
-    "data_type": "text"
+    "column_name": "barangay",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "tin",
-    "data_type": "text"
-  },
-  {
-    "column_name": "first",
-    "data_type": "text"
-  },
-  {
-    "column_name": "middle",
-    "data_type": "text"
-  },
-  {
-    "column_name": "last",
-    "data_type": "text"
+    "column_name": "office",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
     "column_name": "position",
-    "data_type": "text"
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "position_group",
-    "data_type": "text"
+    "column_name": "disabled",
+    "data_type": "boolean",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "corrected.degree",
-    "data_type": "text"
+    "column_name": "contact_number",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   },
   {
-    "column_name": "specialization.final",
-    "data_type": "text"
+    "column_name": "alt_email",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "account_category",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
   }
 ]

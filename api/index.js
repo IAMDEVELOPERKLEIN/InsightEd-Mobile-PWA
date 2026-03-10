@@ -15,6 +15,8 @@ import csv from 'csv-parser'; // Added for seed
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
+import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
+import bcrypt from 'bcrypt'; // For new standard hashes
 
 
 // Load environment variables
@@ -1209,6 +1211,89 @@ app.get('/api/lists/municipalities', async (req, res) => {
     res.json(result.rows); // Returns [{municipality, region, division, province}, ...]
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- NEW LAZY MIGRATION LOGIN ENDPOINT ---
+app.post('/api/auth/migrate-login', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: "Email and password are required." });
+  }
+
+  try {
+    // 1. Fetch user from PostgreSQL
+    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE email = $1', [email.trim()]);
+    
+    if (userRes.rowCount === 0) {
+      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+    }
+
+    const user = userRes.rows[0];
+
+    // 2. Determine which hash algorithm to check against
+    let isValid = false;
+
+    if (user.hash_version === 'bcrypt') {
+      // User has already bumped to standard bcrypt
+      isValid = await bcrypt.compare(password, user.password_hash);
+    } 
+    else if (user.hash_version === 'firebase') {
+      // Check if server is configured for Firebase Scrypt
+      if (!process.env.FIREBASE_HASH_SIGNER_KEY) {
+         console.error("CRITICAL: FIREBASE_HASH_SIGNER_KEY is missing from .env");
+         return res.status(500).json({ success: false, error: "Server configuration error during migration." });
+      }
+
+      const scrypt = new FirebaseScrypt({
+        memCost: parseInt(process.env.FIREBASE_HASH_MEM_COST || 14),
+        rounds: parseInt(process.env.FIREBASE_HASH_ROUNDS || 8),
+        saltSeparator: process.env.FIREBASE_HASH_SALT_SEPARATOR,
+        signerKey: process.env.FIREBASE_HASH_SIGNER_KEY
+      });
+
+      isValid = await scrypt.verify(password, user.password_salt, user.password_hash);
+
+      // --- THE LAZY UPGRADE ---
+      if (isValid) {
+        console.log(`[LAZY MIGRATION] Upgrading hash for user: ${email}`);
+        const saltRounds = 10;
+        const newBcryptHash = await bcrypt.hash(password, saltRounds);
+
+        await pool.query(
+          `UPDATE users SET password_hash = $1, password_salt = NULL, hash_version = 'bcrypt' WHERE email = $2`, 
+          [newBcryptHash, email]
+        );
+      }
+    } else {
+       // Catch-all for unknown hash versions
+       return res.status(401).json({ success: false, error: "Unsupported hash algorithm." });
+    }
+
+    if (!isValid) {
+      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+    }
+
+    // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
+    // until the frontend is fully decoupled from the Firebase SDK.
+    const customToken = await admin.auth().createCustomToken(user.uid, {
+        role: user.role // Embed role into token if you like
+    });
+
+    return res.json({ 
+        success: true, 
+        customToken: customToken,
+        user: {
+            uid: user.uid,
+            email: user.email,
+            role: user.role
+        }
+    });
+
+  } catch (err) {
+    console.error("Migration Login Error:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 });
 
@@ -5164,10 +5249,10 @@ app.post('/api/check-existing-school', async (req, res) => {
 
 // --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
 app.post('/api/register-school', async (req, res) => {
-  const { uid, email, schoolData, contactNumber, role } = req.body;
+  const { email, password, schoolData, contactNumber, role } = req.body;
 
-  if (!uid || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data." });
+  if (!email || !password || !schoolData || !schoolData.school_id) {
+    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData)." });
   }
 
   // Fallback to School Head if role not provided for backward compatibility
@@ -5175,7 +5260,6 @@ app.post('/api/register-school', async (req, res) => {
 
   // DEBUG LOG
   console.log("âœ… REGISTRATION DATA:", {
-    uid,
     school: schoolData.school_name,
     role: userRole
   });
@@ -5190,6 +5274,18 @@ app.post('/api/register-school', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: "This school is already registered." });
     }
+
+    const emailCheckRes = await client.query("SELECT uid FROM users WHERE email = $1", [email]);
+    if (emailCheckRes.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: "This email is already registered." });
+    }
+
+    // NATIVE AUTH: Generate UUID and Hash Password
+    const { v4: uuidv4 } = require('uuid');
+    const uid = uuidv4();
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
 
     // 2. GENERATE IERN (Sequential: YYYY-XXXXX)
     const year = new Date().getFullYear();
@@ -5218,15 +5314,18 @@ app.post('/api/register-school', async (req, res) => {
         `INSERT INTO users (
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
-            region, division, province, city
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10)
+            region, division, province, city,
+            password_hash, hash_version
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
             region = EXCLUDED.region,
             division = EXCLUDED.division,
             province = EXCLUDED.province,
-            city = EXCLUDED.city;`,
+            city = EXCLUDED.city,
+            password_hash = EXCLUDED.password_hash,
+            hash_version = EXCLUDED.hash_version;`,
         [
           uid,
           email,
@@ -5237,7 +5336,9 @@ app.post('/api/register-school', async (req, res) => {
           valueOrNull(schoolData.region),
           valueOrNull(schoolData.division),
           valueOrNull(schoolData.province),
-          valueOrNull(schoolData.municipality) // stored as 'city' in users table
+          valueOrNull(schoolData.municipality), // stored as 'city' in users table
+          passwordHash,
+          'bcrypt'
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -5331,7 +5432,12 @@ app.post('/api/register-school', async (req, res) => {
       // Non-fatal, registration still succeeded
     }
 
-    res.json({ success: true, iern: newIern, message: "School Registered Successfully" });
+    // NATIVE AUTH: Generate Firebase Custom Token
+    const customToken = await admin.auth().createCustomToken(uid, {
+        role: userRole
+    });
+
+    res.json({ success: true, iern: newIern, customToken: customToken, message: "School Registered Successfully" });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -5344,14 +5450,13 @@ app.post('/api/register-school', async (req, res) => {
 
 // --- 3e. POST: Register Beta Tester (One-Shot matching schools_IERN) ---
 app.post('/api/register-beta', async (req, res) => {
-  const { uid, email, schoolData, contactNumber } = req.body;
+  const { email, password, schoolData, contactNumber } = req.body;
 
-  if (!uid || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data." });
+  if (!email || !password || !schoolData || !schoolData.school_id) {
+    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData)." });
   }
 
   console.log("✅ BETA REGISTRATION DATA:", {
-    uid,
     school: schoolData.school_name,
     role: 'Beta Tester'
   });
@@ -5369,6 +5474,19 @@ app.post('/api/register-beta', async (req, res) => {
     const iernData = iernResult.rows[0];
     const foundIern = iernData.iern; // IERN is actually 'iern' column
 
+    // 1b. Duplicate Email Check
+    const emailCheckRes = await client.query("SELECT uid FROM users WHERE email = $1", [email]);
+    if (emailCheckRes.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: "This email is already registered." });
+    }
+
+    // NATIVE AUTH: Generate UUID and Hash Password
+    const { v4: uuidv4 } = require('uuid');
+    const uid = uuidv4();
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
     // 2. CREATE USER
     try {
       await client.query('SAVEPOINT user_creation');
@@ -5376,15 +5494,18 @@ app.post('/api/register-beta', async (req, res) => {
         `INSERT INTO users (
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
-            region, division, province, city
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10)
+            region, division, province, city,
+            password_hash, hash_version
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
             region = EXCLUDED.region,
             division = EXCLUDED.division,
             province = EXCLUDED.province,
-            city = EXCLUDED.city;`,
+            city = EXCLUDED.city,
+            password_hash = EXCLUDED.password_hash,
+            hash_version = EXCLUDED.hash_version;`,
         [
           uid,
           email,
@@ -5395,7 +5516,9 @@ app.post('/api/register-beta', async (req, res) => {
           schoolData.region || null,
           schoolData.division || null,
           schoolData.province || null,
-          schoolData.municipality || null
+          schoolData.municipality || null,
+          passwordHash,
+          'bcrypt'
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -5443,7 +5566,12 @@ app.post('/api/register-beta', async (req, res) => {
     await client.query(insertQuery, values);
     await client.query('COMMIT');
 
-    res.json({ success: true, iern: foundIern, message: "Beta Tester Registered Successfully" });
+    // NATIVE AUTH: Generate Custom Token
+    const customToken = await admin.auth().createCustomToken(uid, {
+        role: 'Beta Tester'
+    });
+
+    res.json({ success: true, iern: foundIern, customToken: customToken, message: "Beta Tester Registered Successfully" });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -5456,23 +5584,34 @@ app.post('/api/register-beta', async (req, res) => {
 
 // --- 3f. POST: Register Generic User (Engineer, RO, SDO) ---
 app.post('/api/register-user', async (req, res) => {
-  const { uid, email, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
+  const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
 
-  if (!uid || !email || !role) {
-    return res.status(400).json({ error: "Missing required fields (uid, email, role)" });
+  if (!email || !password || !role) {
+    return res.status(400).json({ error: "Missing required fields (email, password, role)" });
   }
 
   try {
+    // 1. Duplicate Email Check
+    const emailCheckRes = await pool.query("SELECT uid FROM users WHERE email = $1", [email]);
+    if (emailCheckRes.rows.length > 0) {
+      return res.status(400).json({ error: "This email is already registered." });
+    }
+
+    // NATIVE AUTH: Generate UUID and Hash Password
+    const { v4: uuidv4 } = require('uuid');
+    const uid = uuidv4();
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
     const query = `
             INSERT INTO users (
                 uid, email, role, created_at,
                 first_name, last_name,
                 region, division, province, city, barangay,
                 office, position, contact_number, alt_email,
-                account_category
+                account_category, password_hash, hash_version
             ) VALUES (
                 $1, $2, $3, CURRENT_TIMESTAMP,
-                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -5488,7 +5627,9 @@ app.post('/api/register-user', async (req, res) => {
                 position = EXCLUDED.position,
                 contact_number = EXCLUDED.contact_number,
                 alt_email = EXCLUDED.alt_email,
-                account_category = EXCLUDED.account_category;
+                account_category = EXCLUDED.account_category,
+                password_hash = EXCLUDED.password_hash,
+                hash_version = EXCLUDED.hash_version;
         `;
 
     await pool.query(query, [
@@ -5496,7 +5637,7 @@ app.post('/api/register-user', async (req, res) => {
       firstName, lastName,
       region, division, province, city, barangay,
       office, position, contactNumber, altEmail,
-      accountCategory
+      accountCategory, passwordHash, 'bcrypt'
     ]);
 
 
@@ -5506,7 +5647,8 @@ app.post('/api/register-user', async (req, res) => {
       valueOrNull(region), valueOrNull(division),
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
       valueOrNull(office), valueOrNull(position),
-      valueOrNull(contactNumber), valueOrNull(altEmail)
+      valueOrNull(contactNumber), valueOrNull(altEmail),
+      valueOrNull(accountCategory), passwordHash, 'bcrypt'
     ];
 
     await pool.query(query, values);
@@ -5525,7 +5667,12 @@ app.post('/api/register-user', async (req, res) => {
 
     await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
 
-    res.json({ success: true, message: "User synced to Database" });
+    // NATIVE AUTH: Generate Custom Token
+    const customToken = await admin.auth().createCustomToken(uid, {
+        role: role
+    });
+
+    res.json({ success: true, customToken: customToken, message: "User synced to Database" });
   } catch (err) {
     console.error("âŒ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });

@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import logo from './assets/InsightEd1.png';
 import { auth, db } from './firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; // Added signIn for recovery
-import { doc, setDoc, getDoc } from 'firebase/firestore'; // Added getDoc for recovery
+import { signInWithCustomToken } from 'firebase/auth'; // Replaced password sign-in with custom token sign-in
+import { doc, setDoc } from 'firebase/firestore'; 
 import { useNavigate, Link } from 'react-router-dom';
 import PageTransition from './components/PageTransition';
 import Papa from 'papaparse';
@@ -452,61 +452,7 @@ const Register = () => {
                 }
             }
 
-            // STEP B: Firebase Auth Create (WITH ZOMBIE RECOVERY)
-            let user;
-            try {
-                console.log("Step B: Creating Firebase Auth user...", authEmail);
-                const userCredential = await createUserWithEmailAndPassword(auth, authEmail, formData.password);
-                user = userCredential.user;
-                console.log("Step B: Auth User Created:", user.uid);
-            } catch (authError) {
-                if (authError.code === 'auth/email-already-in-use') {
-                    // ATTEMPT RECOVERY: Try logging in to see if it's a "Zombie" account (No Firestore Data)
-                    // If they entered the CORRECT password for the existing email, we can proceed to check if it's a zombie.
-
-                    try {
-                        const userCredential = await signInWithEmailAndPassword(auth, authEmail, formData.password);
-                        user = userCredential.user;
-                    } catch (loginError) {
-                        // If login fails, we cannot proceed with Zombie recovery.
-                        if (loginError.code === 'auth/wrong-password') {
-                            throw new Error("Account already exists with a different password. Please log in or reset your password.");
-                        } else if (loginError.code === 'auth/too-many-requests') {
-                            throw new Error("Access temporarily disabled due to many failed attempts. Reset your password or try again later.");
-                        } else {
-                            // Network error or other auth issue
-                            console.error("Recovery Login Error:", loginError);
-                            throw new Error("Email already in use. Please log in.");
-                        }
-                    }
-
-                    // If we get here, Auth Login was SUCCESSFUL (User knows password).
-                    // Now check if they have a profile (Real User) or not (Zombie).
-                    try {
-                        const userDoc = await getDoc(doc(db, "users", user.uid));
-                        if (userDoc.exists()) {
-                            alert("This email is already registered. Please use the Login page to access your account.");
-                            // navigate(getDashboardPath(formData.role)); // REMOVED per user request
-                            return;
-                        } else {
-                            // ZOMBIE DETECTED: Auth exists, Firestore missing.
-                            // Allow code to proceed to Step C to "repair"/complete registration.
-                            console.log("Resuming registration for orphaned Auth account...");
-                        }
-                    } catch (firestoreError) {
-                        console.error("Firestore Check Error:", firestoreError);
-                        // If we can't check Firestore (e.g. offline), we shouldn't overwrite blindly, 
-                        // but usually if we are offline, we wouldn't have gotten past Auth.
-                        // We will assume if Auth works, we should be able to check Profile.
-                        throw new Error("Connection error checking existing account profile.");
-                    }
-
-                } else {
-                    throw authError; // Genuine other error (e.g. weak-password)
-                }
-            }
-
-            // STEP C: Role-Specific Persistence
+            // STEP B & C: Unified Native Registration and Persistence
             if (formData.role === 'School Head' || formData.role === 'Beta Tester') {
                 // CALL NEW ONE-SHOT ENDPOINT
                 console.log("SENDING REGISTRATION DATA:", {
@@ -514,11 +460,8 @@ const Register = () => {
                 });
 
                 // selectedSchool now contains the updated latitude/longitude from the map drag
-                // Explicitly construct payload to avoid shadowing
                 const finalSchoolData = {
                     ...selectedSchool,
-                    // Explicitly map keys if needed, though spread usually handles it
-                    // ensuring curricular offering is included
                     curricularOffering: selectedSchool.curricular_offering
                 };
 
@@ -529,8 +472,8 @@ const Register = () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        uid: user.uid,
-                        email: contactEmail, // <--- SAVE REAL EMAIL HERE
+                        email: contactEmail,
+                        password: formData.password, // Send password securely to backend
                         contactNumber: contactDigits,
                         schoolData: finalSchoolData
                     })
@@ -541,7 +484,11 @@ const Register = () => {
                     throw new Error(regData.error || "Server Registration Failed.");
                 }
 
-                // Save to Firestore (Minimal user profile + schoolId link)
+                // Authenticate frontend using Custom Token
+                const userCredential = await signInWithCustomToken(auth, regData.customToken);
+                const user = userCredential.user;
+
+                // Save to Firestore (Minimal user profile + schoolId link) using the Native Backend UID
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
                     role: formData.role, // Use formData.role to preserve Beta Tester or School Head
@@ -551,38 +498,22 @@ const Register = () => {
                     firstName: formData.role,
                     lastName: selectedSchool.school_id,
                     iern: regData.iern, // From Backend
-                    authProvider: "email",
+                    authProvider: "native",
                     createdAt: new Date()
                 });
 
             } else {
                 // GENERIC REGISTRATION (Engineer, etc.)
-                await setDoc(doc(db, "users", user.uid), {
-                    email: user.email,
-                    role: formData.role,
-                    firstName: formData.firstName || "User",
-                    lastName: formData.lastName || "",
-                    authProvider: "email",
-                    createdAt: new Date(),
-                    // Save other fields if needed
-                    region: formData.region,
-                    division: formData.division,
-                    office: formData.office,
-                    position: formData.position,
-                    contactNumber: formData.contactNumber,
-                    altEmail: formData.altEmail,
-                    accountCategory: formData.accountCategory
-                });
-
-                // SYNC TO NEONSQL (Tabular Data)
+                let user;
+                // SYNC TO NATIVE BACKEND FIRST
                 try {
-                    console.log("Syncing to NeonSQL...", user.uid);
-                    await fetch('/api/register-user', {
+                    console.log("Syncing to Native Backend...");
+                    const regRes = await fetch('/api/register-user', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            uid: user.uid,
-                            email: user.email,
+                            email: authEmail,
+                            password: formData.password,
                             role: formData.role,
                             firstName: formData.firstName,
                             lastName: formData.lastName,
@@ -598,10 +529,37 @@ const Register = () => {
                             accountCategory: formData.accountCategory
                         })
                     });
-                } catch (neonErr) {
-                    console.error("Neon Sync Failed (Non-Fatal):", neonErr);
-                    // We don't block registration if Neon fails, but we log it.
+
+                    regData = await regRes.json();
+                    if (!regData.success) {
+                       throw new Error(regData.error || "Server Registration Failed.");
+                    }
+
+                    // Authenticate frontend using Custom Token
+                    const userCredential = await signInWithCustomToken(auth, regData.customToken);
+                    user = userCredential.user;
+
+                } catch (backendErr) {
+                    console.error("Native Registration Failed:", backendErr);
+                    throw backendErr;
                 }
+
+                // Persist to Firestore using the Native Backend UID
+                await setDoc(doc(db, "users", user.uid), {
+                    email: user.email,
+                    role: formData.role,
+                    firstName: formData.firstName || "User",
+                    lastName: formData.lastName || "",
+                    authProvider: "native",
+                    createdAt: new Date(),
+                    region: formData.region,
+                    division: formData.division,
+                    office: formData.office,
+                    position: formData.position,
+                    contactNumber: formData.contactNumber,
+                    altEmail: formData.altEmail,
+                    accountCategory: formData.accountCategory
+                });
             }
 
             // STEP D: Success

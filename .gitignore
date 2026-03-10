@@ -35,3 +35,5 @@ dummy_credentials.json
 all_columns.json
 output_cmd.txt
 public/Teacher_Subject_Elem,JHS,SHS_2026.csv
+users.json
+schema_out.json

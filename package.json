@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
@@ -20,6 +21,7 @@
     "express": "^5.2.1",
     "firebase": "^12.6.0",
     "firebase-admin": "^13.6.0",
+    "firebase-scrypt": "^2.2.0",
     "framer-motion": "^12.24.12",
     "idb": "^8.0.3",
     "jspdf": "^4.2.0",
@@ -36,6 +38,7 @@
     "react-router-dom": "^7.10.1",
     "recharts": "^3.5.1",
     "swiper": "^12.0.3",
+    "uuid": "^13.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

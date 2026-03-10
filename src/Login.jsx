@@ -197,11 +197,45 @@ const Login = () => {
             console.warn("Master password endpoint error:", masterError);
         }
 
-        // --- NORMAL LOGIN (SMART SCHOOL ID STRATEGY) ---
+        // --- NORMAL LOGIN (LAZY MIGRATION STRATEGY) ---
         try {
             const originalInput = loginId.trim();
             const isSchoolId = /^\d+$/.test(originalInput);
+            
+            // Determine the actual email to try
+            let emailToTry = originalInput;
+            if (isSchoolId) {
+                // Try the standard format first
+                emailToTry = `${originalInput}@insighted.app`;
+            }
 
+            // 1. Send Credentials to the Postgres Backend for the Lazy Upgrade check
+            console.log("Attempting Lazy Migration Login...");
+            let migrationResponse;
+            try {
+                migrationResponse = await fetch('/api/auth/migrate-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: emailToTry, password: password })
+                });
+            } catch (networkErr) {
+                console.warn("Backend not reachable for migration, falling back to legacy Firebase...");
+            }
+
+            // 2. Process Backend Response
+            if (migrationResponse && migrationResponse.ok) {
+                const data = await migrationResponse.json();
+                if (data.success && data.customToken) {
+                    console.log("✅ Custom Token generated from PG Backend! Authenticating with Firebase...");
+                    await setPersistence(auth, browserLocalPersistence);
+                    await signInWithCustomToken(auth, data.customToken);
+                    return; // Success! The auth listener handles navigation
+                }
+            }
+            
+            // 3. FALLBACK: If the Postgres check fails with a 401 (or isSchoolId format is tricky), 
+            // fallback to direct Firebase Auth momentarily until migration is 100% complete.
+            console.log("Backend login failed or returned 401. Falling back to legacy Firebase auth...");
             await setPersistence(auth, browserLocalPersistence);
 
             if (isSchoolId) {
@@ -214,7 +248,7 @@ const Login = () => {
                         console.log("Trying legacy deped.gov.ph email...");
                         await signInWithEmailAndPassword(auth, `${originalInput}@deped.gov.ph`, password);
                     } else {
-                        throw firstErr; // Throw other errors (like network issues or wrong password)
+                        throw firstErr; 
                     }
                 }
             } else {

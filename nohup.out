@@ -1,0 +1,30 @@
+[dotenv@17.2.3] injecting env (4) from .env -- tip: 🔑 add access controls to secrets: https://dotenvx.com/ops
+🔌 Database Connection: Remote (postgres://Administrator1:****@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd)
+âœ… Firebase Admin Initialized from Local File
+--- Startup Debug Info ---
+Executed File: E:\InsightEd-Mobile-PWA\api\index.js
+Current File: E:\InsightEd-Mobile-PWA\api\index.js
+Is Main Module? Legacy check
+Force Start Env? undefined
+--------------------------
+🚀 Starting database initialization...
+     [Segment 0.1: project_documents table]
+     [Segment 0.2: engineer_form PDF columns]
+✅ DB Init: Finance Projects table verified.
+✅ DB Init: Dropped obsolete 'lgu_forms' table.
+✅ Finance DB Init: lgu_projects schema verified.
+✅ DB Init: Masterlist (Cloned) table verified.
+🚀 Server listening on port 3000
+👉 CORS Allowed Origins: http://localhost:5173, http://localhost:5174, https://insight-ed-mobile-pwa.vercel.app
+âœ… REGISTRATION DATA: { school: 'Test School Native', role: 'School Head' }
+âœ… REGISTRATION DATA: { school: 'Test School Native', role: 'School Head' }
+âœ… REGISTRATION DATA: { school: 'Test School 23529951', role: 'School Head' }
+🤖 [Auto-Fill] Filling Teachers for School: 9923529951...
+✅ [Auto-Fill] Success! Copied 0 teachers for school 9923529951.
+[SUCCESS] Registered School: Test School 23529951 (2026-04984)
+TRIGGER: calculateSchoolProgress for 9923529951
+âœ… Snapshot Updated for 9923529951: 1/10 (10%) [1000000000]
+[InstantUpdate] Starting for 9923529951...
+[InstantUpdate] Stats for 9923529951: Learners = 0, Teachers = 0, Rooms = 0 
+[InstantUpdate] No Critical Issues. Awaiting Python Validation...
+âœ… Instant School Summary Update for 9923529951: Pending Validation (0 issues)
