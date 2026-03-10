@@ -3520,6 +3520,16 @@ app.use((err, req, res, next) => {
   }
 });
 
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'online', 
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    pid: process.pid
+  });
+});
+
 // ==================================================================
 //                        SERVER STARTUP
 // ==================================================================
@@ -3560,13 +3570,12 @@ process.on('unhandledRejection', (reason, promise) => {
 if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
 
-
-
-
   const server = app.listen(PORT, () => {
-    console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
-    console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
-    console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+    console.log(`\n================================================`);
+    console.log(`🚀 SERVER RUNNING - PID: ${process.pid}`);
+    console.log(`🚀 Port: ${PORT}`);
+    console.log(`🚀 Time: ${new Date().toLocaleString()}`);
+    console.log(`================================================\n`);
   });
 
   server.on('error', (e) => {
@@ -3575,6 +3584,23 @@ if (isMainModule || process.env.START_SERVER === 'true') {
     } else {
       console.error("❌ Server Error:", e);
     }
+  });
+
+  // Graceful Shutdown Handlers
+  process.on('SIGINT', () => {
+    console.log('🛑 Received SIGINT (Ctrl+C or PM2). Shutting down...');
+    server.close(() => {
+      console.log('👋 Server closed.');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('🛑 Received SIGTERM. Shutting down...');
+    server.close(() => {
+      console.log('👋 Server closed.');
+      process.exit(0);
+    });
   });
 }
 
