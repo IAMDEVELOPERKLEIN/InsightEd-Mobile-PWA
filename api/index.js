@@ -24,6 +24,37 @@ import bcrypt from 'bcrypt'; // For new standard hashes
 // Load environment variables
 dotenv.config();
 
+// --- FIREBASE ADMIN INIT ---
+if (!admin.apps.length) {
+  try {
+    let credential;
+    // 1. Try Environment Variable (Vercel Production)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      credential = admin.credential.cert(serviceAccount);
+      console.log("✅ Firebase Admin Initialized from ENV");
+    }
+    // 2. Try Local File (Local Dev)
+    else {
+      try {
+        const serviceAccount = require("./service-account.json");
+        credential = admin.credential.cert(serviceAccount);
+        console.log("✅ Firebase Admin Initialized from Local File");
+      } catch (fileErr) {
+        console.warn("⚠️ No local service-account.json found.");
+      }
+    }
+
+    if (credential) {
+      admin.initializeApp({ credential });
+    } else {
+      console.warn("⚠️ Firebase Admin NOT initialized (Missing Credentials)");
+    }
+  } catch (e) {
+    console.warn("⚠️ Firebase Admin Init Failed:", e.message);
+  }
+}
+
 // --- EMAIL TRANSPORTER ---
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -1248,10 +1279,14 @@ app.post('/api/auth/migrate-login', async (req, res) => {
   }
 
   try {
-    // 1. Fetch user from PostgreSQL
-    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE email = $1', [email.trim()]);
+    const normalizedEmail = email.trim().toLowerCase();
+    console.log(`[MIGRATE LOGIN] Attempting login for: ${normalizedEmail}`);
 
+    // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
+    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+    
     if (userRes.rowCount === 0) {
+      console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
     }
 
@@ -1297,28 +1332,17 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     }
 
     if (!isValid) {
+      console.warn(`[MIGRATE LOGIN] Password mismatch for: ${normalizedEmail}`);
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
     }
 
-    // 3. User is verified! Generate a Firebase Custom Token so frontend can sign in
-    let customToken;
-    if (admin.apps.length > 0) {
-      customToken = await admin.auth().createCustomToken(user.uid, { role: user.role });
-    } else {
-      // Firebase Admin NOT available (local dev) — generate fallback JWT
-      console.warn('⚠️ Firebase Admin not initialized — generating fallback custom token');
-      const crypto = await import('crypto');
-      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-      const payload = Buffer.from(JSON.stringify({
-        uid: user.uid, role: user.role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
-        iss: 'insighted-local-dev'
-      })).toString('base64url');
-      const secret = process.env.JWT_SECRET || 'insighted-local-secret';
-      const sig = crypto.default.createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-      customToken = `${header}.${payload}.${sig}`;
-    }
+    console.log(`[MIGRATE LOGIN] Success for: ${normalizedEmail} (Role: ${user.role})`);
+
+    // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
+    // until the frontend is fully decoupled from the Firebase SDK.
+    const customToken = await admin.auth().createCustomToken(user.uid, {
+        role: user.role // Embed role into token if you like
+    });
 
     return res.json({
       success: true,
@@ -5314,7 +5338,8 @@ app.post('/api/register-school', async (req, res) => {
       return res.status(400).json({ error: "This school is already registered." });
     }
 
-    const emailCheckRes = await client.query("SELECT uid FROM users WHERE email = $1", [email]);
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailCheckRes = await client.query("SELECT uid FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
     if (emailCheckRes.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: "This email is already registered." });
@@ -5367,7 +5392,7 @@ app.post('/api/register-school', async (req, res) => {
             hash_version = EXCLUDED.hash_version;`,
         [
           uid,
-          email,
+          normalizedEmail,
           userRole,
           valueOrNull(contactNumber),
           userRole, // first_name (now using role name instead of hardcoded 'School Head')
@@ -5513,8 +5538,9 @@ app.post('/api/register-beta', async (req, res) => {
     const iernData = iernResult.rows[0];
     const foundIern = iernData.iern; // IERN is actually 'iern' column
 
+    const normalizedEmail = email.trim().toLowerCase();
     // 1b. Duplicate Email Check
-    const emailCheckRes = await client.query("SELECT uid FROM users WHERE email = $1", [email]);
+    const emailCheckRes = await client.query("SELECT uid FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
     if (emailCheckRes.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: "This email is already registered." });
@@ -5547,7 +5573,7 @@ app.post('/api/register-beta', async (req, res) => {
             hash_version = EXCLUDED.hash_version;`,
         [
           uid,
-          email,
+          normalizedEmail,
           'Beta Tester',
           contactNumber || null,
           'Beta Tester',
@@ -5630,8 +5656,9 @@ app.post('/api/register-user', async (req, res) => {
   }
 
   try {
+    const normalizedEmail = email.trim().toLowerCase();
     // 1. Duplicate Email Check
-    const emailCheckRes = await pool.query("SELECT uid FROM users WHERE email = $1", [email]);
+    const emailCheckRes = await pool.query("SELECT uid FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
     if (emailCheckRes.rows.length > 0) {
       return res.status(400).json({ error: "This email is already registered." });
     }
@@ -5680,8 +5707,17 @@ app.post('/api/register-user', async (req, res) => {
                 hash_version = EXCLUDED.hash_version;
         `;
 
+    await pool.query(query, [
+      uid, normalizedEmail, role,
+      firstName, lastName,
+      region, division, province, city, barangay,
+      office, position, contactNumber, altEmail,
+      accountCategory, passwordHash, 'bcrypt'
+    ]);
+
+
     const values = [
-      uid, email, role,
+      uid, normalizedEmail, role,
       valueOrNull(firstName), valueOrNull(lastName),
       valueOrNull(region), valueOrNull(division),
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
@@ -14157,6 +14193,16 @@ app.post('/api/user/progress', async (req, res) => {
   }
 });
 
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'online', 
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    pid: process.pid
+  });
+});
+
 // --- SERVER STARTUP ---
 const startServer = async () => {
   try {
@@ -14166,10 +14212,31 @@ const startServer = async () => {
     await initMasterlistDB();
 
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server listening on port ${PORT}`);
-      console.log(`👉 CORS Allowed Origins: http://localhost:5173, http://localhost:5174, https://insight-ed-mobile-pwa.vercel.app`);
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`\n================================================`);
+      console.log(`🚀 SERVER RUNNING - PID: ${process.pid}`);
+      console.log(`🚀 Port: ${PORT}`);
+      console.log(`🚀 Time: ${new Date().toLocaleString()}`);
+      console.log(`================================================\n`);
     });
+
+    // Graceful Shutdown Handlers
+    process.on('SIGINT', () => {
+      console.log('🛑 Received SIGINT (Ctrl+C or PM2). Shutting down...');
+      server.close(() => {
+        console.log('👋 Server closed.');
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGTERM', () => {
+      console.log('🛑 Received SIGTERM. Shutting down...');
+      server.close(() => {
+        console.log('👋 Server closed.');
+        process.exit(0);
+      });
+    });
+
   } catch (err) {
     console.error("❌ Failed to start server:", err.message);
     process.exit(1);

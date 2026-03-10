@@ -205,8 +205,21 @@ const Login = () => {
             // Determine the actual email to try
             let emailToTry = originalInput;
             if (isSchoolId) {
-                // Try the standard format first
-                emailToTry = `${originalInput}@insighted.app`;
+                // Determine the actual registered email for this School ID
+                try {
+                    const lookupRes = await fetch(`/api/auth/lookup-email/${originalInput}`);
+                    const lookupData = await lookupRes.json();
+                    if (lookupData.found && lookupData.email) {
+                        emailToTry = lookupData.email;
+                        console.log("Resolved School ID to email:", emailToTry);
+                    } else {
+                        // Fallback to legacy format if not found
+                        emailToTry = `${originalInput}@insighted.app`;
+                    }
+                } catch (lookupErr) {
+                    console.warn("Email lookup failed, using fallback:", lookupErr);
+                    emailToTry = `${originalInput}@insighted.app`;
+                }
             }
 
             // 1. Send Credentials to the Postgres Backend for the Lazy Upgrade check
