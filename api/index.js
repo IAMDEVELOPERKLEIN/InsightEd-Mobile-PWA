@@ -24,6 +24,37 @@ import bcrypt from 'bcrypt'; // For new standard hashes
 // Load environment variables
 dotenv.config();
 
+// --- FIREBASE ADMIN INIT ---
+if (!admin.apps.length) {
+  try {
+    let credential;
+    // 1. Try Environment Variable (Vercel Production)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      credential = admin.credential.cert(serviceAccount);
+      console.log("✅ Firebase Admin Initialized from ENV");
+    }
+    // 2. Try Local File (Local Dev)
+    else {
+      try {
+        const serviceAccount = require("./service-account.json");
+        credential = admin.credential.cert(serviceAccount);
+        console.log("✅ Firebase Admin Initialized from Local File");
+      } catch (fileErr) {
+        console.warn("⚠️ No local service-account.json found.");
+      }
+    }
+
+    if (credential) {
+      admin.initializeApp({ credential });
+    } else {
+      console.warn("⚠️ Firebase Admin NOT initialized (Missing Credentials)");
+    }
+  } catch (e) {
+    console.warn("⚠️ Firebase Admin Init Failed:", e.message);
+  }
+}
+
 // --- EMAIL TRANSPORTER ---
 const transporter = nodemailer.createTransport({
   service: 'gmail',
