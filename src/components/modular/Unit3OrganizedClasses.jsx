@@ -75,11 +75,29 @@ const Unit3OrganizedClasses = () => {
         let parsedData = {};
         let isActuallySaved = false;
         
+        // --- 0. Parse Unit 2 Data for Strict Filtering ---
+        let u2ActiveGrades = {}; // Map of gradeId -> { is_active, total }
+        if (d.unit2_simplified_enrollment) {
+            try {
+                const u2Raw = typeof d.unit2_simplified_enrollment === 'string'
+                    ? JSON.parse(d.unit2_simplified_enrollment)
+                    : d.unit2_simplified_enrollment;
+                
+                const u2Arr = Array.isArray(u2Raw) ? u2Raw : (u2Raw.array || []);
+                u2Arr.forEach(item => {
+                    u2ActiveGrades[item.grade_level] = {
+                        is_active: item.is_active !== false,
+                        total: parseInt(item.total) || 0
+                    };
+                });
+            } catch (e) { console.warn("U2 Parse Error in Unit 3", e); }
+        }
+
         // 1. Check Multigrade Slots (Primary Source for groupings)
         for (let i = 1; i <= 3; i++) {
             const groupName = d[`multigrade_groupings_${i}`];
             const groupSize = d[`multigrade_size_${i}`];
-            const groupSections = d[`multigrade_sections_${i}`] || 0; // Future proofing
+            const groupSections = d[`multigrade_sections_${i}`] || 0; 
 
             if (groupName) {
                 const id = `mg_${i}`;
@@ -117,36 +135,53 @@ const Unit3OrganizedClasses = () => {
 
         // Determine which single grades are actually active in the school
         let co = (d.curricular_offering || "").toLowerCase();
-        let allowedGrades = [];
-        if (co.includes("kinder")) allowedGrades.push("kinder");
-        if (co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12")) {
-            allowedGrades.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+        let offeringGrades = [];
+        if (co.includes("integrated") || co.includes("k-12") || co.includes("k to 12") || co.includes("k-10") || co.includes("k to 10")) {
+            offeringGrades = singleGradeMappings.map(m => m.id);
+        } else {
+            if (co.includes("kinder")) offeringGrades.push("kinder");
+            if (co.includes("elementary") || co.includes("primary")) {
+                offeringGrades.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+            }
+            if (co.includes("junior high") || co.includes("jhs")) {
+                offeringGrades.push("g7", "g8", "g9", "g10");
+            }
+            if (co.includes("senior high") || co.includes("shs")) {
+                offeringGrades.push("g11", "g12");
+            }
         }
-        if (co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12")) {
-            allowedGrades.push("g7", "g8", "g9", "g10");
-        }
-        if (co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12")) {
-            allowedGrades.push("g11", "g12");
-        }
+        offeringGrades = [...new Set(offeringGrades)];
 
         singleGradeMappings.forEach(mapping => {
             const size = d[mapping.key];
-            const isActiveInOfferings = allowedGrades.includes(mapping.id);
             
+            // --- STRICT FILTERING LOGIC ---
+            // A grade is allowed iff:
+            // 1. It is in the general Curricular Offering
+            // 2. AND (If Unit 2 is saved) it is marked ACTIVE and has TOTAL > 0
+            
+            const isOffered = offeringGrades.includes(mapping.id);
+            const u2Data = u2ActiveGrades[mapping.id];
+            
+            // If u2Data exists, it must be active and have count > 0.
+            // If u2Data doesn't exist (not saved yet), we fall back to general offering.
+            const isActuallyActive = u2Data 
+                ? (u2Data.is_active && u2Data.total > 0)
+                : isOffered;
+
+            if (!isActuallyActive) return;
+
             // Check if this single grade is part of ANY multigrade label
             const isJoined = mgLabels.some(label => {
-                // Look for the specific number part: e.g. "2" from "Grade 2"
                 const gradeNum = mapping.label.replace(/\D/g, "");
                 if (gradeNum) {
-                    // Match with word boundaries to avoid 1 in 10, etc.
                     const numRegex = new RegExp(`\\b${gradeNum}\\b`);
                     return numRegex.test(label) || label.includes(mapping.label.toLowerCase());
                 }
-                // Fallback for non-numeric (Kindergarten)
                 return label.includes(mapping.label.toLowerCase());
             });
 
-            if (isActiveInOfferings && !isJoined) {
+            if (!isJoined) {
                 activeClasses.push({ label: mapping.label, id: mapping.id });
                 parsedData[mapping.id] = { 
                     selectedSize: size || null, 

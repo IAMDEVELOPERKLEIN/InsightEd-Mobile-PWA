@@ -17,7 +17,7 @@ npm run build
 
 echo "🔄 4. Restarting Backend Service..."
 # Using the name instead of ID since the ID might change
-pm2 restart insighted-backend --update-env
+pm2 restart insighted-backend
 
 echo "✅ Deployment Complete!"
 echo "------------------------------------------------"

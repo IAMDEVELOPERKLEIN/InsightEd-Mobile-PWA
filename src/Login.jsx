@@ -30,7 +30,7 @@ const getDashboardPath = (role) => {
         'Central Office': '/monitoring-dashboard',
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
-        'Beta Tester': '/modular-dashboard',
+        'Beta Tester': '/activity-dashboard',
         'EFD': '/efd-dashboard',
     };
     return roleMap[role] || '/';

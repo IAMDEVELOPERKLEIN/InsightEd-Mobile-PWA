@@ -28,6 +28,7 @@ import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
 import SchoolAuditView from './modules/SchoolAuditView';
 import UserProfile from './modules/UserProfile';
 import Activity from './modules/Activity';
+import MyActivityDashboard from './modules/MyActivityDashboard';
 import ProjectGallery from './modules/ProjectGallery';
 import Outbox from './modules/Outbox';
 import EngineerOutbox from './modules/EngineerOutbox';
@@ -169,6 +170,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
               <ModularDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/activity-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <MyActivityDashboard />
             </ProtectedRoute>
           }
         />

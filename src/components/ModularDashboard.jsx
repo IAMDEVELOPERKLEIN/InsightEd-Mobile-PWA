@@ -4,6 +4,7 @@ import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, Fi
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
 import BarongMascot from "./BarongMascot";
+import BottomNav from "../modules/BottomNav";
 
 const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, isLocked }) => {
     const radius = (size - strokeWidth) / 2;
@@ -282,6 +283,8 @@ const ModularDashboard = () => {
                     <BarongMascot className="w-16 h-16 drop-shadow-md" />
                 </motion.div>
             </motion.div>
+
+            <BottomNav userRole="Beta Tester" />
         </motion.div>
     );
 };
