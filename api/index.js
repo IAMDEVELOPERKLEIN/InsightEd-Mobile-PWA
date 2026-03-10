@@ -19,6 +19,7 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
+import { teachChatbot, chatWithKnowledge } from './chatbot.js';
 
 
 // Load environment variables
@@ -166,7 +167,7 @@ const checkAndAddColumn = async (tableName, columnName, columnDefinition) => {
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = $1 AND column_name = $2
   `, [tableName, columnName]);
-  
+
   if (res.rowCount === 0) {
     console.log(`       -> Adding column ${columnName} to ${tableName}...`);
     await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
@@ -174,15 +175,15 @@ const checkAndAddColumn = async (tableName, columnName, columnDefinition) => {
 };
 
 const checkAndDropColumn = async (tableName, columnName) => {
-    const res = await pool.query(`
+  const res = await pool.query(`
       SELECT 1 FROM information_schema.columns 
       WHERE table_name = $1 AND column_name = $2
     `, [tableName, columnName]);
-    
-    if (res.rowCount > 0) {
-      console.log(`       -> Dropping column ${columnName} from ${tableName}...`);
-      await pool.query(`ALTER TABLE ${tableName} DROP COLUMN ${columnName}`);
-    }
+
+  if (res.rowCount > 0) {
+    console.log(`       -> Dropping column ${columnName} from ${tableName}...`);
+    await pool.query(`ALTER TABLE ${tableName} DROP COLUMN ${columnName}`);
+  }
 };
 
 // --- DATABASE INIT ---
@@ -468,7 +469,7 @@ const initDB = async () => {
     currentSegment = "Segment 8: engineer_image";
     console.log(`     [${currentSegment}]`);
     await checkAndAddColumn('engineer_image', 'ipc', 'TEXT');
-    
+
     // Backfill IPC in engineer_image
     await pool.query(`
       UPDATE engineer_image ei
@@ -492,10 +493,10 @@ const initDB = async () => {
     currentSegment = "Segment 10: lgu_projects columns";
     console.log(`     [${currentSegment}]`);
     if (await tableExists('lgu_projects')) {
-        await checkAndAddColumn('lgu_projects', 'project_category', 'TEXT');
-        await checkAndAddColumn('lgu_projects', 'number_of_classrooms', 'INTEGER DEFAULT 0');
-        await checkAndAddColumn('lgu_projects', 'number_of_storeys', 'INTEGER DEFAULT 0');
-        await checkAndAddColumn('lgu_projects', 'number_of_sites', 'INTEGER DEFAULT 1');
+      await checkAndAddColumn('lgu_projects', 'project_category', 'TEXT');
+      await checkAndAddColumn('lgu_projects', 'number_of_classrooms', 'INTEGER DEFAULT 0');
+      await checkAndAddColumn('lgu_projects', 'number_of_storeys', 'INTEGER DEFAULT 0');
+      await checkAndAddColumn('lgu_projects', 'number_of_sites', 'INTEGER DEFAULT 1');
     }
 
     currentSegment = "Segment 11: secondary DB sync";
@@ -907,7 +908,7 @@ const initMasterlistDB = async () => {
           "province" character varying(100)
       );
     `);
-    
+
     // Migration: Rename leg_district to legislative_district
     await pool.query(`
       DO $$
@@ -1284,7 +1285,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
     const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
-    
+
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
@@ -1298,12 +1299,12 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     if (user.hash_version === 'bcrypt') {
       // User has already bumped to standard bcrypt
       isValid = await bcrypt.compare(password, user.password_hash);
-    } 
+    }
     else if (user.hash_version === 'firebase') {
       // Check if server is configured for Firebase Scrypt
       if (!process.env.FIREBASE_HASH_SIGNER_KEY) {
-         console.error("CRITICAL: FIREBASE_HASH_SIGNER_KEY is missing from .env");
-         return res.status(500).json({ success: false, error: "Server configuration error during migration." });
+        console.error("CRITICAL: FIREBASE_HASH_SIGNER_KEY is missing from .env");
+        return res.status(500).json({ success: false, error: "Server configuration error during migration." });
       }
 
       const scrypt = new FirebaseScrypt({
@@ -1322,13 +1323,13 @@ app.post('/api/auth/migrate-login', async (req, res) => {
         const newBcryptHash = await bcrypt.hash(password, saltRounds);
 
         await pool.query(
-          `UPDATE users SET password_hash = $1, password_salt = NULL, hash_version = 'bcrypt' WHERE email = $2`, 
+          `UPDATE users SET password_hash = $1, password_salt = NULL, hash_version = 'bcrypt' WHERE email = $2`,
           [newBcryptHash, email]
         );
       }
     } else {
-       // Catch-all for unknown hash versions
-       return res.status(401).json({ success: false, error: "Unsupported hash algorithm." });
+      // Catch-all for unknown hash versions
+      return res.status(401).json({ success: false, error: "Unsupported hash algorithm." });
     }
 
     if (!isValid) {
@@ -1341,17 +1342,17 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
     // until the frontend is fully decoupled from the Firebase SDK.
     const customToken = await admin.auth().createCustomToken(user.uid, {
-        role: user.role // Embed role into token if you like
+      role: user.role // Embed role into token if you like
     });
 
-    return res.json({ 
-        success: true, 
-        customToken: customToken,
-        user: {
-            uid: user.uid,
-            email: user.email,
-            role: user.role
-        }
+    return res.json({
+      success: true,
+      customToken: customToken,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        role: user.role
+      }
     });
 
   } catch (err) {
@@ -4636,6 +4637,57 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
 });
 
 // POST - Admin Approve School
+// --- CHATBOT KNOWLEDGE TEACHING ---
+app.post('/api/admin/teach', async (req, res) => {
+  const bb = busboy({ headers: req.headers });
+  let content = "";
+  let filePath = null;
+  const tempFiles = [];
+
+  bb.on('file', (name, file, info) => {
+    const { filename, mimeType } = info;
+    if (mimeType === 'application/pdf') {
+      const savePath = path.join(process.cwd(), 'storage', `teach_${Date.now()}_${filename}`);
+      filePath = savePath;
+      tempFiles.push(savePath);
+      file.pipe(fs.createWriteStream(savePath));
+    } else {
+      file.resume();
+    }
+  });
+
+  bb.on('field', (name, val) => {
+    if (name === 'content') content = val;
+  });
+
+  bb.on('finish', async () => {
+    try {
+      const result = await teachChatbot(content, filePath);
+      // Cleanup temp files
+      tempFiles.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
+      res.json(result);
+    } catch (err) {
+      console.error("Chatbot Teaching Failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  req.pipe(bb);
+});
+
+// --- CHATBOT CHAT ---
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) return res.status(400).json({ error: "Question is required" });
+    const answer = await chatWithKnowledge(question);
+    res.json({ answer });
+  } catch (err) {
+    console.error("Chatbot Error:", err);
+    res.status(500).json({ error: "Failed to get answer from chatbot" });
+  }
+});
+
 app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
   const { pending_id } = req.params;
   const { reviewed_by, reviewed_by_name } = req.body;
@@ -5498,7 +5550,7 @@ app.post('/api/register-school', async (req, res) => {
 
     // NATIVE AUTH: Generate Firebase Custom Token
     const customToken = await admin.auth().createCustomToken(uid, {
-        role: userRole
+      role: userRole
     });
 
     res.json({ success: true, iern: newIern, customToken: customToken, message: "School Registered Successfully" });
@@ -5633,7 +5685,7 @@ app.post('/api/register-beta', async (req, res) => {
 
     // NATIVE AUTH: Generate Custom Token
     const customToken = await admin.auth().createCustomToken(uid, {
-        role: 'Beta Tester'
+      role: 'Beta Tester'
     });
 
     res.json({ success: true, iern: foundIern, customToken: customToken, message: "Beta Tester Registered Successfully" });
@@ -5735,7 +5787,7 @@ app.post('/api/register-user', async (req, res) => {
 
     // NATIVE AUTH: Generate Custom Token
     const customToken = await admin.auth().createCustomToken(uid, {
-        role: role
+      role: role
     });
 
     res.json({ success: true, customToken: customToken, message: "User synced to Database" });
@@ -12681,17 +12733,17 @@ const initializeAndStart = async () => {
     try {
       // 2. Sequential Migrations
       console.log("📦 Starting Database Initializations...");
-      
+
       console.log("  -> Initializing OTP Table...");
       await initOtpTable(pool);
-      
+
       console.log("  -> Initializing Core DB...");
       console.log(`     (Pool Status: Total=${pool.totalCount}, Idle=${pool.idleCount}, Waiting=${pool.waitingCount})`);
       await initDB();
-      
+
       console.log("  -> Initializing Finance DB...");
       await initFinanceDB();
-      
+
       console.log("  -> Initializing Masterlist DB...");
       await initMasterlistDB();
 
@@ -13453,16 +13505,16 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
     // 0. Server-side validation: Check baseline total from Unit 6
     const schoolRes = await pool.query('SELECT total_teachers_registered FROM ph_schools WHERE school_id = $1', [schoolId]);
     if (schoolRes.rows.length === 0) {
-        return res.status(404).json({ error: "School not found" });
+      return res.status(404).json({ error: "School not found" });
     }
     const baseline = parseInt(schoolRes.rows[0].total_teachers_registered) || 0;
     const totalInput = pInt(d.fund_deped) + pInt(d.fund_lgu) + pInt(d.fund_others);
 
     if (totalInput > baseline) {
-        return res.status(400).json({ 
-            error: "Data Validation Error", 
-            message: `Total assigned teachers (${totalInput}) exceeds the registered baseline (${baseline}) from Unit 6.`
-        });
+      return res.status(400).json({
+        error: "Data Validation Error",
+        message: `Total assigned teachers (${totalInput}) exceeds the registered baseline (${baseline}) from Unit 6.`
+      });
     }
 
     // 1. Upsert into teaching_personnel table
@@ -13585,11 +13637,11 @@ app.get('/api/ph_schools/:schoolId/teachers', async (req, res) => {
  */
 app.put('/api/teachers/:teacherId', async (req, res) => {
   const { teacherId } = req.params;
-  const { 
+  const {
     first_name, middle_name, last_name, position,
     specialization, sex, experience_bracket, funding_source, role_designation,
     monday_mins, tuesday_mins, wednesday_mins, thursday_mins, friday_mins,
-    workloads 
+    workloads
   } = req.body;
 
   const client = await pool.connect();
@@ -13737,11 +13789,11 @@ app.get('/api/subjects', async (req, res) => {
 
 app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
   const { schoolId } = req.params;
-  const { 
-    first_name, last_name, position, sex, 
-    specialization, experience_bracket, funding_source, role_designation 
+  const {
+    first_name, last_name, position, sex,
+    specialization, experience_bracket, funding_source, role_designation
   } = req.body;
-  
+
   try {
     const query = `
       INSERT INTO ph_teachers_list (
@@ -13753,8 +13805,8 @@ app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
     `;
     const values = [
       schoolId, first_name, last_name, position || 'Teacher I', sex || '',
-      specialization || '', experience_bracket || '', 
-      funding_source || 'DepEd Nationally Funded', 
+      specialization || '', experience_bracket || '',
+      funding_source || 'DepEd Nationally Funded',
       role_designation || 'Non-Advisory'
     ];
     const result = await pool.query(query, values);
@@ -13782,11 +13834,11 @@ app.post('/api/ph_schools/unit6/:schoolId', async (req, res) => {
     // 1. Mark unit6_completed flag in ph_schools
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE;`);
     await pool.query(`UPDATE ph_schools SET unit6_completed = TRUE WHERE school_id = $1`, [schoolId]);
-    
+
     // 2. Calculate baseline total from registry for Unit 7's reference
     const countRes = await pool.query('SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1', [schoolId]);
     const count = parseInt(countRes.rows[0].count) || 0;
-    
+
     // 3. Store baseline in ph_schools
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS total_teachers_registered INTEGER DEFAULT 0;`);
     await pool.query('UPDATE ph_schools SET total_teachers_registered = $1 WHERE school_id = $2', [count, schoolId]);
@@ -13821,7 +13873,7 @@ app.get('/api/schools/:schoolId/workload-summary', async (req, res) => {
       GROUP BY grade_level 
       ORDER BY grade_level ASC
     `, [schoolId]);
-    
+
     const subjectDist = await pool.query(`
       SELECT subject_name as label, COUNT(DISTINCT teacher_id) as value 
       FROM ph_teachers_workload 
@@ -14163,8 +14215,8 @@ app.post('/api/user/progress', async (req, res) => {
 
 // Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'online', 
+  res.json({
+    status: 'online',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     pid: process.pid
@@ -14178,7 +14230,7 @@ const startServer = async () => {
     await initDB();
     await initFinanceDB();
     await initMasterlistDB();
-    
+
     const PORT = process.env.PORT || 3000;
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n================================================`);
