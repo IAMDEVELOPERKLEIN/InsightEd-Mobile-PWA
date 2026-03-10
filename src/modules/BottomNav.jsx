@@ -29,6 +29,18 @@ const BottomNav = ({ userRole }) => {
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
+        'DepEd Engineer': [
+            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
+            { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
+            { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'Non-DepEd Engineer': [
+            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
+            { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
+            { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
         'Local Government Unit': [
             { label: 'Projects', path: '/lgu-dashboard', icon: TbClipboardList },
             { label: 'Settings', path: '/profile', icon: FiSettings },
@@ -80,6 +92,18 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', state: { activeTab: 'settings' }, icon: FiSettings },
         ],
         'EFD': [
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'EFD Engineer': [
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'HRODI': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },

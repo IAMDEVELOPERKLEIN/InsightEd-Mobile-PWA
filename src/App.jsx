@@ -126,17 +126,18 @@ const AnimatedRoutes = () => {
       <Route path="/" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      {/* Dashboards */}
-      <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
-      {/* <Route path="/lgu" element={<LguDashboard />} /> */}
-      {/* <Route path="/lgu-form" element={<LguForm />} /> */}
-      {/* <Route path="/lgu-projects" element={<LguProjects />} /> */}
-      <Route path="/engineer-projects" element={<EngineerProjects />} />
-      <Route path="/super-admin" element={<SuperAdminDashboard />} />
-      <Route path="/finance-dashboard" element={<FinanceDashboard />} />
-      <Route path="/lgu-dashboard" element={<LguDashboard />} />
-      <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
-      <Route path="/lgu-project-details/:id" element={<LguProjectDetails />} />
+        {/* Dashboards */}
+        <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
+        <Route path="/non-deped-dashboard" element={<EngineerDashboard />} />{/* TODO: Create dedicated NonDepEdDashboard */}
+        {/* <Route path="/lgu" element={<LguDashboard />} /> */}
+        {/* <Route path="/lgu-form" element={<LguForm />} /> */}
+        {/* <Route path="/lgu-projects" element={<LguProjects />} /> */}
+        <Route path="/engineer-projects" element={<EngineerProjects />} />
+        <Route path="/super-admin" element={<SuperAdminDashboard />} />
+        <Route path="/finance-dashboard" element={<FinanceDashboard />} />
+        <Route path="/lgu-dashboard" element={<LguDashboard />} />
+        <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
+        <Route path="/lgu-project-details/:id" element={<LguProjectDetails />} />
 
       {/* Super User Selector (Protected) */}
       <Route

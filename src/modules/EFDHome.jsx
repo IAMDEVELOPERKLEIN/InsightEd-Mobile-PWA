@@ -47,14 +47,14 @@ const EFDHome = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const user = auth.currentUser;
-                if (!user) {
+                const uid = localStorage.getItem('uid');
+                if (!uid) {
                     setLoading(false);
                     return;
                 }
 
                 // Fetch user data first to set region/division defaults
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                const userDoc = await getDoc(doc(db, 'users', uid));
                 if (userDoc.exists()) {
                     const data = userDoc.data();
                     setUserData(data);
@@ -86,15 +86,7 @@ const EFDHome = () => {
             }
         };
 
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) {
-                fetchData();
-            } else {
-                setLoading(false);
-            }
-        });
-
-        return () => unsubscribe();
+        fetchData();
     }, []);
 
     const normalize = (val) => val?.toString().trim().toUpperCase() || 'UNASSIGNED';

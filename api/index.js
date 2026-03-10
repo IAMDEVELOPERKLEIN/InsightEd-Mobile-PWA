@@ -1487,6 +1487,24 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     console.log(`[MIGRATE LOGIN] Success for: ${normalizedEmail} (Role: ${user.role})`);
 
+    // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
+    let finalCategory = user.account_category;
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
+      if (user.role === 'EFD' || user.role === 'HRODI') {
+        finalCategory = 'EFD Engineer';
+      } else if (user.role === 'Division Engineer') {
+        finalCategory = 'DepEd Engineer';
+      } else {
+        finalCategory = user.role;
+      }
+
+      // Lazy update the DB if it changed or was null
+      if (finalCategory !== user.account_category) {
+        console.log(`[MIGRATE LOGIN] Normalizing category for ${normalizedEmail}: ${finalCategory}`);
+        await pool.query('UPDATE users SET account_category = $1 WHERE uid = $2', [finalCategory, user.uid]);
+      }
+    }
+
     // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
     // until the frontend is fully decoupled from the Firebase SDK.
     const customToken = await admin.auth().createCustomToken(user.uid, {
@@ -1499,7 +1517,8 @@ app.post('/api/auth/migrate-login', async (req, res) => {
       user: {
         uid: user.uid,
         email: user.email,
-        role: user.role
+        role: user.role,
+        account_category: finalCategory
       }
     });
 
@@ -5871,7 +5890,7 @@ app.post('/api/register-user', async (req, res) => {
 
     // Auto-determine account_category based on role if not explicitly provided
     let finalAccountCategory = accountCategory;
-    if (role === 'EFD') {
+    if (role === 'EFD' || role === 'HRODI') {
       finalAccountCategory = 'EFD Engineer';
     } else if (role === 'Division Engineer' && !accountCategory) {
       finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Division Engineers
@@ -5906,15 +5925,6 @@ app.post('/api/register-user', async (req, res) => {
                 password_hash = EXCLUDED.password_hash,
                 hash_version = EXCLUDED.hash_version;
         `;
-
-    await pool.query(query, [
-      uid, normalizedEmail, role,
-      firstName, lastName,
-      region, division, province, city, barangay,
-      office, position, contactNumber, altEmail,
-      accountCategory, passwordHash, 'bcrypt'
-    ]);
-
 
     const values = [
       uid, normalizedEmail, role,
@@ -5968,7 +5978,14 @@ app.post('/api/register-user', async (req, res) => {
       customToken = `${header}.${payload}.${sig}`;
     }
 
-    res.json({ success: true, customToken: customToken, message: "User synced to Database" });
+    res.json({
+      success: true,
+      customToken: customToken,
+      uid: uid,
+      role: role,
+      accountCategory: finalAccountCategory,
+      message: "User synced to Database"
+    });
   } catch (err) {
     console.error("âŒ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });

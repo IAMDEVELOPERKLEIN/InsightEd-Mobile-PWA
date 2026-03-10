@@ -203,21 +203,25 @@ const EngineerDashboard = () => {
 
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
-      const user = auth.currentUser;
-      if (user) {
-        const docRef = doc(db, "users", user.uid);
+      const uid = localStorage.getItem('uid');
+      if (uid) {
+        const docRef = doc(db, "users", uid);
         const docSnap = await getDoc(docRef);
-        let currentRole = "";
+        let currentRole = localStorage.getItem('userRole') || "";
+        setUserRole(currentRole);
+        
         if (docSnap.exists()) {
           const userData = docSnap.data();
           setUserName(`${userData.firstName} ${userData.lastName || ''}`.trim());
-          currentRole = userData.role;
-          setUserRole(userData.role);
+          if (!currentRole) {
+              currentRole = userData.role;
+              setUserRole(userData.role);
+          }
         }
 
         try {
           setIsLoading(true);
-          let url = `${API_BASE}/api/projects?engineer_id=${user.uid}`;
+          let url = `${API_BASE}/api/projects?engineer_id=${uid}`;
           let currentProjects = [];
 
           if (currentRole === 'Super User') {
@@ -285,7 +289,7 @@ const EngineerDashboard = () => {
           }
 
           try {
-            const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${user.uid}`);
+            const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${uid}`);
             if (actResponse.ok) {
               const actData = await actResponse.json();
               setActivities(actData);
