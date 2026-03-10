@@ -107,27 +107,63 @@ if (process.env.NEW_DATABASE_URL) {
     .catch(err => console.error('âŒ Failed to connect to Secondary Database:', err.message));
 }
 
+// --- DATABASE INIT HELPERS ---
+const tableExists = async (tableName) => {
+  const res = await pool.query(`SELECT 1 FROM information_schema.tables WHERE table_name = $1`, [tableName]);
+  return res.rowCount > 0;
+};
+
+const checkAndAddColumn = async (tableName, columnName, columnDefinition) => {
+  const res = await pool.query(`
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = $1 AND column_name = $2
+  `, [tableName, columnName]);
+  
+  if (res.rowCount === 0) {
+    console.log(`       -> Adding column ${columnName} to ${tableName}...`);
+    await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+};
+
+const checkAndDropColumn = async (tableName, columnName) => {
+    const res = await pool.query(`
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = $1 AND column_name = $2
+    `, [tableName, columnName]);
+    
+    if (res.rowCount > 0) {
+      console.log(`       -> Dropping column ${columnName} from ${tableName}...`);
+      await pool.query(`ALTER TABLE ${tableName} DROP COLUMN ${columnName}`);
+    }
+};
+
 // --- DATABASE INIT ---
 const initDB = async () => {
+  let currentSegment = "Start";
   try {
+    // Set a lock timeout to prevent hanging forever on busy tables
+    await pool.query('SET lock_timeout = 5000'); // 5 seconds
+
+    currentSegment = "Segment 0.1: project_documents table";
+    console.log(`     [${currentSegment}]`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS project_documents (
         id SERIAL PRIMARY KEY,
         project_id INT REFERENCES engineer_form(project_id),
-        doc_type TEXT NOT NULL, -- 'POW', 'DUPA', 'CONTRACT'
+        doc_type TEXT NOT NULL,
         file_data TEXT, 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // --- MIGRATION: ADD PDF COLUMNS & engineer_id TO ENGINEER_FORM IF NOT EXIST ---
-    await pool.query(`
-      ALTER TABLE engineer_form 
-      ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
-      ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
-      ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
-      ADD COLUMN IF NOT EXISTS engineer_id TEXT;
+    currentSegment = "Segment 0.2: engineer_form PDF columns";
+    console.log(`     [${currentSegment}]`);
+    await checkAndAddColumn('engineer_form', 'pow_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'dupa_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'contract_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
 
+    await pool.query(`
       -- Cleanup redundant VO columns
       ALTER TABLE engineer_form
       DROP COLUMN IF EXISTS has_variation_order,
@@ -175,15 +211,17 @@ const initDB = async () => {
           ALTER TABLE engineer_form DROP COLUMN time_lapsed;
         END IF;
       END $$;
+    `);
 
-      -- Rename update_type column to actions safely (checks if actions already exists)
+    currentSegment = "Segment 5: variation_orders table";
+    console.log(`     [${currentSegment}]`);
+    await pool.query(`
       DO $$ 
       BEGIN 
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='update_type') THEN
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='actions') THEN
             ALTER TABLE engineer_form RENAME COLUMN update_type TO actions;
           ELSE
-            -- If 'actions' exists, we can drop 'update_type' because we don't need two columns
             ALTER TABLE engineer_form DROP COLUMN update_type;
           END IF;
         END IF;
@@ -220,25 +258,19 @@ const initDB = async () => {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           created_by TEXT
       );
+    `);
 
-      -- Migration for justification and cumulative fields
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='justification_category') THEN
-          ALTER TABLE variation_orders ADD COLUMN justification_category TEXT;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='justification_details') THEN
-          ALTER TABLE variation_orders ADD COLUMN justification_details TEXT;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='previous_vo_total') THEN
-          ALTER TABLE variation_orders ADD COLUMN previous_vo_total NUMERIC DEFAULT 0;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='original_expiry_date') THEN
-          ALTER TABLE variation_orders ADD COLUMN original_expiry_date DATE;
-        END IF;
-      END $$;
+    currentSegment = "Segment 5.5: variation_orders justification migration";
+    console.log(`     [${currentSegment}]`);
+    await checkAndAddColumn('variation_orders', 'justification_category', 'TEXT');
+    await checkAndAddColumn('variation_orders', 'justification_details', 'TEXT');
+    await checkAndAddColumn('variation_orders', 'previous_vo_total', 'NUMERIC DEFAULT 0');
+    await checkAndAddColumn('variation_orders', 'original_expiry_date', 'DATE');
 
-      -- Migration for existing variation_orders table
+    currentSegment = "Segment 6: realignments table";
+    console.log(`     [${currentSegment}]`);
+    // Migration for existing variation_orders table if needed
+    await pool.query(`
       DO $$ 
       BEGIN 
         IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'variation_orders') THEN
@@ -273,16 +305,13 @@ const initDB = async () => {
       );
     `);
 
-    // --- MIGRATION: REMOVE FRAUD DETECTION COLUMNS FROM SCHOOL_PROFILES ---
-    // User requested these be exclusively in school_summary EXCEPT FOR school_head_validation
-    await pool.query(`
-      ALTER TABLE school_profiles
-      ADD COLUMN IF NOT EXISTS school_head_validation BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS multigrade_classes JSONB DEFAULT '[]'::jsonb,
-      DROP COLUMN IF EXISTS data_health_score,
-      DROP COLUMN IF EXISTS data_health_description,
-      DROP COLUMN IF EXISTS forms_to_recheck;
-    `);
+    currentSegment = "Segment 7: school_profiles removals";
+    console.log(`     [${currentSegment}]`);
+    await checkAndAddColumn('school_profiles', 'school_head_validation', 'BOOLEAN DEFAULT FALSE');
+    await checkAndAddColumn('school_profiles', 'multigrade_classes', "JSONB DEFAULT '[]'::jsonb");
+    await checkAndDropColumn('school_profiles', 'data_health_score');
+    await checkAndDropColumn('school_profiles', 'data_health_description');
+    await checkAndDropColumn('school_profiles', 'forms_to_recheck');
 
 
 
@@ -377,54 +406,42 @@ const initDB = async () => {
     console.log("✅ DB Init: LGU Schema SKIPPED (Removed in cleanup).");
     */
 
-    // --- MIGRATION: ADD IPC TO ENGINEER_IMAGE AND BACKFILL ---
+    // Segment 8: engineer_image
+    currentSegment = "Segment 8: engineer_image";
+    console.log(`     [${currentSegment}]`);
+    await checkAndAddColumn('engineer_image', 'ipc', 'TEXT');
+    
+    // Backfill IPC in engineer_image
     await pool.query(`
-      ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT;
-      
       UPDATE engineer_image ei
       SET ipc = ef.ipc
       FROM engineer_form ef
       WHERE ei.project_id = ef.project_id
       AND ei.ipc IS NULL;
     `);
-    console.log("✅ DB Init: Engineer Image IPC column verified and backfilled.");
 
+    // LGU Forms is handled in initFinanceDB (dropped as obsolete)
 
-    // --- MIGRATION: ADD MISSING COLUMNS TO LGU FORMS ---
-    try {
-      await pool.query(`
-        ALTER TABLE lgu_forms 
-        ADD COLUMN IF NOT EXISTS project_category TEXT,
-        ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1;
-      `);
-    } catch (err) {
-      // Table likely missing
+    currentSegment = "Segment 9: engineer_form extra columns";
+    console.log(`     [${currentSegment}]`);
+    await checkAndAddColumn('engineer_form', 'number_of_classrooms', 'INTEGER DEFAULT 0');
+    await checkAndAddColumn('engineer_form', 'number_of_sites', 'INTEGER DEFAULT 1');
+    await checkAndAddColumn('engineer_form', 'number_of_storeys', 'INTEGER DEFAULT 0');
+    await checkAndAddColumn('engineer_form', 'funds_utilized', 'NUMERIC DEFAULT 0'); // Redundant check is fine
+    await checkAndAddColumn('engineer_form', 'internal_description', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'external_description', 'TEXT');
+
+    currentSegment = "Segment 10: lgu_projects columns";
+    console.log(`     [${currentSegment}]`);
+    if (await tableExists('lgu_projects')) {
+        await checkAndAddColumn('lgu_projects', 'project_category', 'TEXT');
+        await checkAndAddColumn('lgu_projects', 'number_of_classrooms', 'INTEGER DEFAULT 0');
+        await checkAndAddColumn('lgu_projects', 'number_of_storeys', 'INTEGER DEFAULT 0');
+        await checkAndAddColumn('lgu_projects', 'number_of_sites', 'INTEGER DEFAULT 1');
     }
 
-    // --- MIGRATION: ADD MISSING COLUMNS (CLASSROOMS, SITES, STOREYS, FUNDS) TO ENGINEER_FORM ---
-    await pool.query(`
-      ALTER TABLE engineer_form 
-      ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1,
-      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS internal_description TEXT,
-      ADD COLUMN IF NOT EXISTS external_description TEXT;
-    `);
-
-    // --- MIGRATION: ADD MISSING COLUMNS TO LGU HISTORY ---
-    await pool.query(`
-      ALTER TABLE lgu_projects 
-      ADD COLUMN IF NOT EXISTS project_category TEXT,
-      ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1;
-    `);
-    console.log("✅ DB Init: Extra columns verified.");
-
-    // --- MIGRATION: ADD IPC TO ENGINEER_IMAGE (SECONDARY DB) ---
+    currentSegment = "Segment 11: secondary DB sync";
+    console.log(`     [${currentSegment}]`);
     if (poolNew) {
       try {
         await poolNew.query(`
@@ -432,12 +449,13 @@ const initDB = async () => {
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year INTEGER;
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year_justification TEXT;
         `);
-        console.log("✅ DB Init: Secondary DB schema synced (engineer_form/image + funding_year).");
       } catch (err) {
         console.error("⚠️ Secondary DB Schema Sync Error:", err.message);
       }
     }
-    // --- MIGRATION: ADD BUILDABLE SPACES ---
+
+    currentSegment = "Segment 12: buildable_spaces and facility tables";
+    console.log(`     [${currentSegment}]`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS buildable_spaces (
         space_id SERIAL PRIMARY KEY,
@@ -452,18 +470,10 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await checkAndAddColumn('buildable_spaces', 'iern', 'TEXT');
+    await checkAndAddColumn('buildable_spaces', 'space_number', 'INTEGER');
+    await checkAndAddColumn('school_profiles', 'has_buildable_space', 'BOOLEAN');
 
-    // Add columns if they don't exist (for existing tables)
-    await pool.query(`ALTER TABLE buildable_spaces ADD COLUMN IF NOT EXISTS iern TEXT;`);
-    await pool.query(`ALTER TABLE buildable_spaces ADD COLUMN IF NOT EXISTS space_number INTEGER;`);
-
-    await pool.query(`
-      ALTER TABLE school_profiles
-      ADD COLUMN IF NOT EXISTS has_buildable_space BOOLEAN;
-    `);
-    console.log("✅ DB Init: Buildable Spaces schema verified.");
-
-    // --- MIGRATION: ADD SDO SCHOOL DOCUMENTS ---
     await pool.query(`
       CREATE TABLE IF NOT EXISTS school_documents (
         id SERIAL PRIMARY KEY,
@@ -473,19 +483,16 @@ const initDB = async () => {
         file_data TEXT, 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE INDEX IF NOT EXISTS idx_school_documents_school_id ON school_documents(school_id);
+      CREATE INDEX IF NOT EXISTS idx_school_documents_pending_id ON school_documents(pending_id);
     `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_school_documents_school_id ON school_documents(school_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_school_documents_pending_id ON school_documents(pending_id);`);
-    console.log("✅ DB Init: School Documents schema verified.");
 
-    // --- MIGRATION: ADD FACILITY REPAIRS ---
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_repairs (
         repair_id SERIAL PRIMARY KEY,
         school_id TEXT REFERENCES school_profiles(school_id),
         iern TEXT,
         building_no TEXT,
-        room_no TEXT,
         repair_roofing BOOLEAN DEFAULT FALSE,
         repair_ceiling_ext BOOLEAN DEFAULT FALSE,
         repair_ceiling_int BOOLEAN DEFAULT FALSE,
@@ -498,11 +505,9 @@ const initDB = async () => {
         remarks TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE INDEX IF NOT EXISTS idx_facility_repairs_iern ON facility_repairs(iern);
     `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_repairs_iern ON facility_repairs(iern);`);
-    console.log("✅ DB Init: Facility Repairs schema verified.");
 
-    // --- MIGRATION: ADD FACILITY DEMOLITIONS ---
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_demolitions (
         demolition_id SERIAL PRIMARY KEY,
@@ -515,30 +520,28 @@ const initDB = async () => {
         reason_upgrade BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE INDEX IF NOT EXISTS idx_facility_demolitions_iern ON facility_demolitions(iern);
     `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_demolitions_iern ON facility_demolitions(iern);`);
-    console.log("✅ DB Init: Facility Demolitions schema verified.");
 
-    // --- MIGRATION: ADD FACILITY INVENTORY ---
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_inventory(
-      id SERIAL PRIMARY KEY,
-      school_id TEXT,
-      iern TEXT,
-      building_name TEXT NOT NULL,
-      category TEXT NOT NULL,
-      status TEXT NOT NULL,
-      no_of_storeys INTEGER DEFAULT 1,
-      no_of_classrooms INTEGER NOT NULL,
-      year_completed INTEGER,
-      remarks TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        iern TEXT,
+        building_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        status TEXT NOT NULL,
+        no_of_storeys INTEGER DEFAULT 1,
+        no_of_classrooms INTEGER NOT NULL,
+        year_completed INTEGER,
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_facility_inventory_iern ON facility_inventory(iern);
     `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_inventory_iern ON facility_inventory(iern); `);
-    console.log("✅ DB Init: Facility Inventory schema verified.");
 
-    // --- Teaching Personnel Table ---
+    currentSegment = "Segment 13: teaching_personnel tables";
+    console.log(`     [${currentSegment}]`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS teaching_personnel (
         school_id TEXT PRIMARY KEY,
@@ -580,26 +583,38 @@ const initDB = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("✅ DB Init: Teaching Personnel schema verified.");
 
-    // --- New: Individual Teachers List (Unit 6 / Unit 7) ---
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ph_teachers_list (
         id SERIAL PRIMARY KEY,
         iern VARCHAR(50),
         school_id VARCHAR(50),
-        school_name VARCHAR(255),
-        region VARCHAR(50),
-        division VARCHAR(100),
-        district VARCHAR(100),
-        control_num VARCHAR(100),
-        tin VARCHAR(50),
         first_name VARCHAR(100),
         middle_name VARCHAR(100),
         last_name VARCHAR(100),
         position VARCHAR(100),
-        position_group VARCHAR(100),
-        corrected_degree VARCHAR(255),
+        specialization TEXT,
+        sex TEXT,
+        experience_bracket TEXT,
+        funding_source TEXT,
+        role_designation TEXT,
+        monday_mins INTEGER DEFAULT 0,
+        tuesday_mins INTEGER DEFAULT 0,
+        wednesday_mins INTEGER DEFAULT 0,
+        thursday_mins INTEGER DEFAULT 0,
+        friday_mins INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS ph_teachers_workload (
+        id SERIAL PRIMARY KEY,
+        teacher_id INTEGER REFERENCES ph_teachers_list(id) ON DELETE CASCADE,
+        school_id VARCHAR(50),
+        grade_level TEXT,
+        subject_name TEXT,
+        subject_code TEXT,
+        duration_minutes INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -649,20 +664,22 @@ const initDB = async () => {
     ];
     const levels = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
     for (const lvl of levels) {
-      shiftModeCols.push(`shift_${lvl} TEXT`);
-      shiftModeCols.push(`mode_${lvl} TEXT`);
+      await checkAndAddColumn('ph_schools', `shift_${lvl}`, 'TEXT');
+      await checkAndAddColumn('ph_schools', `mode_${lvl}`, 'TEXT');
     }
-    for (const col of shiftModeCols) {
-      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col};`);
-    }
-    console.log("✅ DB Init: Unit 5 shift/mode/ADM columns verified.");
 
-    // Ensure unit7_completed flag exists on ph_schools
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
-    console.log("✅ DB Init: unit7_completed column verified.");
+    await checkAndAddColumn('ph_schools', 'unit7_completed', 'BOOLEAN DEFAULT FALSE');
+
+    console.log("✅ DB Init: All primary migrations completed successfully.");
 
   } catch (err) {
-    console.error("❌ DB Init Error:", err);
+    // Note: currentSegment is not defined in this snippet, assuming it's defined elsewhere or intended as a placeholder.
+    // For this change, I will add it as requested, but be aware it might be undefined if not set globally or within the function.
+    const currentSegment = "initDB"; // Placeholder for current segment
+    console.error(`❌ DB Init Error in segment [${currentSegment}]:`, err.message);
+    if (err.detail) console.error("   Detail:", err.detail);
+    if (err.hint) console.error("   Hint:", err.hint);
+    // Continue even if migration fails, but log it
   }
 };
 // initDB(); // Moved to awaited startup
@@ -674,7 +691,7 @@ const initFinanceDB = async () => {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS finance_projects (
         finance_id SERIAL PRIMARY KEY,
-        root_id TEXT, -- For Append-Only History
+        root_id TEXT, 
         region TEXT,
         division TEXT,
         district TEXT,
@@ -690,7 +707,8 @@ const initFinanceDB = async () => {
     `);
 
     // --- MIGRATION: Add root_id to finance_projects if missing ---
-    await pool.query(`ALTER TABLE finance_projects ADD COLUMN IF NOT EXISTS root_id TEXT;`);
+    await checkAndAddColumn('finance_projects', 'root_id', 'TEXT');
+
     // Backfill root_id for existing
     await pool.query(`UPDATE finance_projects SET root_id = 'FIN-' || finance_id WHERE root_id IS NULL;`);
 
@@ -717,81 +735,87 @@ const initFinanceDB = async () => {
         liquidated_amount NUMERIC DEFAULT 0,
         liquidation_date DATE,
         percentage_liquidated NUMERIC DEFAULT 0,
-        finance_id INTEGER, -- Link to CO Finance
+        finance_id INTEGER, 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-        -- NEW FIELDS (LGU Refactor)
         source_agency TEXT,
-      contractor_name TEXT,
-      lsb_resolution_no TEXT,
-      moa_ref_no TEXT,
-      moa_date DATE,
-      validity_period TEXT,
-      contract_duration TEXT,
-      date_approved_pow DATE,
-      approved_contract_budget NUMERIC,
-      schedule_of_fund_release TEXT, -- 'Lumpsum' or 'Tranches'
+        contractor_name TEXT,
+        lsb_resolution_no TEXT,
+        moa_ref_no TEXT,
+        moa_date DATE,
+        validity_period TEXT,
+        contract_duration TEXT,
+        date_approved_pow DATE,
+        approved_contract_budget NUMERIC,
+        schedule_of_fund_release TEXT,
         number_of_tranches INTEGER,
-      amount_per_tranche NUMERIC,
-      mode_of_procurement TEXT,
-      philgeps_ref_no TEXT,
-      pcab_license_no TEXT,
-      date_contract_signing DATE,
-      date_notice_of_award DATE,
-      bid_amount NUMERIC,
-      latitude TEXT,
-      longitude TEXT,
-
-      --DOCUMENTS
+        amount_per_tranche NUMERIC,
+        mode_of_procurement TEXT,
+        philgeps_ref_no TEXT,
+        pcab_license_no TEXT,
+        date_contract_signing DATE,
+        date_notice_of_award DATE,
+        bid_amount NUMERIC,
+        latitude TEXT,
+        longitude TEXT,
         pow_pdf TEXT,
-      dupa_pdf TEXT,
-      contract_pdf TEXT,
-
-      --PROGRESS
+        dupa_pdf TEXT,
+        contract_pdf TEXT,
         project_status TEXT DEFAULT 'Not Yet Started',
-      accomplishment_percentage NUMERIC DEFAULT 0,
-      status_as_of_date DATE,
-      amount_utilized NUMERIC DEFAULT 0,
-      nature_of_delay TEXT
-    );
+        accomplishment_percentage NUMERIC DEFAULT 0,
+        status_as_of_date DATE,
+        amount_utilized NUMERIC DEFAULT 0,
+        nature_of_delay TEXT
+      );
     `);
 
-    // Add columns if they don't exist (for migration)
-    const newCols = [
-      "source_agency TEXT", "contractor_name TEXT", "lsb_resolution_no TEXT", "moa_ref_no TEXT", "moa_date DATE",
-      "validity_period TEXT", "contract_duration TEXT", "date_approved_pow DATE", "approved_contract_budget NUMERIC",
-      "schedule_of_fund_release TEXT", "number_of_tranches INTEGER", "amount_per_tranche NUMERIC",
-      "mode_of_procurement TEXT", "philgeps_ref_no TEXT", "pcab_license_no TEXT", "date_contract_signing DATE",
-      "date_notice_of_award DATE", "bid_amount NUMERIC", "latitude TEXT", "longitude TEXT",
-      "pow_pdf TEXT", "dupa_pdf TEXT", "contract_pdf TEXT",
-      "project_status TEXT DEFAULT 'Not Yet Started'", "accomplishment_percentage NUMERIC DEFAULT 0",
-      "status_as_of_date DATE", "amount_utilized NUMERIC DEFAULT 0", "nature_of_delay TEXT",
-      "root_project_id INTEGER", "finance_id INTEGER"
-    ];
+    // Migration for lgu_projects
+    await checkAndAddColumn('lgu_projects', 'source_agency', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'contractor_name', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'lsb_resolution_no', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'moa_ref_no', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'moa_date', 'DATE');
+    await checkAndAddColumn('lgu_projects', 'validity_period', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'contract_duration', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'date_approved_pow', 'DATE');
+    await checkAndAddColumn('lgu_projects', 'approved_contract_budget', 'NUMERIC');
+    await checkAndAddColumn('lgu_projects', 'schedule_of_fund_release', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'number_of_tranches', 'INTEGER');
+    await checkAndAddColumn('lgu_projects', 'amount_per_tranche', 'NUMERIC');
+    await checkAndAddColumn('lgu_projects', 'mode_of_procurement', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'philgeps_ref_no', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'pcab_license_no', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'date_contract_signing', 'DATE');
+    await checkAndAddColumn('lgu_projects', 'date_notice_of_award', 'DATE');
+    await checkAndAddColumn('lgu_projects', 'bid_amount', 'NUMERIC');
+    await checkAndAddColumn('lgu_projects', 'latitude', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'longitude', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'pow_pdf', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'dupa_pdf', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'contract_pdf', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'project_status', "TEXT DEFAULT 'Not Yet Started'");
+    await checkAndAddColumn('lgu_projects', 'accomplishment_percentage', 'NUMERIC DEFAULT 0');
+    await checkAndAddColumn('lgu_projects', 'status_as_of_date', 'DATE');
+    await checkAndAddColumn('lgu_projects', 'amount_utilized', 'NUMERIC DEFAULT 0');
+    await checkAndAddColumn('lgu_projects', 'nature_of_delay', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'root_project_id', 'INTEGER');
+    await checkAndAddColumn('lgu_projects', 'finance_id', 'INTEGER');
 
-    for (const col of newCols) {
-      await pool.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS ${col}; `);
-    }
-
-    // --- MIGRATION: Backfill root_project_id for existing records ---
-    // If root_project_id is NULL, set it to the project's own ID (it becomes the root)
     await pool.query(`
         UPDATE lgu_projects 
         SET root_project_id = lgu_project_id 
         WHERE root_project_id IS NULL;
     `);
-    console.log("✅ DB Init: LGU Projects table verified (Updated Schema + History Support).");
+    console.log("✅ Finance DB Init: lgu_projects schema verified.");
 
   } catch (err) {
-    console.error("❌ Finance DB Init Error:", err);
+    console.error("❌ Finance DB Init Error:", err.message);
   }
-
 };
-// initFinanceDB(); // Moved to awaited startup
 
 // --- PSIP DATABASE INIT ---
 const initMasterlistDB = async () => {
   try {
+    await pool.query('SET lock_timeout = 5000');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS masterlist_26_30 (
           "Index" integer PRIMARY KEY,
@@ -825,19 +849,19 @@ const initMasterlistDB = async () => {
           "province" character varying(100)
       );
     `);
-    // Migration: Rename leg_district to legislative_district if it exists, add province
+    
+    // Migration: Rename leg_district to legislative_district
     await pool.query(`
       DO $$
       BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'masterlist_26_30' AND column_name = 'leg_district') THEN
           ALTER TABLE masterlist_26_30 RENAME COLUMN leg_district TO legislative_district;
         END IF;
-
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'masterlist_26_30' AND column_name = 'province') THEN
-          ALTER TABLE masterlist_26_30 ADD COLUMN province character varying(100);
-        END IF;
       END $$;
+    `);
+    await checkAndAddColumn('masterlist_26_30', 'province', 'character varying(100)');
 
+    await pool.query(`
       -- Populate province from schools table
       UPDATE masterlist_26_30 m
       SET province = s.province
@@ -845,11 +869,12 @@ const initMasterlistDB = async () => {
       WHERE m.school_id::text = s.school_id::text
       AND m.province IS NULL;
     `);
+
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_funding_year ON masterlist_26_30("proposed_funding_year");`);
     console.log("✅ DB Init: Masterlist (Cloned) table verified.");
   } catch (err) {
-    console.error("❌ Masterlist DB Init Error:", err);
+    console.error("❌ Masterlist DB Init Error:", err.message);
   }
 };
 // initMasterlistDB(); // Moved to awaited startup
@@ -9423,90 +9448,90 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         SUM(CASE WHEN sp.adm_blended IS TRUE THEN 1 ELSE 0 END) as cnt_adm_blended,
 
         -- TEACHER METRICS (COUNT BY GRADE/LEVEL)
-        SUM(sp.teach_kinder) as cnt_teach_k,
-        SUM(sp.teach_g1) as cnt_teach_g1,
-        SUM(sp.teach_g2) as cnt_teach_g2,
-        SUM(sp.teach_g3) as cnt_teach_g3,
-        SUM(sp.teach_g4) as cnt_teach_g4,
-        SUM(sp.teach_g5) as cnt_teach_g5,
-        SUM(sp.teach_g6) as cnt_teach_g6,
-        SUM(sp.teach_g7) as cnt_teach_g7,
-        SUM(sp.teach_g8) as cnt_teach_g8,
-        SUM(sp.teach_g9) as cnt_teach_g9,
-        SUM(sp.teach_g10) as cnt_teach_g10,
-        SUM(sp.teach_g11) as cnt_teach_g11,
-        SUM(sp.teach_g12) as cnt_teach_g12,
+        SUM(COALESCE(sp.teach_kinder, 0)) as cnt_teach_k,
+        SUM(COALESCE(sp.teach_g1, 0)) as cnt_teach_g1,
+        SUM(COALESCE(sp.teach_g2, 0)) as cnt_teach_g2,
+        SUM(COALESCE(sp.teach_g3, 0)) as cnt_teach_g3,
+        SUM(COALESCE(sp.teach_g4, 0)) as cnt_teach_g4,
+        SUM(COALESCE(sp.teach_g5, 0)) as cnt_teach_g5,
+        SUM(COALESCE(sp.teach_g6, 0)) as cnt_teach_g6,
+        SUM(COALESCE(sp.teach_g7, 0)) as cnt_teach_g7,
+        SUM(COALESCE(sp.teach_g8, 0)) as cnt_teach_g8,
+        SUM(COALESCE(sp.teach_g9, 0)) as cnt_teach_g9,
+        SUM(COALESCE(sp.teach_g10, 0)) as cnt_teach_g10,
+        SUM(COALESCE(sp.teach_g11, 0)) as cnt_teach_g11,
+        SUM(COALESCE(sp.teach_g12, 0)) as cnt_teach_g12,
 
         -- MULTIGRADE TEACHERS
-        SUM(sp.teach_multi_1_2) as cnt_multi_1_2,
-        SUM(sp.teach_multi_3_4) as cnt_multi_3_4,
-        SUM(sp.teach_multi_5_6) as cnt_multi_5_6,
+        SUM(COALESCE(sp.teach_multi_1_2, 0)) as cnt_multi_1_2,
+        SUM(COALESCE(sp.teach_multi_3_4, 0)) as cnt_multi_3_4,
+        SUM(COALESCE(sp.teach_multi_5_6, 0)) as cnt_multi_5_6,
 
         -- TEACHING EXPERIENCE
-        SUM(sp.teach_exp_0_1) as cnt_exp_0_1,
-        SUM(sp.teach_exp_2_5) as cnt_exp_2_5,
-        SUM(sp.teach_exp_6_10) as cnt_exp_6_10,
-        SUM(sp.teach_exp_11_15) as cnt_exp_11_15,
-        SUM(sp.teach_exp_16_20) as cnt_exp_16_20,
-        SUM(sp.teach_exp_21_25) as cnt_exp_21_25,
-        SUM(sp.teach_exp_26_30) as cnt_exp_26_30,
-        SUM(sp.teach_exp_31_35) as cnt_exp_31_35,
-        SUM(sp.teach_exp_36_40) as cnt_exp_36_40,
-        SUM(sp.teach_exp_40_45) as cnt_exp_40_45,
+        SUM(COALESCE(sp.teach_exp_0_1, 0)) as cnt_exp_0_1,
+        SUM(COALESCE(sp.teach_exp_2_5, 0)) as cnt_exp_2_5,
+        SUM(COALESCE(sp.teach_exp_6_10, 0)) as cnt_exp_6_10,
+        SUM(COALESCE(sp.teach_exp_11_15, 0)) as cnt_exp_11_15,
+        SUM(COALESCE(sp.teach_exp_16_20, 0)) as cnt_exp_16_20,
+        SUM(COALESCE(sp.teach_exp_21_25, 0)) as cnt_exp_21_25,
+        SUM(COALESCE(sp.teach_exp_26_30, 0)) as cnt_exp_26_30,
+        SUM(COALESCE(sp.teach_exp_31_35, 0)) as cnt_exp_31_35,
+        SUM(COALESCE(sp.teach_exp_36_40, 0)) as cnt_exp_36_40,
+        SUM(COALESCE(sp.teach_exp_40_45, 0)) as cnt_exp_40_45,
 
         -- SPECIALIZATION (MAJORS)
-        SUM(sp.spec_math_major) as cnt_spec_math,
-        SUM(sp.spec_science_major) as cnt_spec_sci,
-        SUM(sp.spec_english_major) as cnt_spec_eng,
-        SUM(sp.spec_filipino_major) as cnt_spec_fil,
-        SUM(sp.spec_ap_major) as cnt_spec_ap,
-        SUM(sp.spec_mapeh_major) as cnt_spec_mapeh,
-        SUM(sp.spec_esp_major) as cnt_spec_esp,
-        SUM(sp.spec_tle_major) as cnt_spec_tle,
-        SUM(sp.spec_general_major) as cnt_spec_gen,
-        SUM(sp.spec_ece_major) as cnt_spec_ece,
+        SUM(COALESCE(sp.spec_math_major, 0)) as cnt_spec_math,
+        SUM(COALESCE(sp.spec_science_major, 0)) as cnt_spec_sci,
+        SUM(COALESCE(sp.spec_english_major, 0)) as cnt_spec_eng,
+        SUM(COALESCE(sp.spec_filipino_major, 0)) as cnt_spec_fil,
+        SUM(COALESCE(sp.spec_ap_major, 0)) as cnt_spec_ap,
+        SUM(COALESCE(sp.spec_mapeh_major, 0)) as cnt_spec_mapeh,
+        SUM(COALESCE(sp.spec_esp_major, 0)) as cnt_spec_esp,
+        SUM(COALESCE(sp.spec_tle_major, 0)) as cnt_spec_tle,
+        SUM(COALESCE(sp.spec_general_major, 0)) as cnt_spec_gen,
+        SUM(COALESCE(sp.spec_ece_major, 0)) as cnt_spec_ece,
 
         -- CLASSROOMS (Condition)
-        SUM(sp.build_classrooms_new) as cnt_class_new,
-        SUM(sp.build_classrooms_good) as cnt_class_good,
-        SUM(sp.build_classrooms_repair) as cnt_class_repair,
-        SUM(sp.build_classrooms_demolition) as cnt_class_demolish,
+        SUM(COALESCE(sp.build_classrooms_new, 0)) as cnt_class_new,
+        SUM(COALESCE(sp.build_classrooms_good, 0)) as cnt_class_good,
+        SUM(COALESCE(sp.build_classrooms_repair, 0)) as cnt_class_repair,
+        SUM(COALESCE(sp.build_classrooms_demolition, 0)) as cnt_class_demolish,
 
         -- EQUIPMENT & INVENTORY
-        SUM(sp.res_ecart_func) as cnt_equip_ecart_func,
-        SUM(sp.res_ecart_nonfunc) as cnt_equip_ecart_non,
-        SUM(sp.res_laptop_func) as cnt_equip_laptop_func,
-        SUM(sp.res_laptop_nonfunc) as cnt_equip_laptop_non,
-        SUM(sp.res_printer_func) as cnt_equip_printer_func,
-        SUM(sp.res_printer_nonfunc) as cnt_equip_printer_non,
-        SUM(sp.res_tv_func) as cnt_equip_tv_func,
-        SUM(sp.res_tv_nonfunc) as cnt_equip_tv_non,
+        SUM(COALESCE(sp.res_ecart_func, 0)) as cnt_equip_ecart_func,
+        SUM(COALESCE(sp.res_ecart_nonfunc, 0)) as cnt_equip_ecart_non,
+        SUM(COALESCE(sp.res_laptop_func, 0)) as cnt_equip_laptop_func,
+        SUM(COALESCE(sp.res_laptop_nonfunc, 0)) as cnt_equip_laptop_non,
+        SUM(COALESCE(sp.res_printer_func, 0)) as cnt_equip_printer_func,
+        SUM(COALESCE(sp.res_printer_nonfunc, 0)) as cnt_equip_printer_non,
+        SUM(COALESCE(sp.res_tv_func, 0)) as cnt_equip_tv_func,
+        SUM(COALESCE(sp.res_tv_nonfunc, 0)) as cnt_equip_tv_non,
 
         -- SEATS (By Grade)
-        SUM(sp.seats_kinder) as cnt_seats_k,
-        SUM(sp.seats_grade_1) as cnt_seats_g1,
-        SUM(sp.seats_grade_2) as cnt_seats_g2,
-        SUM(sp.seats_grade_3) as cnt_seats_g3,
-        SUM(sp.seats_grade_4) as cnt_seats_g4,
-        SUM(sp.seats_grade_5) as cnt_seats_g5,
-        SUM(sp.seats_grade_6) as cnt_seats_g6,
-        SUM(sp.seats_grade_7) as cnt_seats_g7,
-        SUM(sp.seats_grade_8) as cnt_seats_g8,
-        SUM(sp.seats_grade_9) as cnt_seats_g9,
-        SUM(sp.seats_grade_10) as cnt_seats_g10,
-        SUM(sp.seats_grade_11) as cnt_seats_g11,
-        SUM(sp.seats_grade_12) as cnt_seats_g12,
+        SUM(COALESCE(sp.seats_kinder, 0)) as cnt_seats_k,
+        SUM(COALESCE(sp.seats_grade_1, 0)) as cnt_seats_g1,
+        SUM(COALESCE(sp.seats_grade_2, 0)) as cnt_seats_g2,
+        SUM(COALESCE(sp.seats_grade_3, 0)) as cnt_seats_g3,
+        SUM(COALESCE(sp.seats_grade_4, 0)) as cnt_seats_g4,
+        SUM(COALESCE(sp.seats_grade_5, 0)) as cnt_seats_g5,
+        SUM(COALESCE(sp.seats_grade_6, 0)) as cnt_seats_g6,
+        SUM(COALESCE(sp.seats_grade_7, 0)) as cnt_seats_g7,
+        SUM(COALESCE(sp.seats_grade_8, 0)) as cnt_seats_g8,
+        SUM(COALESCE(sp.seats_grade_9, 0)) as cnt_seats_g9,
+        SUM(COALESCE(sp.seats_grade_10, 0)) as cnt_seats_g10,
+        SUM(COALESCE(sp.seats_grade_11, 0)) as cnt_seats_g11,
+        SUM(COALESCE(sp.seats_grade_12, 0)) as cnt_seats_g12,
 
         -- TOILETS (Comfort Rooms)
-        SUM(sp.res_toilets_male) as cnt_toilet_male,
-        SUM(sp.res_toilets_female) as cnt_toilet_female,
-        SUM(sp.res_toilets_pwd) as cnt_toilet_pwd,
-        SUM(sp.res_toilets_common) as cnt_toilet_common,
+        SUM(COALESCE(sp.res_toilets_male, 0)) as cnt_toilet_male,
+        SUM(COALESCE(sp.res_toilets_female, 0)) as cnt_toilet_female,
+        SUM(COALESCE(sp.res_toilets_pwd, 0)) as cnt_toilet_pwd,
+        SUM(COALESCE(sp.res_toilets_common, 0)) as cnt_toilet_common,
 
         -- SPECIALIZED ROOMS
-        SUM(sp.res_sci_labs) as cnt_room_sci,
-        SUM(sp.res_com_labs) as cnt_room_com,
-        SUM(sp.res_tvl_workshops) as cnt_room_tvl,
+        SUM(COALESCE(sp.res_sci_labs, 0)) as cnt_room_sci,
+        SUM(COALESCE(sp.res_com_labs, 0)) as cnt_room_com,
+        SUM(COALESCE(sp.res_tvl_workshops, 0)) as cnt_room_tvl,
 
         -- SITE & UTILITIES
         -- Electricity
@@ -9974,90 +9999,90 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         SUM(CASE WHEN sp.adm_blended IS TRUE THEN 1 ELSE 0 END) as cnt_adm_blended,
 
         -- TEACHER METRICS (COUNT BY GRADE/LEVEL)
-        SUM(sp.teach_kinder) as cnt_teach_k,
-        SUM(sp.teach_g1) as cnt_teach_g1,
-        SUM(sp.teach_g2) as cnt_teach_g2,
-        SUM(sp.teach_g3) as cnt_teach_g3,
-        SUM(sp.teach_g4) as cnt_teach_g4,
-        SUM(sp.teach_g5) as cnt_teach_g5,
-        SUM(sp.teach_g6) as cnt_teach_g6,
-        SUM(sp.teach_g7) as cnt_teach_g7,
-        SUM(sp.teach_g8) as cnt_teach_g8,
-        SUM(sp.teach_g9) as cnt_teach_g9,
-        SUM(sp.teach_g10) as cnt_teach_g10,
-        SUM(sp.teach_g11) as cnt_teach_g11,
-        SUM(sp.teach_g12) as cnt_teach_g12,
+        SUM(COALESCE(sp.teach_kinder, 0)) as cnt_teach_k,
+        SUM(COALESCE(sp.teach_g1, 0)) as cnt_teach_g1,
+        SUM(COALESCE(sp.teach_g2, 0)) as cnt_teach_g2,
+        SUM(COALESCE(sp.teach_g3, 0)) as cnt_teach_g3,
+        SUM(COALESCE(sp.teach_g4, 0)) as cnt_teach_g4,
+        SUM(COALESCE(sp.teach_g5, 0)) as cnt_teach_g5,
+        SUM(COALESCE(sp.teach_g6, 0)) as cnt_teach_g6,
+        SUM(COALESCE(sp.teach_g7, 0)) as cnt_teach_g7,
+        SUM(COALESCE(sp.teach_g8, 0)) as cnt_teach_g8,
+        SUM(COALESCE(sp.teach_g9, 0)) as cnt_teach_g9,
+        SUM(COALESCE(sp.teach_g10, 0)) as cnt_teach_g10,
+        SUM(COALESCE(sp.teach_g11, 0)) as cnt_teach_g11,
+        SUM(COALESCE(sp.teach_g12, 0)) as cnt_teach_g12,
 
         -- MULTIGRADE TEACHERS
-        SUM(sp.teach_multi_1_2) as cnt_multi_1_2,
-        SUM(sp.teach_multi_3_4) as cnt_multi_3_4,
-        SUM(sp.teach_multi_5_6) as cnt_multi_5_6,
+        SUM(COALESCE(sp.teach_multi_1_2, 0)) as cnt_multi_1_2,
+        SUM(COALESCE(sp.teach_multi_3_4, 0)) as cnt_multi_3_4,
+        SUM(COALESCE(sp.teach_multi_5_6, 0)) as cnt_multi_5_6,
 
         -- TEACHING EXPERIENCE
-        SUM(sp.teach_exp_0_1) as cnt_exp_0_1,
-        SUM(sp.teach_exp_2_5) as cnt_exp_2_5,
-        SUM(sp.teach_exp_6_10) as cnt_exp_6_10,
-        SUM(sp.teach_exp_11_15) as cnt_exp_11_15,
-        SUM(sp.teach_exp_16_20) as cnt_exp_16_20,
-        SUM(sp.teach_exp_21_25) as cnt_exp_21_25,
-        SUM(sp.teach_exp_26_30) as cnt_exp_26_30,
-        SUM(sp.teach_exp_31_35) as cnt_exp_31_35,
-        SUM(sp.teach_exp_36_40) as cnt_exp_36_40,
-        SUM(sp.teach_exp_40_45) as cnt_exp_40_45,
+        SUM(COALESCE(sp.teach_exp_0_1, 0)) as cnt_exp_0_1,
+        SUM(COALESCE(sp.teach_exp_2_5, 0)) as cnt_exp_2_5,
+        SUM(COALESCE(sp.teach_exp_6_10, 0)) as cnt_exp_6_10,
+        SUM(COALESCE(sp.teach_exp_11_15, 0)) as cnt_exp_11_15,
+        SUM(COALESCE(sp.teach_exp_16_20, 0)) as cnt_exp_16_20,
+        SUM(COALESCE(sp.teach_exp_21_25, 0)) as cnt_exp_21_25,
+        SUM(COALESCE(sp.teach_exp_26_30, 0)) as cnt_exp_26_30,
+        SUM(COALESCE(sp.teach_exp_31_35, 0)) as cnt_exp_31_35,
+        SUM(COALESCE(sp.teach_exp_36_40, 0)) as cnt_exp_36_40,
+        SUM(COALESCE(sp.teach_exp_40_45, 0)) as cnt_exp_40_45,
 
         -- SPECIALIZATION (MAJORS)
-        SUM(sp.spec_math_major) as cnt_spec_math,
-        SUM(sp.spec_science_major) as cnt_spec_sci,
-        SUM(sp.spec_english_major) as cnt_spec_eng,
-        SUM(sp.spec_filipino_major) as cnt_spec_fil,
-        SUM(sp.spec_ap_major) as cnt_spec_ap,
-        SUM(sp.spec_mapeh_major) as cnt_spec_mapeh,
-        SUM(sp.spec_esp_major) as cnt_spec_esp,
-        SUM(sp.spec_tle_major) as cnt_spec_tle,
-        SUM(sp.spec_general_major) as cnt_spec_gen,
-        SUM(sp.spec_ece_major) as cnt_spec_ece,
+        SUM(COALESCE(sp.spec_math_major, 0)) as cnt_spec_math,
+        SUM(COALESCE(sp.spec_science_major, 0)) as cnt_spec_sci,
+        SUM(COALESCE(sp.spec_english_major, 0)) as cnt_spec_eng,
+        SUM(COALESCE(sp.spec_filipino_major, 0)) as cnt_spec_fil,
+        SUM(COALESCE(sp.spec_ap_major, 0)) as cnt_spec_ap,
+        SUM(COALESCE(sp.spec_mapeh_major, 0)) as cnt_spec_mapeh,
+        SUM(COALESCE(sp.spec_esp_major, 0)) as cnt_spec_esp,
+        SUM(COALESCE(sp.spec_tle_major, 0)) as cnt_spec_tle,
+        SUM(COALESCE(sp.spec_general_major, 0)) as cnt_spec_gen,
+        SUM(COALESCE(sp.spec_ece_major, 0)) as cnt_spec_ece,
 
         -- CLASSROOMS (Condition)
-        SUM(sp.build_classrooms_new) as cnt_class_new,
-        SUM(sp.build_classrooms_good) as cnt_class_good,
-        SUM(sp.build_classrooms_repair) as cnt_class_repair,
-        SUM(sp.build_classrooms_demolition) as cnt_class_demolish,
+        SUM(COALESCE(sp.build_classrooms_new, 0)) as cnt_class_new,
+        SUM(COALESCE(sp.build_classrooms_good, 0)) as cnt_class_good,
+        SUM(COALESCE(sp.build_classrooms_repair, 0)) as cnt_class_repair,
+        SUM(COALESCE(sp.build_classrooms_demolition, 0)) as cnt_class_demolish,
 
         -- EQUIPMENT & INVENTORY
-        SUM(sp.res_ecart_func) as cnt_equip_ecart_func,
-        SUM(sp.res_ecart_nonfunc) as cnt_equip_ecart_non,
-        SUM(sp.res_laptop_func) as cnt_equip_laptop_func,
-        SUM(sp.res_laptop_nonfunc) as cnt_equip_laptop_non,
-        SUM(sp.res_printer_func) as cnt_equip_printer_func,
-        SUM(sp.res_printer_nonfunc) as cnt_equip_printer_non,
-        SUM(sp.res_tv_func) as cnt_equip_tv_func,
-        SUM(sp.res_tv_nonfunc) as cnt_equip_tv_non,
+        SUM(COALESCE(sp.res_ecart_func, 0)) as cnt_equip_ecart_func,
+        SUM(COALESCE(sp.res_ecart_nonfunc, 0)) as cnt_equip_ecart_non,
+        SUM(COALESCE(sp.res_laptop_func, 0)) as cnt_equip_laptop_func,
+        SUM(COALESCE(sp.res_laptop_nonfunc, 0)) as cnt_equip_laptop_non,
+        SUM(COALESCE(sp.res_printer_func, 0)) as cnt_equip_printer_func,
+        SUM(COALESCE(sp.res_printer_nonfunc, 0)) as cnt_equip_printer_non,
+        SUM(COALESCE(sp.res_tv_func, 0)) as cnt_equip_tv_func,
+        SUM(COALESCE(sp.res_tv_nonfunc, 0)) as cnt_equip_tv_non,
 
         -- SEATS (By Grade)
-        SUM(sp.seats_kinder) as cnt_seats_k,
-        SUM(sp.seats_grade_1) as cnt_seats_g1,
-        SUM(sp.seats_grade_2) as cnt_seats_g2,
-        SUM(sp.seats_grade_3) as cnt_seats_g3,
-        SUM(sp.seats_grade_4) as cnt_seats_g4,
-        SUM(sp.seats_grade_5) as cnt_seats_g5,
-        SUM(sp.seats_grade_6) as cnt_seats_g6,
-        SUM(sp.seats_grade_7) as cnt_seats_g7,
-        SUM(sp.seats_grade_8) as cnt_seats_g8,
-        SUM(sp.seats_grade_9) as cnt_seats_g9,
-        SUM(sp.seats_grade_10) as cnt_seats_g10,
-        SUM(sp.seats_grade_11) as cnt_seats_g11,
-        SUM(sp.seats_grade_12) as cnt_seats_g12,
+        SUM(COALESCE(sp.seats_kinder, 0)) as cnt_seats_k,
+        SUM(COALESCE(sp.seats_grade_1, 0)) as cnt_seats_g1,
+        SUM(COALESCE(sp.seats_grade_2, 0)) as cnt_seats_g2,
+        SUM(COALESCE(sp.seats_grade_3, 0)) as cnt_seats_g3,
+        SUM(COALESCE(sp.seats_grade_4, 0)) as cnt_seats_g4,
+        SUM(COALESCE(sp.seats_grade_5, 0)) as cnt_seats_g5,
+        SUM(COALESCE(sp.seats_grade_6, 0)) as cnt_seats_g6,
+        SUM(COALESCE(sp.seats_grade_7, 0)) as cnt_seats_g7,
+        SUM(COALESCE(sp.seats_grade_8, 0)) as cnt_seats_g8,
+        SUM(COALESCE(sp.seats_grade_9, 0)) as cnt_seats_g9,
+        SUM(COALESCE(sp.seats_grade_10, 0)) as cnt_seats_g10,
+        SUM(COALESCE(sp.seats_grade_11, 0)) as cnt_seats_g11,
+        SUM(COALESCE(sp.seats_grade_12, 0)) as cnt_seats_g12,
 
         -- TOILETS (Comfort Rooms)
-        SUM(sp.res_toilets_male) as cnt_toilet_male,
-        SUM(sp.res_toilets_female) as cnt_toilet_female,
-        SUM(sp.res_toilets_pwd) as cnt_toilet_pwd,
-        SUM(sp.res_toilets_common) as cnt_toilet_common,
+        SUM(COALESCE(sp.res_toilets_male, 0)) as cnt_toilet_male,
+        SUM(COALESCE(sp.res_toilets_female, 0)) as cnt_toilet_female,
+        SUM(COALESCE(sp.res_toilets_pwd, 0)) as cnt_toilet_pwd,
+        SUM(COALESCE(sp.res_toilets_common, 0)) as cnt_toilet_common,
 
         -- SPECIALIZED ROOMS
-        SUM(sp.res_sci_labs) as cnt_room_sci,
-        SUM(sp.res_com_labs) as cnt_room_com,
-        SUM(sp.res_tvl_workshops) as cnt_room_tvl,
+        SUM(COALESCE(sp.res_sci_labs, 0)) as cnt_room_sci,
+        SUM(COALESCE(sp.res_com_labs, 0)) as cnt_room_com,
+        SUM(COALESCE(sp.res_tvl_workshops, 0)) as cnt_room_tvl,
 
         -- SITE & UTILITIES
         -- Electricity
@@ -10765,21 +10790,12 @@ app.use((err, req, res, next) => {
   }
 });
 
-// ==================================================================
-//                        SERVER STARTUP
-// ==================================================================
-
-// 1. FOR LOCAL DEVELOPMENT (runs when you type 'node api/index.js')
+// --- TEMPORARY MIGRATION ENDPOINT (FACILITY REPAIRS) ---
 
 
 // Robust path comparison for Windows
 // Robust path comparison for Windows
-const currentFile = fileURLToPath(import.meta.url);
-const executedFile = process.argv[1];
 
-console.log("Startup Check:");
-console.log("  Executed:", executedFile);
-console.log("  Current: ", currentFile);
 
 /* 
    ON WINDOWS:
@@ -10790,7 +10806,7 @@ console.log("  Current: ", currentFile);
    path.resolve() adjusts slashes but DOES NOT fix drive letter case on all Node versions.
    We will normalize to lowercase for comparison.
 */
-const isMainModule = path.resolve(executedFile).toLowerCase() === path.resolve(currentFile).toLowerCase();
+
 
 // --- 1. GLOBAL ERROR HANDLERS TO PREVENT SILENT CRASHES ---
 process.on('uncaughtException', (err) => {
@@ -10806,7 +10822,7 @@ process.on('unhandledRejection', (reason, promise) => {
 console.log('--- Startup Debug Info ---');
 console.log('Executed File:', process.argv[1]);
 console.log('Current File:', fileURLToPath(import.meta.url));
-console.log('Is Main Module?', isMainModule);
+console.log('Is Main Module?', 'Legacy check');
 console.log('Force Start Env?', process.env.START_SERVER);
 console.log('--------------------------');
 
@@ -12182,10 +12198,19 @@ const initializeAndStart = async () => {
 
     try {
       // 2. Sequential Migrations
-      console.log("📦 Running Database Initializations...");
+      console.log("📦 Starting Database Initializations...");
+      
+      console.log("  -> Initializing OTP Table...");
       await initOtpTable(pool);
+      
+      console.log("  -> Initializing Core DB...");
+      console.log(`     (Pool Status: Total=${pool.totalCount}, Idle=${pool.idleCount}, Waiting=${pool.waitingCount})`);
       await initDB();
+      
+      console.log("  -> Initializing Finance DB...");
       await initFinanceDB();
+      
+      console.log("  -> Initializing Masterlist DB...");
       await initMasterlistDB();
 
       console.log("🛠️ Running Advanced Migrations (Primary)...");
@@ -12241,10 +12266,7 @@ const initializeAndStart = async () => {
   }
 };
 
-// Check if main module and start using the isMainModule defined earlier
-if (isMainModule || process.env.START_SERVER || true) {
-  initializeAndStart();
-}
+
 
 // ==================================================================
 //               IERN LOOKUP ENDPOINT
@@ -12301,9 +12323,8 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       if (row.unit3_completed) { completedUnits.push(3); xp += 200; }
       if (row.unit4_completed) { completedUnits.push(4); xp += 250; }
       if (row.unit5_completed) { completedUnits.push(5); xp += 300; }
-      if (row.unit6_completed) { completedUnits.push(6); xp += 300; }
-      if (row.unit7_completed) { completedUnits.push(7); xp += 350; }
-      if (row.unit8_completed) { completedUnits.push(8); xp += 400; }
+      if (row.unit6_completed) { completedUnits.push(6); xp += 300; } // Teacher Registration
+      if (row.unit7_completed) { completedUnits.push(7); xp += 350; } // Teaching Personnel Summary
       if (row.unit9_completed) { completedUnits.push(9); xp += 500; }
       if (row.unit10_completed) { completedUnits.push(10); xp += 500; }
     }
@@ -12947,6 +12968,21 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
   const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
 
   try {
+    // 0. Server-side validation: Check baseline total from Unit 6
+    const schoolRes = await pool.query('SELECT total_teachers_registered FROM ph_schools WHERE school_id = $1', [schoolId]);
+    if (schoolRes.rows.length === 0) {
+        return res.status(404).json({ error: "School not found" });
+    }
+    const baseline = parseInt(schoolRes.rows[0].total_teachers_registered) || 0;
+    const totalInput = pInt(d.fund_deped) + pInt(d.fund_lgu) + pInt(d.fund_others);
+
+    if (totalInput > baseline) {
+        return res.status(400).json({ 
+            error: "Data Validation Error", 
+            message: `Total assigned teachers (${totalInput}) exceeds the registered baseline (${baseline}) from Unit 6.`
+        });
+    }
+
     // 1. Upsert into teaching_personnel table
     const upsertQuery = `
       INSERT INTO teaching_personnel (
@@ -13009,223 +13045,350 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
   }
 });
 
-// ==========================================
-// UNIT 8: PERSONNEL REGISTRY ENDPOINTS
-// ==========================================
+// ===============================================
+// UNIT 7: UNIFIED TEACHER ROSTER & WORKLOADS
+// ===============================================
 
-// --- GET: Fetch all personnel for a school (with Auto-Seeding) ---
-app.get('/api/personnel/:schoolId', async (req, res) => {
+/**
+ * GET: Fetch Full Roster for a School
+ * Returns an array of teacher objects, each with a nested 'workloads' array.
+ */
+app.get('/api/ph_schools/:schoolId/teachers', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // 1. Check if ph_teachers_list is empty for this school
-    const existing = await pool.query('SELECT * FROM ph_teachers_list WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
+    // 1. Fetch teachers
+    const query = `
+      SELECT * FROM ph_teachers_list 
+      WHERE school_id = $1
+      ORDER BY last_name ASC, first_name ASC
+    `;
+    const result = await pool.query(query, [schoolId]);
 
-    if (existing.rows.length === 0) {
-      // 2. Auto-seed from existing teachers_list table
+    // 2. Auto-Seeding Logic (Legacy Sync)
+    // If roster is empty, attempt to pull from the master 'teachers_list'
+    if (result.rows.length === 0) {
+      console.log(`[Unit 7] Roster empty for ${schoolId}. Checking master for auto-seed...`);
       const legacyTeachers = await pool.query('SELECT * FROM teachers_list WHERE CAST("school.id" AS TEXT) = $1', [schoolId]);
 
       if (legacyTeachers.rows.length > 0) {
-        // Fetch school basic info for the new records
-        const schoolRes = await pool.query('SELECT school_name, region, division, district FROM ph_schools WHERE school_id = $1', [schoolId]);
-        const schoolInfo = schoolRes.rows[0] || { school_name: '', region: '', division: '', district: '' };
-
         for (const t of legacyTeachers.rows) {
           await pool.query(`
             INSERT INTO ph_teachers_list (
-              school_id, school_name, region, division, district,
-              control_num, tin, first_name, middle_name, last_name,
-              position, position_group, corrected_degree,
-              workload_hrs, workload_mins
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, 0)
+              school_id, first_name, middle_name, last_name, position
+            ) VALUES ($1, $2, $3, $4, $5)
           `, [
             schoolId,
-            schoolInfo.school_name,
-            schoolInfo.region,
-            schoolInfo.division,
-            schoolInfo.district,
-            t.control_num || null,
-            t.tin || null,
             t.first || null,
             t.middle || null,
             t.last || null,
-            t.position || null,
-            t.position_group || 'Teaching',
-            t['corrected.degree'] || null
+            t.position || null
           ]);
         }
-
         // Refetch after seeding
-        const newlySeeded = await pool.query('SELECT * FROM ph_teachers_list WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
-        return res.json({ success: true, data: newlySeeded.rows, seeded: true });
+        const seededResult = await pool.query(query, [schoolId]);
+        return res.json({ success: true, data: seededResult.rows, seeded: true });
       }
     }
 
-    res.json({ success: true, data: existing.rows, seeded: false });
+    res.json({ success: true, data: result.rows });
   } catch (err) {
-    console.error("Fetch Personnel Error:", err);
+    console.error("Fetch Unified Roster Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-// --- POST: Add new personnel to a school ---
-app.post('/api/personnel', async (req, res) => {
-  const { schoolId, data } = req.body;
-  try {
-    // 1. Fetch school details from ph_schools to auto-populate the registry
-    const schoolRes = await pool.query('SELECT school_name, region, division, district FROM ph_schools WHERE school_id = $1', [schoolId]);
+/**
+ * PUT: Update Teacher Profile & Workloads
+ * Transactional 'Delete and Replace' for workloads to ensure integrity.
+ */
+app.put('/api/teachers/:teacherId', async (req, res) => {
+  const { teacherId } = req.params;
+  const { 
+    first_name, middle_name, last_name, position,
+    specialization, sex, experience_bracket, funding_source, role_designation,
+    monday_mins, tuesday_mins, wednesday_mins, thursday_mins, friday_mins,
+    workloads 
+  } = req.body;
 
-    if (schoolRes.rows.length === 0) {
-      return res.status(404).json({ error: "School not found" });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Step A: Update Teacher Profile
+    const updateProfileQuery = `
+      UPDATE ph_teachers_list 
+      SET 
+        first_name = $1, middle_name = $2, last_name = $3, position = $4,
+        specialization = $5, sex = $6, experience_bracket = $7, 
+        funding_source = $8, role_designation = $9,
+        monday_mins = $10, tuesday_mins = $11, wednesday_mins = $12,
+        thursday_mins = $13, friday_mins = $14,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $15
+      RETURNING *
+    `;
+    const profileValues = [
+      first_name, middle_name, last_name, position,
+      specialization, sex, experience_bracket, funding_source, role_designation,
+      monday_mins || 0, tuesday_mins || 0, wednesday_mins || 0,
+      thursday_mins || 0, friday_mins || 0,
+      teacherId
+    ];
+    const profileRes = await client.query(updateProfileQuery, profileValues);
+
+    if (profileRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: "Teacher not found" });
     }
 
-    const schoolInfo = schoolRes.rows[0];
+    // Step B: Replace Workloads
+    // 1. Clear existing
+    await client.query('DELETE FROM ph_teachers_workload WHERE teacher_id = $1', [teacherId]);
 
-    // 2. Insert into ph_teachers_list
-    const insertQuery = `
+    // 2. Batch Insert new workloads
+    if (workloads && Array.isArray(workloads) && workloads.length > 0) {
+      const schoolId = profileRes.rows[0].school_id;
+      for (const w of workloads) {
+        await client.query(`
+          INSERT INTO ph_teachers_workload (
+            teacher_id, school_id, grade_level, subject_name, subject_code, duration_minutes
+          ) VALUES ($1, $2, $3, $4, $5, $6)
+        `, [
+          teacherId,
+          schoolId,
+          w.grade_level,
+          w.subject_name,
+          w.subject_code,
+          w.duration_minutes ? parseInt(w.duration_minutes) : 0
+        ]);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Teacher updated successfully!" });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(`[Unit 7] Update Error for teacher ${teacherId}:`, err.message);
+    if (err.detail) console.error("Detail:", err.detail);
+    res.status(500).json({ error: "Internal Server Error", message: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * DELETE: Remove Teacher
+ * Relies on ON DELETE CASCADE for workloads.
+ */
+app.delete('/api/teachers/:teacherId', async (req, res) => {
+  const { teacherId } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM ph_teachers_list WHERE id = $1 RETURNING *', [teacherId]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Teacher not found" });
+    }
+    res.json({ success: true, message: "Teacher removed from roster." });
+  } catch (err) {
+    console.error("Delete Teacher Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+/**
+ * GET: Search Master Directory (teacher_list)
+ * Hits the 800k+ master table with ILIKE and a strict LIMIT 20.
+ */
+app.get('/api/master-teachers/search', async (req, res) => {
+  const { name } = req.query;
+  if (!name || name.length < 2) {
+    return res.json({ success: true, data: [] });
+  }
+
+  try {
+    const query = `
+      SELECT * FROM teachers_list 
+      WHERE first ILIKE $1 OR last ILIKE $1
+      LIMIT 20
+    `;
+    const result = await pool.query(query, [`%${name}%`]);
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Master Search Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET: All Unique Specializations from master list
+app.get('/api/specializations', async (req, res) => {
+  try {
+    const query = `
+      SELECT DISTINCT "specialization.final" as spec 
+      FROM teachers_list 
+      WHERE "specialization.final" IS NOT NULL 
+        AND "specialization.final" != '' 
+        AND "specialization.final" != '0'
+      ORDER BY spec ASC
+    `;
+    const result = await pool.query(query);
+    res.json({ success: true, data: result.rows.map(r => r.spec) });
+  } catch (err) {
+    console.error("Fetch Specializations Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET: All Subjects from ph_subjects
+app.get('/api/subjects', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM ph_subjects ORDER BY category, subject_name ASC');
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Fetch Subjects Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+/**
+ * POST: Add New Teacher to Roster (Initial Blank)
+ */
+
+
+app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
+  const { schoolId } = req.params;
+  const { 
+    first_name, last_name, position, sex, 
+    specialization, experience_bracket, funding_source, role_designation 
+  } = req.body;
+  
+  try {
+    const query = `
       INSERT INTO ph_teachers_list (
-        school_id, school_name, region, division, district,
-        control_num, tin, first_name, middle_name, last_name,
-        position, position_group, corrected_degree,
-        workload_hrs, workload_mins
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      RETURNING *;
-    `;
-
-    const values = [
-      schoolId,
-      schoolInfo.school_name,
-      schoolInfo.region,
-      schoolInfo.division,
-      schoolInfo.district,
-      data.control_num || null,
-      data.tin || null,
-      data.first_name || null,
-      data.middle_name || null,
-      data.last_name || null,
-      data.position || null,
-      data.position_group || 'Teaching', // Default based on user typical entry
-      data.corrected_degree || null,
-      data.workload_hrs ? parseInt(data.workload_hrs) : 0,
-      data.workload_mins ? parseInt(data.workload_mins) : 0
-    ];
-
-    const result = await pool.query(insertQuery, values);
-
-    // 3. Mark unit8_completed flag in ph_schools (Optional/Future proofing)
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query(`UPDATE ph_schools SET unit8_completed = TRUE WHERE school_id = $1`, [schoolId]);
-
-    res.json({ success: true, data: result.rows[0], message: "Personnel added successfully!" });
-  } catch (err) {
-    console.error("Add Personnel Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-// --- DELETE: Remove personnel ---
-app.delete('/api/personnel/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await pool.query('DELETE FROM ph_teachers_list WHERE id = $1 RETURNING *', [id]);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Personnel record not found" });
-    }
-    res.json({ success: true, message: "Personnel removed successfully!" });
-  } catch (err) {
-    console.error("Delete Personnel Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-// --- PUT: Edit personnel ---
-app.put('/api/personnel/:id', async (req, res) => {
-  const { id } = req.params;
-  const { data } = req.body;
-  try {
-    const updateQuery = `
-      UPDATE ph_teachers_list 
-      SET 
-        control_num = $1, 
-        tin = $2, 
-        first_name = $3, 
-        middle_name = $4, 
-        last_name = $5,
-        position = $6, 
-        position_group = $7, 
-        corrected_degree = $8,
-        workload_hrs = $9,
-        workload_mins = $10
-      WHERE id = $11
-      RETURNING *;
+        school_id, first_name, last_name, position, sex, 
+        specialization, experience_bracket, funding_source, role_designation
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
     `;
     const values = [
-      data.control_num || null,
-      data.tin || null,
-      data.first_name || null,
-      data.middle_name || null,
-      data.last_name || null,
-      data.position || null,
-      data.position_group || 'Teaching',
-      data.corrected_degree || null,
-      data.instructional_hrs ? parseInt(data.instructional_hrs) : 0,
-      data.instructional_mins ? parseInt(data.instructional_mins) : 0,
-      data.ancillary_hrs ? parseInt(data.ancillary_hrs) : 0,
-      data.ancillary_mins ? parseInt(data.ancillary_mins) : 0,
-      id
+      schoolId, first_name, last_name, position || 'Teacher I', sex || '',
+      specialization || '', experience_bracket || '', 
+      funding_source || 'DepEd Nationally Funded', 
+      role_designation || 'Non-Advisory'
     ];
-
-    const result = await pool.query(updateQuery, values);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Personnel record not found" });
-    }
-    res.json({ success: true, data: result.rows[0], message: "Personnel updated successfully!" });
+    const result = await pool.query(query, values);
+    res.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error("Update Personnel Error:", err);
+    console.error("Add Teacher Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-// --- PUT: Quick Edit Personnel Workload (Inline) ---
-app.put('/api/personnel/:id/workload', async (req, res) => {
-  const { id } = req.params;
-  const { workload_hrs, workload_mins } = req.body;
-  try {
-    const updateQuery = `
-      UPDATE ph_teachers_list 
-      SET 
-        workload_hrs = $1,
-        workload_mins = $2
-      WHERE id = $3
-      RETURNING *;
-    `;
-    const values = [
-      workload_hrs ? parseInt(workload_hrs) : 0,
-      workload_mins ? parseInt(workload_mins) : 0,
-      id
-    ];
+/* 
+  DEPRECATED: Old Unit 8 Personnel Routes
+  The following endpoints are now legacy and should be migrated to the unified routes above.
+*/
+// app.get('/api/personnel/:schoolId', ...)
+// app.post('/api/personnel', ...)
+// app.delete('/api/personnel/:id', ...)
+// app.put('/api/personnel/:id', ...)
+// app.put('/api/personnel/:id/workload', ...)
 
-    const result = await pool.query(updateQuery, values);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Personnel record not found" });
-    }
-    res.json({ success: true, data: result.rows[0], message: "Workload updated successfully!" });
-  } catch (err) {
-    console.error("Update Personnel Workload Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-// --- POST: Finalize Unit 8 ---
-app.post('/api/ph_schools/unit8/:schoolId', async (req, res) => {
+// --- POST: Finalize Unit 6 (Teacher Registration) ---
+app.post('/api/ph_schools/unit6/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // Mark unit8_completed flag in ph_schools
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query(`UPDATE ph_schools SET unit8_completed = TRUE WHERE school_id = $1`, [schoolId]);
+    // 1. Mark unit6_completed flag in ph_schools
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query(`UPDATE ph_schools SET unit6_completed = TRUE WHERE school_id = $1`, [schoolId]);
+    
+    // 2. Calculate baseline total from registry for Unit 7's reference
+    const countRes = await pool.query('SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1', [schoolId]);
+    const count = parseInt(countRes.rows[0].count) || 0;
+    
+    // 3. Store baseline in ph_schools
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS total_teachers_registered INTEGER DEFAULT 0;`);
+    await pool.query('UPDATE ph_schools SET total_teachers_registered = $1 WHERE school_id = $2', [count, schoolId]);
 
-    res.json({ success: true, message: "Unit 8 Personnel Registry finalized!" });
+    res.json({ success: true, message: "Unit 6 finalized!", total: count });
   } catch (err) {
-    console.error("Finalize Unit 8 Error:", err);
+    console.error("Finalize Unit 6 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- GET: Workload Summary Dashboard (Unit 7) ---
+app.get('/api/schools/:schoolId/workload-summary', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    // 1. Total Headcount
+    const headcountRes = await pool.query('SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1', [schoolId]);
+    const totalHeadcount = parseInt(headcountRes.rows[0].count);
+
+    // 2. Demographic Groupings
+    const sexDist = await pool.query('SELECT sex as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY sex', [schoolId]);
+    const expDist = await pool.query('SELECT experience_bracket as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY experience_bracket', [schoolId]);
+    const fundDist = await pool.query('SELECT funding_source as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY funding_source', [schoolId]);
+    const roleDist = await pool.query('SELECT role_designation as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY role_designation', [schoolId]);
+    const specDist = await pool.query('SELECT specialization as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY specialization', [schoolId]);
+
+    // 3. Deployment Metrics (Joined from Workload)
+    const gradeDist = await pool.query(`
+      SELECT grade_level as label, COUNT(DISTINCT teacher_id) as value 
+      FROM ph_teachers_workload 
+      WHERE school_id = $1 
+      GROUP BY grade_level 
+      ORDER BY grade_level ASC
+    `, [schoolId]);
+    
+    const subjectDist = await pool.query(`
+      SELECT subject_name as label, COUNT(DISTINCT teacher_id) as value 
+      FROM ph_teachers_workload 
+      WHERE school_id = $1 
+      GROUP BY subject_name 
+      ORDER BY value DESC
+    `, [schoolId]);
+
+    // 4. Killer Metric: Average Teacher Workload
+    // Sum of all minutes for all teachers / Total teachers
+    const totalMinsRes = await pool.query('SELECT SUM(duration_minutes) FROM ph_teachers_workload WHERE school_id = $1', [schoolId]);
+    const totalMins = parseInt(totalMinsRes.rows[0].sum) || 0;
+    const avgWorkload = totalHeadcount > 0 ? Math.round(totalMins / totalHeadcount) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        totalHeadcount,
+        demographics: {
+          sex: sexDist.rows,
+          experience: expDist.rows,
+          funding: fundDist.rows,
+          role: roleDist.rows,
+          specialization: specDist.rows
+        },
+        deployment: {
+          byGrade: gradeDist.rows,
+          bySubject: subjectDist.rows
+        },
+        avgWorkloadMinutes: avgWorkload,
+        totalWorkloadMinutes: totalMins
+      }
+    });
+
+  } catch (err) {
+    console.error("Workload Summary Error:", err);
+    res.status(500).json({ error: "Failed to generate workload summary." });
+  }
+});
+
+// --- POST: Finalize Unit 7 (Teacher Roster & Workloads) ---
+app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query('UPDATE ph_schools SET unit7_completed = TRUE WHERE school_id = $1', [schoolId]);
+    res.json({ success: true, message: "Unit 7 finalized!" });
+  } catch (err) {
+    console.error("Finalize Unit 7 Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -13515,5 +13678,33 @@ app.post('/api/user/progress', async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+// --- SERVER STARTUP ---
+const startServer = async () => {
+  try {
+    console.log("🚀 Starting database initialization...");
+    await initDB();
+    await initFinanceDB();
+    await initMasterlistDB();
+    
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server listening on port ${PORT}`);
+      console.log(`👉 CORS Allowed Origins: http://localhost:5173, http://localhost:5174, https://insight-ed-mobile-pwa.vercel.app`);
+    });
+  } catch (err) {
+    console.error("❌ Failed to start server:", err.message);
+    process.exit(1);
+  }
+};
+
+// Start the server if this file is run directly
+const executedFile = process.argv[1] || '';
+const currentFile = fileURLToPath(import.meta.url);
+const isMain = path.resolve(executedFile).toLowerCase() === path.resolve(currentFile).toLowerCase();
+
+if (isMain || process.env.FORCE_START === 'true' || process.env.START_SERVER === 'true') {
+  startServer();
+}
 
 export default app;

@@ -60,7 +60,7 @@ const WATER_SOURCES = [
     "No water source"
 ];
 
-const Unit9SchoolResources = () => {
+const Unit7SchoolResources = () => {
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
@@ -530,15 +530,15 @@ const Unit9SchoolResources = () => {
                 try {
                     const stored = localStorage.getItem('quest_progress');
                     let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-                    if (!progress.completedUnits.includes(9)) {
-                        progress.completedUnits.push(9);
+                    if (!progress.completedUnits.includes(7)) {
+                        progress.completedUnits.push(7);
                         progress.xp += 500;
                         localStorage.setItem('quest_progress', JSON.stringify(progress));
                     }
                 } catch (e) { console.warn("Local progress update failed", e); }
 
                 alert("School Resources module completed and saved successfully!");
-                navigate("/modular-dashboard");
+                navigate("/modular/unit-8");
             } else {
                 alert("Failed to save. Please check your connection.");
                 setLoading(false);
@@ -578,11 +578,11 @@ const Unit9SchoolResources = () => {
                 {/* Exit Header */}
                 <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
                     <div className="max-w-md mx-auto flex items-center gap-3">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiX className="w-6 h-6" />
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                            <FiArrowLeft className="w-6 h-6" />
                         </button>
                         <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 9</div>
+                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 7</div>
                             <h1 className="text-sm font-black text-gray-800">School Resources</h1>
                         </div>
                         <div className="w-10" />
@@ -600,7 +600,7 @@ const Unit9SchoolResources = () => {
                         <span className="text-4xl text-white">🎒</span>
                     </motion.div>
                     <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-200">
-                        Unit 9 • School Resources
+                        Unit 7 • School Resources
                     </span>
                     <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
                     <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
@@ -710,8 +710,8 @@ const Unit9SchoolResources = () => {
                         } else {
                             navigate("/modular-dashboard");
                         }
-                    }} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                        {currentPhase > 1 ? <FiArrowLeft className="w-6 h-6" /> : <FiX className="w-6 h-6" />}
+                    }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                        <FiArrowLeft className="w-6 h-6" />
                     </button>
                     <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
                         <motion.div
@@ -1340,4 +1340,4 @@ const Unit9SchoolResources = () => {
     );
 };
 
-export default Unit9SchoolResources;
+export default Unit7SchoolResources;

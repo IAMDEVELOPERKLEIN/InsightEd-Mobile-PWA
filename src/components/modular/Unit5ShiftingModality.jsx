@@ -344,7 +344,7 @@ const Unit5ShiftingModality = () => {
                 <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
                     <div className="max-w-md mx-auto flex items-center gap-3">
                         <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiX className="w-6 h-6" />
+                            <FiArrowLeft className="w-6 h-6" />
                         </button>
                         <div className="flex-1 text-center">
                             <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 5</div>
@@ -483,7 +483,7 @@ const Unit5ShiftingModality = () => {
             <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
                 <div className="max-w-md mx-auto flex items-center gap-3">
                     <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
-                        <FiX className="w-6 h-6 text-gray-400 hover:text-gray-600" />
+                        <FiArrowLeft className="w-6 h-6 text-gray-400 hover:text-gray-600" />
                     </button>
                     <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
                         <motion.div className="h-full bg-indigo-500 rounded-full" animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.4 }} />
@@ -729,8 +729,8 @@ const Unit5ShiftingModality = () => {
 
             <SuccessModal 
                 isOpen={showSuccess} 
-                onClose={() => navigate("/modular-dashboard")} 
-                redirectUrl="/modular-dashboard"
+                onClose={() => navigate("/modular/unit-6")} 
+                redirectUrl="/modular/unit-6"
                 title="Amazing!" 
                 message="You've successfully mapped out your Shifting and Modalities." 
                 buttonText="Back to Quest Board" 

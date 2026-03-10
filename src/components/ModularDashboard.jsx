@@ -120,10 +120,9 @@ const ModularDashboard = () => {
             { id: 3, title: "Organized Classes", icon: <FiGrid className="w-5 h-5" />, path: "/modular/unit-3", locked: false },
             { id: 4, title: hasHighSchool ? "JHS/SHS Profile" : "Learner Profile", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-4", locked: false },
             { id: 5, title: "Shifting & Modality", icon: <FiClock className="w-5 h-5" />, path: "/modular/unit-5", locked: false },
-            { id: 7, title: "Teaching Personnel", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-7", locked: false },
-            { id: 8, title: "Personnel Registry", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-8", locked: false },
-            { id: 9, title: "School Resources", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-9", locked: false },
-            { id: 10, title: "Physical Facilities", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-10", locked: false },
+            { id: 6, title: "Teaching Personnel", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-6", locked: false },
+            { id: 7, title: "School Resources", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-7", locked: false },
+            { id: 8, title: "Physical Facilities", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-8", locked: false },
         ];
         return mods;
     }, [curricularOffering, questProgress.completedUnits]);
@@ -151,7 +150,11 @@ const ModularDashboard = () => {
     const userRank = getRank(questProgress.xp);
 
     return (
-        <div className="min-h-screen flex flex-col items-center bg-slate-50 font-sans pb-32">
+        <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            className="min-h-screen flex flex-col items-center bg-slate-50 font-sans pb-32"
+        >
             <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md rounded-b-[2rem] shadow-[0_4px_20px_rgba(0,0,0,0.03)] border-b border-slate-100 px-4 py-4 sm:px-6">
                 <div className="max-w-md mx-auto relative flex items-center justify-between">
                     <button
@@ -275,12 +278,11 @@ const ModularDashboard = () => {
 
                 <motion.div 
                     whileHover={{ scale: 1.05, rotate: [-2, 2, 0] }}
-                    className="pointer-events-auto cursor-pointer"
                 >
                     <BarongMascot className="w-16 h-16 drop-shadow-md" />
                 </motion.div>
             </motion.div>
-        </div>
+        </motion.div>
     );
 };
 

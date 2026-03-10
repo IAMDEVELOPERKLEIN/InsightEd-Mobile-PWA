@@ -47,7 +47,7 @@ const DEFAULT_BUILDING_TYPES = [
     "Gymnasium"
 ];
 
-export default function Unit10PhysicalFacilities() {
+export default function Unit8PhysicalFacilities() {
     const navigate = useNavigate();
 
     // ── Global State ─────────────────────────────────────────────────────────
@@ -320,8 +320,8 @@ export default function Unit10PhysicalFacilities() {
             // Update Progress locally if this is the first interaction that completes unit 10
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-            if (!progress.completedUnits.includes(9)) {
-                progress.completedUnits.push(9); // Actually Unit 10 is index 10, wait...
+            if (!progress.completedUnits.includes(8)) {
+                progress.completedUnits.push(8); 
                 // The dashboard mapped Unit 10 ID to locked array of 9. Let's just update as needed.
                 if (!progress.completedUnits.includes(10)) progress.completedUnits.push(10);
                 progress.xp += 300;
@@ -699,10 +699,10 @@ export default function Unit10PhysicalFacilities() {
                 {/* Top Navigation */}
                 <header className="px-6 py-4 flex items-center justify-between sticky top-0 bg-gray-50/80 backdrop-blur-md z-50 border-b border-gray-200/50">
                     <button onClick={handleBack} className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 shadow-sm hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all">
-                        <FiChevronLeft className="w-6 h-6" />
+                        <FiArrowLeft className="w-6 h-6" />
                     </button>
                     <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black tracking-[0.2em] text-indigo-500 uppercase">Unit 10 Insight</span>
+                        <span className="text-[10px] font-black tracking-[0.2em] text-indigo-500 uppercase">Unit 8 Insight</span>
                         <h1 className="font-black text-gray-800 text-lg uppercase tracking-wide">Physical Facilities</h1>
                     </div>
                     <div className="w-12" />
@@ -923,10 +923,10 @@ export default function Unit10PhysicalFacilities() {
             <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
                 <div className="max-w-3xl mx-auto flex items-center justify-between">
                     <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 text-gray-400">
-                        <FiChevronLeft className="w-6 h-6" />
+                        <FiArrowLeft className="w-6 h-6" />
                     </button>
                     <div className="flex flex-col items-center">
-                        <h1 className="font-bold text-gray-800 text-xl">Unit 10 Audit</h1>
+                        <h1 className="font-bold text-gray-800 text-xl">Unit 8 Audit</h1>
                         <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Step {currentPage} of 5</span>
                     </div>
                     <div className="w-10"></div>
@@ -978,18 +978,22 @@ export default function Unit10PhysicalFacilities() {
                                             );
                                         })}
 
-                                        {/* Render new drawing space */}
-                                        {newSpace.center_lat && newSpace.center_lng && isFormVisible && (
-                                            <>
-                                                <Rectangle 
-                                                    bounds={calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0)} 
-                                                    pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }} 
-                                                />
-                                                <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
-                                                    <Popup>Target Location</Popup>
-                                                </Marker>
-                                            </>
-                                        )}
+                                         {/* Render new drawing space */}
+                                         {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
+                                             const b = calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0);
+                                             if (!b) return null;
+                                             return (
+                                                 <>
+                                                     <Rectangle 
+                                                         bounds={b} 
+                                                         pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }} 
+                                                     />
+                                                     <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
+                                                         <Popup>Target Location</Popup>
+                                                     </Marker>
+                                                 </>
+                                             );
+                                         })()}
                                     </MapContainer>
                                 )}
                             </div>

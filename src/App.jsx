@@ -79,10 +79,10 @@ import Unit2Learners from './components/modular/Unit2Learners';
 import Unit3OrganizedClasses from './components/modular/Unit3OrganizedClasses';
 import Unit4LearnerProfile from './components/modular/Unit4LearnerProfile';
 import Unit5ShiftingModality from './components/modular/Unit5ShiftingModality';
-import Unit6TeachingPersonnel from './components/modular/Unit6TeachingPersonnel';
-import Unit8PersonnelRegistry from './components/modular/Unit8PersonnelRegistry';
-import Unit9SchoolResources from './components/modular/Unit9SchoolResources';
-import Unit10PhysicalFacilities from './components/modular/Unit10PhysicalFacilities';
+import TeachingPersonnelUnit from './components/modular/TeachingPersonnel';
+import Unit6Summary from './components/modular/Unit6Summary';
+import Unit7SchoolResources from './components/modular/Unit7SchoolResources';
+import Unit8PhysicalFacilities from './components/modular/Unit8PhysicalFacilities';
 
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
@@ -118,9 +118,7 @@ const AnimatedRoutes = () => {
   // }
 
   return (
-    // 'mode="wait"' ensures the old page leaves before the new one enters
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+    <Routes>
         {/* Authentication */}
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -212,10 +210,18 @@ const AnimatedRoutes = () => {
           }
         />
         <Route
-          path="/modular/unit-10"
+          path="/modular/unit-6"
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
-              <Unit10PhysicalFacilities />
+              <TeachingPersonnelUnit />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-6-summary"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit6Summary />
             </ProtectedRoute>
           }
         />
@@ -223,7 +229,7 @@ const AnimatedRoutes = () => {
           path="/modular/unit-7"
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
-              <Unit6TeachingPersonnel />
+              <Unit7SchoolResources />
             </ProtectedRoute>
           }
         />
@@ -231,15 +237,7 @@ const AnimatedRoutes = () => {
           path="/modular/unit-8"
           element={
             <ProtectedRoute allowedRoles={['Beta Tester']}>
-              <Unit8PersonnelRegistry />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/modular/unit-9"
-          element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
-              <Unit9SchoolResources />
+              <Unit8PhysicalFacilities />
             </ProtectedRoute>
           }
         />
@@ -283,14 +281,6 @@ const AnimatedRoutes = () => {
         {/* Hidden Admin Login Route */}
         <Route path="/adminlogin" element={<Login />} />
       </Routes>
-
-      {/* MAINTENANCE OVERLAY (Blocks interaction if active) */}
-      {/* EXEMPT: Authenticated users (protected routes) and Admin Login */}
-      {/* FIX: Only show on Login Page ('/') if not Admin. Logged-in users are effectively exempt by being on other routes. */}
-      {maintenanceMode && !isAdmin && location.pathname === '/' && (
-        <MaintenanceScreen />
-      )}
-    </AnimatePresence>
   );
 };
 
