@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown } from 'react-icons/fi';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText } from 'react-icons/fi';
 import { auth } from '../firebase';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
@@ -38,6 +38,21 @@ const EFDMonitoring = () => {
     const [isAssigning, setIsAssigning] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
     const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
+    
+    // New State for Document Uploads
+    const [selectedProjectForDocs, setSelectedProjectForDocs] = useState(null);
+    const [uploadDocs, setUploadDocs] = useState({ RTA: null, MOA: null });
+    const [isUploadingDocs, setIsUploadingDocs] = useState(false);
+
+    const handleClearFilters = () => {
+        setSelectedRegion('');
+        setSelectedDivision('');
+        setSelectedCategory('');
+        setSelectedFundingYear('');
+        setSelectedDonated('All');
+        setSearchTerm('');
+        setShowUnassignedOnly(false);
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -162,6 +177,72 @@ const EFDMonitoring = () => {
             setIsAssigning(false);
         }
     };
+    const convertFullFileToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result); // Resolve full data URL
+            reader.onerror = (error) => reject(error);
+        });
+    };
+
+    const handleUploadDocuments = async () => {
+        if (!selectedProjectForDocs) return;
+        if (!uploadDocs.RTA && !uploadDocs.MOA) {
+            setMessage({ text: "Please select at least one document to upload", type: 'error' });
+            return;
+        }
+
+        console.log(`🚀 Starting upload for project: ${selectedProjectForDocs.id}`);
+        setIsUploadingDocs(true);
+        try {
+            const uploadDoc = async (type, file) => {
+                if (!file) return;
+                console.log(`   - Converting ${type} to base64...`);
+                const base64 = await convertFullFileToBase64(file);
+                console.log(`   - Sending ${type} to API (${(base64.length / (1024 * 1024)).toFixed(2)} MB)...`);
+                const response = await fetch('/api/upload-project-document', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectId: selectedProjectForDocs.id,
+                        type: type,
+                        base64: base64,
+                        uid: auth.currentUser?.uid
+                    })
+                });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Failed to upload ${type}`);
+                }
+                console.log(`   - ✅ ${type} uploaded successfully.`);
+            };
+
+            if (uploadDocs.RTA) await uploadDoc('RTA', uploadDocs.RTA);
+            if (uploadDocs.MOA) await uploadDoc('MOA', uploadDocs.MOA);
+
+            // Update local state so UI reflects the new documents
+            setProjects(prevProjects => prevProjects.map(p => {
+                if (p.id === selectedProjectForDocs.id) {
+                    return {
+                        ...p,
+                        rta_pdf: uploadDocs.RTA ? 'data:application/pdf;base64,...' : p.rta_pdf, // placeholder or fetch from response if server returned it
+                        moa_pdf: uploadDocs.MOA ? 'data:application/pdf;base64,...' : p.moa_pdf
+                    };
+                }
+                return p;
+            }));
+
+            setMessage({ text: "Documents uploaded successfully!", type: 'success' });
+            setSelectedProjectForDocs(null);
+            setUploadDocs({ RTA: null, MOA: null });
+        } catch (error) {
+            console.error("❌ Upload error:", error);
+            setMessage({ text: error.message || "Failed to upload documents", type: 'error' });
+        } finally {
+            setIsUploadingDocs(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -178,7 +259,7 @@ const EFDMonitoring = () => {
                 <div className="bg-[#004A99] text-white pt-8 pb-10 px-6 rounded-b-[3rem] shadow-xl mb-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                     <div className="relative z-10">
-                        <h1 className="text-2xl font-black tracking-tight leading-none">Deployment</h1>
+                        <h1 className="text-2xl font-black tracking-tight leading-none">Project Assignment</h1>
                         <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
                             Engineer Resource Allocation • System Monitoring
                         </p>
@@ -206,12 +287,22 @@ const EFDMonitoring = () => {
                                 <FiFilter className="text-blue-500" />
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Filters</span>
                             </div>
-                            <button 
-                                onClick={() => setShowUnassignedOnly(!showUnassignedOnly)}
-                                className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-wider transition-all border shrink-0 ${showUnassignedOnly ? 'bg-orange-500 border-orange-500 text-white' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}
-                            >
-                                {showUnassignedOnly ? 'Showing Unassigned' : 'Filter Unassigned'}
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <button 
+                                    onClick={() => setShowUnassignedOnly(!showUnassignedOnly)}
+                                    className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-wider transition-all border shrink-0 ${showUnassignedOnly ? 'bg-orange-500 border-orange-500 text-white' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}
+                                >
+                                    {showUnassignedOnly ? 'Showing Unassigned' : 'Filter Unassigned'}
+                                </button>
+                                {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || searchTerm || showUnassignedOnly) && (
+                                    <button 
+                                        onClick={handleClearFilters}
+                                        className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full transition-all active:scale-95"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -305,15 +396,28 @@ const EFDMonitoring = () => {
                                     <h4 className="text-sm font-black text-slate-800 tracking-tight truncate overflow-hidden" title={p.projectName}>{p.projectName}</h4>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{p.schoolName}</p>
                                 </div>
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedProject(p);
-                                    }}
-                                    className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shrink-0"
-                                >
-                                    <FiUserPlus size={18} />
-                                </button>
+                                <div className="flex gap-2 shrink-0">
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedProjectForDocs(p);
+                                        }}
+                                        className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                        title="Upload Documents (RTA/MOA)"
+                                    >
+                                        <FiFileText size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedProject(p);
+                                        }}
+                                        className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                        title="Assign Engineer"
+                                    >
+                                        <FiUserPlus size={18} />
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-4">
@@ -346,7 +450,7 @@ const EFDMonitoring = () => {
                             
                             <div className="mb-6">
                                 <h2 className="text-xl font-black text-slate-800">Assign Engineer</h2>
-                                <p className="text-xs text-slate-400 font-medium">Deployment for project: <span className="text-blue-600 font-bold">{selectedProject.projectName}</span></p>
+                                <p className="text-xs text-slate-400 font-medium">Assignment for project: <span className="text-blue-600 font-bold">{selectedProject.projectName}</span></p>
                             </div>
 
                             <div className="space-y-4 mb-8">
@@ -387,7 +491,105 @@ const EFDMonitoring = () => {
                                     disabled={!selectedEngineer || isAssigning}
                                     className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
                                 >
-                                    {isAssigning ? 'Updating...' : 'Confirm Deployment'}
+                                    {isAssigning ? 'Updating...' : 'Confirm Assignment'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                )}
+
+                {/* Document Upload Modal */}
+                {selectedProjectForDocs && createPortal(
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 px-4">
+                        <div className="bg-white w-full max-w-xl rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col relative px-4 sm:px-8">
+                            <button 
+                                onClick={() => setSelectedProjectForDocs(null)}
+                                className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
+                            >
+                                <FiX size={20} />
+                            </button>
+                            
+                            <div className="mb-6 pr-10">
+                                <h2 className="text-xl font-black text-slate-800">Project Documents</h2>
+                                <p className="text-xs text-slate-400 font-medium truncate">Upload for: <span className="text-blue-600 font-bold">{selectedProjectForDocs.projectName}</span></p>
+                            </div>
+
+                            <div className="space-y-6 mb-8 overflow-y-auto pr-2 custom-scrollbar">
+                                {/* RTA Upload */}
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Resolution to Award (RTA)</label>
+                                    <div className={`p-4 rounded-2xl border-2 border-dashed transition-all ${uploadDocs.RTA ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
+                                        <input 
+                                            type="file" 
+                                            accept="application/pdf"
+                                            onChange={(e) => setUploadDocs(prev => ({ ...prev, RTA: e.target.files[0] }))}
+                                            className="hidden" 
+                                            id="rta-upload"
+                                        />
+                                        <label htmlFor="rta-upload" className="flex flex-col items-center justify-center cursor-pointer">
+                                            {uploadDocs.RTA ? (
+                                                <div className="flex items-center gap-2 text-emerald-600">
+                                                    <FiCheck size={20} />
+                                                    <span className="text-xs font-bold truncate max-w-[200px]">{uploadDocs.RTA.name}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-2 text-slate-400">
+                                                    <FiFileText size={24} />
+                                                    <span className="text-[10px] font-bold uppercase">Select RTA PDF</span>
+                                                </div>
+                                            )}
+                                        </label>
+                                    </div>
+                                    {selectedProjectForDocs.rta_pdf && !uploadDocs.RTA && (
+                                        <p className="text-[9px] text-blue-500 font-bold ml-1 italic">✓ Existing RTA File Available</p>
+                                    )}
+                                </div>
+
+                                {/* MOA Upload */}
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Memorandum of Agreement (MOA)</label>
+                                    <div className={`p-4 rounded-2xl border-2 border-dashed transition-all ${uploadDocs.MOA ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
+                                        <input 
+                                            type="file" 
+                                            accept="application/pdf"
+                                            onChange={(e) => setUploadDocs(prev => ({ ...prev, MOA: e.target.files[0] }))}
+                                            className="hidden" 
+                                            id="moa-upload"
+                                        />
+                                        <label htmlFor="moa-upload" className="flex flex-col items-center justify-center cursor-pointer">
+                                            {uploadDocs.MOA ? (
+                                                <div className="flex items-center gap-2 text-emerald-600">
+                                                    <FiCheck size={20} />
+                                                    <span className="text-xs font-bold truncate max-w-[200px]">{uploadDocs.MOA.name}</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-2 text-slate-400">
+                                                    <FiFileText size={24} />
+                                                    <span className="text-[10px] font-bold uppercase">Select MOA PDF</span>
+                                                </div>
+                                            )}
+                                        </label>
+                                    </div>
+                                    {selectedProjectForDocs.moa_pdf && !uploadDocs.MOA && (
+                                        <p className="text-[9px] text-blue-500 font-bold ml-1 italic">✓ Existing MOA File Available</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-3 mt-auto">
+                                <button 
+                                    onClick={() => setSelectedProjectForDocs(null)}
+                                    className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={handleUploadDocuments}
+                                    disabled={(!uploadDocs.RTA && !uploadDocs.MOA) || isUploadingDocs}
+                                    className="w-full py-4 rounded-2xl bg-emerald-600 text-white font-bold text-sm shadow-xl shadow-emerald-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
+                                >
+                                    {isUploadingDocs ? 'Uploading...' : 'Save Documents'}
                                 </button>
                             </div>
                         </div>
@@ -403,6 +605,7 @@ const EFDMonitoring = () => {
                         <button onClick={() => setMessage({ text: '', type: '' })} className="ml-2 hover:opacity-70"><FiX /></button>
                     </div>
                 )}
+
 
                 <BottomNav userRole="EFD" />
             </div>

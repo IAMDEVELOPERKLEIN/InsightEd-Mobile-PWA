@@ -15,7 +15,9 @@ const ProjectStatus = {
 const DOC_TYPES = {
     POW: "Program of Works / Progress of Work",
     DUPA: "DUPA",
-    CONTRACT: "Signed Contract"
+    CONTRACT: "Signed Contract",
+    RTA: "Resolution to Award (RTA)",
+    MOA: "Memorandum of Agreement (MOA)"
 };
 
 const PROJECT_CATEGORIES = [
@@ -85,12 +87,14 @@ const EditProjectModal = ({
     // Optional: For internal logic if not provided
     internalFiles, // Array of File objects
     externalFiles,  // Array of File objects
-    voHistory = [] // Passed from parent
+    voHistory = [], // Passed from parent
+    userRole = null
 }) => {
     const [formData, setFormData] = useState(null);
     const [documents, setDocuments] = useState({ 
         POW: null, DUPA: null, CONTRACT: null, VO: null,
-        RevisedPOW: null, RevisedDUPA: null, RevisedContract: null
+        RevisedPOW: null, RevisedDUPA: null, RevisedContract: null,
+        RTA: null, MOA: null
     });
     const [isFundingYearLocked, setIsFundingYearLocked] = useState(true);
     const [showJustificationPrompt, setShowJustificationPrompt] = useState(false);
@@ -1010,10 +1014,7 @@ const EditProjectModal = ({
                     <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">Fund Source</label>
                     <input name="fund_source" value={formData.fund_source || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs" />
                 </div>
-                <div>
-                    <label className="block text-[10px] font-bold text-blue-700 uppercase mb-1">MOA Date</label>
-                    <input type="date" name="moa_date" value={formData.moa_date || ''} onChange={handleChange} className="w-full p-2 bg-white border border-blue-100 rounded-lg text-xs" />
-                </div>
+                {/* MOA Date removed as it is now a PDF upload handled below */}
             </div>
 
             {/* Tranches */}
@@ -1255,6 +1256,12 @@ const EditProjectModal = ({
 
             <div className="space-y-2">
                 {Object.entries(DOC_TYPES)
+                    .filter(([key]) => {
+                        if (['RTA', 'MOA'].includes(key)) {
+                            return userRole === 'EFD';
+                        }
+                        return true;
+                    })
                     .map(([key, label]) => (
                     <div key={key} className={`p-3 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
                         <div className="flex justify-between items-center">
@@ -1597,6 +1604,8 @@ const EditProjectModal = ({
                                 if (documents.RevisedPOW) finalData.revised_pow_pdf = await convertFullFileToBase64(documents.RevisedPOW);
                                 if (documents.RevisedDUPA) finalData.revised_dupa_pdf = await convertFullFileToBase64(documents.RevisedDUPA);
                                 if (documents.RevisedContract) finalData.revised_contract_pdf = await convertFullFileToBase64(documents.RevisedContract);
+                                if (documents.RTA) finalData.rta_pdf = await convertFullFileToBase64(documents.RTA);
+                                if (documents.MOA) finalData.moa_pdf = await convertFullFileToBase64(documents.MOA);
 
                                 // Ensure delay tracking values are explicitly included for persistence
                                 if (new Date() > new Date(formData.targetCompletionDate)) {

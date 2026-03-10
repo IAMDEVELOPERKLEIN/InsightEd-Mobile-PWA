@@ -86,7 +86,8 @@ const Register = () => {
         barangay: '',
         authCode: '',
         // New Fields for Division Engineer
-        altEmail: ''
+        altEmail: '',
+        accountCategory: '' // Added this line
     });
 
     // --- OTP STATE --- (REMOVED)
@@ -233,14 +234,15 @@ const Register = () => {
     };
 
     const handleRoleChange = (e) => {
-        setFormData({
-            ...formData,
-            role: e.target.value,
+        const newRole = e.target.value;
+        setFormData(prev => ({
+            ...prev,
+            role: newRole,
             // Reset location fields on role change
             region: '', division: '', province: '', city: '', barangay: '', office: '', position: '',
             // Reset role-specific fields
-            schoolEmail: '', contactNumber: ''
-        });
+            schoolEmail: '', contactNumber: '', altEmail: '', accountCategory: ''
+        }));
         // Reset school selection if moving away
         setSelectedSchool(null);
     };
@@ -568,7 +570,8 @@ const Register = () => {
                     office: formData.office,
                     position: formData.position,
                     contactNumber: formData.contactNumber,
-                    altEmail: formData.altEmail
+                    altEmail: formData.altEmail,
+                    accountCategory: formData.accountCategory
                 });
 
                 // SYNC TO NEONSQL (Tabular Data)
@@ -591,7 +594,8 @@ const Register = () => {
                             office: formData.office,
                             position: formData.position,
                             contactNumber: formData.contactNumber,
-                            altEmail: formData.altEmail
+                            altEmail: formData.altEmail,
+                            accountCategory: formData.accountCategory
                         })
                     });
                 } catch (neonErr) {
@@ -970,7 +974,7 @@ const Register = () => {
                                             <label className="text-xs font-bold text-purple-700 uppercase">Region Assignment</label>
                                             <select
                                                 name="region"
-                                                onChange={handleChange}
+                                                onChange={handleRegionChange}
                                                 value={formData.region}
                                                 className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
                                                 required
@@ -1121,6 +1125,21 @@ const Register = () => {
                                                     <option value="Technical Assistant IV (COS)">Technical Assistant IV (COS)</option>
                                                     <option value="Technical Assistant V (COS)">Technical Assistant V (COS)</option>
                                                 </select>
+
+                                                {/* ACCOUNT CATEGORY (DepEd vs Non-DepEd) */}
+                                                {formData.role === 'Division Engineer' && (
+                                                    <select
+                                                        name="accountCategory"
+                                                        value={formData.accountCategory}
+                                                        onChange={handleChange}
+                                                        className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
+                                                        required
+                                                    >
+                                                        <option value="">Select Account Category</option>
+                                                        <option value="DepEd">DepEd Division Engineer</option>
+                                                        <option value="Non-DepEd">Non-DepEd Engineer</option>
+                                                    </select>
+                                                )}
                                             </div>
 
                                             {/* CONTACT INFO */}
