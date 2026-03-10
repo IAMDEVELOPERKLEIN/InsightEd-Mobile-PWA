@@ -403,11 +403,11 @@ const EngineerProjects = () => {
   // Fetch User & Projects
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
-      const user = auth.currentUser;
-      if (user) {
+      const uid = localStorage.getItem('uid');
+      if (uid) {
         // 1. Get User Name & Account Category
         try {
-          const docRef = doc(db, "users", user.uid);
+          const docRef = doc(db, "users", uid);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             setUserName(docSnap.data().firstName);
@@ -418,7 +418,7 @@ const EngineerProjects = () => {
 
         // 2. Fetch account_category from backend
         try {
-          const infoRes = await fetch(`/api/user-info/${user.uid}`);
+          const infoRes = await fetch(`/api/user-info/${uid}`);
           if (infoRes.ok) {
             const info = await infoRes.json();
             setAccountCategory(info.account_category);
@@ -474,7 +474,7 @@ const EngineerProjects = () => {
 
             // 2. Network Request (Background Sync)
             try {
-              let url = `${API_BASE}/api/projects?engineer_id=${user.uid}`;
+              let url = `${API_BASE}/api/projects?engineer_id=${uid}`;
 
               const userRole = localStorage.getItem('userRole');
               if (userRole === 'Super User') {
@@ -642,8 +642,8 @@ const EngineerProjects = () => {
       contract_len: updatedProject.contract_pdf?.length
     });
 
-    const user = auth.currentUser;
-    if (!user) return;
+    const uid = localStorage.getItem('uid');
+    if (!uid) return;
 
     // OPTIMIZATION: Check if progress changed
     const originalProject = projects.find(p => p.id === updatedProject.id);
@@ -682,7 +682,7 @@ const EngineerProjects = () => {
       if (userRole === 'EFD') uploaderType = 'EFD Engineer';
       else if (userRole === 'Division Engineer' && accountCategory === 'Non-DepEd Engineer') uploaderType = 'Non-DepEd Engineer';
 
-      const payload = { ...updatedProject, uid: user.uid, modifiedBy: userName, uploader_type: uploaderType };
+      const payload = { ...updatedProject, uid: uid, modifiedBy: userName, uploader_type: uploaderType };
 
       // OPTIMIZATION: Remove large existing docs if they haven't changed
       // This prevents 413 Payload Too Large errors on servers with low limits
@@ -719,7 +719,7 @@ const EngineerProjects = () => {
               await addEngineerToOutbox({
                 url: `${API_BASE}/api/upload-image`,
                 method: 'POST',
-                body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid, category: item.category },
+                body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: uid, category: item.category },
                 formName: `Photo (${item.category}): ${updatedProject.schoolName}`
               });
             } catch (err) {
@@ -760,7 +760,7 @@ const EngineerProjects = () => {
             await fetch(`${API_BASE}/api/upload-image`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid, category: item.category }),
+              body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: uid, category: item.category }),
             });
           } catch (err) {
             console.error("Compression failed for file:", item.file.name, err);

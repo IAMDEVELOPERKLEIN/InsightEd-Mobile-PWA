@@ -95,10 +95,10 @@ const UserProfile = () => {
     // --- INITIAL FETCH ---
     useEffect(() => {
         const fetchData = async () => {
-            const user = auth.currentUser;
-            if (user) {
-                // 1. Fetch Basic Info from Firebase
-                const docRef = doc(db, "users", user.uid);
+            const uid = localStorage.getItem('uid');
+            if (uid) {
+                // 1. Fetch Basic Info from Firebase (or your backend if migrated)
+                const docRef = doc(db, "users", uid);
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
@@ -119,7 +119,7 @@ const UserProfile = () => {
 
                 // 2. Fetch Assigned School from Neon
                 try {
-                    const response = await fetch(`/api/school-by-user/${user.uid}`);
+                    const response = await fetch(`/api/school-by-user/${uid}`);
                     const result = await response.json();
                     if (result.exists) {
                         setSchoolId(result.data.school_id);
@@ -167,7 +167,7 @@ const UserProfile = () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        userUid: auth.currentUser?.uid || 'unknown',
+                        userUid: localStorage.getItem('uid') || 'unknown',
                         userName: userData?.firstName || 'User',
                         role: userData?.role || 'User',
                         actionType: 'LOGOUT',
@@ -194,10 +194,10 @@ const UserProfile = () => {
     const handleSaveProfile = async () => {
         setLoading(true);
         try {
-            const user = auth.currentUser;
-            if (!user) return;
+            const uid = localStorage.getItem('uid');
+            if (!uid) return;
 
-            const docRef = doc(db, "users", user.uid);
+            const docRef = doc(db, "users", uid);
 
             // Only update the allowed fields in Firestore
             await updateDoc(docRef, {
@@ -280,7 +280,7 @@ const UserProfile = () => {
         setLoading(true);
         try {
             await addDoc(collection(db, "app_feedback"), {
-                userId: auth.currentUser?.uid || 'anonymous',
+                userId: localStorage.getItem('uid') || 'anonymous',
                 userName: userData?.firstName ? `${userData.firstName} ${userData.lastName}` : 'Anonymous',
                 role: userData?.role || 'User',
                 ratings: feedbackRatings,

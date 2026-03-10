@@ -1283,8 +1283,8 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     console.log(`[MIGRATE LOGIN] Attempting login for: ${normalizedEmail}`);
 
     // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
-    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
-    
+    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version, account_category FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
@@ -1338,11 +1338,34 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     console.log(`[MIGRATE LOGIN] Success for: ${normalizedEmail} (Role: ${user.role})`);
 
+    // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
+    let finalCategory = user.account_category;
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
+      if (user.role === 'EFD' || user.role === 'HRODI') {
+        finalCategory = 'EFD Engineer';
+      } else if (user.role === 'Division Engineer') {
+        finalCategory = 'DepEd Engineer';
+      } else {
+        finalCategory = user.role;
+      }
+
+      // Lazy update the DB if it changed or was null
+      if (finalCategory !== user.account_category) {
+        console.log(`[MIGRATE LOGIN] Normalizing category for ${normalizedEmail}: ${finalCategory}`);
+        await pool.query('UPDATE users SET account_category = $1 WHERE uid = $2', [finalCategory, user.uid]);
+      }
+    }
+
     // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
     // until the frontend is fully decoupled from the Firebase SDK.
-    const customToken = await admin.auth().createCustomToken(user.uid, {
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      customToken = await admin.auth().createCustomToken(user.uid, {
         role: user.role // Embed role into token if you like
-    });
+      });
+    } else {
+      console.warn('⚠️ Firebase Admin not initialized — skipping custom token generation');
+    }
 
     return res.json({
       success: true,
@@ -1350,7 +1373,8 @@ app.post('/api/auth/migrate-login', async (req, res) => {
       user: {
         uid: user.uid,
         email: user.email,
-        role: user.role
+        role: user.role,
+        account_category: finalCategory
       }
     });
 
@@ -5671,7 +5695,7 @@ app.post('/api/register-user', async (req, res) => {
 
     // Auto-determine account_category based on role if not explicitly provided
     let finalAccountCategory = accountCategory;
-    if (role === 'EFD') {
+    if (role === 'EFD' || role === 'HRODI') {
       finalAccountCategory = 'EFD Engineer';
     } else if (role === 'Division Engineer' && !accountCategory) {
       finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Division Engineers
@@ -5706,15 +5730,6 @@ app.post('/api/register-user', async (req, res) => {
                 password_hash = EXCLUDED.password_hash,
                 hash_version = EXCLUDED.hash_version;
         `;
-
-    await pool.query(query, [
-      uid, normalizedEmail, role,
-      firstName, lastName,
-      region, division, province, city, barangay,
-      office, position, contactNumber, altEmail,
-      accountCategory, passwordHash, 'bcrypt'
-    ]);
-
 
     const values = [
       uid, normalizedEmail, role,
@@ -5768,7 +5783,14 @@ app.post('/api/register-user', async (req, res) => {
       customToken = `${header}.${payload}.${sig}`;
     }
 
-    res.json({ success: true, customToken: customToken, message: "User synced to Database" });
+    res.json({
+      success: true,
+      customToken: customToken,
+      uid: uid,
+      role: role,
+      accountCategory: finalAccountCategory,
+      message: "User synced to Database"
+    });
   } catch (err) {
     console.error("âŒ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
@@ -14195,8 +14217,8 @@ app.post('/api/user/progress', async (req, res) => {
 
 // Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'online', 
+  res.json({
+    status: 'online',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     pid: process.pid

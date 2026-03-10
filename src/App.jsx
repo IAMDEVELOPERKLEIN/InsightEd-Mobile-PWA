@@ -126,6 +126,7 @@ const AnimatedRoutes = () => {
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
+        <Route path="/non-deped-dashboard" element={<EngineerDashboard />} />{/* TODO: Create dedicated NonDepEdDashboard */}
         {/* <Route path="/lgu" element={<LguDashboard />} /> */}
         {/* <Route path="/lgu-form" element={<LguForm />} /> */}
         {/* <Route path="/lgu-projects" element={<LguProjects />} /> */}
