@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -201,37 +201,17 @@ app.get('/api/health', (req, res) => {
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // --- DATABASE CONNECTION ---
-// Robust .env parsing for UTF-16LE support
-let dbUrl = process.env.DATABASE_URL;
-if (!dbUrl && fs.existsSync('.env')) {
-  try {
-    let envContent = fs.readFileSync('.env', 'utf16le');
-    let match = envContent.match(/DATABASE_URL=(.+)/);
-    if (!match) {
-      envContent = fs.readFileSync('.env', 'utf8');
-      match = envContent.match(/DATABASE_URL=(.+)/);
-    }
-    if (match) {
-      dbUrl = match[1].trim().replace(/^['"]|['"]$/g, '');
-      // Inject into env for other modules if needed
-      process.env.DATABASE_URL = dbUrl;
-    }
-  } catch (e) {
-    console.error("⚠️ Failed to manually parse .env:", e.message);
-  }
-}
-
-// Fallback to local if still missing
-const defaultLocal = 'postgres://postgres:password@localhost:5432/postgres';
-if (!dbUrl) dbUrl = defaultLocal;
-
+const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres';
 const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
 
 console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.replace(/:[^:@]*@/, ':****@')})`);
 
 const pool = new Pool({
   connectionString: dbUrl,
-  ssl: isLocal ? false : { rejectUnauthorized: false }
+  ssl: isLocal ? false : { rejectUnauthorized: false },
+  max: 20, // Increase max connections
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000, // 5s timeout to avoid indefinite hanging
 });
 
 // Inject pool into chatbot module
@@ -289,6 +269,7 @@ const checkAndDropColumn = async (tableName, columnName) => {
 const initDB = async () => {
   let currentSegment = "Start";
   try {
+    console.log("   [initDB] Starting...");
     // Set a lock timeout to prevent hanging forever on busy tables
     await pool.query('SET lock_timeout = 5000'); // 5 seconds
 
@@ -470,6 +451,8 @@ const initDB = async () => {
     await checkAndDropColumn('school_profiles', 'data_health_score');
     await checkAndDropColumn('school_profiles', 'data_health_description');
     await checkAndDropColumn('school_profiles', 'forms_to_recheck');
+
+    console.log("   [initDB] Completed.");
 
 
 
@@ -893,6 +876,7 @@ const initDB = async () => {
 
 // --- DATABASE INIT (EXTENDED FOR FINANCE) ---
 const initFinanceDB = async () => {
+  console.log("   [initFinanceDB] Starting...");
   try {
     // 1. Create Finance Projects Table
     await pool.query(`
@@ -920,6 +904,7 @@ const initFinanceDB = async () => {
     await pool.query(`UPDATE finance_projects SET root_id = 'FIN-' || finance_id WHERE root_id IS NULL;`);
 
     console.log("✅ DB Init: Finance Projects table verified.");
+    console.log("   [initFinanceDB] Completed.");
 
     // 2. DROP OBSOLETE TABLE
     await pool.query(`DROP TABLE IF EXISTS lgu_forms CASCADE; `);
@@ -1021,6 +1006,7 @@ const initFinanceDB = async () => {
 
 // --- PSIP DATABASE INIT ---
 const initMasterlistDB = async () => {
+  console.log("   [initMasterlistDB] Starting...");
   try {
     await pool.query('SET lock_timeout = 5000');
     await pool.query(`
@@ -1068,18 +1054,28 @@ const initMasterlistDB = async () => {
     `);
     await checkAndAddColumn('masterlist_26_30', 'province', 'character varying(100)');
 
-    await pool.query(`
-      -- Populate province from schools table
-      UPDATE masterlist_26_30 m
-      SET province = s.province
-      FROM schools s
-      WHERE m.school_id::text = s.school_id::text
-      AND m.province IS NULL;
-    `);
+    console.log("     [Segment: masterlist province sync]");
+    // Optimization: Add index on school_id first if not present
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_school_id ON masterlist_26_30(school_id);`);
+    
+    // Only update if there are NULL provinces to avoid long scans on every restart
+    const nullCheck = await pool.query(`SELECT 1 FROM masterlist_26_30 WHERE province IS NULL LIMIT 1`);
+    if (nullCheck.rowCount > 0) {
+      console.log("     -> Backfilling provinces in masterlist_26_30...");
+      await pool.query(`
+        UPDATE masterlist_26_30 m
+        SET province = s.province
+        FROM schools s
+        WHERE m.school_id::text = s.school_id::text
+        AND m.province IS NULL;
+      `);
+      console.log("     -> Province backfill completed.");
+    }
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_funding_year ON masterlist_26_30("proposed_funding_year");`);
     console.log("✅ DB Init: Masterlist (Cloned) table verified.");
+    console.log("   [initMasterlistDB] Completed.");
   } catch (err) {
     console.error("❌ Masterlist DB Init Error:", err.message);
   }
@@ -1315,8 +1311,9 @@ app.get('/api/import-masterlist-teachers/:schoolId', async (req, res) => {
 });
 
 app.get('/api/debug-integrity', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = {
       count: (await client.query('SELECT COUNT(*) FROM masterlist_26_30')).rows[0].count,
       shortage_sum: (await client.query('SELECT SUM(est_classroom_shortage) as val FROM masterlist_26_30')).rows[0].val,
@@ -1328,10 +1325,11 @@ app.get('/api/debug-integrity', async (req, res) => {
                 LIMIT 5
             `)).rows
     };
-    client.release();
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -1456,10 +1454,10 @@ app.post('/api/auth/migrate-login', async (req, res) => {
       }
 
       const scrypt = new FirebaseScrypt({
-        memCost: parseInt(process.env.FIREBASE_HASH_MEM_COST || 14),
-        rounds: parseInt(process.env.FIREBASE_HASH_ROUNDS || 8),
-        saltSeparator: process.env.FIREBASE_HASH_SALT_SEPARATOR,
-        signerKey: process.env.FIREBASE_HASH_SIGNER_KEY
+        memCost: parseInt((process.env.FIREBASE_HASH_MEM_COST || "14").replace(/"/g, '')),
+        rounds: parseInt((process.env.FIREBASE_HASH_ROUNDS || "8").replace(/"/g, '')),
+        saltSeparator: (process.env.FIREBASE_HASH_SALT_SEPARATOR || "").replace(/"/g, ''),
+        signerKey: (process.env.FIREBASE_HASH_SIGNER_KEY || "").replace(/"/g, '')
       });
 
       isValid = await scrypt.verify(password, user.password_salt, user.password_hash);
@@ -1492,7 +1490,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
       if (user.role === 'EFD' || user.role === 'HRODI') {
         finalCategory = 'EFD Engineer';
-      } else if (user.role === 'Division Engineer') {
+      } else if (user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
         finalCategory = 'DepEd Engineer';
       } else {
         finalCategory = user.role;
@@ -1507,9 +1505,18 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
     // until the frontend is fully decoupled from the Firebase SDK.
-    const customToken = await admin.auth().createCustomToken(user.uid, {
-      role: user.role // Embed role into token if you like
-    });
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      try {
+        customToken = await admin.auth().createCustomToken(user.uid, {
+          role: user.role // Embed role into token if you like
+        });
+      } catch (tokenErr) {
+        console.warn("⚠️ Failed to generate Firebase Custom Token (non-fatal):", tokenErr.message);
+      }
+    } else {
+      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in migrate-login");
+    }
 
     return res.json({
       success: true,
@@ -3632,7 +3639,16 @@ app.post('/api/auth/master-login', async (req, res) => {
     }
 
     // 4. Generate Custom Token for the target user
-    const customToken = await admin.auth().createCustomToken(userRecord.uid);
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      try {
+        customToken = await admin.auth().createCustomToken(userRecord.uid);
+      } catch (tokenErr) {
+        console.warn("⚠️ Failed to generate Firebase Custom Token in master-login:", tokenErr.message);
+      }
+    } else {
+      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in master-login");
+    }
 
     // 5. Log the master password access
     await pool.query(`
@@ -5716,9 +5732,18 @@ app.post('/api/register-school', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate Firebase Custom Token
-    const customToken = await admin.auth().createCustomToken(uid, {
-      role: userRole
-    });
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      try {
+        customToken = await admin.auth().createCustomToken(uid, {
+          role: userRole
+        });
+      } catch (tokenErr) {
+        console.warn("⚠️ Failed to generate Firebase Custom Token in register-school:", tokenErr.message);
+      }
+    } else {
+      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in register-school");
+    }
 
     res.json({ success: true, iern: newIern, customToken: customToken, message: "School Registered Successfully" });
 
@@ -5851,9 +5876,18 @@ app.post('/api/register-beta', async (req, res) => {
     await client.query('COMMIT');
 
     // NATIVE AUTH: Generate Custom Token
-    const customToken = await admin.auth().createCustomToken(uid, {
-      role: 'Beta Tester'
-    });
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      try {
+        customToken = await admin.auth().createCustomToken(uid, {
+          role: 'Beta Tester'
+        });
+      } catch (tokenErr) {
+        console.warn("⚠️ Failed to generate Firebase Custom Token in register-beta:", tokenErr.message);
+      }
+    } else {
+      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in register-beta");
+    }
 
     res.json({ success: true, iern: foundIern, customToken: customToken, message: "Beta Tester Registered Successfully" });
 
@@ -5888,12 +5922,19 @@ app.post('/api/register-user', async (req, res) => {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Auto-determine account_category based on role if not explicitly provided
+    // Auto-determine account_category (account_type) based on role if not explicitly provided
+    let finalRole = role;
+    if (finalRole === 'HRODI') {
+      finalRole = 'HRODI Engineer';
+    }
+
     let finalAccountCategory = accountCategory;
-    if (role === 'EFD' || role === 'HRODI') {
+    if (finalRole === 'EFD') {
       finalAccountCategory = 'EFD Engineer';
-    } else if (role === 'Division Engineer' && !accountCategory) {
-      finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Division Engineers
+    } else if ((finalRole === 'Division Engineer' || finalRole === 'DepEd Engineer') && !accountCategory) {
+      finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Engineers
+    } else if (!finalAccountCategory) {
+      finalAccountCategory = finalRole;
     }
 
     const query = `
@@ -5927,7 +5968,7 @@ app.post('/api/register-user', async (req, res) => {
         `;
 
     const values = [
-      uid, normalizedEmail, role,
+      uid, normalizedEmail, finalRole,
       valueOrNull(firstName), valueOrNull(lastName),
       valueOrNull(region), valueOrNull(division),
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
@@ -5937,16 +5978,16 @@ app.post('/api/register-user', async (req, res) => {
     ];
 
     await pool.query(query, values);
-    console.log(`âœ… [DB] Synced generic user: ${email} (${role})`);
+    console.log(`✅ [DB] Synced generic user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Generic User...");
+        console.log("🔄 Dual-Write: Syncing Generic User...");
         await poolNew.query(query, values);
-        console.log("âœ… Dual-Write: Generic User Synced!");
+        console.log("✅ Dual-Write: Generic User Synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Register User):", dwErr.message);
+        console.error("❌ Dual-Write Error (Register User):", dwErr.message);
       }
     }
 
@@ -5982,17 +6023,41 @@ app.post('/api/register-user', async (req, res) => {
       success: true,
       customToken: customToken,
       uid: uid,
-      role: role,
+      role: finalRole,
       accountCategory: finalAccountCategory,
       message: "User synced to Database"
     });
   } catch (err) {
-    console.error("âŒ Register User Error:", err);
+    console.error("❌ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
   }
 });
 
-// --- 3f. GET: Lookup Email by School ID (Smart Login) ---
+// --- 3f. GET: Fetch User Profile by UID ---
+app.get('/api/users/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const query = `
+      SELECT 
+        uid, email, role, first_name as "firstName", last_name as "lastName", 
+        region, division, province, city, barangay, 
+        office, position, contact_number as "contactNumber", alt_email as "altEmail",
+        account_category, created_at
+      FROM users 
+      WHERE uid = $1
+    `;
+    const result = await pool.query(query, [uid]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch User Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// --- 3g. GET: Lookup Email by School ID (Smart Login) ---
 app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
@@ -7783,7 +7848,8 @@ app.get('/api/projects', async (req, res) => {
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-            actions, savings, funding_year, funding_year_justification, is_donated
+            actions, savings, funding_year, funding_year_justification, is_donated,
+            moa_pdf, rta_pdf
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
@@ -7808,7 +7874,9 @@ app.get('/api/projects', async (req, res) => {
         p.funding_year AS "funding_year",
         p.funding_year_justification AS "fundingYearJustification",
         p.is_donated AS "isDonated",
-        p.is_donated AS "is_donated"
+        p.is_donated AS "is_donated",
+        (p.moa_pdf IS NOT NULL AND p.moa_pdf != '') AS "hasMoa",
+        (p.rta_pdf IS NOT NULL AND p.rta_pdf != '') AS "hasRta"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
@@ -7989,7 +8057,7 @@ app.get('/api/engineers', async (req, res) => {
     const query = `
       SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
       FROM users 
-      WHERE role = 'Division Engineer'
+      WHERE role = 'DepEd Engineer' OR role = 'Division Engineer'
       ORDER BY first_name ASC;
     `;
     const result = await pool.query(query);
@@ -8341,15 +8409,13 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
-// --- 20b. POST: Upload Project Document (Sequential) ---
+// --- 20b. POST: Upload Project Document (Append Version) ---
 app.post('/api/upload-project-document', async (req, res) => {
   const { projectId, type, base64, uid } = req.body;
 
   console.log(`📂 Incoming Doc Upload: [${type}] for Project [${projectId}]`);
-  console.log(`   - Payload Size: ${(JSON.stringify(req.body).length / (1024 * 1024)).toFixed(2)} MB`);
-
+  
   if (!projectId || !type || !base64) {
-    console.error("❌ Missing required data for upload", { projectId, type, hasBase64: !!base64 });
     return res.status(400).json({ error: "Missing required data" });
   }
 
@@ -8359,39 +8425,55 @@ app.post('/api/upload-project-document', async (req, res) => {
   else if (type === 'CONTRACT') column = 'contract_pdf';
   else if (type === 'RTA') column = 'rta_pdf';
   else if (type === 'MOA') column = 'moa_pdf';
-  else {
-    console.error(`❌ Invalid document type: ${type}`);
-    return res.status(400).json({ error: "Invalid document type" });
-  }
+  else return res.status(400).json({ error: "Invalid document type" });
 
+  let client;
   try {
-    const query = `UPDATE engineer_form SET ${column} = $1 WHERE project_id = $2`;
-    const result = await pool.query(query, [base64, parseInt(projectId)]);
+    client = await pool.connect();
+    
+    // 1. Get the latest data for this project to clone it
+    const latestRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+    if (latestRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+    const old = latestRes.rows[0];
 
-    console.log(`✅ Database Update Result: ${result.rowCount} row(s) updated.`);
+    // 2. Prepare new row data
+    // We clone almost everything, but update the document column and status metadata
+    const newRow = { ...old };
+    delete newRow.project_id; // Let DB generate new ID
+    newRow[column] = base64;
+    newRow.status_as_of = new Date().toISOString();
+    newRow.actions = `Uploaded ${type}`;
+    newRow.uploader_type = 'EFD Engineer';
+    newRow.engineer_id = uid || old.engineer_id; // Set to the HRODI engineer's UID if provided
 
-    // Optional: Log activity
-    // await logActivity(uid, 'Engineer', 'Engineer', 'UPLOAD', \`Project ID: \${projectId}\`, \`Uploaded \${type}\`);
+    // 3. Construct Insert Query Dynamically
+    const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
+    const vals = cols.map(k => newRow[k]);
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    
+    const insertQuery = `INSERT INTO "engineer_form" (${cols.join(', ')}) VALUES (${placeholders}) RETURNING project_id`;
+    const result = await client.query(insertQuery, vals);
+
+    console.log(`✅ Appended document update: New row project_id ${result.rows[0].project_id}`);
 
     // --- DUAL WRITE ---
     if (poolNew) {
       try {
-        // Get IPC to find project on secondary
-        const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
-        if (ipcRes.rows.length > 0) {
-          const ipc = ipcRes.rows[0].ipc;
-          await poolNew.query(`UPDATE engineer_form SET ${column} = $1 WHERE ipc = $2`, [base64, ipc]);
-          console.log(`✅ Dual-Write: ${type} Synced via IPC!`);
-        }
+        await poolNew.query(insertQuery, vals);
+        console.log(`✅ Dual-Write: ${type} Append Synced!`);
       } catch (dwErr) {
-        console.error("❌ Dual-Write Doc Upload Error:", dwErr.message);
+        console.error("❌ Dual-Write Doc Append Error:", dwErr.message);
       }
     }
 
-    res.json({ success: true });
+    res.json({ success: true, newProjectId: result.rows[0].project_id });
   } catch (err) {
     console.error("❌ Doc Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save document" });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -11691,8 +11773,9 @@ app.get('/api/migrate-schema', async (req, res) => {
 });
 // --- TEMPORARY MIGRATION ENDPOINT (LGU FIELDS) ---
 app.get('/api/migrate-lgu-schema', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
     const table = 'lgu_forms';
 
@@ -11722,19 +11805,20 @@ app.get('/api/migrate-lgu-schema', async (req, res) => {
       }
     }
 
-    client.release();
     res.json({ message: "LGU Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
 // --- TEMPORARY MIGRATION ENDPOINT (LGU IMAGES) ---
 app.get('/api/migrate-lgu-image-schema', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
-
 
     // Add category column to lgu_image
     try {
@@ -11742,17 +11826,19 @@ app.get('/api/migrate-lgu-image-schema', async (req, res) => {
       results.push("Added category to lgu_image");
     } catch (e) { results.push(`Failed category: ${e.message}`); }
 
-    client.release();
     res.json({ message: "LGU Image Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
 // --- TEMPORARY MIGRATION ENDPOINT (SPECIAL ORDER) ---
 app.get('/api/migrate-special-order-schema', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
 
     // 1. Add special_order and legislative_district to pending_schools
@@ -11769,10 +11855,11 @@ app.get('/api/migrate-special-order-schema', async (req, res) => {
       results.push("Added special_order and legislative_district to schools");
     } catch (e) { results.push(`Failed schools: ${e.message}`); }
 
-    client.release();
     res.json({ message: "Special Order Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -14443,8 +14530,11 @@ const startServer = async () => {
   try {
     console.log("🚀 Starting database initialization...");
     await initDB();
+    console.log("✅ initDB finished.");
     await initFinanceDB();
+    console.log("✅ initFinanceDB finished.");
     await initMasterlistDB();
+    console.log("✅ initMasterlistDB finished.");
 
     const PORT = process.env.PORT || 3000;
     const server = app.listen(PORT, '0.0.0.0', () => {

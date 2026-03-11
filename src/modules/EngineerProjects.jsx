@@ -58,7 +58,7 @@ const formatDateShort = (dateString) => {
 
 // --- SUB-COMPONENTS ---
 
-const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading, searchQuery, readOnly, uploadProgress, handlePdfUpload }) => {
+const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading, searchQuery, readOnly, uploadProgress = {}, handlePdfUpload }) => {
   const navigate = useNavigate();
 
   const getStatusColor = (status) => {
@@ -262,48 +262,6 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
                   <td className="sticky right-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-l border-slate-50 dark:border-slate-700 text-center">
                     <div className="flex flex-col gap-2">
                       {/* CONDITIONAL ACTION: Upload Docs / View Docs */}
-                      <div className="flex flex-col items-center">
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          style={{ display: 'none' }}
-                          id={`upload-pow-${p.id}`}
-                          onChange={(e) => handlePdfUpload(p.id, 'pow_pdf', e.target.files[0], p)}
-                        />
-                        {uploadProgress[`${p.id}-pow_pdf`] !== undefined ? (
-                          <div className="text-[10px] text-blue-600 font-bold">{uploadProgress[`${p.id}-pow_pdf`]}% Uploading...</div>
-                        ) : (
-                          <button onClick={() => document.getElementById(`upload-pow-${p.id}`).click()} className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline font-medium">Update POW</button>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          style={{ display: 'none' }}
-                          id={`upload-dupa-${p.id}`}
-                          onChange={(e) => handlePdfUpload(p.id, 'dupa_pdf', e.target.files[0], p)}
-                        />
-                        {uploadProgress[`${p.id}-dupa_pdf`] !== undefined ? (
-                          <div className="text-[10px] text-blue-600 font-bold">{uploadProgress[`${p.id}-dupa_pdf`]}% Uploading...</div>
-                        ) : (
-                          <button onClick={() => document.getElementById(`upload-dupa-${p.id}`).click()} className="mt-2 text-[10px] text-blue-600 hover:text-blue-800 underline font-medium">Update DUPA</button>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <input
-                          type="file"
-                          accept="application/pdf"
-                          style={{ display: 'none' }}
-                          id={`upload-contract-${p.id}`}
-                          onChange={(e) => handlePdfUpload(p.id, 'contract_pdf', e.target.files[0], p)}
-                        />
-                        {uploadProgress[`${p.id}-contract_pdf`] !== undefined ? (
-                          <div className="text-[10px] text-blue-600 font-bold">{uploadProgress[`${p.id}-contract_pdf`]}% Uploading...</div>
-                        ) : (
-                          <button onClick={() => document.getElementById(`upload-contract-${p.id}`).click()} className="mt-2 text-[10px] text-blue-600 hover:text-blue-800 underline font-medium">Update Contract</button>
-                        )}
-                      </div>
 
 
 
@@ -367,8 +325,14 @@ import EditProjectModal from "../components/EditProjectModal";
 
 const EngineerProjects = () => {
   const navigate = useNavigate();
-  const [userName, setUserName] = useState("Division Engineer");
-  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Division Engineer");
+  const [userName, setUserName] = useState("Engineer");
+  const [userRole, setUserRole] = useState(() => {
+    const saved = localStorage.getItem('userRole');
+    if (saved === 'deped_engineer') return 'DepEd Engineer';
+    if (saved === 'non_deped_engineer') return 'Non-DepEd Engineer';
+    if (saved === 'engineer') return 'Engineer';
+    return saved || "DepEd Engineer";
+  });
   const [accountCategory, setAccountCategory] = useState(null);
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -405,22 +369,12 @@ const EngineerProjects = () => {
     const fetchUserDataAndProjects = async () => {
       const uid = localStorage.getItem('uid');
       if (uid) {
-        // 1. Get User Name & Account Category
-        try {
-          const docRef = doc(db, "users", uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setUserName(docSnap.data().firstName);
-          }
-        } catch (e) {
-          console.error("Error fetching user profile:", e);
-        }
-
-        // 2. Fetch account_category from backend
+        // 1. Get User Name & Account Category from our own API (replaced Firebase dependency)
         try {
           const infoRes = await fetch(`/api/user-info/${uid}`);
           if (infoRes.ok) {
             const info = await infoRes.json();
+            setUserName(info.first_name || info.firstName || 'Engineer');
             setAccountCategory(info.account_category);
           }
         } catch (e) {
@@ -429,7 +383,13 @@ const EngineerProjects = () => {
 
         try {
           setIsLoading(true);
-          const userRole = localStorage.getItem('userRole');
+          let currentRole = localStorage.getItem('userRole');
+          // Normalize
+          if (currentRole === 'deped_engineer') currentRole = 'DepEd Engineer';
+          if (currentRole === 'non_deped_engineer') currentRole = 'Non-DepEd Engineer';
+          if (currentRole === 'engineer') currentRole = 'Engineer';
+          
+          setUserRole(currentRole);
           let currentProjects = [];
 
           if (userRole === 'Super Admin') {
@@ -680,7 +640,7 @@ const EngineerProjects = () => {
       // Determine uploader_type from the logged-in user's role and account category
       let uploaderType = 'Uploaded by DepEd Engineer'; // Default
       if (userRole === 'EFD') uploaderType = 'EFD Engineer';
-      else if (userRole === 'Division Engineer' && accountCategory === 'Non-DepEd Engineer') uploaderType = 'Non-DepEd Engineer';
+      else if (userRole === 'Non-DepEd Engineer' || (userRole === 'DepEd Engineer' && accountCategory === 'Non-DepEd Engineer')) uploaderType = 'Non-DepEd Engineer';
 
       const payload = { ...updatedProject, uid: uid, modifiedBy: userName, uploader_type: uploaderType };
 
@@ -872,6 +832,8 @@ const EngineerProjects = () => {
             isLoading={isLoading}
             searchQuery={searchQuery}
             readOnly={userRole === 'Super User'}
+            uploadProgress={uploadProgress}
+            handlePdfUpload={handlePdfUpload}
           />
 
           <div className="flex items-center justify-center gap-4 mt-4">

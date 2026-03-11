@@ -788,7 +788,13 @@ const DetailedProjInfo = () => {
         setIsUploading(true);
         try {
             // 1. Update Project Details
-            const body = { ...updatedProject, uid: user.uid, modifiedBy: "Engineer" }; // Simplify userName for now or fetch it
+            // Determine uploader_type from the logged-in user's role
+            let uploaderType = updatedProject.uploader_type; // Default: preserve existing
+            if (userRole === 'HRODI Engineer') uploaderType = 'EFD Engineer';
+            else if (userRole === 'DepEd Engineer') uploaderType = 'DepEd Engineer';
+            else if (userRole === 'Non-DepEd Engineer') uploaderType = 'Non-DepEd Engineer';
+
+            const body = { ...updatedProject, uid: uid, modifiedBy: userRole || "Engineer", uploader_type: uploaderType };
 
             const response = await fetch(`${API_BASE}/api/update-project/${updatedProject.id}`, {
                 method: "PUT",
@@ -1063,7 +1069,7 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Funding Year" value={project.funding_year || project.fundingYear} />
                             </div>
                             <div className="grid grid-cols-1 gap-3">
-                                <DetailItem label="Handling Division Engineer" value={project.engineerName ? `Engr. ${project.engineerName}` : 'Unassigned'} />
+                                <DetailItem label="Handling DepEd Engineer" value={project.engineerName ? `Engr. ${project.engineerName}` : 'Unassigned'} />
                             </div>
                             <DetailItem label="Remarks" value={project.otherRemarks} />
 

@@ -64,7 +64,7 @@ import TeacherSpecialization from './forms/TeacherSpecialization';
 import PhysicalFacilities from './forms/PhysicalFacilities';
 import LearnerStatistics from './forms/LearnerStatistics';
 
-// Form Imports (Division Engineer)
+// Form Imports (DepEd Engineer)
 import EngineerSchoolResources from './forms/EngineerSchoolResources';
 import DamageAssessment from './forms/DamageAssessment';
 import ProjectMonitoring from './forms/ProjectMonitoring';
@@ -280,7 +280,7 @@ const AnimatedRoutes = () => {
       <Route path="/project-validation" element={<ProjectValidation />} />
       <Route path="/leaderboard" element={<Leaderboard />} />
 
-      {/* Division Engineer Forms */}
+      {/* DepEd Engineer Forms */}
       <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
       <Route path="/damage-assessment" element={<DamageAssessment />} />
       <Route path="/project-monitoring" element={<ProjectMonitoring />} />

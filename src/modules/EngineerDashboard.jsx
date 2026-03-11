@@ -188,8 +188,8 @@ const StatsChart = ({ projects }) => {
 // --- MAIN DASHBOARD COMPONENT ---
 
 const EngineerDashboard = () => {
-  const [userName, setUserName] = useState("Division Engineer");
-  const [userRole, setUserRole] = useState("");
+  const [userName, setUserName] = useState("DepEd Engineer");
+  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "");
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]);
 
@@ -199,25 +199,33 @@ const EngineerDashboard = () => {
   const { isUpdateAvailable, updateApp } = useServiceWorker();
 
   const API_BASE = "";
-  const navigate = useNavigate(); // Needs to be imported if not already, checking imports... it's not imported in EngineerDashboard.jsx yet.
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
       const uid = localStorage.getItem('uid');
       if (uid) {
-        const docRef = doc(db, "users", uid);
-        const docSnap = await getDoc(docRef);
-        let currentRole = localStorage.getItem('userRole') || "";
-        setUserRole(currentRole);
-        
-        if (docSnap.exists()) {
-          const userData = docSnap.data();
-          setUserName(`${userData.firstName} ${userData.lastName || ''}`.trim());
-          if (!currentRole) {
-              currentRole = userData.role;
-              setUserRole(userData.role);
+        // 1. Fetch Basic Info from PostgreSQL backend
+        try {
+          const userRes = await fetch(`/api/users/${uid}`);
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            setUserName(`${userData.firstName} ${userData.lastName || ''}`.trim());
+            
+            let roleFromDb = userData.role;
+            // Normalize Role
+            if (roleFromDb === 'deped_engineer') roleFromDb = 'DepEd Engineer';
+            if (roleFromDb === 'non_deped_engineer') roleFromDb = 'Non-DepEd Engineer';
+            if (roleFromDb === 'engineer') roleFromDb = 'Engineer';
+
+            setUserRole(roleFromDb);
+            localStorage.setItem('userRole', roleFromDb);
           }
+        } catch (error) {
+          console.error("Failed to fetch user data:", error);
         }
+
+        const currentRole = localStorage.getItem('userRole');
 
         try {
           setIsLoading(true);

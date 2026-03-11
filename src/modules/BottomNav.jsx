@@ -16,6 +16,14 @@ const BottomNav = ({ userRole }) => {
 
     // --- SUPER USER OVERRIDE ---
     let effectiveRole = userRole;
+
+    // Normalization logic for database vs UI role strings
+    if (effectiveRole === 'deped_engineer') effectiveRole = 'DepEd Engineer';
+    if (effectiveRole === 'non_deped_engineer') effectiveRole = 'Non-DepEd Engineer';
+    if (effectiveRole === 'engineer') effectiveRole = 'Engineer';
+    if (effectiveRole === 'school_head') effectiveRole = 'School Head';
+    if (effectiveRole === 'lgu') effectiveRole = 'Local Government Unit';
+
     if (localStorage.getItem('userRole') === 'Super User') {
         const impRole = sessionStorage.getItem('impersonatedRole');
         if (impRole) effectiveRole = impRole;
@@ -23,7 +31,7 @@ const BottomNav = ({ userRole }) => {
 
     // --- CONFIGURATION BY ROLE ---
     const navConfigs = {
-        'Division Engineer': [
+        'Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
@@ -98,6 +106,12 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'EFD Engineer': [
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'HRODI Engineer': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },

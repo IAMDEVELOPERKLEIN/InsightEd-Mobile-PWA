@@ -12,9 +12,9 @@ import LoadingScreen from './components/LoadingScreen';
 
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role, accountCategory) => {
-    // Division Engineer redirect depends on account category
-    if (role === 'Division Engineer' || role === 'Engineer') {
-        return accountCategory === 'Non-DepEd Engineer'
+    // DepEd/Non-DepEd Engineer redirect
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
+        return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
             ? '/non-deped-dashboard'
             : '/engineer-dashboard';
     }
@@ -31,7 +31,11 @@ const getDashboardPath = (role, accountCategory) => {
         'Super User': '/super-user-selector',
         'Beta Tester': '/activity-dashboard',
         'EFD': '/efd-dashboard',
+        'HRODI Engineer': '/efd-dashboard',
         'HRODI': '/efd-dashboard',
+        'DepEd Engineer': '/engineer-dashboard',
+        'Non-DepEd Engineer': '/non-deped-dashboard',
+        'Engineer': '/engineer-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -486,7 +490,6 @@ const Login = () => {
             let normalizedRole = role;
             if (role === 'school_head') normalizedRole = 'School Head';
             if (role === 'lgu') normalizedRole = 'Local Government Unit';
-            if (role === 'division_engineer') normalizedRole = 'Division Engineer';
             if (role === 'admin') normalizedRole = 'Admin';
             if (role === 'super_admin') normalizedRole = 'Super Admin';
 
@@ -586,7 +589,7 @@ const Login = () => {
                     console.log("Redirecting LGU to Dashboard...");
                     navigate('/lgu-dashboard');
                 } else {
-                    // Fetch account_category for role-aware navigation (Division Engineer / Non-DepEd)
+                    // Fetch account_category for role-aware navigation
                     let accountCategory = localStorage.getItem('accountCategory');
                     try {
                         const infoRes = await fetch(`/api/user-info/${uid}`);
