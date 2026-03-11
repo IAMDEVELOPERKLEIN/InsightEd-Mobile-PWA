@@ -4934,6 +4934,38 @@ app.post('/api/feedback', async (req, res) => {
   }
 });
 
+// app.post('/api/bugs') - For user bug reports
+app.post('/api/bugs', async (req, res) => {
+  try {
+    const { description, user_email, user_uid } = req.body;
+    
+    if (!description || description.trim().length === 0) {
+      return res.status(400).json({ error: "Description is required" });
+    }
+    
+    if (description.length > 500) {
+      return res.status(400).json({ error: "Bug report must be 500 characters or less" });
+    }
+
+    await pool.query(
+      'INSERT INTO app_bugs (description, metadata) VALUES ($1, $2)',
+      [
+        description.trim(), 
+        JSON.stringify({ 
+          user_email: user_email || null, 
+          user_uid: user_uid || null,
+          timestamp: new Date().toISOString() 
+        })
+      ]
+    );
+
+    res.json({ success: true, message: "Developers are on their way to fix this" });
+  } catch (err) {
+    console.error("Bug Report Error:", err);
+    res.status(500).json({ error: "Failed to save bug report" });
+  }
+});
+
 app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
   const { pending_id } = req.params;
   const { reviewed_by, reviewed_by_name } = req.body;
