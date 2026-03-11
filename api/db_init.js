@@ -696,6 +696,22 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init chatbot_knowledge table:`, migErr.message);
     }
+
+    // --- 19. SYSTEM FEEDBACK TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS system_feedback (
+                id SERIAL PRIMARY KEY,
+                content VARCHAR(200) NOT NULL,
+                user_email TEXT,
+                user_uid TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log(`✅ [${dbLabel}] System Feedback Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init system_feedback table:`, migErr.message);
+    }
 };
 
 export { initOtpTable, runMigrations };
