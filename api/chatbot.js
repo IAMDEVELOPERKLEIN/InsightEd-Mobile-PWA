@@ -153,7 +153,9 @@ export const chatWithKnowledge = async (question) => {
 
         if (topChunks.length === 0) {
             await recordMissingQuestion(question);
-            return "I'm sorry, I don't have information on that yet. Please **download Google Chat** on your mobile device and send a message to **support.stride@deped.gov.ph** for further assistance.";
+            const fallback = "I'm sorry, I don't have information on that yet. Please **download Google Chat** on your mobile device and send a message to **support.stride@deped.gov.ph** for further assistance.";
+            await logChatbotQuery(question, fallback, { type: 'fallback', reason: 'no_context' });
+            return fallback;
         }
 
         const context = topChunks.map(c => `Q: ${c.question}\nA: ${c.answer}`).join("\n\n---\n\n");
@@ -179,6 +181,16 @@ User Question: ${question}
 `;
 
         const genStart = performance.now();
+        // 1. Cost Protection / Quota Check
+        const usageCount = await getDailyUsageCount();
+        const QUOTA_LIMIT = 1400; // Safe threshold for 1,500 RPD Free Tier
+        
+        if (usageCount >= QUOTA_LIMIT) {
+            const quotaMsg = "The AI is currently resting to stay within free usage limits. Please check back tomorrow, or contact **support.stride@deped.gov.ph** if you have urgent concerns.";
+            await logChatbotQuery(question, quotaMsg, { type: 'quota_exceeded', count: usageCount });
+            return quotaMsg;
+        }
+
         const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
         
         const result = await model.generateContent(prompt);
@@ -194,15 +206,20 @@ User Question: ${question}
         // If Gemini identifies it doesn't know the answer despite some chunks, record it
         if (responseText.includes("I'm sorry, I don't have information on that yet")) {
             await recordMissingQuestion(question);
+            await logChatbotQuery(question, responseText, { type: 'fallback', reason: 'ai_low_confidence' });
+        } else {
+            await logChatbotQuery(question, responseText, { type: 'success' });
         }
 
         return responseText;
     } catch (e) {
         console.error("Chat Error:", e);
-        if (e.message.includes('safety')) {
-            return "I'm sorry, I cannot answer that question as it violates safety guidelines.";
-        }
-        return "I'm sorry, I encountered an error while processing your request. Please try again later.";
+        const errorMsg = e.message.includes('safety') 
+            ? "I encountered a safety restriction and cannot answer this. Please rephrase."
+            : "An error occurred while processing your request.";
+        
+        await logChatbotQuery(question, errorMsg, { type: 'error', error: e.message });
+        return errorMsg;
     }
 };
 
@@ -279,5 +296,36 @@ export const recordMissingQuestion = async (question) => {
         );
     } catch (e) {
         console.error("Failed to record missing question:", e);
+    }
+};
+
+/**
+ * Logs every chatbot interaction for analytical purposes.
+ */
+export const logChatbotQuery = async (question, response, metadata = {}) => {
+    if (!pool) return;
+    try {
+        await pool.query(
+            'INSERT INTO chatbot_queries (question, response, metadata) VALUES ($1, $2, $3)',
+            [question, response, JSON.stringify(metadata)]
+        );
+    } catch (e) {
+        console.error("Failed to log chatbot query:", e);
+    }
+};
+
+/**
+ * Returns the number of queries sent to the chatbot today.
+ */
+export const getDailyUsageCount = async () => {
+    if (!pool) return 0;
+    try {
+        const res = await pool.query(
+            'SELECT COUNT(*) FROM chatbot_queries WHERE created_at >= CURRENT_DATE'
+        );
+        return parseInt(res.rows[0].count);
+    } catch (e) {
+        console.error("Failed to get daily usage count:", e);
+        return 0;
     }
 };
