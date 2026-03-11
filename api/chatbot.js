@@ -75,7 +75,13 @@ export const teachChatbot = async (text, filePath = null) => {
             const resp = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: EMBEDDING_MODEL, prompt: chunk })
+                body: JSON.stringify({ 
+                    model: EMBEDDING_MODEL, 
+                    prompt: chunk,
+                    options: {
+                        num_thread: 6
+                    }
+                })
             });
 
             if (!resp.ok) {
@@ -128,7 +134,13 @@ export const chatWithKnowledge = async (question) => {
         const embedResp = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: EMBEDDING_MODEL, prompt: question })
+            body: JSON.stringify({ 
+                model: EMBEDDING_MODEL, 
+                prompt: question,
+                options: {
+                    num_thread: 6
+                }
+            })
         });
 
         if (!embedResp.ok) {
@@ -176,7 +188,11 @@ User Question: ${question}
             body: JSON.stringify({
                 model: CHAT_MODEL,
                 prompt: prompt,
-                stream: false
+                stream: false,
+                options: {
+                    num_thread: 6,
+                    num_ctx: 4096
+                }
             })
         });
 
