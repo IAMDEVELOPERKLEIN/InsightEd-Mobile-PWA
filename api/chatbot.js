@@ -2,13 +2,13 @@ import pdfParse from 'pdf-parse-new';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
 // --- CONFIGURATION ---
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const EMBEDDING_MODEL = process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text";
-const CHAT_MODEL = process.env.OLLAMA_CHAT_MODEL || "llama3";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 let pool = null;
 
@@ -41,12 +41,7 @@ function cosineSimilarity(A, B) {
  */
 export const teachChatbot = async (text, filePath = null) => {
     if (!pool) throw new Error("Database pool not initialized.");
-
-    try {
-        await fetch(`${OLLAMA_BASE_URL}/api/tags`);
-    } catch (e) {
-        throw new Error(`Ollama server not reachable at ${OLLAMA_BASE_URL}. Please ensure Ollama is running.`);
-    }
+    if (!genAI) throw new Error("GEMINI_API_KEY is not configured in .env.");
 
     let content = "";
     let source = "admin_paste";
@@ -68,28 +63,12 @@ export const teachChatbot = async (text, filePath = null) => {
     if (!content.trim()) return { success: false, message: "No content to ingest." };
 
     const chunks = content.split(/\n\s*\n/).filter(c => c.trim().length > 10);
+    const embedModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
     for (const chunk of chunks) {
         try {
-            const resp = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    model: EMBEDDING_MODEL, 
-                    prompt: chunk,
-                    options: {
-                        num_thread: 6
-                    }
-                })
-            });
-
-            if (!resp.ok) {
-                const errText = await resp.text();
-                throw new Error(errText);
-            }
-
-            const result = await resp.json();
-            const embedding = result.embedding;
+            const result = await embedModel.embedContent(chunk);
+            const embedding = result.embedding.values;
 
             await pool.query(
                 'INSERT INTO chatbot_knowledge (content, embedding, metadata) VALUES ($1, $2, $3)',
@@ -108,8 +87,9 @@ export const teachChatbot = async (text, filePath = null) => {
  */
 export const chatWithKnowledge = async (question) => {
     if (!pool) return "I'm sorry, my database is currently offline. Please try again later.";
+    if (!genAI) return "I'm sorry, my AI engine is not configured (missing API key). Please contact the administrator.";
 
-    console.log(`\n🤖 Chatbot Processing Question: "${question}"`);
+    console.log(`\n🤖 Chatbot Processing Question: "${question}" (Gemini Flash)`);
     const startTime = performance.now();
 
     try {
@@ -125,29 +105,14 @@ export const chatWithKnowledge = async (question) => {
         console.log(`⏱️ DB Fetch: ${(dbEnd - dbStart).toFixed(2)}ms (${kbItems.length} items)`);
 
         if (kbItems.length === 0) {
-            return "I'm sorry, I don't have information on that yet. Please contact the helpdesk for further assistance.";
+            return "I'm sorry, I don't have information on that yet. Please **download Google Chat** on your mobile device and send a message to **support.stride@deped.gov.ph** for further assistance.";
         }
 
         // 2. Get embedding for the question
         const embedStart = performance.now();
-        const embedResp = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                model: EMBEDDING_MODEL, 
-                prompt: question,
-                options: {
-                    num_thread: 6
-                }
-            })
-        });
-
-        if (!embedResp.ok) {
-            return "I'm sorry, I couldn't reach the local AI engine for embeddings. Is Ollama running?";
-        }
-
-        const embedResult = await embedResp.json();
-        const qEmbedding = embedResult.embedding;
+        const embedModel = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
+        const embedResult = await embedModel.embedContent(question);
+        const qEmbedding = embedResult.embedding.values;
         const embedEnd = performance.now();
         console.log(`⏱️ Embedding Gen: ${(embedEnd - embedStart).toFixed(2)}ms`);
 
@@ -163,7 +128,7 @@ export const chatWithKnowledge = async (question) => {
         console.log(`⏱️ Similarity Search: ${(searchEnd - searchStart).toFixed(2)}ms`);
 
         if (topChunks.length === 0) {
-            return "I'm sorry, I don't have information on that yet. Please contact the helpdesk for further assistance.";
+            return "I'm sorry, I don't have information on that yet. Please **download Google Chat** on your mobile device and send a message to **support.stride@deped.gov.ph** for further assistance.";
         }
 
         const context = topChunks.map(c => c.text).join("\n\n");
@@ -171,8 +136,16 @@ export const chatWithKnowledge = async (question) => {
         // 4. Generate answer
         const prompt = `
 Answer the user's question ONLY using the provided context. 
-If the answer isn't in the context, say "I'm sorry, I don't have information on that yet. Please contact the helpdesk for further assistance."
+If the answer isn't in the context, say EXACTLY: "I'm sorry, I don't have information on that yet. Please **download Google Chat** on your mobile device and send a message to **support.stride@deped.gov.ph** for further assistance."
 Do not use your own knowledge outside the context.
+
+FORMATTING RULES:
+- IMPORTANT: Use double newlines before starting any list.
+- Use numbered lists (1. 2. 3.) for steps.
+- Use bullet points (*) for lists of items.
+- **BOLD** every single important name, button, role, and action using double asterisks: **text**.
+- Example formatting: "Click the **'Login'** button if you are a **School Head**."
+- Keep the response clean and well-spaced.
 
 Context:
 ${context}
@@ -181,34 +154,22 @@ User Question: ${question}
 `;
 
         const genStart = performance.now();
-        const generateResp = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: CHAT_MODEL,
-                prompt: prompt,
-                stream: false,
-                options: {
-                    num_thread: 6,
-                    num_ctx: 4096
-                }
-            })
-        });
-
-        if (!generateResp.ok) {
-            return "I'm sorry, I couldn't reach the local AI engine to generate an answer. Is Ollama running?";
-        }
-
-        const genResult = await generateResp.json();
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+        
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
         const genEnd = performance.now();
-        console.log(`⏱️ LLM Generation: ${(genEnd - genStart).toFixed(2)}ms`);
+        console.log(`⏱️ Gemini Generation: ${(genEnd - genStart).toFixed(2)}ms`);
 
         const totalTime = (performance.now() - startTime).toFixed(2);
         console.log(`✅ Chatbot Total Response Time: ${totalTime}ms\n`);
 
-        return genResult.response;
+        return response.text();
     } catch (e) {
         console.error("Chat Error:", e);
+        if (e.message.includes('safety')) {
+            return "I'm sorry, I cannot answer that question as it violates safety guidelines.";
+        }
         return "I'm sorry, I encountered an error while processing your request. Please try again later.";
     }
 };

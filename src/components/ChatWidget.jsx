@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FiMessageSquare, FiSend, FiX, FiMinus, FiCornerDownLeft, FiUser } from "react-icons/fi";
 import { TbRobot } from "react-icons/tb";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const ChatWidget = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -80,11 +82,30 @@ const ChatWidget = () => {
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
                             {messages.map((msg, idx) => (
                                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] p-3 rounded-2xl text-xs leading-relaxed ${msg.role === 'user'
+                                    <div className={`max-w-[80%] p-3 rounded-2xl text-[11px] leading-relaxed ${msg.role === 'user'
                                             ? 'bg-[#004A99] text-white rounded-tr-none shadow-md'
                                             : 'bg-white text-gray-700 border border-gray-100 rounded-tl-none shadow-sm'
                                         }`}>
-                                        {msg.text}
+                                        {msg.role === 'assistant' ? (
+                                            <div className="prose prose-sm max-w-none">
+                                                <ReactMarkdown 
+                                                    remarkPlugins={[remarkGfm]}
+                                                    components={{
+                                                        ul: ({node, ...props}) => <ul className="list-disc ml-5 mb-3 mt-1 space-y-1" {...props} />,
+                                                        ol: ({node, ...props}) => <ol className="list-decimal ml-5 mb-3 mt-1 space-y-1" {...props} />,
+                                                        li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                                                        p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                                                        a: ({node, ...props}) => <a className="text-blue-600 underline font-medium" {...props} />,
+                                                        strong: ({node, ...props}) => <strong className="font-extrabold text-gray-900" {...props} />,
+                                                        b: ({node, ...props}) => <b className="font-extrabold text-gray-900" {...props} />
+                                                    }}
+                                                >
+                                                    {msg.text}
+                                                </ReactMarkdown>
+                                            </div>
+                                        ) : (
+                                            <div className="whitespace-pre-wrap">{msg.text}</div>
+                                        )}
                                     </div>
                                 </div>
                             ))}
