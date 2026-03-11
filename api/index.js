@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
-import { teachChatbot, chatWithKnowledge, setPool } from './chatbot.js';
+import { teachChatbot, chatWithKnowledge, setPool, updateKnowledgeEntry, deleteKnowledgeEntry } from './chatbot.js';
 import { v4 as uuidv4 } from 'uuid';
 
 
@@ -4940,7 +4940,8 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
 // --- CHATBOT KNOWLEDGE TEACHING ---
 app.post('/api/admin/teach', async (req, res) => {
   const bb = busboy({ headers: req.headers });
-  let content = "";
+  let question = "";
+  let answer = "";
   let filePath = null;
   const tempFiles = [];
 
@@ -4957,12 +4958,14 @@ app.post('/api/admin/teach', async (req, res) => {
   });
 
   bb.on('field', (name, val) => {
-    if (name === 'content') content = val;
+    if (name === 'question') question = val;
+    if (name === 'answer') answer = val;
+    if (name === 'content') answer = val; // Legacy support
   });
 
   bb.on('finish', async () => {
     try {
-      const result = await teachChatbot(content, filePath);
+      const result = await teachChatbot(question, answer, filePath);
       // Cleanup temp files
       tempFiles.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
       res.json(result);
@@ -4975,6 +4978,42 @@ app.post('/api/admin/teach', async (req, res) => {
   req.pipe(bb);
 });
 
+// GET - Fetch all knowledge base items
+app.get('/api/admin/knowledge', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, question, answer, metadata, created_at FROM chatbot_knowledge ORDER BY created_at DESC');
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Fetch Knowledge Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// PUT - Update a knowledge entry
+app.put('/api/admin/knowledge/:id', async (req, res) => {
+  const { id } = req.params;
+  const { question, answer } = req.body;
+  try {
+    const result = await updateKnowledgeEntry(id, question, answer);
+    res.json(result);
+  } catch (err) {
+    console.error("Update Knowledge Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE - Remove a knowledge entry
+app.delete('/api/admin/knowledge/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await deleteKnowledgeEntry(id);
+    res.json(result);
+  } catch (err) {
+    console.error("Delete Knowledge Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- CHATBOT CHAT ---
 app.post('/api/chat', async (req, res) => {
   try {
@@ -4985,6 +5024,31 @@ app.post('/api/chat', async (req, res) => {
   } catch (err) {
     console.error("Chatbot Error:", err);
     res.status(500).json({ error: "Failed to get answer from chatbot" });
+  }
+});
+
+// app.post('/api/feedback') - For user suggestions
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { content, user_email, user_uid } = req.body;
+    
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ error: "Content is required" });
+    }
+    
+    if (content.length > 200) {
+      return res.status(400).json({ error: "Feedback must be 200 characters or less" });
+    }
+
+    await pool.query(
+      'INSERT INTO system_feedback (content, user_email, user_uid) VALUES ($1, $2, $3)',
+      [content.trim(), user_email || null, user_uid || null]
+    );
+
+    res.json({ success: true, message: "Thank you for your feedback!" });
+  } catch (err) {
+    console.error("Feedback Error:", err);
+    res.status(500).json({ error: "Failed to save feedback" });
   }
 });
 
