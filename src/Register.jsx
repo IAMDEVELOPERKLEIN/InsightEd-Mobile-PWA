@@ -207,29 +207,47 @@ const Register = () => {
     // --- OFFICE DROPDOWN LOGIC ---
     const regionalOffices = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Regional Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     const divisionOffices = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Schools Division Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     const centralOfficeBureaus = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Central Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     // --- HANDLERS ---
@@ -552,7 +570,10 @@ const Register = () => {
                         })
                     });
 
-                    regData = await regRes.json();
+                    const regText = await regRes.text();
+                    console.log("Generic Registration response text:", regText);
+                    if (!regText) throw new Error("Empty response from /api/register-user");
+                    regData = JSON.parse(regText);
                     if (!regData.success) {
                        throw new Error(regData.error || "Server Registration Failed.");
                     }

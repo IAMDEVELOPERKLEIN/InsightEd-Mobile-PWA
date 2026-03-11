@@ -570,7 +570,8 @@ const initDB = async () => {
     console.log(`     [${currentSegment}]`);
     await checkAndAddColumn('engineer_image', 'ipc', 'TEXT');
 
-    // Backfill IPC in engineer_image
+    /* 
+    // Backfill IPC in engineer_image - Commented out to speed up startup
     await pool.query(`
       UPDATE engineer_image ei
       SET ipc = ef.ipc
@@ -578,6 +579,7 @@ const initDB = async () => {
       WHERE ei.project_id = ef.project_id
       AND ei.ipc IS NULL;
     `);
+    */
 
     // LGU Forms is handled in initFinanceDB (dropped as obsolete)
 
@@ -1637,7 +1639,13 @@ app.post('/api/auth/pin-login', async (req, res) => {
 
 app.get('/api/lists/divisions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT DISTINCT division, region FROM schools WHERE division IS NOT NULL ORDER BY division');
+    const result = await pool.query(`
+      SELECT MAX("Division") as division, MAX("Region") as region 
+      FROM "schools_IERN" 
+      WHERE "Division" IS NOT NULL AND "Region" IS NOT NULL 
+      GROUP BY UPPER(TRIM("Division"))
+      ORDER BY division ASC
+    `);
     res.json(result.rows); // Returns [{division, region}, ...]
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4397,9 +4405,27 @@ app.get('/api/admin/user-stats', async (req, res) => {
 // GET Filter Options for Admin Dashboard
 app.get('/api/admin/filter-options', async (req, res) => {
   try {
-    const regionsRes = await pool.query('SELECT DISTINCT region FROM users WHERE region IS NOT NULL AND region != \'\' ORDER BY region');
-    const divisionsRes = await pool.query('SELECT DISTINCT division, region FROM users WHERE division IS NOT NULL AND division != \'\' ORDER BY division');
-    const rolesRes = await pool.query('SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role != \'\' ORDER BY role');
+    const regionsRes = await pool.query(`
+      SELECT MAX(region) as region 
+      FROM users 
+      WHERE region IS NOT NULL AND region != '' 
+      GROUP BY UPPER(TRIM(region))
+      ORDER BY region
+    `);
+    const divisionsRes = await pool.query(`
+      SELECT MAX(division) as division, MAX(region) as region 
+      FROM users 
+      WHERE division IS NOT NULL AND division != '' 
+      GROUP BY UPPER(TRIM(division))
+      ORDER BY division
+    `);
+    const rolesRes = await pool.query(`
+      SELECT MAX(role) as role 
+      FROM users 
+      WHERE role IS NOT NULL AND role != '' 
+      GROUP BY UPPER(TRIM(role))
+      ORDER BY role
+    `);
 
     res.json({
       regions: regionsRes.rows.map(r => r.region),
@@ -5848,7 +5874,8 @@ app.post('/api/register-beta', async (req, res) => {
   console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
     email,
     schoolId: schoolData?.school_id,
-    role: 'School Head'
+    role: 'School Head',
+    payload: req.body
   });
 
   let client;
@@ -5995,8 +6022,10 @@ app.post('/api/register-user', async (req, res) => {
   const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
 
   if (!email || !password || !role) {
+    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role });
     return res.status(400).json({ error: "Missing required fields (email, password, role)" });
   }
+  console.log(`🚀 Registration request for ${email} (${role})`);
 
   try {
     const normalizedEmail = email.trim().toLowerCase();
@@ -6219,7 +6248,13 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
 // --- 5. GET: Cascading Location Endpoints ---
 app.get('/api/locations/regions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT DISTINCT "Region" as region FROM "schools_IERN" WHERE "Region" IS NOT NULL AND "Region" != \'\' ORDER BY "Region" ASC');
+    const result = await pool.query(`
+      SELECT MAX("Region") as region 
+      FROM "schools_IERN" 
+      WHERE "Region" IS NOT NULL AND "Region" != '' 
+      GROUP BY UPPER(TRIM("Region"))
+      ORDER BY region ASC
+    `);
     res.json(result.rows.map(r => r.region));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6227,7 +6262,14 @@ app.get('/api/locations/regions', async (req, res) => {
 app.get('/api/locations/divisions', async (req, res) => {
   const { region } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "Division" as division FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND "Division" IS NOT NULL AND "Division" != \'\' ORDER BY "Division" ASC', [region]);
+    const result = await pool.query(`
+      SELECT MAX("Division") as division 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND "Division" IS NOT NULL AND "Division" != '' 
+      GROUP BY UPPER(TRIM("Division"))
+      ORDER BY division ASC
+    `, [region]);
     res.json(result.rows.map(r => r.division));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6235,7 +6277,15 @@ app.get('/api/locations/divisions', async (req, res) => {
 app.get('/api/locations/districts', async (req, res) => {
   const { region, division } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "District" as district FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND "District" IS NOT NULL AND "District" != \'\' ORDER BY "District" ASC', [region, division]);
+    const result = await pool.query(`
+      SELECT MAX("District") as district 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
+      AND "District" IS NOT NULL AND "District" != '' 
+      GROUP BY UPPER(TRIM("District"))
+      ORDER BY district ASC
+    `, [region, division]);
     res.json(result.rows.map(r => r.district));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6243,7 +6293,14 @@ app.get('/api/locations/districts', async (req, res) => {
 app.get('/api/locations/leg-districts', async (req, res) => {
   const { region } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "Legislative_District" as leg_district FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND "Legislative_District" IS NOT NULL AND "Legislative_District" != \'\' ORDER BY "Legislative_District" ASC', [region]);
+    const result = await pool.query(`
+      SELECT MAX("Legislative_District") as leg_district 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND "Legislative_District" IS NOT NULL AND "Legislative_District" != '' 
+      GROUP BY UPPER(TRIM("Legislative_District"))
+      ORDER BY leg_district ASC
+    `, [region]);
     res.json(result.rows.map(r => r.leg_district));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6251,7 +6308,16 @@ app.get('/api/locations/leg-districts', async (req, res) => {
 app.get('/api/locations/municipalities', async (req, res) => {
   const { region, division, district } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "Municipality" as municipality FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND UPPER(TRIM("District")) = UPPER(TRIM($3)) AND "Municipality" IS NOT NULL AND "Municipality" != \'\' ORDER BY "Municipality" ASC', [region, division, district]);
+    const result = await pool.query(`
+      SELECT MAX("Municipality") as municipality 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
+      AND UPPER(TRIM("District")) = UPPER(TRIM($3)) 
+      AND "Municipality" IS NOT NULL AND "Municipality" != '' 
+      GROUP BY UPPER(TRIM("Municipality"))
+      ORDER BY municipality ASC
+    `, [region, division, district]);
     res.json(result.rows.map(r => r.municipality));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -12020,7 +12086,10 @@ app.get('/api/debug/health-stats', async (req, res) => {
 app.get('/api/user-info/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT role, first_name, last_name, account_category FROM users WHERE uid = $1', [uid]);
+    const result = await pool.query(
+      'SELECT role, first_name, last_name, email, region, division, account_category FROM users WHERE uid = $1',
+      [uid]
+    );
     if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
     res.json(result.rows[0]);
   } catch (err) {

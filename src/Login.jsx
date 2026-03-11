@@ -642,7 +642,7 @@ const Login = () => {
                     console.log("Redirecting LGU to Dashboard...");
                     navigate('/lgu-dashboard');
                 } else {
-                    // Fetch account_category for role-aware navigation (Division Engineer / Non-DepEd)
+                    // Fetch account_category, region, division for role-aware navigation
                     let accountCategory = localStorage.getItem('accountCategory');
                     try {
                         const infoRes = await fetch(`/api/user-info/${uid}`);
@@ -650,9 +650,12 @@ const Login = () => {
                             const info = await infoRes.json();
                             accountCategory = info.account_category || accountCategory;
                             if (accountCategory) localStorage.setItem('accountCategory', accountCategory);
+                            // Save region & division for dashboard use (critical for RO/CO users without Firestore docs)
+                            if (info.region) localStorage.setItem('userRegion', info.region);
+                            if (info.division) localStorage.setItem('userDivision', info.division);
                         }
                     } catch (e) {
-                        console.warn('Could not fetch account_category for routing:', e);
+                        console.warn('Could not fetch user-info for routing:', e);
                     }
                     const path = getDashboardPath(role, accountCategory);
                     console.log("Navigating to:", path, "(accountCategory:", accountCategory, ")");
