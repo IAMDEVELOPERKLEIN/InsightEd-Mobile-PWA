@@ -18,6 +18,7 @@ const EFDMonitoring = () => {
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedFundingYear, setSelectedFundingYear] = useState('');
     const [selectedDonated, setSelectedDonated] = useState('All'); // 'All', 'Donated', 'Non-Donated'
+    const [selectedDocStatus, setSelectedDocStatus] = useState('All'); // 'All', 'Complete', 'Missing RTA', 'Missing MOA', 'Missing Both'
     const [fundingYears, setFundingYears] = useState([]);
 
     const categories = [
@@ -50,6 +51,7 @@ const EFDMonitoring = () => {
         setSelectedCategory('');
         setSelectedFundingYear('');
         setSelectedDonated('All');
+        setSelectedDocStatus('All');
         setSearchTerm('');
         setShowUnassignedOnly(false);
     };
@@ -127,6 +129,13 @@ const EFDMonitoring = () => {
             const matchesDonated = selectedDonated === 'All' || 
                 (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
                 (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+            
+            const matchesDocStatus = selectedDocStatus === 'All' ||
+                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
+                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
+            
             const isUnassignedOnly = !showUnassignedOnly || !p.engineerName;
             
             const matchesSearch = !searchTerm || 
@@ -135,9 +144,9 @@ const EFDMonitoring = () => {
                 p.schoolId?.toString().includes(searchTerm) ||
                 p.engineerName?.toLowerCase().includes(searchTerm.toLowerCase());
                 
-            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && isUnassignedOnly && matchesSearch;
+            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && isUnassignedOnly && matchesSearch;
         });
-    }, [projects, searchTerm, showUnassignedOnly, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, selectedDonated]);
+    }, [projects, searchTerm, showUnassignedOnly, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, selectedDonated, selectedDocStatus]);
 
     const handleAssign = async () => {
         if (!selectedProject || !selectedEngineer) return;
@@ -208,7 +217,7 @@ const EFDMonitoring = () => {
                         projectId: selectedProjectForDocs.id,
                         type: type,
                         base64: base64,
-                        uid: auth.currentUser?.uid
+                        uid: localStorage.getItem('uid')
                     })
                 });
                 if (!response.ok) {
@@ -221,13 +230,13 @@ const EFDMonitoring = () => {
             if (uploadDocs.RTA) await uploadDoc('RTA', uploadDocs.RTA);
             if (uploadDocs.MOA) await uploadDoc('MOA', uploadDocs.MOA);
 
-            // Update local state so UI reflects the new documents
+            // Update local state so UI reflects the new documents immediately
             setProjects(prevProjects => prevProjects.map(p => {
                 if (p.id === selectedProjectForDocs.id) {
                     return {
                         ...p,
-                        rta_pdf: uploadDocs.RTA ? 'data:application/pdf;base64,...' : p.rta_pdf, // placeholder or fetch from response if server returned it
-                        moa_pdf: uploadDocs.MOA ? 'data:application/pdf;base64,...' : p.moa_pdf
+                        hasMoa: uploadDocs.MOA ? true : p.hasMoa,
+                        hasRta: uploadDocs.RTA ? true : p.hasRta,
                     };
                 }
                 return p;
@@ -294,7 +303,7 @@ const EFDMonitoring = () => {
                                 >
                                     {showUnassignedOnly ? 'Showing Unassigned' : 'Filter Unassigned'}
                                 </button>
-                                {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || searchTerm || showUnassignedOnly) && (
+                                {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || selectedDocStatus !== 'All' || searchTerm || showUnassignedOnly) && (
                                     <button 
                                         onClick={handleClearFilters}
                                         className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full transition-all active:scale-95"
@@ -367,6 +376,20 @@ const EFDMonitoring = () => {
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
+                            <div className="relative">
+                                <select 
+                                    value={selectedDocStatus}
+                                    onChange={(e) => setSelectedDocStatus(e.target.value)}
+                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
+                                >
+                                    <option value="All">All Document Statuses</option>
+                                    <option value="Complete">Complete (Has MOA & RTA)</option>
+                                    <option value="Missing RTA">Has MOA but Missing RTA</option>
+                                    <option value="Missing MOA">Has RTA but Missing MOA</option>
+                                    <option value="Missing Both">Missing Both MOA & RTA</option>
+                                </select>
+                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -395,6 +418,17 @@ const EFDMonitoring = () => {
                                 <div className="flex-1 min-w-0 pr-2">
                                     <h4 className="text-sm font-black text-slate-800 tracking-tight truncate overflow-hidden" title={p.projectName}>{p.projectName}</h4>
                                     <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{p.schoolName}</p>
+                                    <div className="flex gap-1 mt-1.5 flex-wrap">
+                                        {!p.hasMoa && !p.hasRta ? (
+                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">Missing MOA & RTA</span>
+                                        ) : p.hasMoa && p.hasRta ? (
+                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200">Docs Complete</span>
+                                        ) : !p.hasMoa ? (
+                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">Missing MOA</span>
+                                        ) : (
+                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">Missing RTA</span>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex gap-2 shrink-0">
                                     <button 

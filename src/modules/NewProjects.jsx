@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse';
-import { auth, storage } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// Removed Firebase imports - using PostgreSQL + LocalStorage
+// import { auth, storage } from '../firebase';
+// import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // --- IMPORT NEW DB LOGIC ---
 import { addEngineerToOutbox, getCachedProjects } from '../db';
 // --- CONSTANTS ---
@@ -45,30 +46,29 @@ const NewProjects = () => {
     // --- FETCH ROLE ---
     useEffect(() => {
         const fetchRole = async () => {
-            if (auth.currentUser) {
-                // IMMEDIATE CHECK: If Super User in localStorage, block access
-                const localRole = localStorage.getItem('userRole');
-                if (localRole === 'Super User') {
-                    alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access to Engineer concepts.");
-                    navigate('/engineer-dashboard');
-                    return;
-                }
+            const localRole = localStorage.getItem('userRole');
+            if (localRole === 'Super User') {
+                alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access to Engineer concepts.");
+                navigate('/engineer-dashboard');
+                return;
+            }
 
-                try {
-                    const res = await fetch(`/api/user-info/${auth.currentUser.uid}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        setUserRole(data.role);
-                        setAccountCategory(data.account_category);
-                        // Double check API role too
-                        if (data.role === 'Super User') {
-                            alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access.");
-                            navigate('/engineer-dashboard');
-                        }
+            const uid = localStorage.getItem('uid');
+            if (!uid) return;
+
+            try {
+                const res = await fetch(`/api/user-info/${uid}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setUserRole(data.role);
+                    setAccountCategory(data.account_category);
+                    if (data.role === 'Super User') {
+                        alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access.");
+                        navigate('/engineer-dashboard');
                     }
-                } catch (err) {
-                    console.error("Failed to fetch user role:", err);
                 }
+            } catch (err) {
+                console.error("Failed to fetch user role:", err);
             }
         };
         fetchRole();
@@ -642,14 +642,14 @@ const NewProjects = () => {
                 statusOfConstructionPhase: formData.status,
                 approved_budget_for_contract: Number(formData.approved_budget_for_contract?.toString().replace(/,/g, '') || 0),
                 contract_amount: Number(formData.contract_amount?.toString().replace(/,/g, '') || 0),
-                uid: auth.currentUser?.uid,
-                modifiedBy: auth.currentUser?.displayName || 'Engineer',
+                uid: localStorage.getItem('uid'),
+                modifiedBy: localStorage.getItem('userName') || 'Engineer',
                 images: compressedImages,
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString(),
-                uploader_type: userRole === 'EFD' ? 'EFD Engineer' :
-                               (userRole === 'Division Engineer' && accountCategory === 'Non-DepEd Engineer' ? 'Non-DepEd Engineer' : 'Uploaded by DepEd Engineer')
+                uploader_type: userRole === 'EFD' || userRole === 'HRODI Engineer' ? 'EFD Engineer' :
+                               (userRole === 'Non-DepEd Engineer' || accountCategory === 'Non-DepEd Engineer' ? 'Non-DepEd Engineer' : 'DepEd Engineer')
             };
 
             // --- OFFLINE/ONLINE CHECK ---

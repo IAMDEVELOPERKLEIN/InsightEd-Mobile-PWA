@@ -18,22 +18,22 @@ const FAQ_DATA = [
     {
         question: "How do I sync my data when back online?",
         answer: "The app automatically syncs when it detects an internet connection. If 'Pending Sync' persists, pull down on your dashboard to force a refresh.",
-        roles: ['School Head', 'Division Engineer', 'Admin']
+        roles: ['School Head', 'DepEd Engineer', 'Admin']
     },
     {
         question: "Why is the 'Submit' button disabled?",
         answer: "Ensure all required fields (marked with *) are filled. Also, check if your geolocation is enabled, as some forms require location tagging.",
-        roles: ['School Head', 'Division Engineer']
+        roles: ['School Head', 'DepEd Engineer']
     },
     {
         question: "How do I attach photos to a report?",
         answer: "Tap the 'Upload Photo' icon in the form. You can select from your gallery or take a new photo. Please use landscape mode for better visibility.",
-        roles: ['Division Engineer', 'School Head']
+        roles: ['DepEd Engineer', 'School Head']
     },
     {
         question: "Can I edit a report after submission?",
         answer: "Submitted reports enter a 'Processing' state. You cannot edit them directly. Please contact your Division Office Admin to request changes.",
-        roles: ['School Head', 'Division Engineer']
+        roles: ['School Head', 'DepEd Engineer']
     },
     {
         question: "Where can I see the status of my funding request?",
@@ -172,7 +172,8 @@ const UserProfile = () => {
     // --- HELPERS ---
     const getDashboardPath = (role) => {
         const roleMap = {
-            'Division Engineer': '/engineer-dashboard',
+            'DepEd Engineer': '/engineer-dashboard',
+            'Non-DepEd Engineer': '/non-deped-dashboard',
             'Engineer': '/engineer-dashboard',
             'Local Government Unit': '/lgu-dashboard',
             'School Head': '/my-activity',
