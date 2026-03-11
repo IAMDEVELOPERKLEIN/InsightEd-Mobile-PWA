@@ -1434,7 +1434,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     
     // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
-    const userRes = await pool.query('SELECT uid, email, role, region, division, account_category, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+    const userRes = await pool.query('SELECT uid, email, role, region, division, account_category, passcode, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
 
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
@@ -1533,12 +1533,104 @@ app.post('/api/auth/migrate-login', async (req, res) => {
         role: user.role,
         region: user.region,
         division: user.division,
-        account_category: finalCategory
+        account_category: finalCategory,
+        passcode: user.passcode
       }
     });
 
   } catch (err) {
     console.error("Migration Login Error:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
+
+// --- NEW BANKING PIN ROUTES ---
+
+app.post('/api/auth/setup-pin', async (req, res) => {
+  const { email, pin } = req.body;
+  if (!email || !pin || pin.length !== 6) {
+    return res.status(400).json({ success: false, error: "Valid 6-digit PIN and email are required." });
+  }
+  
+  try {
+    const result = await pool.query(
+      'UPDATE users SET passcode = $1 WHERE LOWER(email) = $2 RETURNING uid',
+      [pin, email.trim().toLowerCase()]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "User not found." });
+    }
+    
+    return res.json({ success: true, message: "PIN set successfully." });
+  } catch (err) {
+    console.error("Setup PIN Error:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
+
+app.post('/api/auth/pin-login', async (req, res) => {
+  const { email, pin } = req.body;
+  if (!email || !pin) {
+    return res.status(400).json({ success: false, error: "Email and PIN are required." });
+  }
+
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    const userRes = await pool.query(
+      'SELECT uid, email, role, region, division, account_category, passcode FROM users WHERE LOWER(email) = $1', 
+      [normalizedEmail]
+    );
+
+    if (userRes.rowCount === 0) {
+      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+    }
+
+    const user = userRes.rows[0];
+
+    // STRICT Plain Text Comparison (As specified by requirements)
+    if (user.passcode !== pin) {
+      return res.status(401).json({ success: false, error: "Incorrect PIN." });
+    }
+
+    // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
+    let finalCategory = user.account_category;
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
+      if (user.role === 'EFD' || user.role === 'HRODI') {
+        finalCategory = 'EFD Engineer';
+      } else if (user.role === 'Division Engineer') {
+        finalCategory = 'DepEd Engineer';
+      } else {
+        finalCategory = user.role;
+      }
+    }
+
+    // Generate Firebase Token for PWA session matching
+    let customToken = null;
+    try {
+      if (admin.apps.length > 0) {
+        customToken = await admin.auth().createCustomToken(user.uid, { role: user.role });
+      }
+    } catch (tokenErr) {
+      console.error("[PIN LOGIN] Custom Token Error:", tokenErr.message);
+    }
+
+    return res.json({
+      success: true,
+      customToken: customToken,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
+        region: user.region,
+        division: user.division,
+        account_category: finalCategory
+      }
+    });
+
+  } catch (err) {
+    console.error("PIN Login Error:", err);
     res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 });

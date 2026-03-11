@@ -561,6 +561,7 @@ const Register = () => {
                     console.log("✅ Registration Successful! Setting native session...");
                     localStorage.setItem('uid', regData.uid);
                     localStorage.setItem('userRole', regData.role);
+                    localStorage.setItem('userEmail', authEmail);
                     if (regData.region) localStorage.setItem('userRegion', regData.region);
                     if (regData.division) localStorage.setItem('userDivision', regData.division);
                     if (regData.accountCategory) {
@@ -569,10 +570,12 @@ const Register = () => {
 
                     // For specialized redirects, we need to pass these directly
                     const destPath = getDashboardPath(regData.role, regData.accountCategory);
-                    console.log("Redirecting to:", destPath);
+                    console.log("Intended Dashboard:", destPath);
+                    
+                    localStorage.setItem('needs_pin_setup', 'true');
                     
                     alert("✅ Account created successfully!");
-                    navigate(destPath);
+                    navigate('/setup-pin');
                     return;
 
                 } catch (backendErr) {
@@ -610,6 +613,16 @@ const Register = () => {
                 if (selectedSchool?.school_id) {
                     localStorage.setItem('schoolId', selectedSchool.school_id);
                 }
+                
+                // Set user email and uid for subsequent steps (like PinSetup)
+                localStorage.setItem('userEmail', contactEmail);
+                if (auth.currentUser?.uid || regData?.uid) {
+                    localStorage.setItem('uid', auth.currentUser?.uid || regData?.uid);
+                }
+
+                // NEW: Mark for PIN setup since they are newly registered
+                localStorage.setItem('needs_pin_setup', 'true');
+
                 setShowSuccessModal(true);
             } else {
                 // Set role in localStorage for immediate access by Dashboard/BottomNav
@@ -1418,10 +1431,16 @@ const Register = () => {
                             </div>
 
                             <button
-                                onClick={() => navigate(getDashboardPath(formData.role))}
+                                onClick={() => {
+                                    if (localStorage.getItem('needs_pin_setup') === 'true') {
+                                        navigate('/setup-pin');
+                                    } else {
+                                        navigate(getDashboardPath(formData.role));
+                                    }
+                                }}
                                 className="w-full py-4 rounded-xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
                             >
-                                Continue to Dashboard
+                                Continue
                             </button>
                         </div>
                     </div>
