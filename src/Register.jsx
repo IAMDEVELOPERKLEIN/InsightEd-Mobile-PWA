@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import logo from './assets/InsightEd1.png';
 import { auth, db } from './firebase';
+import { signInWithCustomToken } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore'; 
 import { useNavigate, Link } from 'react-router-dom';
 import PageTransition from './components/PageTransition';
@@ -34,7 +35,6 @@ const AUTHORIZATION_CODES = {
     'Non-DepEd Engineer': 'E5T8-B2W3',
     'Local Government Unit': 'L2G7-X4Z9',
     'Central Office Finance': '8XK2-M9P4', // Same as Central Office
-    'Beta Tester': 'B3TA-T3ST', // Added for beta testers
     'Super User': 'SUP3R-US3R', // Added for testing
     // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
     'Admin': 'A3M6-Y1K8',
@@ -55,7 +55,7 @@ const getDashboardPath = (role, accountCategory) => {
         'HRODI Engineer': '/efd-dashboard',
         'HRODI': '/efd-dashboard',
         'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/schoolhead-dashboard',
+        'School Head': '/my-activity',
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
         'Central Office': '/monitoring-dashboard',
@@ -63,7 +63,6 @@ const getDashboardPath = (role, accountCategory) => {
         'School Division Office': '/monitoring-dashboard',
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
-        'Beta Tester': '/modular-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -209,29 +208,47 @@ const Register = () => {
     // --- OFFICE DROPDOWN LOGIC ---
     const regionalOffices = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Regional Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     const divisionOffices = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Schools Division Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     const centralOfficeBureaus = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Central Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     // --- HANDLERS ---
@@ -345,13 +362,13 @@ const Register = () => {
         e.preventDefault();
 
         // FAKE EMAIL STRATEGY:
-        // If School Head or Beta Tester, Auth Email is [SchoolID]@insighted.app
+        // If School Head, Auth Email is [SchoolID]@insighted.app
         // The "Real" email is stored in formData.schoolEmail and sent to backend
-        const authEmail = (formData.role === 'School Head' || formData.role === 'Beta Tester')
+        const authEmail = (formData.role === 'School Head')
             ? `${selectedSchool.school_id}@insighted.app`
             : (formData.email || '').trim();
 
-        const contactEmail = (formData.role === 'School Head' || formData.role === 'Beta Tester')
+        const contactEmail = (formData.role === 'School Head')
             ? (formData.schoolEmail || '').trim()
             : authEmail; // For others, auth email is contact email
 
@@ -372,7 +389,7 @@ const Register = () => {
             }
         }
 
-        if (formData.role === 'School Head' || formData.role === 'Beta Tester') {
+        if (formData.role === 'School Head') {
             if (!selectedSchool) {
                 alert("Please select a school.");
                 return;
@@ -404,7 +421,7 @@ const Register = () => {
 
 
         // STRICT EMAIL VALIDATION (Global Check)
-        if (formData.role !== 'Local Government Unit' && formData.role !== 'Beta Tester' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
+        if (formData.role !== 'Local Government Unit' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
             alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
         }
@@ -440,8 +457,8 @@ const Register = () => {
         try {
             let regData = null;
 
-            // STEP A: Pre-Checks for School Head or Beta Tester
-            if (formData.role === 'School Head' || formData.role === 'Beta Tester') {
+            // STEP A: Pre-Checks for School Head
+            if (formData.role === 'School Head') {
                 if (!selectedSchool) throw new Error("Please select a school.");
 
                 // Backend Check
@@ -452,14 +469,21 @@ const Register = () => {
                     body: JSON.stringify({ schoolId: selectedSchool.school_id })
                 });
                 console.log("Step A: Check response received", checkRes.status);
-                const checkData = await checkRes.json();
+                if (!checkRes.ok) {
+                    const errorText = await checkRes.text();
+                    throw new Error(`Check School Failed (${checkRes.status}): ${errorText || 'No detail'}`);
+                }
+                const checkText = await checkRes.text();
+                console.log("Step A: Check response text:", checkText);
+                if (!checkText) throw new Error("Empty response from /api/check-existing-school");
+                const checkData = JSON.parse(checkText);
                 if (checkData.exists) {
                     throw new Error(checkData.message || "School already registered.");
                 }
             }
 
             // STEP B & C: Unified Native Registration and Persistence
-            if (formData.role === 'School Head' || formData.role === 'Beta Tester') {
+            if (formData.role === 'School Head') {
                 // CALL NEW ONE-SHOT ENDPOINT
                 console.log("SENDING REGISTRATION DATA:", {
                     ...selectedSchool
@@ -473,7 +497,7 @@ const Register = () => {
 
                 console.log("SENDING FINAL REGISTRATION DATA:", finalSchoolData);
 
-                const endpoint = formData.role === 'Beta Tester' ? '/api/register-beta' : '/api/register-school';
+                const endpoint = '/api/register-beta'; // Use the iern-check endpoint for school heads now
                 const regRes = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -485,19 +509,30 @@ const Register = () => {
                     })
                 });
 
-                regData = await regRes.json();
+                console.log("Step B: Registration response received", regRes.status);
+                if (!regRes.ok) {
+                    const errorText = await regRes.text();
+                    throw new Error(`Registration Failed (${regRes.status}): ${errorText || 'No detail'}`);
+                }
+                const regText = await regRes.text();
+                console.log("Step B: Registration response text:", regText);
+                if (!regText) throw new Error("Empty response from " + endpoint);
+                regData = JSON.parse(regText);
                 if (!regData.success) {
                     throw new Error(regData.error || "Server Registration Failed.");
                 }
 
                 // Authenticate frontend using Custom Token
+                if (!regData.customToken) {
+                    throw new Error("Registration succeeded but no authentication token was received. Please try logging in.");
+                }
                 const userCredential = await signInWithCustomToken(auth, regData.customToken);
                 const user = userCredential.user;
 
                 // Save to Firestore (Minimal user profile + schoolId link) using the Native Backend UID
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
-                    role: formData.role, // Use formData.role to preserve Beta Tester or School Head
+                    role: formData.role, // Use formData.role to preserve School Head
                     schoolId: selectedSchool.school_id,
                     loginId: selectedSchool.school_id,
                     contactNumber: contactDigits,
@@ -536,7 +571,10 @@ const Register = () => {
                         })
                     });
 
-                    regData = await regRes.json();
+                    const regText = await regRes.text();
+                    console.log("Generic Registration response text:", regText);
+                    if (!regText) throw new Error("Empty response from /api/register-user");
+                    regData = JSON.parse(regText);
                     if (!regData.success) {
                        throw new Error(regData.error || "Server Registration Failed.");
                     }
@@ -545,16 +583,21 @@ const Register = () => {
                     console.log("✅ Registration Successful! Setting native session...");
                     localStorage.setItem('uid', regData.uid);
                     localStorage.setItem('userRole', regData.role);
+                    localStorage.setItem('userEmail', authEmail);
+                    if (regData.region) localStorage.setItem('userRegion', regData.region);
+                    if (regData.division) localStorage.setItem('userDivision', regData.division);
                     if (regData.accountCategory) {
                         localStorage.setItem('accountCategory', regData.accountCategory);
                     }
 
                     // For specialized redirects, we need to pass these directly
                     const destPath = getDashboardPath(regData.role, regData.accountCategory);
-                    console.log("Redirecting to:", destPath);
+                    console.log("Intended Dashboard:", destPath);
+                    
+                    localStorage.setItem('needs_pin_setup', 'true');
                     
                     alert("✅ Account created successfully!");
-                    navigate(destPath);
+                    navigate('/setup-pin');
                     return;
 
                 } catch (backendErr) {
@@ -585,13 +628,23 @@ const Register = () => {
             }
 
             // STEP D: Success
-            if ((formData.role === 'School Head' || formData.role === 'Beta Tester') && regData?.iern) {
+            if ((formData.role === 'School Head') && regData?.iern) {
                 setRegisteredIern(regData.iern);
                 // Set role and schoolId in localStorage for immediate access by Dashboard/BottomNav/Modular Units
                 localStorage.setItem('userRole', formData.role);
                 if (selectedSchool?.school_id) {
                     localStorage.setItem('schoolId', selectedSchool.school_id);
                 }
+                
+                // Set user email and uid for subsequent steps (like PinSetup)
+                localStorage.setItem('userEmail', contactEmail);
+                if (auth.currentUser?.uid || regData?.uid) {
+                    localStorage.setItem('uid', auth.currentUser?.uid || regData?.uid);
+                }
+
+                // NEW: Mark for PIN setup since they are newly registered
+                localStorage.setItem('needs_pin_setup', 'true');
+
                 setShowSuccessModal(true);
             } else {
                 // Set role in localStorage for immediate access by Dashboard/BottomNav
@@ -652,7 +705,6 @@ const Register = () => {
                                         <option value="HRODI Engineer">HRODI Engineer (Human Resource and Organizational Development)</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         <option value="Central Office Finance">Central Office Finance</option>
-                                        <option value="Beta Tester">Beta Tester</option>
                                         {/* <option value="Super User" hidden>Super User</option> */}
                                         {/* Super User hidden from registration - managed internally */}
                                         {/* {<option value="Admin">Admin</option>} */}
@@ -687,8 +739,8 @@ const Register = () => {
                                 </div>
                             )}
 
-                            {/* === SCHOOL HEAD & BETA TESTER SPECIFIC FLOW === */}
-                            {formData.role === 'School Head' || formData.role === 'Beta Tester' ? (
+                            {/* === SCHOOL HEAD SPECIFIC FLOW === */}
+                            {formData.role === 'School Head' ? (
                                 <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4">
                                     <div className="bg-white p-5 rounded-2xl border-l-4 border-l-blue-500 shadow-sm border border-slate-100">
                                         <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -1281,7 +1333,7 @@ const Register = () => {
                             {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
-                                        {(formData.role === 'School Head' || formData.role === 'Beta Tester') ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
+                                        {(formData.role === 'School Head') ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
                                     </span>
                                     Account Security
                                 </h3>
@@ -1389,10 +1441,16 @@ const Register = () => {
                             </div>
 
                             <button
-                                onClick={() => navigate(getDashboardPath(formData.role))}
+                                onClick={() => {
+                                    if (localStorage.getItem('needs_pin_setup') === 'true') {
+                                        navigate('/setup-pin');
+                                    } else {
+                                        navigate(getDashboardPath(formData.role));
+                                    }
+                                }}
                                 className="w-full py-4 rounded-xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
                             >
-                                Continue to Dashboard
+                                Continue
                             </button>
                         </div>
                     </div>

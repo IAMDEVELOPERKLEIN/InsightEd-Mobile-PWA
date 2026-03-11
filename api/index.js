@@ -19,7 +19,8 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
-import { teachChatbot, chatWithKnowledge, setPool } from './chatbot.js';
+import { teachChatbot, chatWithKnowledge, setPool, updateKnowledgeEntry, deleteKnowledgeEntry } from './chatbot.js';
+import { v4 as uuidv4 } from 'uuid';
 
 
 // Load environment variables
@@ -220,7 +221,7 @@ setPool(pool);
 // --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
 let poolNew = null;
 if (process.env.NEW_DATABASE_URL) {
-  console.log('ðŸ”Œ Initializing Secondary Database Connection...');
+  console.log('”Œ Initializing Secondary Database Connection...');
   poolNew = new Pool({
     connectionString: process.env.NEW_DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -229,7 +230,7 @@ if (process.env.NEW_DATABASE_URL) {
   // Test Connection
   poolNew.connect()
     .then(client => {
-      console.log('âœ… Connected to Secondary Database (ICTS) successfully!');
+      console.log('… Connected to Secondary Database (ICTS) successfully!');
       client.release();
     })
     .catch(err => console.error('âŒ Failed to connect to Secondary Database:', err.message));
@@ -552,7 +553,8 @@ const initDB = async () => {
     console.log(`     [${currentSegment}]`);
     await checkAndAddColumn('engineer_image', 'ipc', 'TEXT');
 
-    // Backfill IPC in engineer_image
+    /* 
+    // Backfill IPC in engineer_image - Commented out to speed up startup
     await pool.query(`
       UPDATE engineer_image ei
       SET ipc = ef.ipc
@@ -560,6 +562,7 @@ const initDB = async () => {
       WHERE ei.project_id = ef.project_id
       AND ei.ipc IS NULL;
     `);
+    */
 
     // LGU Forms is handled in initFinanceDB (dropped as obsolete)
 
@@ -1427,10 +1430,11 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
   try {
     const normalizedEmail = email.trim().toLowerCase();
-    console.log(`[MIGRATE LOGIN] Attempting login for: ${normalizedEmail}`);
-
+    console.log(`[MIGRATE LOGIN] Starting lookup for: ${normalizedEmail}`);
+    
     // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
-    const userRes = await pool.query('SELECT uid, email, role, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+    console.log(`[MIGRATE LOGIN] Running SQL query...`);
+    const userRes = await pool.query('SELECT uid, email, role, region, division, account_category, passcode, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
 
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
@@ -1506,16 +1510,18 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
     // until the frontend is fully decoupled from the Firebase SDK.
     let customToken = null;
-    if (admin.apps.length > 0) {
-      try {
+    try {
+      if (admin.apps.length > 0) {
         customToken = await admin.auth().createCustomToken(user.uid, {
           role: user.role // Embed role into token if you like
         });
-      } catch (tokenErr) {
-        console.warn("⚠️ Failed to generate Firebase Custom Token (non-fatal):", tokenErr.message);
+      } else {
+        console.warn("[MIGRATE LOGIN] Firebase Admin not initialized, skipping custom token");
       }
-    } else {
-      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in migrate-login");
+    } catch (tokenErr) {
+      console.error("[MIGRATE LOGIN] Custom Token Error:", tokenErr.message);
+      // Proceed without token? Or fail? 
+      // If the dashboard needs Firestore, we MUST have a token.
     }
 
     return res.json({
@@ -1525,7 +1531,10 @@ app.post('/api/auth/migrate-login', async (req, res) => {
         uid: user.uid,
         email: user.email,
         role: user.role,
-        account_category: finalCategory
+        region: user.region,
+        division: user.division,
+        account_category: finalCategory,
+        passcode: user.passcode
       }
     });
 
@@ -1535,9 +1544,109 @@ app.post('/api/auth/migrate-login', async (req, res) => {
   }
 });
 
+// --- NEW BANKING PIN ROUTES ---
+
+app.post('/api/auth/setup-pin', async (req, res) => {
+  const { email, pin } = req.body;
+  if (!email || !pin || pin.length !== 6) {
+    return res.status(400).json({ success: false, error: "Valid 6-digit PIN and email are required." });
+  }
+  
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      'UPDATE users SET passcode = $1 WHERE LOWER(email) = $2 OR iern = $2 OR LOWER(email) = $3 RETURNING uid',
+      [pin, normalizedEmail, `${normalizedEmail}@insighted.app`]
+    );
+
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "User not found." });
+    }
+    
+    return res.json({ success: true, message: "PIN set successfully." });
+  } catch (err) {
+    console.error("Setup PIN Error:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
+
+app.post('/api/auth/pin-login', async (req, res) => {
+  const { email, pin } = req.body;
+  if (!email || !pin) {
+    return res.status(400).json({ success: false, error: "Email and PIN are required." });
+  }
+
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    const userRes = await pool.query(
+      'SELECT uid, email, role, region, division, account_category, passcode FROM users WHERE LOWER(email) = $1 OR iern = $1 OR LOWER(email) = $2', 
+      [normalizedEmail, `${normalizedEmail}@insighted.app`]
+    );
+
+
+    if (userRes.rowCount === 0) {
+      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+    }
+
+    const user = userRes.rows[0];
+
+    // STRICT Plain Text Comparison (As specified by requirements)
+    if (user.passcode !== pin) {
+      return res.status(401).json({ success: false, error: "Incorrect PIN." });
+    }
+
+    // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
+    let finalCategory = user.account_category;
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
+      if (user.role === 'EFD' || user.role === 'HRODI') {
+        finalCategory = 'EFD Engineer';
+      } else if (user.role === 'Division Engineer') {
+        finalCategory = 'DepEd Engineer';
+      } else {
+        finalCategory = user.role;
+      }
+    }
+
+    // Generate Firebase Token for PWA session matching
+    let customToken = null;
+    try {
+      if (admin.apps.length > 0) {
+        customToken = await admin.auth().createCustomToken(user.uid, { role: user.role });
+      }
+    } catch (tokenErr) {
+      console.error("[PIN LOGIN] Custom Token Error:", tokenErr.message);
+    }
+
+    return res.json({
+      success: true,
+      customToken: customToken,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
+        region: user.region,
+        division: user.division,
+        account_category: finalCategory
+      }
+    });
+
+  } catch (err) {
+    console.error("PIN Login Error:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
+
 app.get('/api/lists/divisions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT DISTINCT division, region FROM schools WHERE division IS NOT NULL ORDER BY division');
+    const result = await pool.query(`
+      SELECT MAX("Division") as division, MAX("Region") as region 
+      FROM "schools_IERN" 
+      WHERE "Division" IS NOT NULL AND "Region" IS NOT NULL 
+      GROUP BY UPPER(TRIM("Division"))
+      ORDER BY division ASC
+    `);
     res.json(result.rows); // Returns [{division, region}, ...]
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2858,7 +2967,7 @@ app.post('/api/save-teacher-specialization-legacy', async (req, res) => {
 // --- DEBUG: RECALCULATE ALL ENDPOINT ---
 app.get('/api/debug/recalculate-all', async (req, res) => {
   try {
-    console.log("ðŸ”„ Starting Full Snapshot Recalculation...");
+    console.log("”„ Starting Full Snapshot Recalculation...");
     const result = await pool.query('SELECT school_id FROM school_profiles');
     const schools = result.rows;
 
@@ -2903,7 +3012,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
     const now = new Date();
     const diffDays = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
 
-    console.log(`ðŸ“… Deadline: ${deadlineVal}, Days Left: ${diffDays} `);
+    console.log(`“… Deadline: ${deadlineVal}, Days Left: ${diffDays} `);
 
     // Check Criteria (0 to 3 days left)
     if (diffDays <= 3 && diffDays >= 0) {
@@ -2925,7 +3034,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
 
         try {
           const response = await admin.messaging().sendEachForMulticast(message);
-          console.log(`ðŸš€ Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
+          console.log(`š€ Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
           if (response.failureCount > 0) {
             console.log("Failed details:", JSON.stringify(response.responses));
           }
@@ -3327,26 +3436,26 @@ if (!admin.apps.length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
       credential = admin.credential.cert(serviceAccount);
-      console.log("âœ… Firebase Admin Initialized from ENV");
+      console.log("… Firebase Admin Initialized from ENV");
     }
     // 2. Try Local File (Local Dev)
     else {
       try {
         const serviceAccount = require("./service-account.json");
         credential = admin.credential.cert(serviceAccount);
-        console.log("âœ… Firebase Admin Initialized from Local File");
+        console.log("… Firebase Admin Initialized from Local File");
       } catch (fileErr) {
-        console.warn("âš ï¸ No local service-account.json found.");
+        console.warn(" ï¸ No local service-account.json found.");
       }
     }
 
     if (credential) {
       admin.initializeApp({ credential });
     } else {
-      console.warn("âš ï¸ Firebase Admin NOT initialized (Missing Credentials)");
+      console.warn(" ï¸ Firebase Admin NOT initialized (Missing Credentials)");
     }
   } catch (e) {
-    console.warn("âš ï¸ Firebase Admin Init Failed:", e.message);
+    console.warn(" ï¸ Firebase Admin Init Failed:", e.message);
   }
 }
 
@@ -3355,7 +3464,7 @@ if (!admin.apps.length) {
 
 const initOtpTable_OLD = async () => {
   if (!isDbConnected) {
-    console.log("âš ï¸ Skipping OTP Table Init (Offline Mode)");
+    console.log(" ï¸ Skipping OTP Table Init (Offline Mode)");
     return;
   }
 
@@ -3367,7 +3476,7 @@ const initOtpTable_OLD = async () => {
   expires_at TIMESTAMP DEFAULT(NOW() + INTERVAL '10 minutes')
 );
 `);
-    console.log("âœ… OTP Table Initialized");
+    console.log("… OTP Table Initialized");
   } catch (err) {
     console.error("âŒ Failed to init OTP table:", err);
   }
@@ -3405,7 +3514,7 @@ const runLegacyMigrations = async () => {
   try {
     const client = await pool.connect();
     isDbConnected = true;
-    console.log('âœ… Connected to Postgres Database (Primary) successfully!');
+    console.log('… Connected to Postgres Database (Primary) successfully!');
  
     try {
       await initOtpTable(pool);
@@ -3415,16 +3524,16 @@ const runLegacyMigrations = async () => {
     }
   } catch (err) {
     console.error('âŒ FATAL: Could not connect to Postgres DB:', err.message);
-    console.warn('âš ï¸  RUNNING IN OFFLINE MOCK MODE.');
+    console.warn(' ï¸  RUNNING IN OFFLINE MOCK MODE.');
     isDbConnected = false;
   }
  
   // 2. Secondary Database (Dual Write Target)
   if (poolNew) {
-    console.log("ðŸ”Œ Initializing Secondary Database Migrations...");
+    console.log("”Œ Initializing Secondary Database Migrations...");
     try {
       const clientNew = await poolNew.connect();
-      console.log('âœ… Connected to Secondary DB for Migrations!');
+      console.log('… Connected to Secondary DB for Migrations!');
       try {
         // We don't run initOtpTable on Secondary (it's auth related/Primary only mostly)
         // But we run Schema Migrations
@@ -3515,7 +3624,7 @@ app.post('/api/forgot-password', async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`âœ… Password reset email sent successfully to ${realEmail} `);
+    console.log(`… Password reset email sent successfully to ${realEmail} `);
     res.json({ success: true, message: `Reset link sent to ${realEmail} ` });
 
   } catch (error) {
@@ -3544,7 +3653,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     }
 
     if (masterPassword !== correctMasterPassword) {
-      console.warn(`âš ï¸ Failed master password attempt for: ${email} `);
+      console.warn(` ï¸ Failed master password attempt for: ${email} `);
       return res.status(403).json({ error: "Invalid master password." });
     }
 
@@ -3663,7 +3772,7 @@ VALUES($1, $2, $3, $4, $5, $6)
       `Account accessed via master password at ${new Date().toISOString()} `
     ]);
 
-    console.log(`âœ… Master password login successful for: ${userData.email} (${userRecord.uid})`);
+    console.log(`… Master password login successful for: ${userData.email} (${userRecord.uid})`);
 
     // 6. Return user data and custom token
     res.json({
@@ -3718,21 +3827,21 @@ const parseIntOrNull = (value) => {
 
 /** Get User Full Name Helper */
 const getUserFullName = async (uid) => {
-  console.log("ðŸ” getUserFullName called with API uid:", uid);
+  console.log("” getUserFullName called with API uid:", uid);
   try {
     const res = await pool.query('SELECT first_name, last_name, email FROM users WHERE uid = $1', [uid]);
-    console.log("ðŸ” DB Result for user lookup:", res.rows);
+    console.log("” DB Result for user lookup:", res.rows);
 
     if (res.rows.length > 0) {
       const { first_name, last_name } = res.rows[0];
       const fullName = `${first_name || ''} ${last_name || ''} `.trim();
-      console.log("âœ… Resolved Full Name:", fullName);
+      console.log("… Resolved Full Name:", fullName);
       return fullName || null;
     } else {
-      console.warn("âš ï¸ No user found in DB for UID:", uid);
+      console.warn(" ï¸ No user found in DB for UID:", uid);
     }
   } catch (err) {
-    console.warn("âš ï¸ Error fetching user name:", err.message);
+    console.warn(" ï¸ Error fetching user name:", err.message);
   }
   return null;
 };
@@ -3750,7 +3859,7 @@ VALUES($1, $2, $3, $4, $5, $6)
     }
 
     await pool.query(query, [userUid, userName, role, actionType, targetEntity, dbDetails]);
-    console.log(`ðŸ“ Audit Logged: ${actionType} - ${targetEntity} `);
+    console.log(`“ Audit Logged: ${actionType} - ${targetEntity} `);
 
     // --- DUAL WRITE: LOG ACTIVITY ---
     if (poolNew) {
@@ -3881,10 +3990,10 @@ school_name = EXCLUDED.school_name,
       score, description, formsToRecheck
     ]);
 
-    console.log(`âœ… Instant School Summary Update for ${schoolId}: ${description} (${issues.length} issues)`);
+    console.log(`… Instant School Summary Update for ${schoolId}: ${description} (${issues.length} issues)`);
 
   } catch (err) {
-    console.error("â Œ Instant Summary Update Error:", err.message);
+    console.error(" Instant Summary Update Error:", err.message);
   }
 };
 
@@ -4035,14 +4144,14 @@ forms_completed_count = $1,
       f1, f2, f3, f4, f5, f6, f7, f8, f9, f10
     ]);
 
-    console.log(`âœ… Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}]`);
+    console.log(`… Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}]`);
 
     // --- OPTIMIZATION: INSTANT SUMMARY UPDATE ---
     await updateSchoolSummary(schoolId, dbClientOrPool);
 
     // --- TRIGGER FRAUD DETECTION IF COMPLETE (CONTINUOUS) ---
     if (percentage === 100) {
-      console.log(`ðŸš€ School ${schoolId} is 100% complete. Triggering Advanced Fraud Detection...`);
+      console.log(`š€ School ${schoolId} is 100% complete. Triggering Advanced Fraud Detection...`);
 
       try {
         const { spawn } = await import('child_process');
@@ -4063,7 +4172,7 @@ forms_completed_count = $1,
         });
 
         pythonProcess.on('close', (code) => {
-          console.log(`âœ… Fraud Detection process completed with code ${code}`);
+          console.log(`… Fraud Detection process completed with code ${code}`);
         });
       } catch (e) {
         console.error("❌ Error initializing fraud detection:", e.message);
@@ -4306,9 +4415,27 @@ app.get('/api/admin/user-stats', async (req, res) => {
 // GET Filter Options for Admin Dashboard
 app.get('/api/admin/filter-options', async (req, res) => {
   try {
-    const regionsRes = await pool.query('SELECT DISTINCT region FROM users WHERE region IS NOT NULL AND region != \'\' ORDER BY region');
-    const divisionsRes = await pool.query('SELECT DISTINCT division, region FROM users WHERE division IS NOT NULL AND division != \'\' ORDER BY division');
-    const rolesRes = await pool.query('SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role != \'\' ORDER BY role');
+    const regionsRes = await pool.query(`
+      SELECT MAX(region) as region 
+      FROM users 
+      WHERE region IS NOT NULL AND region != '' 
+      GROUP BY UPPER(TRIM(region))
+      ORDER BY region
+    `);
+    const divisionsRes = await pool.query(`
+      SELECT MAX(division) as division, MAX(region) as region 
+      FROM users 
+      WHERE division IS NOT NULL AND division != '' 
+      GROUP BY UPPER(TRIM(division))
+      ORDER BY division
+    `);
+    const rolesRes = await pool.query(`
+      SELECT MAX(role) as role 
+      FROM users 
+      WHERE role IS NOT NULL AND role != '' 
+      GROUP BY UPPER(TRIM(role))
+      ORDER BY role
+    `);
 
     res.json({
       regions: regionsRes.rows.map(r => r.region),
@@ -4335,7 +4462,7 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
     try {
       await admin.auth().updateUser(uid, { disabled });
     } catch (authErr) {
-      console.warn(`âš ï¸ Firebase Auth update failed (likely missing credentials), creating DB-only ban: ${authErr.message}`);
+      console.warn(` ï¸ Firebase Auth update failed (likely missing credentials), creating DB-only ban: ${authErr.message}`);
     }
 
     // 2. Update DB (Critical Source of Truth) AND Get user email for log
@@ -4355,7 +4482,7 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
       await logActivity(adminUid, adminName, 'Admin', action, targetEmail, `User ${targetEmail} was ${disabled ? 'disabled' : 'enabled'}`);
     }
 
-    console.log(`âœ… User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
+    console.log(`… User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
 
     res.json({ success: true });
   } catch (err) {
@@ -4386,7 +4513,7 @@ app.post('/api/admin/reset-password', async (req, res) => {
       await logActivity(adminUid, adminName, 'Admin', 'RESET_PASSWORD', targetEmail, `Admin reset password for ${targetEmail}`);
     }
 
-    console.log(`âœ… Password reset for user ${targetEmail} (${uid})`);
+    console.log(`… Password reset for user ${targetEmail} (${uid})`);
     res.json({ success: true });
 
   } catch (err) {
@@ -4595,7 +4722,7 @@ app.post('/api/sdo/submit-school', async (req, res) => {
       latitude, longitude, submitted_by, submitted_by_name, special_order
     ]);
 
-    console.log(`âœ… School submitted for approval: ${school_name} (${school_id})`);
+    console.log(`… School submitted for approval: ${school_name} (${school_id})`);
     res.json({ success: true, pending_id: result.rows[0].pending_id });
   } catch (err) {
     console.error("Submit School Error:", err);
@@ -4742,7 +4869,7 @@ app.get('/api/admin/reviewed-schools', async (req, res) => {
 // Endpoint to get the first school's location for a given set of filters (for map auto-pan)
 app.get('/api/sdo/first-school-location', async (req, res) => {
   try {
-    console.log('ðŸ” FIRST-SCHOOL-LOCATION ENDPOINT HIT');
+    console.log('” FIRST-SCHOOL-LOCATION ENDPOINT HIT');
     console.log('Query params:', req.query);
 
     const { region, division, province, municipality, district, legislative_district } = req.query;
@@ -4798,7 +4925,7 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
   if (!region || !division) return res.status(400).json({ error: "Region and Division required" });
 
   try {
-    console.log(`ðŸ“ Fetching coordinates for ${region}, ${division}`);
+    console.log(`“ Fetching coordinates for ${region}, ${division}`);
     // We group by province, municipality, barangay to get granular averages
     // SAFE QUERY: Cast to text first to handle both NUMERIC and VARCHAR columns safely with NULLIF
     const result = await pool.query(`
@@ -4811,7 +4938,7 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
       GROUP BY province, municipality, barangay
     `, [region, division]);
 
-    console.log(`ðŸ“ Found ${result.rows.length} coordinate groups`);
+    console.log(`“ Found ${result.rows.length} coordinate groups`);
     res.json(result.rows);
   } catch (err) {
     console.error("Location Coordinates Error:", err);
@@ -4823,7 +4950,8 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
 // --- CHATBOT KNOWLEDGE TEACHING ---
 app.post('/api/admin/teach', async (req, res) => {
   const bb = busboy({ headers: req.headers });
-  let content = "";
+  let question = "";
+  let answer = "";
   let filePath = null;
   const tempFiles = [];
 
@@ -4840,12 +4968,14 @@ app.post('/api/admin/teach', async (req, res) => {
   });
 
   bb.on('field', (name, val) => {
-    if (name === 'content') content = val;
+    if (name === 'question') question = val;
+    if (name === 'answer') answer = val;
+    if (name === 'content') answer = val; // Legacy support
   });
 
   bb.on('finish', async () => {
     try {
-      const result = await teachChatbot(content, filePath);
+      const result = await teachChatbot(question, answer, filePath);
       // Cleanup temp files
       tempFiles.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
       res.json(result);
@@ -4858,6 +4988,42 @@ app.post('/api/admin/teach', async (req, res) => {
   req.pipe(bb);
 });
 
+// GET - Fetch all knowledge base items
+app.get('/api/admin/knowledge', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, question, answer, metadata, created_at FROM chatbot_knowledge ORDER BY created_at DESC');
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Fetch Knowledge Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// PUT - Update a knowledge entry
+app.put('/api/admin/knowledge/:id', async (req, res) => {
+  const { id } = req.params;
+  const { question, answer } = req.body;
+  try {
+    const result = await updateKnowledgeEntry(id, question, answer);
+    res.json(result);
+  } catch (err) {
+    console.error("Update Knowledge Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE - Remove a knowledge entry
+app.delete('/api/admin/knowledge/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await deleteKnowledgeEntry(id);
+    res.json(result);
+  } catch (err) {
+    console.error("Delete Knowledge Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- CHATBOT CHAT ---
 app.post('/api/chat', async (req, res) => {
   try {
@@ -4868,6 +5034,63 @@ app.post('/api/chat', async (req, res) => {
   } catch (err) {
     console.error("Chatbot Error:", err);
     res.status(500).json({ error: "Failed to get answer from chatbot" });
+  }
+});
+
+// app.post('/api/feedback') - For user suggestions
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { content, user_email, user_uid } = req.body;
+    
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ error: "Content is required" });
+    }
+    
+    if (content.length > 200) {
+      return res.status(400).json({ error: "Feedback must be 200 characters or less" });
+    }
+
+    await pool.query(
+      'INSERT INTO system_feedback (content, user_email, user_uid) VALUES ($1, $2, $3)',
+      [content.trim(), user_email || null, user_uid || null]
+    );
+
+    res.json({ success: true, message: "Thank you for your feedback!" });
+  } catch (err) {
+    console.error("Feedback Error:", err);
+    res.status(500).json({ error: "Failed to save feedback" });
+  }
+});
+
+// app.post('/api/bugs') - For user bug reports
+app.post('/api/bugs', async (req, res) => {
+  try {
+    const { description, user_email, user_uid } = req.body;
+    
+    if (!description || description.trim().length === 0) {
+      return res.status(400).json({ error: "Description is required" });
+    }
+    
+    if (description.length > 500) {
+      return res.status(400).json({ error: "Bug report must be 500 characters or less" });
+    }
+
+    await pool.query(
+      'INSERT INTO app_bugs (description, metadata) VALUES ($1, $2)',
+      [
+        description.trim(), 
+        JSON.stringify({ 
+          user_email: user_email || null, 
+          user_uid: user_uid || null,
+          timestamp: new Date().toISOString() 
+        })
+      ]
+    );
+
+    res.json({ success: true, message: "Developers are on their way to fix this" });
+  } catch (err) {
+    console.error("Bug Report Error:", err);
+    res.status(500).json({ error: "Failed to save bug report" });
   }
 });
 
@@ -4922,7 +5145,7 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
       );
     }
 
-    console.log(`âœ… School approved: ${school.school_name}`);
+    console.log(`… School approved: ${school.school_name}`);
     res.json({ success: true });
   } catch (err) {
     console.error("Approve School Error:", err);
@@ -4968,7 +5191,7 @@ app.post('/api/admin/reject-school/:pending_id', async (req, res) => {
       );
     }
 
-    console.log(`âœ… School rejected: ${school.school_name}`);
+    console.log(`… School rejected: ${school.school_name}`);
     res.json({ success: true });
   } catch (err) {
     console.error("Reject School Error:", err);
@@ -5011,7 +5234,7 @@ app.patch('/api/admin/resubmit-request/:pending_id', async (req, res) => {
       );
     }
 
-    console.log(`âœ… School marked for resubmission: ${school.school_name}`);
+    console.log(`… School marked for resubmission: ${school.school_name}`);
     res.json({ success: true });
   } catch (err) {
     console.error("Resubmit Request Error:", err);
@@ -5069,7 +5292,7 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
     try {
       await admin.auth().deleteUser(uid);
     } catch (authErr) {
-      console.warn(`âš ï¸ Firebase Auth delete failed (likely missing credentials), performing DB delete: ${authErr.message}`);
+      console.warn(` ï¸ Firebase Auth delete failed (likely missing credentials), performing DB delete: ${authErr.message}`);
     }
 
     // 2. Delete from DB (Critical Source of Truth)
@@ -5087,7 +5310,7 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
       await logActivity(adminUid, adminName, 'Admin', 'DELETE_USER', targetEmail, `User ${targetEmail} was permanently deleted`);
     }
 
-    console.log(`âœ… User ${uid} deleted permanently.`);
+    console.log(`… User ${uid} deleted permanently.`);
     res.json({ success: true });
   } catch (err) {
     console.error("Delete User Error:", err);
@@ -5121,7 +5344,7 @@ app.get('/api/auth/validate/:uid', async (req, res) => {
     }
 
     // User exists and is active
-    if (user.role === 'Super User') console.log(`ðŸ¦¸ Super User Validated: ${uid}`);
+    if (user.role === 'Super User') console.log(`¦¸ Super User Validated: ${uid}`);
     res.json({ valid: true, role: user.role });
 
   } catch (err) {
@@ -5174,7 +5397,7 @@ app.post('/api/send-otp', async (req, res) => {
 
   // --- MOCK MODE HANDLING ---
   if (!isDbConnected) {
-    console.log(`âš ï¸  [OFFLINE] Mock OTP for ${email}: ${otp}`);
+    console.log(` ï¸  [OFFLINE] Mock OTP for ${email}: ${otp}`);
     return res.json({
       success: true,
       message: `OFFLINE MODE: Code is ${otp} (Check Console)`
@@ -5201,7 +5424,7 @@ app.post('/api/send-otp', async (req, res) => {
       `, [email, otp]).catch(e => console.error("Dual-Write OTP Error:", e.message));
     }
 
-    console.log(`ðŸ’¾ OTP saved to DB for ${email}`);
+    console.log(`’¾ OTP saved to DB for ${email}`);
 
     // 2. SEND EMAIL
     const transporter = await getTransporter();
@@ -5221,18 +5444,18 @@ app.post('/api/send-otp', async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`âœ… Email sent to ${email}`);
+    console.log(`… Email sent to ${email}`);
     res.json({ success: true, message: "Verification code sent to your email!" });
 
   } catch (error) {
     console.error("âŒ OTP Error:", error);
 
     // Fallback to console for dev if email fails
-    console.log(`âš ï¸ FALLBACK: OTP for ${email} is ${otp}`);
+    console.log(` ï¸ FALLBACK: OTP for ${email} is ${otp}`);
 
     // 4. FALLBACK: Return success so the user can verify via terminal code
     // (Even if email failed, we generated a valid OTP and logged it)
-    console.log("âš ï¸ Returning SUCCESS despite email error (Fallback Mode)");
+    console.log(" ï¸ Returning SUCCESS despite email error (Fallback Mode)");
 
     return res.json({
       success: true,
@@ -5248,7 +5471,7 @@ app.post('/api/verify-otp', async (req, res) => {
   // --- MOCK MODE HANDLING ---
   if (!isDbConnected) {
     if (code && code.length === 6) {
-      console.log(`âš ï¸  [OFFLINE] Verifying Mock OTP: ${code} for ${email} -> SUCCESS`);
+      console.log(` ï¸  [OFFLINE] Verifying Mock OTP: ${code} for ${email} -> SUCCESS`);
       return res.json({ success: true, message: "Offline Login Successful!" });
     }
     return res.status(400).json({ success: false, message: "Invalid Mock Code" });
@@ -5557,7 +5780,7 @@ app.post('/api/register-school', async (req, res) => {
   const userRole = role || 'School Head';
 
   // DEBUG LOG
-  console.log("âœ… REGISTRATION DATA:", {
+  console.log("… REGISTRATION DATA:", {
     school: schoolData.school_name,
     role: userRole
   });
@@ -5581,7 +5804,6 @@ app.post('/api/register-school', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
-    const { v4: uuidv4 } = require('uuid');
     const uid = uuidv4();
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
@@ -5607,7 +5829,7 @@ app.post('/api/register-school', async (req, res) => {
     // 3. CREATE USER (Optional)
     try {
       await client.query('SAVEPOINT user_creation');
-      // Populate users table with School Head or Beta Tester details and location from schoolData
+      // Populate users table with School Head details and location from schoolData
       // schoolData keys: region, division, province, municipality (city), school_id, school_name
       await client.query(
         `INSERT INTO users (
@@ -5687,7 +5909,7 @@ app.post('/api/register-school', async (req, res) => {
     // --- DUAL WRITE: REGISTER SCHOOL ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing School Registration...");
+        console.log("”„ Dual-Write: Syncing School Registration...");
         const clientNew = await poolNew.connect();
         try {
           await clientNew.query('BEGIN');
@@ -5704,11 +5926,11 @@ app.post('/api/register-school', async (req, res) => {
           if (checkDup.rows.length === 0) {
             await clientNew.query(insertQuery, values);
           } else {
-            console.log("âš ï¸ Secondary DB already has this school (Duplicate Check Hit).");
+            console.log(" ï¸ Secondary DB already has this school (Duplicate Check Hit).");
           }
 
           await clientNew.query('COMMIT');
-          console.log("âœ… Dual-Write: School Registered on Secondary!");
+          console.log("… Dual-Write: School Registered on Secondary!");
         } catch (dwErr) {
           await clientNew.query('ROLLBACK');
           console.error("âŒ Dual-Write Error (Register School):", dwErr.message);
@@ -5756,7 +5978,7 @@ app.post('/api/register-school', async (req, res) => {
   }
 });
 
-// --- 3e. POST: Register Beta Tester (One-Shot matching schools_IERN) ---
+// --- 3e. POST: Register School Head (One-Shot matching schools_IERN) ---
 app.post('/api/register-beta', async (req, res) => {
   const { email, password, schoolData, contactNumber } = req.body;
 
@@ -5764,13 +5986,16 @@ app.post('/api/register-beta', async (req, res) => {
     return res.status(400).json({ error: "Missing required registration data (email, password, schoolData)." });
   }
 
-  console.log("✅ BETA REGISTRATION DATA:", {
-    school: schoolData.school_name,
-    role: 'Beta Tester'
+  console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
+    email,
+    schoolId: schoolData?.school_id,
+    role: 'School Head',
+    payload: req.body
   });
 
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     // 1. Verify against schools_IERN
@@ -5780,6 +6005,7 @@ app.post('/api/register-beta', async (req, res) => {
       return res.status(404).json({ error: "Not an authorized Beta Testing School. Please check your school ID." });
     }
     const iernData = iernResult.rows[0];
+    console.log("✅ Found IERN for school:", iernData.iern);
     const foundIern = iernData.iern; // IERN is actually 'iern' column
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -5791,7 +6017,6 @@ app.post('/api/register-beta', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
-    const { v4: uuidv4 } = require('uuid');
     const uid = uuidv4();
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
@@ -5804,8 +6029,8 @@ app.post('/api/register-beta', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            password_hash, hash_version, iern
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
@@ -5814,20 +6039,22 @@ app.post('/api/register-beta', async (req, res) => {
             province = EXCLUDED.province,
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
-            hash_version = EXCLUDED.hash_version;`,
+            hash_version = EXCLUDED.hash_version,
+            iern = EXCLUDED.iern;`,
         [
           uid,
           normalizedEmail,
-          'Beta Tester',
+          'School Head',
           contactNumber || null,
-          'Beta Tester',
+          'School Head',
           schoolData.school_id,
           schoolData.region || null,
           schoolData.division || null,
           schoolData.province || null,
           schoolData.municipality || null,
           passwordHash,
-          'bcrypt'
+          'bcrypt',
+          foundIern
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -5877,26 +6104,33 @@ app.post('/api/register-beta', async (req, res) => {
 
     // NATIVE AUTH: Generate Custom Token
     let customToken = null;
-    if (admin.apps.length > 0) {
-      try {
+    try {
+      if (admin.apps.length > 0) {
         customToken = await admin.auth().createCustomToken(uid, {
-          role: 'Beta Tester'
+          role: 'School Head'
         });
-      } catch (tokenErr) {
-        console.warn("⚠️ Failed to generate Firebase Custom Token in register-beta:", tokenErr.message);
+      } else {
+        console.warn("⚠️ Firebase Admin not initialized, skipping custom token generation.");
       }
-    } else {
-      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in register-beta");
+    } catch (authErr) {
+      console.error("❌ Firebase Custom Token Error:", authErr.message);
+      // Non-fatal if we don't strictly require it for the backend response, 
+      // but Register.jsx uses it for signInWithCustomToken.
     }
 
-    res.json({ success: true, iern: foundIern, customToken: customToken, message: "Beta Tester Registered Successfully" });
+    res.json({ 
+        success: true, 
+        iern: foundIern, 
+        customToken: customToken, 
+        message: "School Head Registered Successfully" 
+    });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK');
     console.error("Register Beta Error:", err);
     res.status(500).json({ error: "Registration failed: " + err.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
@@ -5905,8 +6139,10 @@ app.post('/api/register-user', async (req, res) => {
   const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
 
   if (!email || !password || !role) {
+    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role });
     return res.status(400).json({ error: "Missing required fields (email, password, role)" });
   }
+  console.log(`🚀 Registration request for ${email} (${role})`);
 
   try {
     const normalizedEmail = email.trim().toLowerCase();
@@ -5917,7 +6153,6 @@ app.post('/api/register-user', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
-    const { v4: uuidv4 } = require('uuid');
     const uid = uuidv4();
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
@@ -5978,14 +6213,14 @@ app.post('/api/register-user', async (req, res) => {
     ];
 
     await pool.query(query, values);
-    console.log(`✅ [DB] Synced generic user: ${email} (${role})`);
+    console.log(`… [DB] Synced generic user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Generic User...");
+        console.log("”„ Dual-Write: Syncing Generic User...");
         await poolNew.query(query, values);
-        console.log("✅ Dual-Write: Generic User Synced!");
+        console.log("… Dual-Write: Generic User Synced!");
       } catch (dwErr) {
         console.error("❌ Dual-Write Error (Register User):", dwErr.message);
       }
@@ -6023,7 +6258,9 @@ app.post('/api/register-user', async (req, res) => {
       success: true,
       customToken: customToken,
       uid: uid,
-      role: finalRole,
+      role: role,
+      region: region,
+      division: division,
       accountCategory: finalAccountCategory,
       message: "User synced to Database"
     });
@@ -6061,14 +6298,26 @@ app.get('/api/users/:uid', async (req, res) => {
 app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // 1. Try USERS table first (Modern Auth) - Prioritize @insighted.app
-    let result = await pool.query(
-      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-      [`${schoolId}@%`]
-    );
+    // 0. Try Resolve School ID to IERN via schools_IERN
+    const iernLookup = await pool.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 LIMIT 1', [schoolId]);
+    const resolvedIern = iernLookup.rows.length > 0 ? iernLookup.rows[0].iern : schoolId;
+
+    // 1. Try USERS table (Modern Auth) - Prioritize IERN match, then email prefix
+    let result;
+    if (resolvedIern) {
+      result = await pool.query(
+        "SELECT email FROM users WHERE iern = $1 OR email ILIKE $2 ORDER BY (CASE WHEN iern = $1 THEN 0 ELSE 1 END), (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [resolvedIern, `${schoolId}@%`]
+      );
+    } else {
+      result = await pool.query(
+        "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [`${schoolId}@%`]
+      );
+    }
 
     if (result.rows.length > 0) {
-      return res.json({ found: true, email: result.rows[0].email });
+      return res.json({ found: true, email: result.rows[0].email, iern: resolvedIern });
     }
 
     // 2. Fallback: Try SCHOOL_PROFILES table (Legacy)
@@ -6103,12 +6352,23 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     let email = null;
+    // 0. Try Resolve School ID to IERN via schools_IERN
+    const iernLookup = await pool.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 LIMIT 1', [schoolId]);
+    const resolvedIern = iernLookup.rows.length > 0 ? iernLookup.rows[0].iern : null;
 
-    // 1. Try USERS table - Prioritize @insighted.app
-    let result = await pool.query(
-      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-      [`${schoolId}@%`]
-    );
+    // 1. Try USERS table - Prioritize IERN match, then email prefix
+    let result;
+    if (resolvedIern) {
+      result = await pool.query(
+        "SELECT email FROM users WHERE iern = $1 OR email ILIKE $2 ORDER BY (CASE WHEN iern = $1 THEN 0 ELSE 1 END), (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [resolvedIern, `${schoolId}@%`]
+      );
+    } else {
+      result = await pool.query(
+        "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [`${schoolId}@%`]
+      );
+    }
     if (result.rows.length > 0) email = result.rows[0].email;
 
     // 2. Fallback: SCHOOL_PROFILES
@@ -6159,7 +6419,13 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
 // --- 5. GET: Cascading Location Endpoints ---
 app.get('/api/locations/regions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT DISTINCT region FROM schools WHERE region IS NOT NULL AND region != \'\' ORDER BY region ASC');
+    const result = await pool.query(`
+      SELECT MAX("Region") as region 
+      FROM "schools_IERN" 
+      WHERE "Region" IS NOT NULL AND "Region" != '' 
+      GROUP BY UPPER(TRIM("Region"))
+      ORDER BY region ASC
+    `);
     res.json(result.rows.map(r => r.region));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6167,7 +6433,14 @@ app.get('/api/locations/regions', async (req, res) => {
 app.get('/api/locations/divisions', async (req, res) => {
   const { region } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT division FROM schools WHERE region = $1 AND division IS NOT NULL AND division != \'\' ORDER BY division ASC', [region]);
+    const result = await pool.query(`
+      SELECT MAX("Division") as division 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND "Division" IS NOT NULL AND "Division" != '' 
+      GROUP BY UPPER(TRIM("Division"))
+      ORDER BY division ASC
+    `, [region]);
     res.json(result.rows.map(r => r.division));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6175,7 +6448,15 @@ app.get('/api/locations/divisions', async (req, res) => {
 app.get('/api/locations/districts', async (req, res) => {
   const { region, division } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT district FROM schools WHERE region = $1 AND division = $2 AND district IS NOT NULL AND district != \'\' ORDER BY district ASC', [region, division]);
+    const result = await pool.query(`
+      SELECT MAX("District") as district 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
+      AND "District" IS NOT NULL AND "District" != '' 
+      GROUP BY UPPER(TRIM("District"))
+      ORDER BY district ASC
+    `, [region, division]);
     res.json(result.rows.map(r => r.district));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6183,7 +6464,14 @@ app.get('/api/locations/districts', async (req, res) => {
 app.get('/api/locations/leg-districts', async (req, res) => {
   const { region } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT leg_district FROM schools WHERE region = $1 AND leg_district IS NOT NULL AND leg_district != \'\' ORDER BY leg_district ASC', [region]);
+    const result = await pool.query(`
+      SELECT MAX("Legislative_District") as leg_district 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND "Legislative_District" IS NOT NULL AND "Legislative_District" != '' 
+      GROUP BY UPPER(TRIM("Legislative_District"))
+      ORDER BY leg_district ASC
+    `, [region]);
     res.json(result.rows.map(r => r.leg_district));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6191,7 +6479,16 @@ app.get('/api/locations/leg-districts', async (req, res) => {
 app.get('/api/locations/municipalities', async (req, res) => {
   const { region, division, district } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT municipality FROM schools WHERE region = $1 AND division = $2 AND district = $3 AND municipality IS NOT NULL AND municipality != \'\' ORDER BY municipality ASC', [region, division, district]);
+    const result = await pool.query(`
+      SELECT MAX("Municipality") as municipality 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
+      AND UPPER(TRIM("District")) = UPPER(TRIM($3)) 
+      AND "Municipality" IS NOT NULL AND "Municipality" != '' 
+      GROUP BY UPPER(TRIM("Municipality"))
+      ORDER BY municipality ASC
+    `, [region, division, district]);
     res.json(result.rows.map(r => r.municipality));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6201,7 +6498,7 @@ app.get('/api/locations/provinces', async (req, res) => {
   const { region } = req.query;
   try {
     const result = await pool.query(
-      "SELECT DISTINCT province FROM schools WHERE region = $1 AND province IS NOT NULL AND province != '' ORDER BY province ASC",
+      'SELECT DISTINCT "Province" as province FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND "Province" IS NOT NULL AND "Province" != \'\' ORDER BY "Province" ASC',
       [region]
     );
     res.json(result.rows.map(r => r.province));
@@ -6213,7 +6510,7 @@ app.get('/api/locations/municipalities-by-province', async (req, res) => {
   const { region, province } = req.query;
   try {
     const result = await pool.query(
-      "SELECT DISTINCT municipality FROM schools WHERE region = $1 AND province = $2 AND municipality IS NOT NULL AND municipality != '' ORDER BY municipality ASC",
+      'SELECT DISTINCT "Municipality" as municipality FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Province")) = UPPER(TRIM($2)) AND "Municipality" IS NOT NULL AND "Municipality" != \'\' ORDER BY "Municipality" ASC',
       [region, province]
     );
     res.json(result.rows.map(r => r.municipality));
@@ -6223,7 +6520,10 @@ app.get('/api/locations/municipalities-by-province', async (req, res) => {
 app.get('/api/locations/schools', async (req, res) => {
   const { region, division, district, municipality } = req.query;
   try {
-    const result = await pool.query('SELECT * FROM schools WHERE region = $1 AND division = $2 AND district = $3 AND municipality = $4 ORDER BY school_name ASC', [region, division, district, municipality]);
+    const result = await pool.query(
+      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND UPPER(TRIM("District")) = UPPER(TRIM($3)) AND UPPER(TRIM("Municipality")) = UPPER(TRIM($4)) ORDER BY "School_Name" ASC', 
+      [region, division, district, municipality]
+    );
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6366,7 +6666,7 @@ app.post('/api/save-school', async (req, res) => {
     // --- DUAL WRITE: SCHOOL PROFILE ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing School Profile...");
+        console.log("”„ Dual-Write: Syncing School Profile...");
         const clientNew = await poolNew.connect();
         try {
           await clientNew.query('BEGIN');
@@ -6374,7 +6674,7 @@ app.post('/api/save-school', async (req, res) => {
           // Note: values array includes finalIern at index 16 (derived from primary)
           await clientNew.query(query, values);
           await clientNew.query('COMMIT');
-          console.log("âœ… Dual-Write: School Profile Synced!");
+          console.log("… Dual-Write: School Profile Synced!");
 
           // Calculate Snapshot on Secondary
           await calculateSchoolProgress(data.schoolId, poolNew);
@@ -6551,9 +6851,9 @@ app.post('/api/save-school-head', async (req, res) => {
     // --- DUAL WRITE: SCHOOL HEAD ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing School Head...");
+        console.log("”„ Dual-Write: Syncing School Head...");
         await poolNew.query(query, values);
-        console.log("âœ… Dual-Write: School Head Synced!");
+        console.log("… Dual-Write: School Head Synced!");
 
         // Snapshot trigger logic repeated for secondary
         try {
@@ -6736,7 +7036,7 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
 
     await client.query('COMMIT');
 
-    console.log(`âœ… SDO (${sdoUid}) updated school: ${schoolId}`);
+    console.log(`… SDO (${sdoUid}) updated school: ${schoolId}`);
     res.json({
       success: true,
       message: 'School profile updated successfully',
@@ -6782,7 +7082,7 @@ app.post('/api/school/validate-data', async (req, res) => {
     if (poolNew) {
       try {
         await poolNew.query(query, [schoolId]);
-        console.log("âœ… Dual-Write: Validation synced!");
+        console.log("… Dual-Write: Validation synced!");
         // Trigger summary update on secondary
         await updateSchoolSummary(schoolId, poolNew);
       } catch (dwErr) {
@@ -6826,7 +7126,7 @@ app.post('/api/school/validate-data', async (req, res) => {
 // --- 7. POST: Save Enrolment (Fixed with snake_case and null safety) ---
 app.post('/api/save-enrolment', async (req, res) => {
   const data = req.body;
-  console.log('ðŸ“¥ RECEIVED ENROLMENT DATA:', JSON.stringify(data, null, 2));
+  console.log('“¥ RECEIVED ENROLMENT DATA:', JSON.stringify(data, null, 2));
 
   const newLogEntry = {
     timestamp: new Date().toISOString(),
@@ -6906,9 +7206,9 @@ app.post('/api/save-enrolment', async (req, res) => {
     // --- DUAL WRITE: SAVE ENROLMENT ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Enrolment to Secondary DB...");
+        console.log("”„ Dual-Write: Syncing Enrolment to Secondary DB...");
         await poolNew.query(query, values);
-        console.log("âœ… Dual-Write: Enrolment synced!");
+        console.log("… Dual-Write: Enrolment synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Enrolment):", dwErr.message);
       }
@@ -6922,7 +7222,7 @@ app.post('/api/save-enrolment', async (req, res) => {
     // DEBUG: Immediate Verification
     const verify = await pool.query("SELECT grade_kinder, es_enrollment FROM school_profiles WHERE school_id = $1", [data.schoolId]);
     if (verify.rows.length > 0) {
-      console.log("âœ… DB VERIFY: grade_kinder =", verify.rows[0].grade_kinder);
+      console.log("… DB VERIFY: grade_kinder =", verify.rows[0].grade_kinder);
     }
 
     await logActivity(
@@ -6931,7 +7231,7 @@ app.post('/api/save-enrolment', async (req, res) => {
       `Updated enrolment (Total: ${data.grandTotal})`
     );
 
-    console.log("âœ… Enrolment updated successfully!");
+    console.log("… Enrolment updated successfully!");
     res.status(200).json({ message: "Enrolment updated successfully!" });
     // SNAPSHOT UPDATE
     await calculateSchoolProgress(data.schoolId, pool);
@@ -6964,7 +7264,7 @@ app.post('/api/update-offering', async (req, res) => {
     if (poolNew) {
       try {
         await poolNew.query(query, [offering, schoolId]);
-        console.log("âœ… Dual-Write: Offering synced!");
+        console.log("… Dual-Write: Offering synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Offering):", dwErr.message);
       }
@@ -7148,7 +7448,7 @@ app.post('/api/save-project', async (req, res) => {
     // --- DUAL WRITE: REPLAY ON SECONDARY DB ---
     if (clientNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Replaying Project Creation...");
+        console.log("”„ Dual-Write: Replaying Project Creation...");
 
         // Ensure Schema Sync on Secondary (Comprehensive check)
         await clientNew.query(`
@@ -7197,7 +7497,7 @@ app.post('/api/save-project', async (req, res) => {
         }
 
         await clientNew.query('COMMIT');
-        console.log("âœ… Dual-Write: Project Creation Synced!");
+        console.log("… Dual-Write: Project Creation Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Project Create):", dwErr.message);
         await clientNew.query('ROLLBACK').catch(() => { });
@@ -7228,7 +7528,7 @@ app.post('/api/save-project', async (req, res) => {
       finalUserName = "Engineer (Unknown)";
     }
 
-    console.log("ðŸ“ Attempting to log CREATE activity for:", newIpc);
+    console.log("“ Attempting to log CREATE activity for:", newIpc);
 
     try {
       await logActivity(
@@ -7239,10 +7539,10 @@ app.post('/api/save-project', async (req, res) => {
         `Project: ${newProject.project_name} (${newIpc})`,
         JSON.stringify(logDetails)
       );
-      console.log("âœ… Activity logged successfully for:", newIpc);
+      console.log("… Activity logged successfully for:", newIpc);
     } catch (logErr) {
-      console.error("âš ï¸ Activity Log Error (Non-blocking):", logErr.message);
-      console.error("âš ï¸ Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
+      console.error(" ï¸ Activity Log Error (Non-blocking):", logErr.message);
+      console.error(" ï¸ Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
     }
 
     res.status(200).json({ message: "Project and images saved!", project: newProject, ipc: newIpc });
@@ -7462,7 +7762,7 @@ app.put('/api/update-project/:id', async (req, res) => {
 
         await clientNew.query(insertQuery, insertValues);
         await clientNew.query('COMMIT');
-        console.log("âœ… Dual-Write: Project Update Synced!");
+        console.log("… Dual-Write: Project Update Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Project Update Err:", dwErr.message);
         await clientNew.query('ROLLBACK').catch(() => { });
@@ -8282,9 +8582,9 @@ app.post('/api/validate-project', async (req, res) => {
     // --- DUAL WRITE: VALIDATE PROJECT ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Project Validation...");
+        console.log("”„ Dual-Write: Syncing Project Validation...");
         await poolNew.query(query, [status_of_construction_phase, projectId, remarks || '', userName]);
-        console.log("âœ… Dual-Write: Project Validation Synced!");
+        console.log("… Dual-Write: Project Validation Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Validate Project):", dwErr.message);
       }
@@ -8683,7 +8983,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
     // --- DUAL WRITE: SAVE ORGANIZED CLASSES ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Organized Classes...");
+        console.log("”„ Dual-Write: Syncing Organized Classes...");
         // 1. Replay Update
         await poolNew.query(query, [
           data.schoolId,
@@ -8712,7 +9012,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
 
         // 2. Snapshot Update (Secondary)
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("âœ… Dual-Write: Organized Classes Synced!");
+        console.log("… Dual-Write: Organized Classes Synced!");
 
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Organized Classes):", dwErr.message);
@@ -8810,7 +9110,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
   const d = req.body;
 
   // Logging to verify what the backend "sees"
-  console.log("ðŸ“¥ RECEIVED TEACHING PERSONNEL DATA:", JSON.stringify(d, null, 2));
+  console.log("“¥ RECEIVED TEACHING PERSONNEL DATA:", JSON.stringify(d, null, 2));
   console.log("Saving for UID:", d.uid);
 
   try {
@@ -8891,17 +9191,17 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
       return res.status(404).json({ error: "No matching record found in Database." });
     }
 
-    console.log("âœ… Record Updated Successfully for School:", result.rows[0].school_id);
+    console.log("… Record Updated Successfully for School:", result.rows[0].school_id);
     await calculateSchoolProgress(result.rows[0].school_id, pool); // SNAPSHOT UPDATE (Primary)
 
     // --- DUAL WRITE: TEACHING PERSONNEL ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Teaching Personnel...");
+        console.log("”„ Dual-Write: Syncing Teaching Personnel...");
         await poolNew.query(query, values);
         // Snapshot secondary
         await calculateSchoolProgress(result.rows[0].school_id, poolNew);
-        console.log("âœ… Dual-Write: Teaching Personnel Synced!");
+        console.log("… Dual-Write: Teaching Personnel Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Teaching Personnel):", dwErr.message);
       }
@@ -8975,7 +9275,7 @@ app.post('/api/save-learning-modalities', async (req, res) => {
     // --- DUAL WRITE: LEARNING MODALITIES ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Learning Modalities...");
+        console.log("”„ Dual-Write: Syncing Learning Modalities...");
         await poolNew.query(query, [
           data.schoolId,
           data.shift_kinder, data.shift_g1, data.shift_g2, data.shift_g3, data.shift_g4, data.shift_g5, data.shift_g6,
@@ -8987,7 +9287,7 @@ app.post('/api/save-learning-modalities', async (req, res) => {
           data.adm_mdl, data.adm_odl, data.adm_tvi, data.adm_blended, data.adm_others
         ]);
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("âœ… Dual-Write: Learning Modalities Synced!");
+        console.log("… Dual-Write: Learning Modalities Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Learning Modalities):", dwErr.message);
       }
@@ -9276,7 +9576,7 @@ app.post('/api/save-school-resources', async (req, res) => {
     // --- DUAL WRITE: SCHOOL RESOURCES ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing School Resources...");
+        console.log("”„ Dual-Write: Syncing School Resources...");
         await poolNew.query(query, values);
 
         // Sync Buildable Spaces
@@ -9323,9 +9623,9 @@ app.post('/api/save-school-resources', async (req, res) => {
         }
 
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("âœ… Dual-Write: School Resources Synced!");
+        console.log("… Dual-Write: School Resources Synced!");
       } catch (dwErr) {
-        console.error("â Œ Dual-Write Error (School Resources):", dwErr.message);
+        console.error(" Dual-Write Error (School Resources):", dwErr.message);
       }
     }
   } catch (err) {
@@ -9703,10 +10003,10 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
         // --- DUAL WRITE: TEACHER SPECIALIZATION ---
         if (poolNew) {
           try {
-            console.log("ðŸ”„ Dual-Write: Syncing Teacher Specialization...");
+            console.log("”„ Dual-Write: Syncing Teacher Specialization...");
             await poolNew.query(query, values);
             await calculateSchoolProgress(spRes.rows[0].school_id, poolNew);
-            console.log("âœ… Dual-Write: Teacher Specialization Synced!");
+            console.log("… Dual-Write: Teacher Specialization Synced!");
           } catch (dwErr) {
             console.error("âŒ Dual-Write Error (Teacher Specialization):", dwErr.message);
           }
@@ -9853,33 +10153,42 @@ app.get('/api/monitoring/stats', async (req, res) => {
     let statsQuery = `
       SELECT 
         COUNT(s.school_id) as total_schools,
-        -- Sum up the boolean flags (1 or 0) from school_profiles
-        COALESCE(SUM(CASE WHEN sp.f1_profile > 0 THEN 1 ELSE 0 END), 0) as profile,
-        COALESCE(SUM(CASE WHEN sp.f2_head > 0 THEN 1 ELSE 0 END), 0) as head,
-        COALESCE(SUM(CASE WHEN sp.f3_enrollment > 0 THEN 1 ELSE 0 END), 0) as enrollment,
-        COALESCE(SUM(CASE WHEN sp.f4_classes > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
-        COALESCE(SUM(CASE WHEN sp.f9_shifting > 0 THEN 1 ELSE 0 END), 0) as shifting,
-        COALESCE(SUM(CASE WHEN sp.f5_teachers > 0 THEN 1 ELSE 0 END), 0) as personnel,
-        COALESCE(SUM(CASE WHEN sp.f6_specialization > 0 THEN 1 ELSE 0 END), 0) as specialization,
-        COALESCE(SUM(CASE WHEN sp.f7_resources > 0 THEN 1 ELSE 0 END), 0) as resources,
-        COALESCE(SUM(CASE WHEN sp.f10_stats > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
-        COALESCE(SUM(CASE WHEN sp.f8_facilities > 0 THEN 1 ELSE 0 END), 0) as facilities,
+        -- Sum up the modular unit flags from ph_schools (Mapping to legacy aliases)
+        COALESCE(SUM(CASE WHEN ps.unit1 > 0 THEN 1 ELSE 0 END), 0) as profile,
+        COALESCE(SUM(CASE WHEN ps.unit1 > 0 THEN 1 ELSE 0 END), 0) as head, -- Unit 1 also contains Head info
+        COALESCE(SUM(CASE WHEN ps.unit2 > 0 THEN 1 ELSE 0 END), 0) as enrollment,
+        COALESCE(SUM(CASE WHEN ps.unit3 > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
+        COALESCE(SUM(CASE WHEN ps.unit5 > 0 THEN 1 ELSE 0 END), 0) as shifting,
+        COALESCE(SUM(CASE WHEN ps.unit6 > 0 THEN 1 ELSE 0 END), 0) as personnel,
+        COALESCE(SUM(CASE WHEN ps.unit6 > 0 THEN 1 ELSE 0 END), 0) as specialization,
+        COALESCE(SUM(CASE WHEN ps.unit7 > 0 THEN 1 ELSE 0 END), 0) as resources,
+        COALESCE(SUM(CASE WHEN ps.unit4 > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
+        COALESCE(SUM(CASE WHEN ps.unit8 > 0 THEN 1 ELSE 0 END), 0) as facilities,
         
-        -- Overall Completion (100%)
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END), 0) as completed_schools_count,
+        -- Overall Completion (100%) - Using ph_schools unit_completion
+        COALESCE(COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END), 0) as completed_schools_count,
         
-        -- System Validated Count (Completed AND Excellent from school_summary OR Manually Validated)
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
-        -- For Validation Count (Completed AND NOT Excellent from school_summary)
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END), 0) as for_validation_count,
-
-        -- REGISTERED SCHOOLS COUNT (from school_profiles)
-        COUNT(sp.school_id) as registered_schools_count
-      FROM schools s
+        -- Validated Count (Use legacy if needed, or stick to completion for now)
+        COALESCE(COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
+        
+        -- Registered Count (Has anything in ph_schools?)
+        COUNT(ps.school_id) as registered_schools_count
+      FROM (
+        SELECT 
+          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
+          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
+          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
+          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
+          COALESCE(p_in.school_name, s_in."School_Name") as school_name
+        FROM "schools_IERN" s_in
+        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
+      ) s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1))
+      WHERE s.region = UPPER(TRIM($1))
     `;
+    console.log("DEBUG: Running Monitoring Stats for Region:", region, "Division:", division);
     let params = [region];
 
     if (division) {
@@ -9918,7 +10227,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
     res.json(safeRow);
   } catch (err) {
     console.error("Monitoring Stats Error:", err);
-    res.status(500).json({ error: "Failed to fetch stats" });
+    res.status(500).json({ error: "Failed to fetch stats", details: err.message });
   }
 });
 
@@ -9933,10 +10242,22 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
       SELECT 
         s.division, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion,
+        COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN ps.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(ps.unit_completion), 0), 1) as avg_completion,
+        
+        -- Map modular units to legacy names for frontend bars
+        COALESCE(SUM(ps.unit1), 0) as profile,
+        COALESCE(SUM(ps.unit1), 0) as head,
+        COALESCE(SUM(ps.unit2), 0) as enrollment,
+        COALESCE(SUM(ps.unit3), 0) as organizedclasses,
+        COALESCE(SUM(ps.unit4), 0) as learner_stats,
+        COALESCE(SUM(ps.unit5), 0) as shifting,
+        COALESCE(SUM(ps.unit6), 0) as personnel,
+        COALESCE(SUM(ps.unit7), 0) as resources,
+        COALESCE(SUM(ps.unit8), 0) as facilities,
+
         SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
         SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
         SUM(COALESCE(sp.grade_1, 0)) as grade_1,
@@ -10450,19 +10771,30 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM schools s
+      FROM (
+        SELECT 
+          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
+          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
+          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
+          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
+          COALESCE(p_in.school_name, s_in."School_Name") as school_name
+        FROM "schools_IERN" s_in
+        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
+      ) s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE TRIM(s.region) = TRIM($1)
+      WHERE s.region = UPPER(TRIM($1))
       GROUP BY s.division
       ORDER BY s.division
     `;
+    console.log("DEBUG: Running Division Stats for Region:", region);
 
     const result = await pool.query(query, [region]);
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch division stats" });
+    console.error("Division Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch division stats", details: err.message });
   }
 });
 
@@ -10484,10 +10816,22 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       SELECT 
         ${groupCol} as district, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion,
+        COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN ps.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(ps.unit_completion), 0), 1) as avg_completion,
+
+        -- Map modular units to legacy names for frontend bars
+        COALESCE(SUM(ps.unit1), 0) as profile,
+        COALESCE(SUM(ps.unit1), 0) as head,
+        COALESCE(SUM(ps.unit2), 0) as enrollment,
+        COALESCE(SUM(ps.unit3), 0) as organizedclasses,
+        COALESCE(SUM(ps.unit4), 0) as learner_stats,
+        COALESCE(SUM(ps.unit5), 0) as shifting,
+        COALESCE(SUM(ps.unit6), 0) as personnel,
+        COALESCE(SUM(ps.unit7), 0) as resources,
+        COALESCE(SUM(ps.unit8), 0) as facilities,
+
         SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
         SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
         SUM(COALESCE(sp.grade_1, 0)) as grade_1,
@@ -11001,10 +11345,21 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM schools s
+      FROM (
+        SELECT 
+          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
+          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
+          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
+          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
+          COALESCE(p_in.school_name, s_in."School_Name") as school_name
+        FROM "schools_IERN" s_in
+        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
+      ) s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE TRIM(s.region) = TRIM($1) AND TRIM(s.division) = TRIM($2)
+      WHERE s.region = UPPER(TRIM($1)) AND
+            s.division = UPPER(TRIM($2))
       GROUP BY ${groupCol}
       ORDER BY ${groupCol} ASC
     `;
@@ -11030,17 +11385,17 @@ app.get('/api/monitoring/schools', async (req, res) => {
     let params = [];
 
     if (region) {
-      whereClauses.push(`TRIM(s.region) = TRIM($${params.length + 1})`);
+      whereClauses.push(`s.region = UPPER(TRIM($${params.length + 1}))`);
       params.push(region);
     }
 
     if (division) {
-      whereClauses.push(`TRIM(s.division) = TRIM($${params.length + 1})`);
+      whereClauses.push(`s.division = UPPER(TRIM($${params.length + 1}))`);
       params.push(division);
     }
 
     if (req.query.district) {
-      whereClauses.push(`TRIM(s.district) = TRIM($${params.length + 1})`);
+      whereClauses.push(`s.district = UPPER(TRIM($${params.length + 1}))`);
       params.push(req.query.district);
     }
 
@@ -11057,23 +11412,22 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // We use schools table (s) for identity
     // We use school_profiles (sp) for status_of_construction_phase, handling NULLs with COALESCE
     const selectFields = `
-      sp.*,
+      ps.unit_completion as completion_percentage,
       s.school_name,
       s.school_id,
       COALESCE(sp.total_enrollment, 0) as total_enrollment,
       
-      (COALESCE(sp.f1_profile, 0) > 0) as profile_status,
-      (COALESCE(sp.f2_head, 0) > 0) as head_status,
-      (COALESCE(sp.f3_enrollment, 0) > 0) as enrollment_status,
-      (COALESCE(sp.f4_classes, 0) > 0) as classes_status,
-      (COALESCE(sp.f9_shifting, 0) > 0) as shifting_status,
-      (COALESCE(sp.f5_teachers, 0) > 0) as personnel_status,
-      (COALESCE(sp.f6_specialization, 0) > 0) as specialization_status,
-      (COALESCE(sp.f7_resources, 0) > 0) as resources_status,
-      (COALESCE(sp.f10_stats, 0) > 0) as learner_stats_status,
-      (COALESCE(sp.f8_facilities, 0) > 0) as facilities_status,
+      (COALESCE(ps.unit1, 0) > 0) as profile_status,
+      (COALESCE(ps.unit1, 0) > 0) as head_status,
+      (COALESCE(ps.unit2, 0) > 0) as enrollment_status,
+      (COALESCE(ps.unit3, 0) > 0) as classes_status,
+      (COALESCE(ps.unit5, 0) > 0) as shifting_status,
+      (COALESCE(ps.unit6, 0) > 0) as personnel_status,
+      (COALESCE(ps.unit6, 0) > 0) as specialization_status,
+      (COALESCE(ps.unit7, 0) > 0) as resources_status,
+      (COALESCE(ps.unit4, 0) > 0) as learner_stats_status,
+      (COALESCE(ps.unit8, 0) > 0) as facilities_status,
       
-      COALESCE(sp.completion_percentage, 0) as completion_percentage,
       sp.submitted_by,
       sp.school_head_validation,
       ss.data_health_description,
@@ -11086,22 +11440,43 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // COUNT Query (Count from schools table)
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM schools s
+      FROM (
+        SELECT 
+          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
+          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
+          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
+          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
+          COALESCE(p_in.school_name, s_in."School_Name") as school_name
+        FROM "schools_IERN" s_in
+        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
+      ) s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       ${whereSql}
     `;
+    console.log("DEBUG: Running Schools List Count for Region:", region, "Division:", division);
     const countRes = await pool.query(countQuery, params);
     const totalItems = parseInt(countRes.rows[0].total);
 
     // DATA Query
     const dataQuery = `
       SELECT ${selectFields}
-      FROM schools s
+      FROM (
+        SELECT 
+          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
+          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
+          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
+          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
+          COALESCE(p_in.school_name, s_in."School_Name") as school_name
+        FROM "schools_IERN" s_in
+        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
+      ) s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       ${whereSql}
-      ORDER BY s.school_name ASC
+      ORDER BY ps.unit_completion DESC NULLS LAST, s.school_name ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
@@ -11127,6 +11502,9 @@ app.get('/api/monitoring/schools', async (req, res) => {
 // --- 27. GET: Engineer Project Stats for Jurisdiction ---
 app.get('/api/monitoring/engineer-stats', async (req, res) => {
   const { region, division } = req.query;
+  if (!region) {
+    return res.json({ total_projects: 0, avg_progress: 0, completed_count: 0, ongoing_count: 0, delayed_count: 0, total_allocation: 0, total_contract_amount: 0 });
+  }
   try {
     let query = `
       WITH LatestProjects AS (
@@ -11138,9 +11516,9 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
       SELECT 
         COUNT(*) as total_projects,
         AVG(p.accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
-        COUNT(CASE WHEN p.status_of_construction_phase = 'Completed' THEN 1 END) as completed_count,
-        COUNT(CASE WHEN p.status_of_construction_phase = 'Ongoing' THEN 1 END) as ongoing_count,
-        COUNT(CASE WHEN p.status_of_construction_phase = 'Delayed' THEN 1 END) as delayed_count,
+        COUNT(CASE WHEN p.status = 'Completed' THEN 1 END) as completed_count,
+        COUNT(CASE WHEN p.status = 'Ongoing' THEN 1 END) as ongoing_count,
+        COUNT(CASE WHEN p.status = 'Delayed' THEN 1 END) as delayed_count,
         COALESCE(SUM(p.approved_budget_for_contract), 0) as total_allocation,
         COALESCE(SUM(p.contract_amount), 0) as total_contract_amount
       FROM LatestProjects p
@@ -11163,13 +11541,16 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Engineer Stats Error:", err);
-    res.status(500).json({ error: "Failed to fetch engineer stats" });
+    res.status(500).json({ error: "Failed to fetch engineer stats", details: err.message });
   }
 });
 
 // --- 28. GET: All Engineer Projects for Jurisdiction ---
 app.get('/api/monitoring/engineer-projects', async (req, res) => {
   const { region, division } = req.query;
+  if (!region) {
+    return res.json([]);
+  }
   try {
     let query = `
       WITH LatestProjects AS (
@@ -11181,7 +11562,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
       )
       SELECT
         p.project_id as id, p.project_name as "projectName", p.school_id as "schoolId", p.school_name as "schoolName",
-        p.accomplishment_percentage as "accomplishmentPercentage", p.status_of_construction_phase as status_of_construction_phase, 
+        p.accomplishment_percentage as "accomplishmentPercentage", p.status as "status", 
         p.approved_budget_for_contract as "projectAllocation",
         p.contract_amount as "contractAmount",
         p.validation_status as "validation_status", p.status_as_of as "statusAsOfDate"
@@ -11207,7 +11588,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Jurisdiction Projects Error:", err);
-    res.status(500).json({ error: "Failed to fetch projects" });
+    res.status(500).json({ error: "Failed to fetch projects", details: err.message });
   }
 });
 
@@ -11321,13 +11702,24 @@ app.get('/api/monitoring/regions', async (req, res) => {
     const query = `
       WITH school_stats AS (
         SELECT 
-          region,
-          COUNT(*) as total_schools,
-          CAST(AVG(completion_percentage) AS DECIMAL(10,1)) as avg_completion,
-          SUM(forms_completed_count) as total_forms_completed,
-          COUNT(CASE WHEN completion_percentage = 100 THEN 1 END) as completed_schools
-        FROM school_profiles
-        GROUP BY region
+          s.region,
+          COUNT(s.school_id) as total_schools,
+          CAST(AVG(COALESCE(ps.unit_completion, 0)) AS DECIMAL(10,1)) as avg_completion,
+          SUM(COALESCE(ps.unit1,0) + COALESCE(ps.unit2,0) + COALESCE(ps.unit3,0) + COALESCE(ps.unit4,0) + 
+              COALESCE(ps.unit5,0) + COALESCE(ps.unit6,0) + COALESCE(ps.unit7,0) + COALESCE(ps.unit8,0)) as total_forms_completed,
+          COUNT(CASE WHEN COALESCE(ps.unit_completion, 0) >= 100 THEN 1 END) as completed_schools
+        FROM (
+          SELECT 
+            COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
+            UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
+            UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
+            UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
+            COALESCE(p_in.school_name, s_in."School_Name") as school_name
+          FROM "schools_IERN" s_in
+          FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
+        ) s
+        LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
+        GROUP BY s.region
       ),
       project_stats AS (
         SELECT 
@@ -11343,7 +11735,7 @@ app.get('/api/monitoring/regions', async (req, res) => {
           COUNT(CASE WHEN TRIM(status_of_construction_phase) ILIKE 'Delayed' THEN 1 END) as delayed_projects
         FROM (
           SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-            region, approved_budget_for_contract, contract_amount, accomplishment_percentage, status
+            region, approved_budget_for_contract, contract_amount, accomplishment_percentage, status_of_construction_phase
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), created_at DESC
         ) LatestProjects
@@ -11555,10 +11947,10 @@ app.post('/api/save-learner-statistics', async (req, res) => {
     // --- DUAL WRITE: LEARNER STATISTICS ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Learner Stats...");
+        console.log("”„ Dual-Write: Syncing Learner Stats...");
         await poolNew.query(query, values);
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("âœ… Dual-Write: Learner Stats Synced!");
+        console.log("… Dual-Write: Learner Stats Synced!");
       } catch (dwErr) {
         console.error("âŒ Dual-Write Error (Learner Stats):", dwErr.message);
       }
@@ -11887,7 +12279,10 @@ app.get('/api/debug/health-stats', async (req, res) => {
 app.get('/api/user-info/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT role, first_name, last_name, account_category FROM users WHERE uid = $1', [uid]);
+    const result = await pool.query(
+      'SELECT role, first_name, last_name, email, region, division, account_category FROM users WHERE uid = $1',
+      [uid]
+    );
     if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
     res.json(result.rows[0]);
   } catch (err) {
@@ -13211,7 +13606,55 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.latitude || null, data.longitude || null,
       data.school_head || null, data.contact_number || null
     ];
-    await pool.query(query, values);
+    
+    // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
+    let updatedByIern = false;
+    if (data.iern) {
+      const updateRes = await pool.query(`
+        UPDATE ph_schools SET
+          school_id = $1, school_name = $3, region = $4, province = $5,
+          municipality = $6, barangay = $7, division = $8, district = $9,
+          leg_district = $10, curricular_offering = $11, latitude = $12,
+          longitude = $13, school_head = $14, contact_number = $15,
+          unit1_completed = TRUE, updated_at = CURRENT_TIMESTAMP
+        WHERE iern = $2
+      `, values);
+      
+      if (updateRes.rowCount > 0) {
+        updatedByIern = true;
+      }
+    }
+
+    // Fallback to INSERT ON CONFLICT school_id if no unique IERN record matched
+    if (!updatedByIern) {
+      await pool.query(query, values);
+    }
+    
+    // --- SYNC TO schools_IERN (Mapping Update) ---
+    // If a School Head provides both school_id and iern, ensure the mapping exists in schools_IERN
+    if (data.school_id && data.iern) {
+      try {
+        const iernValues = [
+          data.school_id, data.iern, data.school_name,
+          data.region || null, data.division || null, data.province || null, data.municipality || null, data.district || null
+        ];
+        
+        const updateIernRes = await pool.query(`
+          UPDATE "schools_IERN" 
+          SET iern = $2, "School_Name" = $3, "Region" = $4, "Division" = $5, "Province" = $6, "Municipality" = $7, "District" = $8 
+          WHERE "SchoolID" = $1
+        `, iernValues);
+        
+        if (updateIernRes.rowCount === 0) {
+          await pool.query(`
+            INSERT INTO "schools_IERN" ("SchoolID", "iern", "School_Name", "Region", "Division", "Province", "Municipality", "District")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `, iernValues);
+        }
+      } catch (syncErr) {
+        console.error("âš ï¸ schools_IERN Sync Error:", syncErr.message);
+      }
+    }
 
     // Auto-update school_summary instantly
     try {

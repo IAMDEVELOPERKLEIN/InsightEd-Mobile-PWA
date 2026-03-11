@@ -144,6 +144,7 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS contact_number TEXT,
             ADD COLUMN IF NOT EXISTS alt_email TEXT,
             ADD COLUMN IF NOT EXISTS account_category TEXT, -- DepEd vs Non-DepEd
+            ADD COLUMN IF NOT EXISTS iern TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
         console.log(`✅ [${dbLabel}] Users Table Schema Updated`);
@@ -695,6 +696,22 @@ const runMigrations = async (client, dbLabel) => {
         console.log(`✅ [${dbLabel}] Chatbot Knowledge Table Initialized`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init chatbot_knowledge table:`, migErr.message);
+    }
+
+    // --- 19. SYSTEM FEEDBACK TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS system_feedback (
+                id SERIAL PRIMARY KEY,
+                content VARCHAR(200) NOT NULL,
+                user_email TEXT,
+                user_uid TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log(`✅ [${dbLabel}] System Feedback Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init system_feedback table:`, migErr.message);
     }
 };
 

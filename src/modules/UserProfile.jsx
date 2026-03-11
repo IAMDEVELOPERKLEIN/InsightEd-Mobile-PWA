@@ -96,12 +96,46 @@ const UserProfile = () => {
     useEffect(() => {
         const fetchData = async () => {
             const uid = localStorage.getItem('uid');
+            const cachedRole = localStorage.getItem('userRole');
+            const cachedEmail = localStorage.getItem('userEmail');
+            
+            let fallbackFirstName = "My";
+            let fallbackLastName = "Profile";
+            let fallbackEmail = cachedEmail || "";
+
+            try {
+                const remStr = localStorage.getItem('remembered_user');
+                if (remStr) {
+                    const parsed = JSON.parse(remStr);
+                    if (parsed.firstName) fallbackFirstName = parsed.firstName;
+                    if (parsed.lastName) fallbackLastName = parsed.lastName; // (Might not exist, but let's try)
+                    if (parsed.email && !fallbackEmail) fallbackEmail = parsed.email;
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+
+            // 1. Instantly populate fallback so UI doesn't hang/crash
+            if (uid || cachedRole) {
+                setUserData({
+                    role: cachedRole || 'User',
+                    firstName: fallbackFirstName,
+                    lastName: fallbackLastName,
+                    email: fallbackEmail
+                });
+                if (cachedRole) {
+                    setHomeRoute(getDashboardPath(cachedRole));
+                }
+            }
+
             if (uid) {
-                // 1. Fetch Basic Info from PostgreSQL backend
+                // 2. Fetch Detailed Info from Firebase (or your backend if migrated)
                 try {
-                    const userRes = await fetch(`/api/users/${uid}`);
-                    if (userRes.ok) {
-                        const data = await userRes.json();
+                    const docRef = doc(db, "users", uid);
+                    const docSnap = await getDoc(docRef);
+
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
                         setUserData(data);
                         setHomeRoute(getDashboardPath(data.role));
 
@@ -115,8 +149,8 @@ const UserProfile = () => {
                             barangay: data.barangay || ''
                         });
                     }
-                } catch (error) {
-                    console.error("Failed to fetch user data:", error);
+                } catch (fsErr) {
+                    console.warn("Firestore user profile fetch failed:", fsErr);
                 }
 
                 // 2. Fetch Assigned School from Neon
@@ -142,7 +176,7 @@ const UserProfile = () => {
             'Non-DepEd Engineer': '/non-deped-dashboard',
             'Engineer': '/engineer-dashboard',
             'Local Government Unit': '/lgu-dashboard',
-            'School Head': '/schoolhead-dashboard',
+            'School Head': '/my-activity',
             'Human Resource': '/hr-dashboard',
             'Regional Office': '/monitoring-dashboard',
             'School Division Office': '/monitoring-dashboard',
@@ -151,7 +185,7 @@ const UserProfile = () => {
             'Central Office': '/monitoring-dashboard',
             'Central Office Finance': '/finance-dashboard',
             'Super User': '/super-user-selector',
-            'Beta Tester': '/modular-dashboard',
+            'School Head': '/my-activity',
             'EFD': '/efd-dashboard',
         };
         return roleMap[role] || '/';
@@ -180,15 +214,37 @@ const UserProfile = () => {
                 });
             } catch (e) { console.warn("Logout Log Failed", e); }
 
-            // 2. Perform Logout
+            // SOFT LOGOUT
             try {
                 await auth.signOut();
+                
+                // Preserve remembered user identity
+                const userEmail = userData?.email || localStorage.getItem('userEmail');
+                const userFirstName = userData?.firstName || 'User';
+                
                 localStorage.clear(); // Clear all session data
+                
+                if (userEmail) {
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: userEmail,
+                        firstName: userFirstName
+                    }));
+                }
+                
                 navigate('/');
             } catch (error) {
                 console.error("Logout Error:", error);
-                // Fallback: Force reload to login if firebase fails
+                
+                const userEmail = userData?.email || localStorage.getItem('userEmail');
+                const userFirstName = userData?.firstName || 'User';
+                
                 localStorage.clear();
+                if (userEmail) {
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: userEmail,
+                        firstName: userFirstName
+                    }));
+                }
                 window.location.href = '/';
             }
         }
@@ -765,6 +821,18 @@ const UserProfile = () => {
                     </div>
                     <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
                 </button>
+                
+                <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => navigate('/setup-pin')}>
+                    <div className="flex items-center gap-4">
+                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Set Up Passcode</span>
+                    </div>
+                    <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
+                </button>
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl py-2 mb-5 shadow-sm overflow-hidden transition-colors border border-transparent dark:border-slate-700">
@@ -928,7 +996,7 @@ const UserProfile = () => {
 
                 </div>
 
-                <BottomNav homeRoute={homeRoute} userRole={userData?.role} />
+                <BottomNav homeRoute={homeRoute} userRole={userData?.role || localStorage.getItem('userRole')} />
             </div>
         </PageTransition>
     );

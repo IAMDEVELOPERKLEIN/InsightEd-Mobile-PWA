@@ -284,7 +284,7 @@ const ModularDashboard = () => {
                 </motion.div>
             </motion.div>
 
-            <BottomNav userRole="Beta Tester" />
+            <BottomNav userRole="School Head" />
         </motion.div>
     );
 };

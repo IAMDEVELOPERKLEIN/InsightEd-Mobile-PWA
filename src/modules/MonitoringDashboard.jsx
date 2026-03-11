@@ -8,7 +8,6 @@ import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft
 import { TbTrophy, TbSchool, TbChartBar, TbFileDownload } from 'react-icons/tb';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
-import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import locationData from '../locations.json';
@@ -49,7 +48,7 @@ const MonitoringDashboard = () => {
     const [availableDivisions, setAvailableDivisions] = useState([]);
     const [availableDistricts, setAvailableDistricts] = useState([]); // NEW: District State
     const [drilldownType, setDrilldownType] = useState('school_district'); // NEW: Drilldown Type (school_district vs legislative)
-    const [schoolData, setSchoolData] = useState([]); // Store raw CSV data
+    const [schoolData] = useState([]); // Kept for safety, no longer populated from CSV
 
     // NEW: Regional Stats for National View
     const [regionalStats, setRegionalStats] = useState([]);
@@ -87,8 +86,6 @@ const MonitoringDashboard = () => {
         };
     }, [isIssuesModalOpen]);
 
-    // NEW: Store Aggregated CSV Totals
-    const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
 
     const [insightsMetric, setInsightsMetric] = useState('enrolment'); // Default to Enrolment for Insights Tab
     const [insightsSubMetric, setInsightsSubMetric] = useState('total'); // NEW: Sub-metric for Enrolment
@@ -678,27 +675,128 @@ const MonitoringDashboard = () => {
     };
 
     const fetchData = async (region, division, district) => {
-        const user = auth.currentUser;
-        if (!user) return;
+        let user = auth.currentUser;
+        let uid = user?.uid || localStorage.getItem('uid');
+        if (!uid) {
+            console.warn("No UID found in auth or storage. Skipping fetch.");
+            setLoading(false);
+            return;
+        }
 
-        // If we already have userData, use it, otherwise fetch it
-        let currentUserData = userData;
+        // Helper: read localStorage safely (returns '' for null/undefined/literal "null")
+        const safeLs = (key) => {
+            const v = localStorage.getItem(key);
+            return (v && v !== 'null' && v !== 'undefined') ? v : '';
+        };
+
+        // Always start from localStorage values saved on login (most up-to-date location info)
+        const lsRole = safeLs('userRole');
+        const lsRegion = safeLs('userRegion');
+        const lsDivision = safeLs('userDivision');
+        const lsEmail = safeLs('userEmail');
+        const lsAccountCategory = safeLs('accountCategory');
+
+        // If we already have userData, enrich it with the fresh localStorage values from login
+        let currentUserData = userData
+            ? {
+                ...userData,
+                region: userData.region || lsRegion,
+                division: userData.division || lsDivision,
+                role: userData.role || lsRole,
+            }
+            : null;
+
         if (!currentUserData) {
-            const docRef = doc(db, "users", user.uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                currentUserData = docSnap.data();
-                setUserData(currentUserData);
+            try {
+                const docRef = doc(db, "users", uid);
+                const docSnap = await Promise.race([
+                    getDoc(docRef),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
+                ]);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    currentUserData = {
+                        ...data,
+                        region: data.region || data.Region || lsRegion || '',
+                        division: data.division || data.Division || lsDivision || '',
+                        district: data.district || data.District || '',
+                        role: data.role || data.Role || lsRole || ''
+                    };
+                    console.log("Monitoring Dashboard: Loaded user from Firestore:", currentUserData.email, currentUserData.region);
+                    setUserData(currentUserData);
+                } else {
+                    // Firestore doc missing — try native backend API
+                    console.warn("Firestore doc missing in fetchData, trying native backend...");
+                    try {
+                        const valRes = await fetch(`/api/user-info/${uid}`);
+                        if (valRes.ok) {
+                            const valData = await valRes.json();
+                            currentUserData = {
+                                uid,
+                                role: valData.role || lsRole || '',
+                                email: valData.email || lsEmail || '',
+                                region: valData.region || lsRegion || '',
+                                division: valData.division || lsDivision || '',
+                                account_category: valData.account_category || lsAccountCategory || ''
+                            };
+                            console.log("Monitoring Dashboard: Loaded user from native backend:", currentUserData.role, currentUserData.region);
+                            setUserData(currentUserData);
+                        }
+                    } catch (apiErr) {
+                        console.warn("Native backend fetch failed, falling back to localStorage:", apiErr.message);
+                    }
+                    // Final fallback: localStorage
+                    if (!currentUserData) {
+                        if (lsRole) {
+                            currentUserData = {
+                                uid,
+                                role: lsRole,
+                                email: lsEmail,
+                                region: lsRegion,
+                                division: lsDivision,
+                                account_category: lsAccountCategory
+                            };
+                            console.log("Monitoring Dashboard: Loaded user from localStorage:", currentUserData.role, currentUserData.region);
+                            setUserData(currentUserData);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Firestore user fetch failed (likely blocked), using localStorage fallback:", err.message);
+                if (lsRole) {
+                    currentUserData = {
+                        uid,
+                        role: lsRole,
+                        email: lsEmail,
+                        region: lsRegion,
+                        division: lsDivision,
+                        account_category: lsAccountCategory
+                    };
+                    setUserData(currentUserData);
+                }
             }
         }
 
 
-        if (!currentUserData) return;
+        if (!currentUserData) {
+            console.warn("No currentUserData available for effectiveRole/Region logic.");
+            return;
+        }
 
         // --- SUPER USER OVERRIDE ---
-        let effectiveRole = currentUserData.role;
-        let effectiveRegion = currentUserData.region;
-        let effectiveDivision = currentUserData.division;
+        let effectiveRole = currentUserData.role || currentUserData.Role;
+        let effectiveRegion = currentUserData.region || currentUserData.Region || '';
+        let effectiveDivision = currentUserData.division || currentUserData.Division || '';
+
+        // Clean out literal string "undefined" or "null" that might be loaded from bad localStorage state
+        if (effectiveRegion === 'undefined' || effectiveRegion === 'null') effectiveRegion = '';
+        if (effectiveDivision === 'undefined' || effectiveDivision === 'null') effectiveDivision = '';
+
+        console.log("Monitoring Dashboard: Resolving Jurisdiction Filters:", {
+            role: effectiveRole,
+            region: effectiveRegion,
+            division: effectiveDivision
+        });
 
         const impersonatedRole = sessionStorage.getItem('impersonatedRole');
         const isSuperUser = currentUserData.role === 'Super User';
@@ -882,29 +980,17 @@ const MonitoringDashboard = () => {
     useEffect(() => {
         fetchData();
 
-        // Load Location Data for filters
-        setAvailableRegions(Object.keys(locationData).sort());
-
-        // Load Schools Data for Division filtering
-        Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-                if (results.data && results.data.length > 0) {
-                    setSchoolData(results.data);
-
-                    // Aggregate Totals by Region
-                    const totals = {};
-                    results.data.forEach(row => {
-                        if (row.region) {
-                            totals[row.region] = (totals[row.region] || 0) + 1;
-                        }
-                    });
-                    setCsvRegionalTotals(totals);
-                }
-            }
-        });
+        // Load regions from API (schools_IERN)
+        fetch('/api/locations/regions')
+            .then(r => r.json())
+            .then(data => {
+                const regions = data.map(r => r.region).filter(Boolean).sort();
+                setAvailableRegions(regions);
+            })
+            .catch(() => {
+                // Fallback to locationData JSON
+                setAvailableRegions(Object.keys(locationData).sort());
+            });
     }, []);
 
     // NEW: Handle Active Tab from Navigation State
@@ -922,38 +1008,39 @@ const MonitoringDashboard = () => {
         }
     }, [location.state]);
 
-    // Effect for Central Office: Update divisions when Region changes
+    // Effect for Central Office: Update divisions when Region changes (uses schools_IERN API)
     useEffect(() => {
-        // REMOVED: Auto-select Region NCR. Now defaults to National View.
-
-        if (userData?.role === 'Central Office' && coRegion && schoolData.length > 0) {
-            const divisions = [...new Set(schoolData
-                .filter(s => s.region === coRegion)
-                .map(s => s.division))]
-                .sort();
-            setAvailableDivisions(divisions);
+        if (userData?.role === 'Central Office' && coRegion) {
+            fetch(`/api/locations/divisions?region=${encodeURIComponent(coRegion)}`)
+                .then(r => r.json())
+                .then(data => {
+                    const divisions = data.map(d => d.division).filter(Boolean).sort();
+                    setAvailableDivisions(divisions);
+                })
+                .catch(() => setAvailableDivisions([]));
         } else {
             setAvailableDivisions([]);
         }
-    }, [coRegion, schoolData, userData]);
+    }, [coRegion, userData]);
 
-    // NEW: Update Districts when Division changes
+    // Update Districts when Division changes (uses schools_IERN API)
     useEffect(() => {
-        // SUPER USER CHECK FOR EFFECTIVE ROLE
         const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
             ? sessionStorage.getItem('impersonatedRole')
             : userData?.role;
 
-        if (effectiveRole === 'Central Office' && coDivision && schoolData.length > 0) {
-            const districts = [...new Set(schoolData
-                .filter(s => s.region === coRegion && s.division === coDivision)
-                .map(s => s.district))]
-                .sort();
-            setAvailableDistricts(districts);
+        if (effectiveRole === 'Central Office' && coDivision) {
+            fetch(`/api/locations/districts?region=${encodeURIComponent(coRegion)}&division=${encodeURIComponent(coDivision)}`)
+                .then(r => r.json())
+                .then(data => {
+                    const districts = data.map(d => d.district).filter(Boolean).sort();
+                    setAvailableDistricts(districts);
+                })
+                .catch(() => setAvailableDistricts([]));
         } else {
             setAvailableDistricts([]);
         }
-    }, [coDivision, coRegion, schoolData, userData]);
+    }, [coDivision, coRegion, userData]);
 
     // NEW: Mobile Detection
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -1002,62 +1089,10 @@ const MonitoringDashboard = () => {
                     apiSchools = Array.isArray(data) ? data : (data.data || []);
                 }
 
-                // MERGE: Combine CSV Master List with API Data
-                // Filter CSV for this region/division
-                const masterList = schoolData.filter(s =>
-                    normalizeLocationName(s.region) === normalizeLocationName(targetRegion) &&
-                    normalizeLocationName(s.division) === normalizeLocationName(division)
+                // Use API data directly — schools_IERN is now the authoritative source
+                const mergedSchools = apiSchools.sort((a, b) => 
+                    (a.school_name || '').localeCompare(b.school_name || '')
                 );
-
-                // 1. Map CSV Schools (Existing Logic)
-                const csvMapped = masterList.map(csvSchool => {
-                    // Find matching API record (by School ID preferred, or Name)
-                    const apiMatch = apiSchools.find(api =>
-                        api.school_id === csvSchool.school_id ||
-                        normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
-                    );
-
-                    if (apiMatch) {
-                        return apiMatch; // Return the full API record if validation exists
-                    } else {
-                        // Return Mock Object for Missing Schools
-                        return {
-                            school_name: csvSchool.school_name,
-                            school_id: csvSchool.school_id,
-                            district: csvSchool.district,
-                            division: csvSchool.division,
-                            // Set all statuses to false
-                            profile_status: false,
-                            head_status: false,
-                            enrollment_status: false,
-                            classes_status: false,
-                            shifting_status: false,
-                            personnel_status: false,
-                            specialization_status: false,
-                            resources_status: false,
-                            learner_stats_status: false,
-                            facilities_status: false,
-                            submitted_by: null
-                        };
-                    }
-                });
-
-                // 2. Add API Schools that were NOT in CSV
-                const csvIds = new Set(masterList.map(s => s.school_id));
-                const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
-
-                const extraApiSchools = apiSchools.filter(api =>
-                    !csvIds.has(api.school_id) &&
-                    !csvNames.has(normalizeLocationName(api.school_name))
-                ).map(api => ({
-                    ...api,
-                    district: api.district || 'Unassigned District'
-                }));
-
-                const mergedSchools = [...csvMapped, ...extraApiSchools];
-
-                // Sort by name
-                mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
                 setDistrictSchools(mergedSchools);
 
             } catch (err) {
@@ -1114,15 +1149,8 @@ const MonitoringDashboard = () => {
                     region = coRegion;
                     division = coDivision;
                 } else if (userData?.role === 'Super User') {
-                    // Try to find region from schoolData for this division if possible, or assume user context
-                    division = coDivision || sessionStorage.getItem('impersonatedLocation'); // if SDO
-                    // Actually handleDistrictChange is likely called within context where params are clearer
-                    // But simplified here...
+                    division = coDivision || sessionStorage.getItem('impersonatedLocation');
                     region = coRegion;
-                    if (!region && schoolData.length > 0) {
-                        const match = schoolData.find(s => s.division === division);
-                        if (match) region = match.region;
-                    }
                 } else {
                     region = userData.region;
                     division = userData.division;
@@ -1135,56 +1163,10 @@ const MonitoringDashboard = () => {
                     apiSchools = Array.isArray(data) ? data : (data.data || []);
                 }
 
-                // MERGE: Combine CSV Master List with API Data
-                const masterList = schoolData.filter(s =>
-                    normalizeLocationName(s.region) === normalizeLocationName(region) &&
-                    normalizeLocationName(s.division) === normalizeLocationName(division) &&
-                    normalizeLocationName(s.district) === normalizeLocationName(district)
+                // Use API data directly — schools_IERN is now the authoritative source
+                const mergedSchools = apiSchools.sort((a, b) => 
+                    (a.school_name || '').localeCompare(b.school_name || '')
                 );
-
-                // 1. Map CSV Schools (Existing Logic)
-                const csvMapped = masterList.map(csvSchool => {
-                    const apiMatch = apiSchools.find(api =>
-                        api.school_id === csvSchool.school_id ||
-                        normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
-                    );
-
-                    if (apiMatch) {
-                        return apiMatch;
-                    } else {
-                        return {
-                            school_name: csvSchool.school_name,
-                            school_id: csvSchool.school_id,
-                            district: csvSchool.district,
-                            profile_status: false,
-                            head_status: false,
-                            enrollment_status: false,
-                            classes_status: false,
-                            shifting_status: false,
-                            personnel_status: false,
-                            specialization_status: false,
-                            resources_status: false,
-                            learner_stats_status: false,
-                            facilities_status: false,
-                            submitted_by: null
-                        };
-                    }
-                });
-
-                // 2. Add API Schools that were NOT in CSV (Fix for SDO View consistency)
-                const csvIds = new Set(masterList.map(s => s.school_id));
-                const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
-
-                const extraApiSchools = apiSchools.filter(api =>
-                    !csvIds.has(api.school_id) &&
-                    !csvNames.has(normalizeLocationName(api.school_name))
-                ).map(api => ({
-                    ...api,
-                    district: api.district || district
-                }));
-
-                const mergedSchools = [...csvMapped, ...extraApiSchools];
-                mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
                 setDistrictSchools(mergedSchools);
 
             } catch (error) {
@@ -1235,50 +1217,10 @@ const MonitoringDashboard = () => {
         );
     };
 
-    // NEW: Calculate Jurisdiction Total (Memoized for reuse)
-    // FIX: Freezing the total logic
+    // jurisdictionTotal: rely on API stats (schools_IERN-backed) as single source of truth
     const jurisdictionTotal = useMemo(() => {
-        let csvTotal = 0;
-        if (schoolData.length > 0 && userData) {
-            const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
-                ? sessionStorage.getItem('impersonatedRole')
-                : userData?.role;
-
-            let targetRegion, targetDivision;
-
-            // Determine Scope based on Role (Frozen for RO/SDO)
-            if (effectiveRole === 'Central Office') {
-                targetRegion = coRegion;
-                targetDivision = coDivision;
-            } else if (effectiveRole === 'Regional Office') {
-                // FORCE Region Scope (Ignore coDivision drill-down)
-                targetRegion = (userData?.role === 'Super User') ? sessionStorage.getItem('impersonatedLocation') : userData?.region;
-                targetDivision = null; // Explicitly ignore division
-            } else if (effectiveRole === 'School Division Office') {
-                // FORCE Division Scope (Ignore coDistrict drill-down)
-                targetDivision = (userData?.role === 'Super User') ? sessionStorage.getItem('impersonatedLocation') : userData?.division;
-                // We likely need to find the region for this division from schoolData to filter accurately if needed, 
-                // or just filter by division (usually unique enough). 
-                // Ideally setup targetRegion too.
-            } else {
-                targetRegion = userData.region;
-                targetDivision = userData.division;
-            }
-
-            const targetDistrict = effectiveRole === 'Central Office' ? coDistrict : null; // Ignore district for RO/SDO
-
-            csvTotal = schoolData.filter(s => {
-                const matchRegion = !targetRegion || normalizeLocationName(s.region) === normalizeLocationName(targetRegion);
-                const matchDivision = !targetDivision || normalizeLocationName(s.division) === normalizeLocationName(targetDivision);
-                // Use normalizeLocationName for safety if imported
-                const matchDistrict = !targetDistrict || s.district === targetDistrict;
-                return matchRegion && matchDivision && matchDistrict;
-            }).length;
-        }
-        // FIX: Use MAX of CSV count or DB count. 
-        const dbTotal = parseInt(stats?.total_schools || 0);
-        return Math.max(csvTotal, dbTotal);
-    }, [schoolData, userData, coRegion, coDivision, coDistrict, stats?.total_schools]);
+        return parseInt(stats?.total_schools || 0);
+    }, [stats?.total_schools]);
 
     // NEW: Determine Insight Chart Data Source (Division vs District)
     const isDistrictView = useMemo(() => {
@@ -1397,13 +1339,10 @@ const MonitoringDashboard = () => {
                                             <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">National Accomplishment Rate</p>
                                             {/* Show Percentage */}
                                             {(() => {
-                                                const csvSum = Object.values(csvRegionalTotals).length > 0
-                                                    ? Object.values(csvRegionalTotals).reduce((a, b) => a + b, 0)
-                                                    : 0;
                                                 const dbSum = regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0);
 
-                                                // FIX: Use Max of CSV vs DB to ensure denominator >= numerator
-                                                const totalSchools = Math.max(csvSum, dbSum);
+                                                // Use DB total directly (schools_IERN-backed)
+                                                const totalSchools = dbSum;
                                                 const completed = regionalStats.reduce((acc, curr) => acc + parseInt(curr.completed_schools || 0), 0);
                                                 const pct = totalSchools > 0 ? ((completed / totalSchools) * 100).toFixed(1) : 0;
                                                 return (
@@ -1462,10 +1401,7 @@ const MonitoringDashboard = () => {
                                         </h2>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {regionalStats.map((reg, idx) => {
-                                                // REFACTOR: Use MAX of API total (DB) or CSV to prevent >100% overflow
-                                                const apiTotal = parseInt(reg.total_schools || 0);
-                                                const csvTotal = csvRegionalTotals[reg.region] || 0;
-                                                const totalSchools = Math.max(apiTotal, csvTotal);
+                                                const totalSchools = parseInt(reg.total_schools || 0);
 
                                                 const completedCount = reg.completed_schools || 0;
 
@@ -2019,17 +1955,16 @@ const MonitoringDashboard = () => {
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
                                         {(() => {
-                                            // 1. Get List of Divisions for Current Region from CSV Data
+                                            // 1. Get List of Divisions from API (schools_IERN backed)
                                             const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
 
-                                            // MERGE Divisions: Use both CSV and API to find all divisions
-                                            const targetRegionName = normalizeLocationName(targetRegion);
-                                            const csvDivisions = [...new Set(schoolData
-                                                .filter(s => normalizeLocationName(s.region) === targetRegionName)
-                                                .map(s => s.division))];
-
-                                            const apiDivisions = divisionStats.map(d => d.division);
-                                            const regionDivisions = [...new Set([...csvDivisions, ...apiDivisions])].sort();
+                                            // Build division list from API divisionStats (already deduplicated)
+                                            const divMap = {};
+                                            divisionStats.forEach(d => {
+                                                const key = normalizeLocationName(d.division);
+                                                if (key) divMap[key] = d.division;
+                                            });
+                                            const regionDivisions = Object.values(divMap).sort();
 
                                             if (regionDivisions.length === 0) {
                                                 return <p className="text-sm text-slate-400 italic">No division data available / No schools found.</p>;
@@ -2047,12 +1982,8 @@ const MonitoringDashboard = () => {
                                                         // Use API Total if available and higher than CSV (to include new schools)
                                                         const apiTotal = startStat ? parseInt(startStat.total_schools || 0) : 0;
 
-                                                        const csvTotal = schoolData.filter(s =>
-                                                            s.region === targetRegion && s.division === divName
-                                                        ).length;
-
-                                                        // Fix: Use Math.max to avoid undercounting if API has fewer synced schools than CSV
-                                                        const totalSchools = Math.max(csvTotal, apiTotal);
+                                                        // Use API total directly (schools_IERN is the source of truth)
+                                                        const totalSchools = apiTotal;
 
                                                         // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
                                                         // Clamp to 100%
@@ -2132,7 +2063,7 @@ const MonitoringDashboard = () => {
                                             // 3. SDO: Use effectiveRegion (if normal user) OR derive from SchoolData (if Super User impersonating SDO)
                                             const targetRegion = effectiveRole === 'Central Office'
                                                 ? coRegion
-                                                : (effectiveRegion || schoolData.find(s => s.division === effectiveDivision)?.region);
+                                                : (effectiveRegion || sessionStorage.getItem('impersonatedRegion') || '');
 
                                             // Determine Target Division:
                                             const targetDivision = (effectiveRole === 'Central Office' || effectiveRole === 'Regional Office')
@@ -2471,10 +2402,17 @@ const MonitoringDashboard = () => {
                                                 // console.log("Drilldown Municipality Keys:", divisionDistricts);
                                             } else {
                                                 // Default: School District
-                                                divisionDistricts = [...new Set(schoolData
-                                                    .filter(s => s.region === targetRegion && s.division === targetDivision)
-                                                    .map(s => s.district))]
-                                                    .sort();
+                                                const districtsMap = {};
+                                                schoolData
+                                                    .filter(s => 
+                                                        s.region?.toUpperCase().trim() === targetRegion?.toUpperCase().trim() && 
+                                                        s.division?.toUpperCase().trim() === targetDivision?.toUpperCase().trim()
+                                                    )
+                                                    .forEach(s => {
+                                                        const u = s.district?.toUpperCase().trim();
+                                                        if (u && !districtsMap[u]) districtsMap[u] = s.district;
+                                                    });
+                                                divisionDistricts = Object.values(districtsMap).sort();
                                             }
 
                                             if (divisionDistricts.length === 0) {
@@ -2485,26 +2423,8 @@ const MonitoringDashboard = () => {
                                                 <div className="space-y-4">
                                                     {divisionDistricts.map((distName, idx) => {
                                                         // 2. Count Total from CSV
-                                                        let csvTotal = 0;
-                                                        if (drilldownType === 'legislative') {
-                                                            csvTotal = schoolData.filter(s =>
-                                                                s.region === targetRegion &&
-                                                                s.division === targetDivision &&
-                                                                s.leg_district === distName
-                                                            ).length;
-                                                        } else if (drilldownType === 'municipality') {
-                                                            csvTotal = schoolData.filter(s =>
-                                                                s.region === targetRegion &&
-                                                                s.division === targetDivision &&
-                                                                s.municipality === distName
-                                                            ).length;
-                                                        } else {
-                                                            csvTotal = schoolData.filter(s =>
-                                                                s.region === targetRegion &&
-                                                                s.division === targetDivision &&
-                                                                s.district === distName
-                                                            ).length;
-                                                        }
+                                                        // Use API total — schools_IERN is the source of truth
+                                                        const csvTotal = 0; // No longer used
 
                                                         // 3. Get API Stats for this Group
                                                         const startStat = districtStats.find(d => {

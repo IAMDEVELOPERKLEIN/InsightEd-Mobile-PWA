@@ -54,9 +54,8 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
-            { label: 'Home', path: '/schoolhead-dashboard', icon: TbHomeEdit },
-            { label: 'Forms', path: '/school-forms', icon: TbClipboardList },
-            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+            { label: 'Home', path: '/my-activity', icon: TbHomeEdit },
+            { label: 'Modules', path: '/modular-dashboard', icon: LuCompass },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
@@ -122,11 +121,6 @@ const BottomNav = ({ userRole }) => {
             { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
-        ],
-        'Beta Tester': [
-            { label: 'Dashboard', path: '/activity-dashboard', icon: TbChartBar },
-            { label: 'Modules', path: '/modular-dashboard', icon: TbClipboardList },
-            { label: 'Profile', path: '/profile', icon: FiSettings },
         ],
 
     };

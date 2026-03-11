@@ -64,22 +64,24 @@ const Unit5ShiftingModality = () => {
 
     // ── Dynamic grades based on curricular offering ──────────────────────
     const activeGrades = useMemo(() => {
-        const co = (curricularOffering || "").toLowerCase();
-        let keys;
-        if (co.includes("purely elementary")) {
-            keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-        } else if (co.includes("purely junior")) {
-            keys = ['g7', 'g8', 'g9', 'g10'];
-        } else if (co.includes("purely senior")) {
-            keys = ['g11', 'g12'];
-        } else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) {
-            keys = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-        } else if (co.includes("elementary school and junior high school")) {
-            keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
-        } else {
-            keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        let coLower = (curricularOffering || "").toLowerCase();
+        let keys = [];
+        if (coLower.includes("kinder")) keys.push("kinder");
+        if (coLower.includes("elementary") || coLower.includes("primary")) {
+            keys.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
         }
-        return keys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
+        if (coLower.includes("junior high") || coLower.includes("jhs")) {
+            keys.push("g7", "g8", "g9", "g10");
+        }
+        if (coLower.includes("senior high") || coLower.includes("shs")) {
+            keys.push("g11", "g12");
+        }
+        // Safety
+        if (keys.length === 0) keys = Object.keys(GRADE_LABEL_MAP);
+        
+        // Ensure unique keys (in case of overlap like elementary + jhs)
+        const uniqueKeys = Array.from(new Set(keys));
+        return uniqueKeys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
     }, [curricularOffering]);
 
     // ── Chapter 1: Standard Setup ───────────────────────────────────────────
@@ -128,16 +130,24 @@ const Unit5ShiftingModality = () => {
                     setCurricularOffering(d.curricular_offering || "");
                     
                     // We must parse activeGrades here locally first since the useMemo needs curricularOffering to mount
-                    let co = d.curricular_offering || "";
-                    let keys = [];
-                    if (co.includes("purely elementary")) keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-                    else if (co.includes("purely junior")) keys = ['g7', 'g8', 'g9', 'g10'];
-                    else if (co.includes("purely senior")) keys = ['g11', 'g12'];
-                    else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) keys = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-                    else if (co.includes("elementary school and junior high school")) keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
-                    else keys = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+                    // Define allowed keys based on curricular offering keywords
+                    let offeringKeys = [];
+                    let coLower = (d.curricular_offering || "").toLowerCase();
+                    
+                    if (coLower.includes("kinder")) offeringKeys.push("kinder");
+                    if (coLower.includes("elementary") || coLower.includes("primary")) {
+                        offeringKeys.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+                    }
+                    if (coLower.includes("junior high") || coLower.includes("jhs")) {
+                        offeringKeys.push("g7", "g8", "g9", "g10");
+                    }
+                    if (coLower.includes("senior high") || coLower.includes("shs")) {
+                        offeringKeys.push("g11", "g12");
+                    }
+                    // Safety: if nothing matches, default to all
+                    if (offeringKeys.length === 0) offeringKeys = Object.keys(GRADE_LABEL_MAP);
 
-                    let baseGrades = keys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
+                    let baseGrades = offeringKeys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
                     let finalGrades = baseGrades;
 
                     // Filter active grades based on Unit 2 config

@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 // Auth
 import Login from './Login';
 import Register from './Register';
+import PinSetup from './components/PinSetup';
 
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
@@ -75,7 +76,7 @@ import DetailedProjInfo from './modules/DetailedProjInfo';
 import ProjectValidation from './modules/ProjectValidation';
 import Leaderboard from './modules/Leaderboard';
 
-// Beta Tester Modular Flow
+// School Head Modular Flow
 import ModularDashboard from './components/ModularDashboard';
 import Unit1SchoolIdentity from './components/modular/Unit1SchoolIdentity';
 import Unit2Learners from './components/modular/Unit2Learners';
@@ -125,6 +126,7 @@ const AnimatedRoutes = () => {
       {/* Authentication */}
       <Route path="/" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/setup-pin" element={<PinSetup />} />
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
@@ -166,19 +168,27 @@ const AnimatedRoutes = () => {
       <Route path="/dummy-forms" element={<DummyDashboard />} />
       <Route path="/psip" element={<PSIP />} />
 
-        {/* Beta Tester Modular Flow */}
+        {/* School Head Modular Flow */}
         <Route
           path="/modular-dashboard"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <ModularDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-activity"
+          element={
+            <ProtectedRoute allowedRoles={['School Head']}>
+              <MyActivityDashboard />
             </ProtectedRoute>
           }
         />
         <Route
           path="/activity-dashboard"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <MyActivityDashboard />
             </ProtectedRoute>
           }
@@ -186,7 +196,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-1"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit1SchoolIdentity />
             </ProtectedRoute>
           }
@@ -194,7 +204,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-2"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit2Learners />
             </ProtectedRoute>
           }
@@ -202,7 +212,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-3"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit3OrganizedClasses />
             </ProtectedRoute>
           }
@@ -210,7 +220,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-4"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit4LearnerProfile />
             </ProtectedRoute>
           }
@@ -218,7 +228,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-5"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit5ShiftingModality />
             </ProtectedRoute>
           }
@@ -226,7 +236,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-6"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <TeachingPersonnelUnit />
             </ProtectedRoute>
           }
@@ -234,7 +244,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-6-summary"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit6Summary />
             </ProtectedRoute>
           }
@@ -242,7 +252,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-7"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit7SchoolResources />
             </ProtectedRoute>
           }
@@ -250,7 +260,7 @@ const AnimatedRoutes = () => {
         <Route
           path="/modular/unit-8"
           element={
-            <ProtectedRoute allowedRoles={['Beta Tester']}>
+            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit8PhysicalFacilities />
             </ProtectedRoute>
           }
