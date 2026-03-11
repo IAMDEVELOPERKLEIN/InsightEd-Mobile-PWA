@@ -67,7 +67,7 @@ def get_db_connection():
 
 BASE_URL       = "http://localhost:5173/insighted"
 LOGIN_URL      = f"{BASE_URL}/#/"                         # HashRouter root = login
-DASHBOARD_URL  = f"{BASE_URL}/#/modular-dashboard"        # Beta Tester dashboard
+DASHBOARD_URL  = f"{BASE_URL}/#/my-activity"              # School Head dashboard
 UNIT_4_URL     = f"{BASE_URL}/#/modular/unit-4"           # Learner Profile
 
 ACCOUNT_NUMBER = "500031"

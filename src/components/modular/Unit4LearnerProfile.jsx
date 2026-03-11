@@ -110,9 +110,25 @@ const Unit4LearnerProfile = () => {
                     let d = (saved.exists && saved.data) ? saved.data : {};
                     setSavedData(d);
 
-                    // 1. Process Unit 2 Data for Dynamic Filtering & Validation
+                    // 1. Determine Allowed Grades based on Curricular Offering (Hard Guard)
+                    const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
+                    const co = (qp.curricular_offering || d.curricular_offering || "").toLowerCase();
+                    let offeringAllowed = [];
+                    if (co.includes("kinder")) offeringAllowed.push("kinder");
+                    if (co.includes("elementary") || co.includes("primary")) {
+                        offeringAllowed.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+                    }
+                    if (co.includes("junior high") || co.includes("jhs")) {
+                        offeringAllowed.push("g7", "g8", "g9", "g10");
+                    }
+                    if (co.includes("senior high") || co.includes("shs")) {
+                        offeringAllowed.push("g11", "g12");
+                    }
+                    // If no keywords match, default to all as safety
+                    if (offeringAllowed.length === 0) offeringAllowed = ALL_GRADES_REF.map(g => g.id);
+
+                    // 2. Process Unit 2 Data for Dynamic Filtering & Validation
                     let gTotals = {};
-                    let activeGradeIds = new Set();
                     let filteredGrades = [];
 
                     if (d.unit2_simplified_enrollment) {
@@ -122,15 +138,16 @@ const Unit4LearnerProfile = () => {
                                 : d.unit2_simplified_enrollment;
                             
                             const q = u2.questionnaire || {};
-                            
-                            // Reset for processing
                             let processedActiveIds = new Set();
                             let processedTotals = {};
 
-                            // 1. Baseline: Check questionnaire data (Primary Source)
+                            // Baseline: Check questionnaire data (Primary Source)
                             ALL_GRADES_REF.forEach(g => {
                                 const gid = g.id;
-                                const isAvail = q.gradeAvailability?.[gid] !== false; // Active by default
+                                // Must be in offering AND not explicitly disabled
+                                if (!offeringAllowed.includes(gid)) return;
+
+                                const isAvail = q.gradeAvailability?.[gid] !== false;
                                 const hasData = q.gradeTotals?.[gid] !== undefined || (gid === 'kinder' && q.kinderEnrollment !== undefined);
                                 
                                 if (isAvail && hasData) {
@@ -139,28 +156,31 @@ const Unit4LearnerProfile = () => {
                                 }
                             });
 
-                            // 2. Refinement: Multigrade / Mixed Combinations (Override or add)
+                            // Refinement: Multigrade / Mixed Combinations (Override or add)
                             (q.mgCombinations || []).forEach(combo => {
                                 const comboTot = parseInt(combo.enrollment) || 0;
                                 (combo.grades || []).forEach(gid => {
-                                    processedActiveIds.add(gid);
-                                    processedTotals[gid] = comboTot;
+                                    if (offeringAllowed.includes(gid)) {
+                                        processedActiveIds.add(gid);
+                                        processedTotals[gid] = comboTot;
+                                    }
                                 });
                             });
 
-                            // 3. Fallback: Check u2.array or u2 itself if it's an array (Source of truth)
+                            // Fallback: Check u2.array or u2 itself if it's an array
                             let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
                             u2Array.forEach(item => {
-                                if (item.grade_level) {
-                                    const isAvail = q.gradeAvailability?.[item.grade_level] !== false;
+                                const gid = item.grade_level;
+                                if (gid && offeringAllowed.includes(gid)) {
+                                    const isAvail = q.gradeAvailability?.[gid] !== false;
                                     const isActive = item.is_active !== false;
 
                                     if (!isAvail || !isActive) {
-                                        processedActiveIds.delete(item.grade_level);
+                                        processedActiveIds.delete(gid);
                                     } else {
-                                        processedActiveIds.add(item.grade_level);
-                                        if (!processedTotals[item.grade_level]) {
-                                            processedTotals[item.grade_level] = parseInt(item.total) || (parseInt(item.male||0) + parseInt(item.female||0)) || 0;
+                                        processedActiveIds.add(gid);
+                                        if (!processedTotals[gid]) {
+                                            processedTotals[gid] = parseInt(item.total) || (parseInt(item.male||0) + parseInt(item.female||0)) || 0;
                                         }
                                     }
                                 }
@@ -175,24 +195,9 @@ const Unit4LearnerProfile = () => {
                             console.warn("Unit 2 Parse error in Unit 4", e);
                         }
                     } else {
-                        // Fallback completely: Initialize default grades using curricular offering tracking if available
-                        try {
-                            const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
-                            const co = (qp.curricular_offering || d.curricular_offering || "").toLowerCase();
-                            
-                            let allowed = [];
-                            if (co.includes("purely elementary")) allowed = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-                            else if (co.includes("purely junior")) allowed = ['g7', 'g8', 'g9', 'g10'];
-                            else if (co.includes("purely senior")) allowed = ['g11', 'g12'];
-                            else if (co.includes("junior high and senior high") || co.includes("jhs with shs")) allowed = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-                            else if (co.includes("elementary school and junior high school")) allowed = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
-                            else allowed = ALL_GRADES_REF.map(g => g.id); // Default ALL
-                            
-                            filteredGrades = ALL_GRADES_REF.filter(g => allowed.includes(g.id));
-                            setDynamicGrades(filteredGrades);
-                        } catch(e) {}
-                        
-                        // Fallback to old total_enrollment
+                        // Fallback logic using offeringAllowed
+                        filteredGrades = ALL_GRADES_REF.filter(g => offeringAllowed.includes(g.id));
+                        setDynamicGrades(filteredGrades);
                         setEnrollmentTotal(parseInt(d.total_enrollment) || 0);
                     }
 

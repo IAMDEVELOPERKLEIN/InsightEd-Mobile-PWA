@@ -165,7 +165,7 @@ const MyActivityDashboard = () => {
                                 <span className="text-[10px] font-black text-white uppercase tracking-wider">LVL {levelInfo.level} • {levelInfo.title}</span>
                             </motion.div>
                             <h1 className="text-3xl font-black text-slate-800 tracking-tight">My Quest</h1>
-                            <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-[0.2em]">STRIDE Beta Tester</p>
+                            <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-[0.2em]">STRIDE School Head</p>
                         </div>
                         <motion.div 
                             initial={{ scale: 0 }}
@@ -369,7 +369,6 @@ const MyActivityDashboard = () => {
                                 unitMap
                                     .filter(unit => !data?.progress?.flags?.[`unit${unit.flagId}`])
                                     .map((unit, i) => {
-                                        const isCompleted = false;
                                         const isNext = nextUnit?.id === unit.id;
                                         return (
                                             <motion.div 
@@ -420,7 +419,7 @@ const MyActivityDashboard = () => {
 
                 </div>
 
-                <BottomNav userRole="Beta Tester" />
+                <BottomNav userRole="School Head" />
             </div>
         </PageTransition>
     );

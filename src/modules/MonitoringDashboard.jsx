@@ -678,27 +678,72 @@ const MonitoringDashboard = () => {
     };
 
     const fetchData = async (region, division, district) => {
-        const user = auth.currentUser;
-        if (!user) return;
+        let user = auth.currentUser;
+        let uid = user?.uid || localStorage.getItem('uid');
+        if (!uid) {
+            console.warn("No UID found in auth or storage. Skipping fetch.");
+            setLoading(false);
+            return;
+        }
 
         // If we already have userData, use it, otherwise fetch it
         let currentUserData = userData;
         if (!currentUserData) {
-            const docRef = doc(db, "users", user.uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                currentUserData = docSnap.data();
-                setUserData(currentUserData);
+            try {
+                const docRef = doc(db, "users", uid);
+                const docSnap = await Promise.race([
+                    getDoc(docRef),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
+                ]);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    currentUserData = {
+                        ...data,
+                        region: data.region || data.Region || '',
+                        division: data.division || data.Division || '',
+                        district: data.district || data.District || '',
+                        role: data.role || data.Role || ''
+                    };
+                    console.log("Monitoring Dashboard: Loaded user from Firestore:", currentUserData.email, currentUserData.region);
+                    setUserData(currentUserData);
+                }
+            } catch (err) {
+                console.warn("Firestore user fetch failed (likely blocked), using localStorage fallback:", err.message);
+                const storedRole = localStorage.getItem('userRole');
+                if (storedRole) {
+                    currentUserData = {
+                        uid: uid,
+                        role: storedRole,
+                        email: localStorage.getItem('userEmail'),
+                        region: localStorage.getItem('userRegion') || '',
+                        division: localStorage.getItem('userDivision') || '',
+                        account_category: localStorage.getItem('accountCategory')
+                    };
+                    setUserData(currentUserData);
+                }
             }
         }
 
 
-        if (!currentUserData) return;
+        if (!currentUserData) {
+            console.warn("No currentUserData available for effectiveRole/Region logic.");
+            return;
+        }
 
         // --- SUPER USER OVERRIDE ---
-        let effectiveRole = currentUserData.role;
-        let effectiveRegion = currentUserData.region;
-        let effectiveDivision = currentUserData.division;
+        let effectiveRole = currentUserData.role || currentUserData.Role;
+        let effectiveRegion = currentUserData.region || currentUserData.Region || '';
+        let effectiveDivision = currentUserData.division || currentUserData.Division || '';
+
+        // Clean out literal string "undefined" or "null" that might be loaded from bad localStorage state
+        if (effectiveRegion === 'undefined' || effectiveRegion === 'null') effectiveRegion = '';
+        if (effectiveDivision === 'undefined' || effectiveDivision === 'null') effectiveDivision = '';
+
+        console.log("Monitoring Dashboard: Resolving Jurisdiction Filters:", {
+            role: effectiveRole,
+            region: effectiveRegion,
+            division: effectiveDivision
+        });
 
         const impersonatedRole = sessionStorage.getItem('impersonatedRole');
         const isSuperUser = currentUserData.role === 'Super User';

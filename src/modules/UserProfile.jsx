@@ -139,7 +139,7 @@ const UserProfile = () => {
             'Division Engineer': '/engineer-dashboard',
             'Engineer': '/engineer-dashboard',
             'Local Government Unit': '/lgu-dashboard',
-            'School Head': '/schoolhead-dashboard',
+            'School Head': '/my-activity',
             'Human Resource': '/hr-dashboard',
             'Regional Office': '/monitoring-dashboard',
             'School Division Office': '/monitoring-dashboard',
@@ -148,7 +148,7 @@ const UserProfile = () => {
             'Central Office': '/monitoring-dashboard',
             'Central Office Finance': '/finance-dashboard',
             'Super User': '/super-user-selector',
-            'Beta Tester': '/modular-dashboard',
+            'School Head': '/my-activity',
             'EFD': '/efd-dashboard',
         };
         return roleMap[role] || '/';

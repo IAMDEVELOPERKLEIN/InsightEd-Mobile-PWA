@@ -9,7 +9,7 @@ const PROJECTS_STORE = 'projects_cache'; // New store for caching projects
 const GALLERY_STORE = 'gallery_cache'; // New store for caching gallery images
 const DRAFT_SPACES_STORE = 'buildable_spaces_drafts'; // New store for draft spaces
 const REPAIRS_STORE = 'facility_repairs'; // Store for offline facility repairs
-const UNIT_1_DRAFT_STORE = 'unit_1_draft_store'; // New store for Unit 1 Beta Tester drafts
+const UNIT_1_DRAFT_STORE = 'unit_1_draft_store'; // New store for Unit 1 School Head drafts
 
 const SCHOOLS_STORE = 'schools_cache'; // Define constant at top
 
@@ -289,7 +289,7 @@ export async function deleteLocalRepair(localId) {
 }
 
 // ==========================================
-//        UNIT 1 MODULAR DRAFTS (Beta Tester)
+//        UNIT 1 MODULAR DRAFTS (School Head)
 // ==========================================
 
 export async function saveUnit1Draft(iern, draftData) {

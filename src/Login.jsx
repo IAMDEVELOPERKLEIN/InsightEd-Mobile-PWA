@@ -4,6 +4,10 @@ import { auth, db } from './firebase';
 import {
     onAuthStateChanged,
     sendPasswordResetEmail,
+    signInWithCustomToken,
+    setPersistence,
+    browserLocalPersistence,
+    signInWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
@@ -20,7 +24,7 @@ const getDashboardPath = (role, accountCategory) => {
     }
     const roleMap = {
         'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/schoolhead-dashboard',
+        'School Head': '/my-activity',
         'Human Resource': '/hr-dashboard',
         'Regional Office': '/monitoring-dashboard',
         'School Division Office': '/monitoring-dashboard',
@@ -29,7 +33,6 @@ const getDashboardPath = (role, accountCategory) => {
         'Central Office': '/monitoring-dashboard',
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
-        'Beta Tester': '/activity-dashboard',
         'EFD': '/efd-dashboard',
         'HRODI': '/efd-dashboard',
     };
@@ -231,8 +234,19 @@ const Login = () => {
             });
 
             // 2. Process Backend Response
+            const responseText = await migrationResponse.text();
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                console.error("Malformed response from server:", responseText);
+                if (!migrationResponse.ok) {
+                    throw new Error(`Server Error (${migrationResponse.status}). Please contact support.`);
+                }
+                throw new Error("Server returned invalid response format.");
+            }
+
             if (migrationResponse.ok) {
-                const data = await migrationResponse.json();
                 if (data.success && data.user) {
                     console.log("✅ Native Login Successful!", data.user);
                     
@@ -240,19 +254,29 @@ const Login = () => {
                     localStorage.setItem('uid', data.user.uid);
                     localStorage.setItem('userRole', data.user.role);
                     localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
+                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
                     if (data.user.account_category) {
                         localStorage.setItem('accountCategory', data.user.account_category);
                     }
 
-                    // Determine Dashboard Path
+                    // 3. If custom token is available, sign in to Firebase to support Firestore/Monitoring
+                    if (data.customToken) {
+                        console.log("🔑 Syncing with Firebase Custom Token...");
+                        await setPersistence(auth, browserLocalPersistence);
+                        await signInWithCustomToken(auth, data.customToken);
+                        // onAuthStateChanged will handle navigation
+                        return;
+                    }
+                    
+                    // Fallback to manual navigation if no token (legacy or specific backend roles)
                     const destPath = getDashboardPath(data.user.role, data.user.account_category);
                     console.log("Navigating to:", destPath);
                     navigate(destPath);
                     return; 
                 }
             } else {
-                const errorData = await migrationResponse.json();
-                throw new Error(errorData.error || "Login Failed");
+                throw new Error(data.error || "Login Failed");
             }
         } catch (error) {
             console.error(error);
@@ -547,9 +571,9 @@ const Login = () => {
                 // --- NAVIGATION ---
                 console.log("Navigating for role:", role);
                 // alert(`Login Success! Role: ${role}`); // Temporary Debug
-                if (role === 'School Head' || role === 'Beta Tester') {
+                if (role === 'School Head') {
                     // FULL SYNC: Fetch schoolId + quest progress BEFORE navigating
-                    const destPath = role === 'School Head' ? '/schoolhead-dashboard' : getDashboardPath(role);
+                    const destPath = '/my-activity';
 
                     try {
                         // Step 1: Get the user's school ID
