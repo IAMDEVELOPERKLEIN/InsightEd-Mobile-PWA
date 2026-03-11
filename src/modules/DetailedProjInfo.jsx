@@ -627,9 +627,10 @@ const DetailedProjInfo = () => {
         };
 
         const fetchUserRole = async () => {
-            if (auth.currentUser) {
+            const uid = localStorage.getItem('uid');
+            if (uid) {
                 try {
-                    const res = await fetch(`/api/user-info/${auth.currentUser.uid}`);
+                    const res = await fetch(`/api/user-info/${uid}`);
                     if (res.ok) {
                         const data = await res.json();
                         setUserRole(data.role);
@@ -774,8 +775,8 @@ const DetailedProjInfo = () => {
     };
 
     const handleSaveProject = async (updatedProject) => {
-        const user = auth.currentUser;
-        if (!user) return;
+        const uid = localStorage.getItem('uid');
+        if (!uid) return;
 
         // CHECK: Mandatory Location
         // CHECK: Mandatory Location REMOVED per user request
@@ -809,7 +810,7 @@ const DetailedProjInfo = () => {
                         await fetch(`${API_BASE}/api/upload-image`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid, category: item.category }),
+                            body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: uid, category: item.category }),
                         });
                     } catch (err) {
                         console.error("Compression failed for file:", item.file.name, err);

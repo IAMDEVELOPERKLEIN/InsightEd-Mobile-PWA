@@ -2,13 +2,8 @@ import React, { useState, useEffect } from 'react';
 import logo from './assets/InsightEd1.png';
 import { auth, db } from './firebase';
 import {
-    signInWithEmailAndPassword,
-    setPersistence,
-    browserLocalPersistence,
     onAuthStateChanged,
     sendPasswordResetEmail,
-    createUserWithEmailAndPassword,
-    signInWithCustomToken
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
@@ -16,10 +11,14 @@ import PageTransition from './components/PageTransition';
 import LoadingScreen from './components/LoadingScreen';
 
 // Helper function to map roles to dashboard URLs
-const getDashboardPath = (role) => {
+const getDashboardPath = (role, accountCategory) => {
+    // Division Engineer redirect depends on account category
+    if (role === 'Division Engineer' || role === 'Engineer') {
+        return accountCategory === 'Non-DepEd Engineer'
+            ? '/non-deped-dashboard'
+            : '/engineer-dashboard';
+    }
     const roleMap = {
-        'Division Engineer': '/engineer-dashboard',
-        'Engineer': '/engineer-dashboard',
         'Local Government Unit': '/lgu-dashboard',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
@@ -32,6 +31,7 @@ const getDashboardPath = (role) => {
         'Super User': '/super-user-selector',
         'Beta Tester': '/activity-dashboard',
         'EFD': '/efd-dashboard',
+        'HRODI': '/efd-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -222,51 +222,37 @@ const Login = () => {
                 }
             }
 
-            // 1. Send Credentials to the Postgres Backend for the Lazy Upgrade check
-            console.log("Attempting Lazy Migration Login...");
-            let migrationResponse;
-            try {
-                migrationResponse = await fetch('/api/auth/migrate-login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: emailToTry, password: password })
-                });
-            } catch (networkErr) {
-                console.warn("Backend not reachable for migration, falling back to legacy Firebase...");
-            }
+            // 1. Send Credentials to the Postgres Backend
+            console.log("Attempting Native Login...");
+            const migrationResponse = await fetch('/api/auth/migrate-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: emailToTry, password: password })
+            });
 
             // 2. Process Backend Response
-            if (migrationResponse && migrationResponse.ok) {
+            if (migrationResponse.ok) {
                 const data = await migrationResponse.json();
-                if (data.success && data.customToken) {
-                    console.log("✅ Custom Token generated from PG Backend! Authenticating with Firebase...");
-                    await setPersistence(auth, browserLocalPersistence);
-                    await signInWithCustomToken(auth, data.customToken);
-                    return; // Success! The auth listener handles navigation
-                }
-            }
-            
-            // 3. FALLBACK: If the Postgres check fails with a 401 (or isSchoolId format is tricky), 
-            // fallback to direct Firebase Auth momentarily until migration is 100% complete.
-            console.log("Backend login failed or returned 401. Falling back to legacy Firebase auth...");
-            await setPersistence(auth, browserLocalPersistence);
-
-            if (isSchoolId) {
-                // 1. Try the new standard (@insighted.app)
-                try {
-                    await signInWithEmailAndPassword(auth, `${originalInput}@insighted.app`, password);
-                } catch (firstErr) {
-                    // 2. If it fails, instantly try the legacy domain (@deped.gov.ph)
-                    if (firstErr.code === 'auth/user-not-found' || firstErr.code === 'auth/invalid-credential') {
-                        console.log("Trying legacy deped.gov.ph email...");
-                        await signInWithEmailAndPassword(auth, `${originalInput}@deped.gov.ph`, password);
-                    } else {
-                        throw firstErr; 
+                if (data.success && data.user) {
+                    console.log("✅ Native Login Successful!", data.user);
+                    
+                    // Establish Native Session
+                    localStorage.setItem('uid', data.user.uid);
+                    localStorage.setItem('userRole', data.user.role);
+                    localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.account_category) {
+                        localStorage.setItem('accountCategory', data.user.account_category);
                     }
+
+                    // Determine Dashboard Path
+                    const destPath = getDashboardPath(data.user.role, data.user.account_category);
+                    console.log("Navigating to:", destPath);
+                    navigate(destPath);
+                    return; 
                 }
             } else {
-                // Standard email login (if they manually typed an @ symbol)
-                await signInWithEmailAndPassword(auth, originalInput, password);
+                const errorData = await migrationResponse.json();
+                throw new Error(errorData.error || "Login Failed");
             }
         } catch (error) {
             console.error(error);
@@ -600,8 +586,20 @@ const Login = () => {
                     console.log("Redirecting LGU to Dashboard...");
                     navigate('/lgu-dashboard');
                 } else {
-                    const path = getDashboardPath(role);
-                    console.log("Navigating to:", path);
+                    // Fetch account_category for role-aware navigation (Division Engineer / Non-DepEd)
+                    let accountCategory = localStorage.getItem('accountCategory');
+                    try {
+                        const infoRes = await fetch(`/api/user-info/${uid}`);
+                        if (infoRes.ok) {
+                            const info = await infoRes.json();
+                            accountCategory = info.account_category || accountCategory;
+                            if (accountCategory) localStorage.setItem('accountCategory', accountCategory);
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch account_category for routing:', e);
+                    }
+                    const path = getDashboardPath(role, accountCategory);
+                    console.log("Navigating to:", path, "(accountCategory:", accountCategory, ")");
                     navigate(path);
                 }
 

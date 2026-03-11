@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import logo from './assets/InsightEd1.png';
 import { auth, db } from './firebase';
-import { signInWithCustomToken } from 'firebase/auth'; // Replaced password sign-in with custom token sign-in
 import { doc, setDoc } from 'firebase/firestore'; 
 import { useNavigate, Link } from 'react-router-dom';
 import PageTransition from './components/PageTransition';
@@ -43,10 +42,16 @@ const AUTHORIZATION_CODES = {
 
 import locationData from './locations.json';
 
-const getDashboardPath = (role) => {
+const getDashboardPath = (role, accountCategory) => {
+    // Division Engineer redirect depends on their account category
+    if (role === 'Division Engineer') {
+        return accountCategory === 'Non-DepEd Engineer'
+            ? '/non-deped-dashboard'
+            : '/engineer-dashboard';
+    }
     const roleMap = {
-        'Division Engineer': '/engineer-dashboard',
         'EFD': '/efd-dashboard',
+        'HRODI': '/efd-dashboard',
         'Local Government Unit': '/lgu-dashboard',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
@@ -535,19 +540,21 @@ const Register = () => {
                        throw new Error(regData.error || "Server Registration Failed.");
                     }
 
-                    // Authenticate frontend using Custom Token
-                    // If Firebase Admin is not initialized (local dev), signInWithCustomToken may fail.
-                    // In that case, navigate to login page — the account was created successfully in DB.
-                    try {
-                        const userCredential = await signInWithCustomToken(auth, regData.customToken);
-                        user = userCredential.user;
-                    } catch (tokenErr) {
-                        console.warn("signInWithCustomToken failed (likely no Firebase Admin locally):", tokenErr.message);
-                        // Account was created in DB — redirect user to login
-                        alert("✅ Account created successfully!\n\nPlease log in with your new credentials.");
-                        navigate('/login');
-                        return;
+                    // NATIVE SESSION MANAGEMENT (Replacing Firebase)
+                    console.log("✅ Registration Successful! Setting native session...");
+                    localStorage.setItem('uid', regData.uid);
+                    localStorage.setItem('userRole', regData.role);
+                    if (regData.accountCategory) {
+                        localStorage.setItem('accountCategory', regData.accountCategory);
                     }
+
+                    // For specialized redirects, we need to pass these directly
+                    const destPath = getDashboardPath(regData.role, regData.accountCategory);
+                    console.log("Redirecting to:", destPath);
+                    
+                    alert("✅ Account created successfully!");
+                    navigate(destPath);
+                    return;
 
                 } catch (backendErr) {
                     console.error("Native Registration Failed:", backendErr);
@@ -588,7 +595,14 @@ const Register = () => {
             } else {
                 // Set role in localStorage for immediate access by Dashboard/BottomNav
                 localStorage.setItem('userRole', formData.role);
-                navigate(getDashboardPath(formData.role));
+                // Save accountCategory so other components can read it
+                if (formData.accountCategory) {
+                    localStorage.setItem('accountCategory', formData.accountCategory);
+                } else if (formData.role === 'EFD' || formData.role === 'HRODI') {
+                    localStorage.setItem('accountCategory', 'EFD Engineer');
+                }
+                const destPath = getDashboardPath(formData.role, formData.accountCategory || ( (formData.role === 'EFD' || formData.role === 'HRODI') ? 'EFD Engineer' : '' ));
+                navigate(destPath);
             }
 
         } catch (error) {

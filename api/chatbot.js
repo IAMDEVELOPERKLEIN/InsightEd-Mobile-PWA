@@ -1,4 +1,4 @@
-import { PDFParse } from 'pdf-parse';
+import pdfParse from 'pdf-parse-new';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -54,8 +54,7 @@ export const teachChatbot = async (text, filePath = null) => {
     if (filePath) {
         const dataBuffer = fs.readFileSync(filePath);
         try {
-            const parser = new PDFParse({ data: dataBuffer });
-            const result = await parser.getText();
+            const result = await pdfParse(dataBuffer);
             content = result.text;
             source = path.basename(filePath);
         } catch (e) {
