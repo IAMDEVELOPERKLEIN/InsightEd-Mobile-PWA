@@ -144,6 +144,7 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS contact_number TEXT,
             ADD COLUMN IF NOT EXISTS alt_email TEXT,
             ADD COLUMN IF NOT EXISTS account_category TEXT, -- DepEd vs Non-DepEd
+            ADD COLUMN IF NOT EXISTS iern TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
         console.log(`✅ [${dbLabel}] Users Table Schema Updated`);

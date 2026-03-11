@@ -219,10 +219,11 @@ const Login = () => {
         try {
             const originalInput = loginId.trim();
             const isSchoolId = /^\d+$/.test(originalInput);
+            const isIern = /^2026-/.test(originalInput);
             
             // Determine the actual email to try
             let emailToTry = originalInput;
-            if (isSchoolId) {
+            if (isSchoolId || isIern) {
                 // Determine the actual registered email for this School ID
                 try {
                     const lookupRes = await fetch(`/api/auth/lookup-email/${originalInput}`);

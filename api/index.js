@@ -1555,10 +1555,12 @@ app.post('/api/auth/setup-pin', async (req, res) => {
   }
   
   try {
+    const normalizedEmail = email.trim().toLowerCase();
     const result = await pool.query(
-      'UPDATE users SET passcode = $1 WHERE LOWER(email) = $2 RETURNING uid',
-      [pin, email.trim().toLowerCase()]
+      'UPDATE users SET passcode = $1 WHERE LOWER(email) = $2 OR iern = $2 OR LOWER(email) = $3 RETURNING uid',
+      [pin, normalizedEmail, `${normalizedEmail}@insighted.app`]
     );
+
     
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: "User not found." });
@@ -1581,9 +1583,10 @@ app.post('/api/auth/pin-login', async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase();
     
     const userRes = await pool.query(
-      'SELECT uid, email, role, region, division, account_category, passcode FROM users WHERE LOWER(email) = $1', 
-      [normalizedEmail]
+      'SELECT uid, email, role, region, division, account_category, passcode FROM users WHERE LOWER(email) = $1 OR iern = $1 OR LOWER(email) = $2', 
+      [normalizedEmail, `${normalizedEmail}@insighted.app`]
     );
+
 
     if (userRes.rowCount === 0) {
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
@@ -6010,8 +6013,8 @@ app.post('/api/register-beta', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            password_hash, hash_version, iern
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
@@ -6020,7 +6023,8 @@ app.post('/api/register-beta', async (req, res) => {
             province = EXCLUDED.province,
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
-            hash_version = EXCLUDED.hash_version;`,
+            hash_version = EXCLUDED.hash_version,
+            iern = EXCLUDED.iern;`,
         [
           uid,
           normalizedEmail,
@@ -6033,7 +6037,8 @@ app.post('/api/register-beta', async (req, res) => {
           schoolData.province || null,
           schoolData.municipality || null,
           passwordHash,
-          'bcrypt'
+          'bcrypt',
+          foundIern
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6246,14 +6251,26 @@ app.post('/api/register-user', async (req, res) => {
 app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // 1. Try USERS table first (Modern Auth) - Prioritize @insighted.app
-    let result = await pool.query(
-      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-      [`${schoolId}@%`]
-    );
+    // 0. Try Resolve School ID to IERN via schools_IERN
+    const iernLookup = await pool.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 LIMIT 1', [schoolId]);
+    const resolvedIern = iernLookup.rows.length > 0 ? iernLookup.rows[0].iern : schoolId;
+
+    // 1. Try USERS table (Modern Auth) - Prioritize IERN match, then email prefix
+    let result;
+    if (resolvedIern) {
+      result = await pool.query(
+        "SELECT email FROM users WHERE iern = $1 OR email ILIKE $2 ORDER BY (CASE WHEN iern = $1 THEN 0 ELSE 1 END), (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [resolvedIern, `${schoolId}@%`]
+      );
+    } else {
+      result = await pool.query(
+        "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [`${schoolId}@%`]
+      );
+    }
 
     if (result.rows.length > 0) {
-      return res.json({ found: true, email: result.rows[0].email });
+      return res.json({ found: true, email: result.rows[0].email, iern: resolvedIern });
     }
 
     // 2. Fallback: Try SCHOOL_PROFILES table (Legacy)
@@ -6288,12 +6305,23 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     let email = null;
+    // 0. Try Resolve School ID to IERN via schools_IERN
+    const iernLookup = await pool.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 LIMIT 1', [schoolId]);
+    const resolvedIern = iernLookup.rows.length > 0 ? iernLookup.rows[0].iern : null;
 
-    // 1. Try USERS table - Prioritize @insighted.app
-    let result = await pool.query(
-      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-      [`${schoolId}@%`]
-    );
+    // 1. Try USERS table - Prioritize IERN match, then email prefix
+    let result;
+    if (resolvedIern) {
+      result = await pool.query(
+        "SELECT email FROM users WHERE iern = $1 OR email ILIKE $2 ORDER BY (CASE WHEN iern = $1 THEN 0 ELSE 1 END), (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [resolvedIern, `${schoolId}@%`]
+      );
+    } else {
+      result = await pool.query(
+        "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [`${schoolId}@%`]
+      );
+    }
     if (result.rows.length > 0) email = result.rows[0].email;
 
     // 2. Fallback: SCHOOL_PROFILES
@@ -13509,7 +13537,55 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.latitude || null, data.longitude || null,
       data.school_head || null, data.contact_number || null
     ];
-    await pool.query(query, values);
+    
+    // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
+    let updatedByIern = false;
+    if (data.iern) {
+      const updateRes = await pool.query(`
+        UPDATE ph_schools SET
+          school_id = $1, school_name = $3, region = $4, province = $5,
+          municipality = $6, barangay = $7, division = $8, district = $9,
+          leg_district = $10, curricular_offering = $11, latitude = $12,
+          longitude = $13, school_head = $14, contact_number = $15,
+          unit1_completed = TRUE, updated_at = CURRENT_TIMESTAMP
+        WHERE iern = $2
+      `, values);
+      
+      if (updateRes.rowCount > 0) {
+        updatedByIern = true;
+      }
+    }
+
+    // Fallback to INSERT ON CONFLICT school_id if no unique IERN record matched
+    if (!updatedByIern) {
+      await pool.query(query, values);
+    }
+    
+    // --- SYNC TO schools_IERN (Mapping Update) ---
+    // If a School Head provides both school_id and iern, ensure the mapping exists in schools_IERN
+    if (data.school_id && data.iern) {
+      try {
+        const iernValues = [
+          data.school_id, data.iern, data.school_name,
+          data.region || null, data.division || null, data.province || null, data.municipality || null, data.district || null
+        ];
+        
+        const updateIernRes = await pool.query(`
+          UPDATE "schools_IERN" 
+          SET iern = $2, "School_Name" = $3, "Region" = $4, "Division" = $5, "Province" = $6, "Municipality" = $7, "District" = $8 
+          WHERE "SchoolID" = $1
+        `, iernValues);
+        
+        if (updateIernRes.rowCount === 0) {
+          await pool.query(`
+            INSERT INTO "schools_IERN" ("SchoolID", "iern", "School_Name", "Region", "Division", "Province", "Municipality", "District")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `, iernValues);
+        }
+      } catch (syncErr) {
+        console.error("âš ï¸ schools_IERN Sync Error:", syncErr.message);
+      }
+    }
 
     // Auto-update school_summary instantly
     try {
