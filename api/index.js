@@ -21,6 +21,8 @@ import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
 import { teachChatbot, chatWithKnowledge, setPool, updateKnowledgeEntry, deleteKnowledgeEntry } from './chatbot.js';
 import { v4 as uuidv4 } from 'uuid';
+import { calculateRiskIndex } from './utils/safetyScore.js';
+import { z } from 'zod'; // For validation
 
 
 // Load environment variables
@@ -14596,6 +14598,121 @@ app.delete('/api/ph_schools/unit10/spaces/:spaceId', async (req, res) => {
     res.json({ success: true, message: "Space deleted." });
   } catch (err) {
     console.error("DELETE Unit 10 Space Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// ==================================================================
+//               SCHOOL LOCATION MODULE (New Module)
+// ==================================================================
+
+const schoolLocationSchema = z.object({
+  school_id: z.string(),
+  transportation_modes: z.array(z.string()).optional(),
+  road_paved_pct: z.number().min(0).max(100),
+  road_unpaved_pct: z.number().min(0).max(100),
+  road_lighting_pct: z.number().min(0).max(100).optional(),
+  public_transpo_availability: z.number().min(1).max(5).optional(),
+  water_proximity: z.array(z.any()).optional(),
+  near_cliff_ravine: z.boolean().optional(),
+  cliff_distance_m: z.number().nullable().optional(),
+  natural_calamities: z.array(z.any()).optional(),
+  hazards_experienced: z.array(z.string()).optional(),
+  insurgency_threats_6mo: z.number().optional(),
+  requires_hiking: z.boolean().optional(),
+  hiking_distance_km: z.number().nullable().optional(),
+  manmade_bridge_foot: z.boolean().optional(),
+  river_crossing_no_bridge: z.boolean().optional(),
+  emergency_response_mins: z.number().optional(),
+  cellular_coverage: z.string().optional(),
+  weather_isolation: z.boolean().optional(),
+}).refine(data => (data.road_paved_pct + data.road_unpaved_pct) === 100, {
+  message: "Paved and unpaved percentages must sum to 100",
+  path: ["road_paved_pct"]
+});
+
+// GET /api/school-location/:school_id
+app.get('/api/school-location/:school_id', async (req, res) => {
+  const { school_id } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_location_profiles WHERE school_id = $1', [school_id]);
+    res.json({ success: true, data: result.rows[0] || null });
+  } catch (err) {
+    console.error("GET School Location Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /api/school-location
+app.post('/api/school-location', async (req, res) => {
+  try {
+    const validatedData = schoolLocationSchema.parse(req.body);
+    const riskIndex = calculateRiskIndex(validatedData);
+
+    const query = `
+      INSERT INTO school_location_profiles (
+        school_id, transportation_modes, road_paved_pct, road_unpaved_pct, road_lighting_pct,
+        public_transpo_availability, water_proximity, near_cliff_ravine, cliff_distance_m,
+        natural_calamities, hazards_experienced, insurgency_threats_6mo, requires_hiking,
+        hiking_distance_km, manmade_bridge_foot, river_crossing_no_bridge, emergency_response_mins,
+        cellular_coverage, weather_isolation, risk_index, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (school_id) DO UPDATE SET
+        transportation_modes = EXCLUDED.transportation_modes,
+        road_paved_pct = EXCLUDED.road_paved_pct,
+        road_unpaved_pct = EXCLUDED.road_unpaved_pct,
+        road_lighting_pct = EXCLUDED.road_lighting_pct,
+        public_transpo_availability = EXCLUDED.public_transpo_availability,
+        water_proximity = EXCLUDED.water_proximity,
+        near_cliff_ravine = EXCLUDED.near_cliff_ravine,
+        cliff_distance_m = EXCLUDED.cliff_distance_m,
+        natural_calamities = EXCLUDED.natural_calamities,
+        hazards_experienced = EXCLUDED.hazards_experienced,
+        insurgency_threats_6mo = EXCLUDED.insurgency_threats_6mo,
+        requires_hiking = EXCLUDED.requires_hiking,
+        hiking_distance_km = EXCLUDED.hiking_distance_km,
+        manmade_bridge_foot = EXCLUDED.manmade_bridge_foot,
+        river_crossing_no_bridge = EXCLUDED.river_crossing_no_bridge,
+        emergency_response_mins = EXCLUDED.emergency_response_mins,
+        cellular_coverage = EXCLUDED.cellular_coverage,
+        weather_isolation = EXCLUDED.weather_isolation,
+        risk_index = EXCLUDED.risk_index,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *;
+    `;
+
+    const values = [
+      validatedData.school_id,
+      validatedData.transportation_modes,
+      validatedData.road_paved_pct,
+      validatedData.road_unpaved_pct,
+      validatedData.road_lighting_pct,
+      validatedData.public_transpo_availability,
+      validatedData.water_proximity ? JSON.stringify(validatedData.water_proximity) : null,
+      validatedData.near_cliff_ravine,
+      validatedData.cliff_distance_m,
+      validatedData.natural_calamities ? JSON.stringify(validatedData.natural_calamities) : null,
+      validatedData.hazards_experienced,
+      validatedData.insurgency_threats_6mo,
+      validatedData.requires_hiking,
+      validatedData.hiking_distance_km,
+      validatedData.manmade_bridge_foot,
+      validatedData.river_crossing_no_bridge,
+      validatedData.emergency_response_mins,
+      validatedData.cellular_coverage,
+      validatedData.weather_isolation,
+      riskIndex
+    ];
+
+    const result = await pool.query(query, values);
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: "Validation failed", details: err.errors });
+    }
+    console.error("POST School Location Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
