@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
 :: Deployment Script (Local to Remote) - Batch Version
 :: This script pushes code directly from your Windows CMD to the Azure VM.
@@ -21,19 +21,33 @@ echo ------------------------------------------------
 echo 1. Syncing local files to VM...
 where rsync >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] 'rsync' was not found in your PATH.
-    echo Please run this script from 'Git Bash' or install 'rsync' for Windows.
-    pause
-    exit /b
+    set "RSYNC_PATH=C:\Program Files\Git\usr\bin\rsync.exe"
+    if not exist "!RSYNC_PATH!" set "RSYNC_PATH=C:\Program Files (x86)\Git\usr\bin\rsync.exe"
+    
+    if not exist "!RSYNC_PATH!" (
+        echo [INFO] 'rsync' not found. Falling back to 'scp' (built-in Windows tool)...
+        scp -r ./api ./src ./public ./index.html ./package.json %SSH_USER%@%SERVER_IP%:%SERVER_DIR%/
+        if %errorlevel% neq 0 (
+            echo [ERROR] Deployment failed.
+            pause
+            exit /b
+        )
+        goto :REMOTE_STEPS
+    )
+    set "RSYNC_CMD=!RSYNC_PATH!"
+) else (
+    set "RSYNC_CMD=rsync"
 )
-:: Using rsync (requires Git Bash or a similar tool in PATH)
-rsync -avz --delete ^
+
+:: Using rsync
+%RSYNC_CMD% -avz --delete ^
     --exclude "node_modules/" ^
     --exclude "dist/" ^
     --exclude ".git/" ^
     --exclude ".env" ^
     ./ %SSH_USER%@%SERVER_IP%:%SERVER_DIR%/
 
+:REMOTE_STEPS
 echo 2. Running remote build and restart...
 # SSH into the server to perform installation and service restart
 ssh %SSH_USER%@%SERVER_IP% "cd %SERVER_DIR% && npm install --legacy-peer-deps && npm run build && pm2 restart insighted-backend"

@@ -13,6 +13,14 @@ const Unit9SchoolLocation = () => {
     };
 
     const handleSaveSuccess = () => {
+        // Update localStorage so ModularDashboard immediately reflects completion
+        const stored = localStorage.getItem('quest_progress');
+        let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+        if (!progress.completedUnits.includes(9)) {
+            progress.completedUnits.push(9);
+            progress.xp = (progress.xp || 0) + 500;
+        }
+        localStorage.setItem('quest_progress', JSON.stringify(progress));
         navigate('/modular-dashboard');
     };
 

@@ -13646,59 +13646,164 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // Ensure columns exist to avoid query failure
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0;`);
+    // ── 1. Ensure all required columns exist (idempotent) ────────────────────
+    const ensureCols = [
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10 INTEGER DEFAULT 0`,
+    ];
+    for (const sql of ensureCols) {
+      await pool.query(sql).catch(() => {}); // silently skip if already exists
+    }
 
+    // ── 2. Safe fetch — only columns we know exist ──────────────────────────
     const result = await pool.query(
-      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed, unit10_completed, curricular_offering, unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9, unit10 FROM ph_schools WHERE school_id = $1',
+      `SELECT 
+        unit1_completed, unit2_completed, unit3_completed, unit4_completed,
+        unit5_completed, unit6_completed, unit7_completed, unit8_completed,
+        unit9_completed, unit10_completed, curricular_offering,
+        unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9, unit10,
+        school_name, total_enrollment
+       FROM ph_schools WHERE school_id = $1`,
       [schoolId]
     );
 
     let completedUnits = [];
     let incompleteUnits = [];
     let xp = 0;
+    const backfillClauses = [];
 
     let curricular_offering = null;
     if (result.rows.length > 0) {
       const row = result.rows[0];
       curricular_offering = row.curricular_offering;
 
-      // Completion Logic
-      if (row.unit1_completed) { completedUnits.push(1); xp += 150; } else if (row.unit1 === 2) { incompleteUnits.push(1); }
-      if (row.unit2_completed) { completedUnits.push(2); xp += 200; } else if (row.unit2 === 2) { incompleteUnits.push(2); }
-      if (row.unit3_completed) { completedUnits.push(3); xp += 200; } else if (row.unit3 === 2) { incompleteUnits.push(3); }
-      if (row.unit4_completed) { completedUnits.push(4); xp += 250; } else if (row.unit4 === 2) { incompleteUnits.push(4); }
-      if (row.unit5_completed) { completedUnits.push(5); xp += 300; } else if (row.unit5 === 2) { incompleteUnits.push(5); }
-      if (row.unit6_completed) { completedUnits.push(6); xp += 300; } else if (row.unit6 === 2) { incompleteUnits.push(6); }
-      if (row.unit7_completed) { completedUnits.push(7); xp += 350; } else if (row.unit7 === 2) { incompleteUnits.push(7); }
+      // ── Unit 1: School Identity ─────────────────────────────────────────
+      let u1 = row.unit1_completed;
+      if (!u1 && row.school_name) { u1 = true; backfillClauses.push(`unit1_completed = TRUE, unit1 = 1`); }
+      if (u1) { completedUnits.push(1); xp += 150; } else if (row.unit1 === 2) { incompleteUnits.push(1); }
 
-      // Unit 8 Inference Fallback
-      let unit8_is_complete = row.unit8_completed || (row.unit8 === 1);
-      if (!unit8_is_complete) {
-        const checkData = await pool.query(`
-          SELECT 
-            (SELECT COUNT(*) FROM ph_buildings_inventory WHERE school_id = $1) as inv,
-            (SELECT COUNT(*) FROM ph_buildings_repairs WHERE school_id = $1) as rep,
-            (SELECT COUNT(*) FROM ph_buildings_demolition WHERE school_id = $1) as demo
-        `, [schoolId]);
-        const counts = checkData.rows[0];
-        if (parseInt(counts.inv) > 0 || parseInt(counts.rep) > 0 || parseInt(counts.demo) > 0) {
-          unit8_is_complete = true;
-          // Best effort sync
-          pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1 WHERE school_id = $1', [schoolId]).catch(() => {});
+      // ── Unit 2: Enrollment ──────────────────────────────────────────────
+      let u2 = row.unit2_completed;
+      if (!u2 && row.total_enrollment > 0) { u2 = true; backfillClauses.push(`unit2_completed = TRUE, unit2 = 1`); }
+      if (!u2) {
+        // secondary: check unit2_simplified_enrollment column (may or may not exist)
+        const ck = await pool.query(`SELECT unit2_simplified_enrollment FROM ph_schools WHERE school_id = $1 AND unit2_simplified_enrollment IS NOT NULL LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u2 = true; backfillClauses.push(`unit2_completed = TRUE, unit2 = 1`); }
+      }
+      if (u2) { completedUnits.push(2); xp += 200; } else if (row.unit2 === 2) { incompleteUnits.push(2); }
+
+      // ── Unit 3: Organized Classes ───────────────────────────────────────
+      let u3 = row.unit3_completed;
+      if (!u3) {
+        const ck = await pool.query(`SELECT unit3_simplified_counts FROM ph_schools WHERE school_id = $1 AND unit3_simplified_counts IS NOT NULL LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u3 = true; backfillClauses.push(`unit3_completed = TRUE, unit3 = 1`); }
+      }
+      if (u3) { completedUnits.push(3); xp += 200; } else if (row.unit3 === 2) { incompleteUnits.push(3); }
+
+      // ── Unit 4: Learner Profile ─────────────────────────────────────────
+      let u4 = row.unit4_completed;
+      if (!u4) {
+        // Unit 4 saves unit4_completed = TRUE via PUT to ph_schools; also check als_g1 as indicator
+        const ck = await pool.query(`SELECT als_g1 FROM ph_schools WHERE school_id = $1 AND als_g1 IS NOT NULL AND als_g1 > 0 LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u4 = true; backfillClauses.push(`unit4_completed = TRUE, unit4 = 1`); }
+      }
+      if (u4) { completedUnits.push(4); xp += 250; } else if (row.unit4 === 2) { incompleteUnits.push(4); }
+
+      // ── Unit 5: Shifting & Modality ─────────────────────────────────────
+      let u5 = row.unit5_completed;
+      if (!u5) {
+        // Check if shifting_modality column exists and has data
+        const ck = await pool.query(`SELECT shifting_modality FROM ph_schools WHERE school_id = $1 AND shifting_modality IS NOT NULL AND shifting_modality != '' LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u5 = true; backfillClauses.push(`unit5_completed = TRUE, unit5 = 1`); }
+      }
+      if (u5) { completedUnits.push(5); xp += 300; } else if (row.unit5 === 2) { incompleteUnits.push(5); }
+
+      // ── Unit 6: Teaching Personnel ──────────────────────────────────────
+      // ALWAYS re-check live data regardless of cached flag,
+      // because a teacher's load can change after the flag was set.
+      let u6 = false;
+      const u6Teachers = await pool.query(
+        `SELECT COUNT(*) as total,
+                SUM(CASE WHEN (COALESCE(monday_mins,0) + COALESCE(tuesday_mins,0) + COALESCE(wednesday_mins,0) + COALESCE(thursday_mins,0) + COALESCE(friday_mins,0)) = 0 THEN 1 ELSE 0 END) as zero_load
+         FROM ph_teachers_list WHERE school_id = $1`, [schoolId]
+      ).catch(() => ({ rows: [{ total: 0, zero_load: 0 }] }));
+      const { total: u6Total, zero_load: u6ZeroLoad } = u6Teachers.rows[0] || { total: 0, zero_load: 0 };
+      if (parseInt(u6Total) > 0) {
+        if (parseInt(u6ZeroLoad) > 0) {
+          // Teachers exist but some have 0 teaching load → Incomplete
+          incompleteUnits.push(6);
+          backfillClauses.push(`unit6_completed = FALSE, unit6 = 2`);
+        } else {
+          // All teachers have loads assigned → Done
+          u6 = true;
+          backfillClauses.push(`unit6_completed = TRUE, unit6 = 1`);
         }
       }
+      if (u6) { completedUnits.push(6); xp += 300; }
 
-      if (unit8_is_complete) { completedUnits.push(8); xp += 500; } else if (row.unit8 === 2) { incompleteUnits.push(8); }
-      if (row.unit9_completed) { completedUnits.push(9); xp += 500; } else if (row.unit9 === 2) { incompleteUnits.push(9); }
+      // ── Unit 7: School Resources ────────────────────────────────────────
+      let u7 = row.unit7_completed;
+      if (!u7) {
+        const ck = await pool.query(`SELECT unit7_furniture FROM ph_schools WHERE school_id = $1 AND unit7_furniture IS NOT NULL LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u7 = true; backfillClauses.push(`unit7_completed = TRUE, unit7 = 1`); }
+      }
+      if (u7) { completedUnits.push(7); xp += 350; } else if (row.unit7 === 2) { incompleteUnits.push(7); }
+
+      // ── Unit 8: Physical Facilities ─────────────────────────────────────
+      let u8 = row.unit8_completed || (row.unit8 === 1);
+      if (!u8) {
+        const ck = await pool.query(`
+          SELECT (SELECT COUNT(*) FROM ph_buildings_inventory WHERE school_id = $1) as inv,
+                 (SELECT COUNT(*) FROM ph_buildings_repairs WHERE school_id = $1) as rep,
+                 (SELECT COUNT(*) FROM ph_buildings_demolition WHERE school_id = $1) as demo
+        `, [schoolId]).catch(() => ({ rows: [{ inv: 0, rep: 0, demo: 0 }] }));
+        const c = ck.rows[0];
+        if (parseInt(c.inv) > 0 || parseInt(c.rep) > 0 || parseInt(c.demo) > 0) { u8 = true; backfillClauses.push(`unit8_completed = TRUE, unit8 = 1`); }
+      }
+      if (u8) { completedUnits.push(8); xp += 500; } else if (row.unit8 === 2) { incompleteUnits.push(8); }
+
+      // ── Unit 9: School Location ─────────────────────────────────────────
+      let u9 = row.unit9_completed;
+      if (!u9) {
+        const ck = await pool.query(`SELECT COUNT(*) as cnt FROM school_location_profiles WHERE school_id = $1`, [schoolId]).catch(() => ({ rows: [{ cnt: 0 }] }));
+        if (parseInt(ck.rows[0]?.cnt) > 0) { u9 = true; backfillClauses.push(`unit9_completed = TRUE, unit9 = 1`); }
+      }
+      if (u9) { completedUnits.push(9); xp += 500; } else if (row.unit9 === 2) { incompleteUnits.push(9); }
+
+      // ── Unit 10 ─────────────────────────────────────────────────────────
       if (row.unit10_completed) { completedUnits.push(10); xp += 500; } else if (row.unit10 === 2) { incompleteUnits.push(10); }
+
+      // ── Retroactive Backfill (fire-and-forget) ──────────────────────────
+      if (backfillClauses.length > 0) {
+        const unique = [...new Set(backfillClauses.join(', ').split(', '))].join(', ');
+        pool.query(`UPDATE ph_schools SET ${unique} WHERE school_id = $1`, [schoolId])
+          .catch(e => console.warn(`[Progress Backfill] ${schoolId}:`, e.message));
+      }
     }
 
     res.json({ success: true, progress: { completedUnits, incompleteUnits, xp, curricular_offering } });
   } catch (err) {
     console.error("Fetch Quest Progress Error:", err);
-    res.status(500).json({ error: "Failed to fetch progress" });
+    // Return empty progress rather than an error so dashboard still renders
+    res.json({ success: true, progress: { completedUnits: [], incompleteUnits: [], xp: 0, curricular_offering: null } });
   }
 });
 

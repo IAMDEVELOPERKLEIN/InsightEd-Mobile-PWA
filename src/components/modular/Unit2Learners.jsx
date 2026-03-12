@@ -52,7 +52,7 @@ const Unit2Learners = () => {
     const [orgType, setOrgType] = useState(null); // 'nano', 'pure_mg', 'mixed'
     const [mgCombinations, setMgCombinations] = useState([]); // [{ id, grades: [], enrollment }]
 
-    // Step 4: Grade Totals & Availability (Nano/Standalone)
+    // Step 4: Grade Totals & Availability (Monograde/Standalone)
     const [gradeTotals, setGradeTotals] = useState({});
     const [gradeAvailability, setGradeAvailability] = useState({});
     
@@ -80,55 +80,48 @@ const Unit2Learners = () => {
         return locked;
     }, [mgCombinations]);
 
-    const activeNanoGrades = useMemo(() => {
-        // Only show grades NOT in combinations and NOT Kinder (handled separately)
-        return availableGrades.filter(g => !lockedGrades.has(g.id) && g.id !== 'kinder');
-    }, [availableGrades, lockedGrades]);
+    const activeMonogrades = useMemo(() => {
+        if (!schoolOffering) return [];
+        // Filters only ELEM grades. Kinder is Step 1.
+        return ALL_GRADES.filter(g => ELEM_GRADES.includes(g.id) && !lockedGrades.has(g.id));
+    }, [schoolOffering, lockedGrades]);
 
     const grandTotal = useMemo(() => {
-        let sum = 0;
-        // Kinder standalone
-        const isKinderActive = gradeAvailability.kinder !== false;
-        if (isKinderActive) {
-            sum += (parseInt(kinderEnrollment) || 0);
-        }
-        
-        // Nano totals
-        activeNanoGrades.forEach(g => sum += (parseInt(gradeTotals[g.id]) || 0));
-        // MG totals
-        mgCombinations.forEach(c => sum += (parseInt(c.enrollment) || 0));
-        
-        // SNED Self-Contained (Non-Graded)
-        if (hasSnedSelfContained && sned_self_contained_count) {
-            sum += parseInt(sned_self_contained_count) || 0;
-        }
+        let sum = (parseInt(kinderEnrollment) || 0);
+        // Monograde totals
+        activeMonogrades.forEach(g => sum += (parseInt(gradeTotals[g.id]) || 0));
+        // Multigrade combinations
+        mgCombinations.forEach(c => {
+            c.grades.forEach(lvl => sum += (parseInt(gradeTotals[lvl]) || 0));
+        });
+        // SNED
+        if (hasSnedSelfContained) sum += (parseInt(sned_self_contained_count) || 0);
+
         return sum;
-    }, [kinderEnrollment, gradeTotals, activeNanoGrades, mgCombinations, hasSnedSelfContained, sned_self_contained_count, gradeAvailability]);
+    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSnedSelfContained, sned_self_contained_count, gradeAvailability]);
 
     const genderSum = useMemo(() => {
         return (parseInt(genderTotals.male) || 0) + (parseInt(genderTotals.female) || 0);
     }, [genderTotals]);
 
     const gradeCapacities = useMemo(() => {
-        const capacities = {};
+        const caps = {};
         // Default all to 0
-        ELEM_GRADES.forEach(id => capacities[id] = 0);
+        ELEM_GRADES.forEach(id => caps[id] = 0);
 
-        // 1. Nano Capacities
-        activeNanoGrades.forEach(g => {
-            capacities[g.id] = parseInt(gradeTotals[g.id]) || 0;
+        // 1. Monograde Capacities
+        activeMonogrades.forEach(g => {
+            caps[g.id] = (parseInt(gradeTotals[g.id]) || 0);
         });
-
-        // 2. MG Capacities (Each grade in MG shares the combination's enrollment limit)
+        // 2. Add Multigrade combinations back into capacity for each grade (for ARAL validation)
         mgCombinations.forEach(c => {
-            const enrollment = parseInt(c.enrollment) || 0;
-            c.grades.forEach(gradeId => {
-                capacities[gradeId] = enrollment;
+            c.grades.forEach(lvl => {
+                if (!caps[lvl]) caps[lvl] = 0;
+                caps[lvl] += (parseInt(gradeTotals[lvl]) || 0);
             });
         });
-
-        return capacities;
-    }, [gradeTotals, activeNanoGrades, mgCombinations]);
+        return caps;
+    }, [gradeTotals, activeMonogrades, mgCombinations]);
 
     const isMathPerfect = genderSum === grandTotal && grandTotal > 0;
 
@@ -301,58 +294,45 @@ const Unit2Learners = () => {
                 setOrgType('nano');
                 setCurrentStep(4);
             }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
         }
-
         // Step 2: Org Gatekeeper
-        if (currentStep === 2) {
+        else if (currentStep === 2) {
             if (!orgType) return;
-            if (orgType === 'pure_mg' || orgType === 'mixed') {
-                setCurrentStep(3); // Go to MG Builder
-            } else {
-                setCurrentStep(4); // Go to Nano Pages
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
-        }
-
-        // Step 3: MG Builder
-        if (currentStep === 3) {
             if (orgType === 'pure_mg') {
-                setCurrentStep(5); // Skip Nano Pages, go to SNED
-            } else {
-                setCurrentStep(4); // Mixed: Go to Nano Pages
+                setCurrentStep(3); // Go to Combinations Builder
+            } else if (orgType === 'mixed') {
+                setCurrentStep(3); // Start with combinations
+            } else { // orgType === 'nano'
+                setCurrentStep(4); // Go to Monograde Pages
             }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
         }
-
-        // Step 4: Grade-by-Grade (Nano/Standalone)
-        if (currentStep === 4) {
-            if (activeNanoGrades.length === 0) {
+        // Step 3: MG Builder
+        else if (currentStep === 3) {
+            if (orgType === 'pure_mg') {
+                setCurrentStep(5); // Skip Monograde Pages, go to SNED
+            } else {
+                setCurrentStep(4); // Mixed: Go to Monograde Pages
+            }
+        }
+        // Step 4: Grade-by-Grade (Monograde/Standalone)
+        else if (currentStep === 4) {
+            if (activeMonogrades.length === 0) {
                 setCurrentStep(5);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 return;
             }
-            if (currentGradeIndex < activeNanoGrades.length - 1) {
+            if (currentGradeIndex < activeMonogrades.length - 1) {
                 setCurrentGradeIndex(prev => prev + 1);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                return;
+            } else {
+                setCurrentStep(5); // Finished grades -> SNED
             }
-            setCurrentStep(5); // Finished grades -> SNED
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
         }
-        
         // Step 6: ARAL (Skip if not elementary)
-        if (currentStep === 5 && !hasElementary) {
+        else if (currentStep === 5 && !hasElementary) {
             setCurrentStep(7); // Skip ARAL, go to Gender
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            return;
+        } else {
+            setCurrentStep(prev => prev + 1);
         }
-
-        setCurrentStep(prev => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -373,48 +353,28 @@ const Unit2Learners = () => {
         }
 
         // Back from MG Builder
-        if (currentStep === 3) {
+        else if (currentStep === 3) {
             setCurrentStep(2);
             return;
         }
 
-        // Back from Nano Pages
-        if (currentStep === 4) {
+        // Back from Monograde Pages
+        else if (currentStep === 4) {
             if (currentGradeIndex > 0) {
                 setCurrentGradeIndex(prev => prev - 1);
-                return;
-            }
-            if (hasElementary) {
-                if (orgType === 'pure_mg' || orgType === 'mixed') {
-                    setCurrentStep(3);
-                } else {
-                    setCurrentStep(2);
-                }
             } else {
-                if (hasKinder) {
-                    setCurrentStep(1);
-                } else {
-                    navigate("/modular-dashboard");
-                }
+                setCurrentStep(orgType === 'mixed' ? 3 : 2);
             }
             return;
         }
 
         // Back from SNED
-        if (currentStep === 5) {
-            if (activeNanoGrades.length > 0) {
+        else if (currentStep === 5) {
+            if (activeMonogrades.length > 0) {
+                setCurrentGradeIndex(activeMonogrades.length - 1);
                 setCurrentStep(4);
-                setCurrentGradeIndex(activeNanoGrades.length - 1);
-            } else if (hasElementary) {
-                if (orgType === 'pure_mg' || orgType === 'mixed') {
-                    setCurrentStep(3);
-                } else {
-                    setCurrentStep(2);
-                }
-            } else if (hasKinder) {
-                setCurrentStep(1);
             } else {
-                navigate("/modular-dashboard");
+                setCurrentStep(orgType === 'pure_mg' ? 3 : 2);
             }
             return;
         }
@@ -461,7 +421,7 @@ const Unit2Learners = () => {
             };
 
             // Backwards compatibility for Unit 3 and Unit 9: Construct the downstream grades array
-            const nanoGrades = activeNanoGrades.map(g => {
+            const monogrades = activeMonogrades.map(g => {
                 const totalActive = gradeAvailability[g.id] !== false;
                 const count = parseInt(gradeTotals[g.id]) || 0;
                 return {
@@ -489,7 +449,7 @@ const Unit2Learners = () => {
                 male: 0, female: 0
             }] : [];
 
-            const downstreamGrades = [...kinderGrade, ...nanoGrades, ...mgGrades];
+            const downstreamGrades = [...kinderGrade, ...monogrades, ...mgGrades];
 
             const payload = {
                 array: downstreamGrades, 
@@ -531,12 +491,21 @@ const Unit2Learners = () => {
             });
 
             if (res.ok) {
-                // Sync progress to cloud for Activity Dashboard
+                // Sync progress to cloud for Activity Dashboard (fire-and-forget)
                 fetch(`/api/user/progress`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ unitId: 2, schoolId: storedId })
                 }).catch(e => console.warn("Activity sync failed:", e));
+
+                // Update localStorage so ModularDashboard immediately reflects completion
+                const stored = localStorage.getItem('quest_progress');
+                let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+                if (!progress.completedUnits.includes(2)) {
+                    progress.completedUnits.push(2);
+                    progress.xp = (progress.xp || 0) + 200;
+                }
+                localStorage.setItem('quest_progress', JSON.stringify(progress));
 
                 setHasSubmitted(true);
                 setIsReadOnly(true);
@@ -730,7 +699,7 @@ const Unit2Learners = () => {
                                 let currentProg = currentStep;
                                 if (currentStep === 4) {
                                     // Sub-steps for grades
-                                    const gradeWeight = 1 / (activeNanoGrades.length || 1);
+                                    const gradeWeight = 1 / (activeMonogrades.length || 1);
                                     currentProg = 3 + (currentGradeIndex + 1) * gradeWeight;
                                 }
 
@@ -848,9 +817,9 @@ const Unit2Learners = () => {
 
                             <div className="space-y-4 mb-8">
                                 {[
-                                    { id: 'nano', label: 'Nano Grade', sub: 'Standard 1-grade-per-page (Pure Monograde)', icon: '🏫' },
+                                    { id: 'nano', label: 'Monograde', sub: 'Standard 1-grade-per-page (Pure Monograde)', icon: '🏫' },
                                     { id: 'pure_mg', label: 'Pure Multigrade', sub: 'Only builds combinations (e.g. G1+G2)', icon: '🤝' },
-                                    { id: 'mixed', label: 'Mixed Organization', sub: 'Both Nano grades and Multigrade combinations', icon: '🔄' }
+                                    { id: 'mixed', label: 'Mixed Organization', sub: 'Both Monograde grades and Multigrade combinations', icon: '🔄' }
                                 ].map(opt => (
                                     <button
                                         key={opt.id}
@@ -995,10 +964,10 @@ const Unit2Learners = () => {
                         </motion.div>
                     )}
                     {/* STEP 4: Grade-by-Grade Enrollment */}
-                    {currentStep === 4 && activeNanoGrades[currentGradeIndex] && (
-                        <motion.div key={`grade-${activeNanoGrades[currentGradeIndex].id}`} variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
+                    {currentStep === 4 && activeMonogrades[currentGradeIndex] && (
+                        <motion.div key={`grade-${activeMonogrades[currentGradeIndex].id}`} variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
                             {(() => {
-                                const g = activeNanoGrades[currentGradeIndex];
+                                const g = activeMonogrades[currentGradeIndex];
                                 const isAvailable = gradeAvailability[g.id] !== false;
                                 return (
                                     <div className="space-y-6">

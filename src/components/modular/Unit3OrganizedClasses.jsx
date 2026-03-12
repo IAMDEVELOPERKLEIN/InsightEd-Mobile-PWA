@@ -391,7 +391,7 @@ const Unit3OrganizedClasses = () => {
 
             if (!res.ok) throw new Error("Failed to save class organization");
 
-            // Sync progress to dashboard
+            // Sync progress to cloud (fire-and-forget)
             try {
                 await fetch('/api/user/progress', {
                     method: 'POST',
@@ -399,6 +399,15 @@ const Unit3OrganizedClasses = () => {
                     body: JSON.stringify({ unitId: 3, schoolId })
                 });
             } catch (e) { console.warn("Progress sync failed", e); }
+
+            // Update localStorage so ModularDashboard immediately reflects completion
+            const stored = localStorage.getItem('quest_progress');
+            let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+            if (!progress.completedUnits.includes(3)) {
+                progress.completedUnits.push(3);
+                progress.xp = (progress.xp || 0) + 200;
+            }
+            localStorage.setItem('quest_progress', JSON.stringify(progress));
 
             setShowSuccess(true);
             setTimeout(() => {
