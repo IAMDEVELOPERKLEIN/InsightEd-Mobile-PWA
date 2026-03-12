@@ -19,6 +19,13 @@ echo (Please copy the password if prompted for SSH)
 echo ------------------------------------------------
 
 echo 1. Syncing local files to VM...
+where rsync >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [ERROR] 'rsync' was not found in your PATH.
+    echo Please run this script from 'Git Bash' or install 'rsync' for Windows.
+    pause
+    exit /b
+)
 :: Using rsync (requires Git Bash or a similar tool in PATH)
 rsync -avz --delete ^
     --exclude "node_modules/" ^
@@ -28,8 +35,8 @@ rsync -avz --delete ^
     ./ %SSH_USER%@%SERVER_IP%:%SERVER_DIR%/
 
 echo 2. Running remote build and restart...
-:: SSH into the server to perform installation and service restart
-ssh %SSH_USER%@%SERVER_IP% "cd %SERVER_DIR% && npm install && npm run build && pm2 restart insighted-backend"
+# SSH into the server to perform installation and service restart
+ssh %SSH_USER%@%SERVER_IP% "cd %SERVER_DIR% && npm install --legacy-peer-deps && npm run build && pm2 restart insighted-backend"
 
 echo.
 echo ✅ Deployment Complete!

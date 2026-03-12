@@ -25,7 +25,7 @@ rsync -avz --delete \
     ./ $USER@$SERVER_IP:$SERVER_DIR/
 
 echo "🏗️  2. Running remote build and restart..."
-ssh $USER@$SERVER_IP "cd $SERVER_DIR && npm install && npm run build && pm2 restart insighted-backend"
+ssh $USER@$SERVER_IP "cd $SERVER_DIR && npm install --legacy-peer-deps && npm run build && pm2 restart insighted-backend"
 
 echo "✅ Local Deployment Complete!"
 echo "------------------------------------------------"

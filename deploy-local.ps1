@@ -23,7 +23,8 @@ rsync -avz --delete `
     ./ "$($USER)@$($SERVER_IP):$($SERVER_DIR)/"
 
 Write-Host "🏗️  2. Running remote build and restart..." -ForegroundColor Yellow
-ssh "$($USER)@$($SERVER_IP)" "cd $($SERVER_DIR) && npm install && npm run build && pm2 restart insighted-backend"
+# SSH into the server to perform installation and service restart
+ssh "$($USER)@$($SERVER_IP)" "cd $($SERVER_DIR) && npm install --legacy-peer-deps && npm run build && pm2 restart insighted-backend"
 
 Write-Host "✅ Local Deployment Complete!" -ForegroundColor Green
 Write-Host "------------------------------------------------" -ForegroundColor Green
