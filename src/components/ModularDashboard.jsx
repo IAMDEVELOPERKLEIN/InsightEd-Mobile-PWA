@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck } from "react-icons/fi";
+import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
 import BarongMascot from "./BarongMascot";
@@ -124,6 +124,7 @@ const ModularDashboard = () => {
             { id: 6, title: "Teaching Personnel", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-6", locked: false },
             { id: 7, title: "School Resources", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-7", locked: false },
             { id: 8, title: "Physical Facilities", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-8", locked: false },
+            { id: 9, title: "School Location", icon: <FiMapPin className="w-5 h-5" />, path: "/modular/unit-9", locked: false },
         ];
         return mods;
     }, [curricularOffering, questProgress.completedUnits]);

@@ -214,7 +214,7 @@ const pool = new Pool({
   ssl: isLocal ? false : { rejectUnauthorized: false },
   max: 20, // Increase max connections
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000, // 5s timeout to avoid indefinite hanging
+  connectionTimeoutMillis: 20000, // Increased to 20s to handle startup bursts
 });
 
 // Inject pool into chatbot module
@@ -269,12 +269,41 @@ const checkAndDropColumn = async (tableName, columnName) => {
 };
 
 // --- DATABASE INIT ---
+const runAutoMigrations = async () => {
+    console.log("   [Auto-Migrate] Starting loose migrations...");
+    try {
+        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE');
+        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;');
+        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;');
+        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB');
+        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0');
+        
+        // Multi-grade columns
+        const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
+        for (const col of mgCols) {
+            await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
+        }
+        const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
+        for (const col of mgEnrCols) {
+            await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
+        }
+
+        // Unit 4
+        await unit4MigrateCols();
+        
+        console.log("   [Auto-Migrate] Finished.");
+    } catch (e) {
+        console.error("❌ Auto-Migrate Fail:", e.message);
+    }
+};
+
 const initDB = async () => {
   let currentSegment = "Start";
   try {
     console.log("   [initDB] Starting...");
     // Set a lock timeout to prevent hanging forever on busy tables
-    await pool.query('SET lock_timeout = 5000'); // 5 seconds
+    // Increased to 15s to be more patient with Azure's background tasks
+    await pool.query('SET lock_timeout = 15000'); 
 
     currentSegment = "Segment 0.1: project_documents table";
     console.log(`     [${currentSegment}]`);
@@ -1013,7 +1042,7 @@ const initFinanceDB = async () => {
 const initMasterlistDB = async () => {
   console.log("   [initMasterlistDB] Starting...");
   try {
-    await pool.query('SET lock_timeout = 5000');
+    await pool.query('SET lock_timeout = 15000');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS masterlist_26_30 (
           "Index" integer PRIMARY KEY,
@@ -13513,8 +13542,7 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
 //               MODULAR BETA ENDPOINTS (PH_SCHOOLS)
 // ==================================================================
 
-// --- Auto-migrate: ensure unit10_completed column exists ---
-pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE').catch(e => console.error('Auto-migrate unit10_completed fail:', e.message));
+// --- Auto-migrate moved to runAutoMigrations ---
 
 // --- 28. GET: Fetch Quest Progress (Modular Beta) ---
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
@@ -13568,9 +13596,7 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
   }
 });
 
-// Auto-migrate: ensure school_head and contact_number columns exist
-pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;').catch(e => console.error("Auto-migrate school_head fail:", e.message));
-pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;').catch(e => console.error("Auto-migrate contact_number fail:", e.message));
+// --- Auto-migrate moved to runAutoMigrations ---
 
 // --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
 app.post('/api/ph_schools/unit1', async (req, res) => {
@@ -13671,25 +13697,25 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
 });
 
 // --- 27. PUT: Save Unit 2 Learner Data (Modular Beta) ---
-// Auto-migrate column
-pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB').catch(e => console.error("Auto-migrate unit2 JSON fail:", e.message));
-pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0').catch(e => console.error("Auto-migrate sned_self_contained_count fail:", e.message));
+// --- Auto-migrate moved to runAutoMigrations ---
 
 app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
 
   try {
-    // Auto-migrate multigrade columns if missing (syncs with Unit 3 structure)
+    // Auto-migrate multigrade columns if missing (Batch optimized)
     try {
+      const alterParts = [];
       const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
       for (const col of mgCols) {
-        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
+        alterParts.push(`ADD COLUMN IF NOT EXISTS ${col} TEXT`);
       }
       const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
       for (const col of mgEnrCols) {
-        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
+        alterParts.push(`ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
       }
+      await pool.query(`ALTER TABLE ph_schools ${alterParts.join(', ')}`);
     } catch (e) {
       console.warn("DB Migration Warning for Unit 2:", e.message);
     }
@@ -13903,14 +13929,20 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
 const unit4MigrateCols = async () => {
   const grades = ['kinder', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
   const cats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
+  
+  const alterParts = [];
   for (const cat of cats) {
     for (const g of grades) {
-      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => { });
+      alterParts.push(`ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`);
     }
   }
-  await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => { });
+  alterParts.push(`ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0`);
+  
+  try {
+    await pool.query(`ALTER TABLE ph_schools ${alterParts.join(', ')}`);
+  } catch (e) { }
 };
-unit4MigrateCols();
+// --- Auto-migrate moved to runAutoMigrations ---
 
 // --- 31. PUT: Save Unit 4 Learner Profile (Modular Beta) ---
 app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
@@ -13921,15 +13953,19 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
   const pInt = (v) => (v === '' || v === null || v === undefined || isNaN(parseInt(v))) ? 0 : parseInt(v);
 
   try {
-    // Auto-ensure columns exist before writing
+    // Auto-ensure columns exist before writing (Batch optimized)
     const allGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
     const allCats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
+    const alterParts = [];
     for (const cat of allCats) {
       for (const g of allGrades) {
-        await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`).catch(() => { });
+        alterParts.push(`ADD COLUMN IF NOT EXISTS ${cat}_${g} INTEGER DEFAULT 0`);
       }
     }
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0').catch(() => { });
+    alterParts.push(`ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0`);
+    try {
+      await pool.query(`ALTER TABLE ph_schools ${alterParts.join(', ')}`);
+    } catch (e) { }
 
     const groupsJson = JSON.stringify(selected_learner_groups);
     const setClauses = [];
@@ -14915,24 +14951,42 @@ app.delete('/api/ph_schools/unit10/spaces/:spaceId', async (req, res) => {
 const schoolLocationSchema = z.object({
   school_id: z.string(),
   transportation_modes: z.array(z.string()).optional(),
-  road_paved_pct: z.number().min(0).max(100),
-  road_unpaved_pct: z.number().min(0).max(100),
-  road_lighting_pct: z.number().min(0).max(100).optional(),
-  public_transpo_availability: z.number().min(1).max(5).optional(),
-  water_proximity: z.array(z.any()).optional(),
+  road_paved_pct: z.coerce.number().min(0).max(100),
+  road_unpaved_pct: z.coerce.number().min(0).max(100),
+  road_lighting_pct: z.coerce.number().min(0).max(100).nullable().optional(),
+  public_transpo_availability: z.coerce.number().min(1).max(5).nullable().optional(),
   near_cliff_ravine: z.boolean().optional(),
-  cliff_distance_m: z.number().nullable().optional(),
+  road_cliff_pct: z.coerce.number().min(0).max(100).nullable().optional(),
+  near_water: z.boolean().optional(),
+  water_proximity: z.array(z.any()).optional(),
   natural_calamities: z.array(z.any()).optional(),
   hazards_experienced: z.array(z.string()).optional(),
-  insurgency_threats_6mo: z.number().optional(),
-  requires_hiking: z.boolean().optional(),
-  hiking_distance_km: z.number().nullable().optional(),
-  manmade_bridge_foot: z.boolean().optional(),
-  river_crossing_no_bridge: z.boolean().optional(),
-  emergency_response_mins: z.number().optional(),
+  has_insurgency_threats: z.boolean().optional(),
+  insurgency_threats_6mo: z.coerce.number().nullable().optional(),
+  road_passable_public_transpo_pct: z.coerce.number().min(0).max(100).nullable().optional(),
+  river_crossing_on_foot: z.boolean().optional(),
+  river_crossing_count: z.coerce.number().nullable().optional(),
+  emergency_response_mins: z.coerce.number().nullable().optional(),
+  proximity_hospital_km: z.coerce.number().nullable().optional(),
+  proximity_brgy_hall_mins: z.coerce.number().nullable().optional(),
+  proximity_brgy_hall_km: z.coerce.number().nullable().optional(),
+  proximity_muni_hall_mins: z.coerce.number().nullable().optional(),
+  proximity_muni_hall_km: z.coerce.number().nullable().optional(),
+  proximity_sdo_mins: z.coerce.number().nullable().optional(),
+  proximity_sdo_km: z.coerce.number().nullable().optional(),
+  proximity_clinic_mins: z.coerce.number().nullable().optional(),
+  proximity_clinic_km: z.coerce.number().nullable().optional(),
+  proximity_terminal_mins: z.coerce.number().nullable().optional(),
+  proximity_terminal_km: z.coerce.number().nullable().optional(),
+  proximity_highway_mins: z.coerce.number().nullable().optional(),
+  proximity_highway_km: z.coerce.number().nullable().optional(),
   cellular_coverage: z.string().optional(),
   weather_isolation: z.boolean().optional(),
-}).refine(data => (data.road_paved_pct + data.road_unpaved_pct) === 100, {
+  anthropogenic_threats: z.array(z.object({
+    type: z.string(),
+    incidences: z.coerce.number()
+  })).optional(),
+}).refine(data => ((Number(data.road_paved_pct) || 0) + (Number(data.road_unpaved_pct) || 0)) === 100, {
   message: "Paved and unpaved percentages must sum to 100",
   path: ["road_paved_pct"]
 });
@@ -14952,18 +15006,35 @@ app.get('/api/school-location/:school_id', async (req, res) => {
 // POST /api/school-location
 app.post('/api/school-location', async (req, res) => {
   try {
-    const validatedData = schoolLocationSchema.parse(req.body);
+    const val = schoolLocationSchema.safeParse(req.body);
+    if (!val.success) {
+      const flattenedErrors = val.error.flatten();
+      console.error("❌ Zod Validation Error (Flattened):", JSON.stringify(flattenedErrors, null, 2));
+      console.error("❌ Raw Zod Issues:", val.error.issues);
+      return res.status(400).json({ 
+        success: false, 
+        error: "Validation failed", 
+        details: val.error.issues,
+        flattened: flattenedErrors 
+      });
+    }
+    const validatedData = val.data;
     const riskIndex = calculateRiskIndex(validatedData);
 
     const query = `
       INSERT INTO school_location_profiles (
         school_id, transportation_modes, road_paved_pct, road_unpaved_pct, road_lighting_pct,
-        public_transpo_availability, water_proximity, near_cliff_ravine, cliff_distance_m,
-        natural_calamities, hazards_experienced, insurgency_threats_6mo, requires_hiking,
-        hiking_distance_km, manmade_bridge_foot, river_crossing_no_bridge, emergency_response_mins,
-        cellular_coverage, weather_isolation, risk_index, updated_at
+        public_transpo_availability, water_proximity, near_cliff_ravine, road_cliff_pct,
+        near_water, natural_calamities, hazards_experienced, has_insurgency_threats, 
+        insurgency_threats_6mo, road_passable_public_transpo_pct, river_crossing_on_foot, 
+        river_crossing_count, emergency_response_mins, proximity_hospital_km,
+        proximity_brgy_hall_mins, proximity_brgy_hall_km, proximity_muni_hall_mins,
+        proximity_muni_hall_km, proximity_sdo_mins, proximity_sdo_km,
+        proximity_clinic_mins, proximity_clinic_km, proximity_terminal_mins,
+        proximity_terminal_km, proximity_highway_mins, proximity_highway_km,
+        cellular_coverage, weather_isolation, anthropogenic_threats, risk_index, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, CURRENT_TIMESTAMP
       )
       ON CONFLICT (school_id) DO UPDATE SET
         transportation_modes = EXCLUDED.transportation_modes,
@@ -14973,17 +15044,32 @@ app.post('/api/school-location', async (req, res) => {
         public_transpo_availability = EXCLUDED.public_transpo_availability,
         water_proximity = EXCLUDED.water_proximity,
         near_cliff_ravine = EXCLUDED.near_cliff_ravine,
-        cliff_distance_m = EXCLUDED.cliff_distance_m,
+        road_cliff_pct = EXCLUDED.road_cliff_pct,
+        near_water = EXCLUDED.near_water,
         natural_calamities = EXCLUDED.natural_calamities,
         hazards_experienced = EXCLUDED.hazards_experienced,
+        has_insurgency_threats = EXCLUDED.has_insurgency_threats,
         insurgency_threats_6mo = EXCLUDED.insurgency_threats_6mo,
-        requires_hiking = EXCLUDED.requires_hiking,
-        hiking_distance_km = EXCLUDED.hiking_distance_km,
-        manmade_bridge_foot = EXCLUDED.manmade_bridge_foot,
-        river_crossing_no_bridge = EXCLUDED.river_crossing_no_bridge,
+        road_passable_public_transpo_pct = EXCLUDED.road_passable_public_transpo_pct,
+        river_crossing_on_foot = EXCLUDED.river_crossing_on_foot,
+        river_crossing_count = EXCLUDED.river_crossing_count,
         emergency_response_mins = EXCLUDED.emergency_response_mins,
+        proximity_hospital_km = EXCLUDED.proximity_hospital_km,
+        proximity_brgy_hall_mins = EXCLUDED.proximity_brgy_hall_mins,
+        proximity_brgy_hall_km = EXCLUDED.proximity_brgy_hall_km,
+        proximity_muni_hall_mins = EXCLUDED.proximity_muni_hall_mins,
+        proximity_muni_hall_km = EXCLUDED.proximity_muni_hall_km,
+        proximity_sdo_mins = EXCLUDED.proximity_sdo_mins,
+        proximity_sdo_km = EXCLUDED.proximity_sdo_km,
+        proximity_clinic_mins = EXCLUDED.proximity_clinic_mins,
+        proximity_clinic_km = EXCLUDED.proximity_clinic_km,
+        proximity_terminal_mins = EXCLUDED.proximity_terminal_mins,
+        proximity_terminal_km = EXCLUDED.proximity_terminal_km,
+        proximity_highway_mins = EXCLUDED.proximity_highway_mins,
+        proximity_highway_km = EXCLUDED.proximity_highway_km,
         cellular_coverage = EXCLUDED.cellular_coverage,
         weather_isolation = EXCLUDED.weather_isolation,
+        anthropogenic_threats = EXCLUDED.anthropogenic_threats,
         risk_index = EXCLUDED.risk_index,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *;
@@ -14998,17 +15084,32 @@ app.post('/api/school-location', async (req, res) => {
       validatedData.public_transpo_availability,
       validatedData.water_proximity ? JSON.stringify(validatedData.water_proximity) : null,
       validatedData.near_cliff_ravine,
-      validatedData.cliff_distance_m,
+      validatedData.road_cliff_pct,
+      validatedData.near_water,
       validatedData.natural_calamities ? JSON.stringify(validatedData.natural_calamities) : null,
       validatedData.hazards_experienced,
+      validatedData.has_insurgency_threats,
       validatedData.insurgency_threats_6mo,
-      validatedData.requires_hiking,
-      validatedData.hiking_distance_km,
-      validatedData.manmade_bridge_foot,
-      validatedData.river_crossing_no_bridge,
+      validatedData.road_passable_public_transpo_pct,
+      validatedData.river_crossing_on_foot,
+      validatedData.river_crossing_count,
       validatedData.emergency_response_mins,
+      validatedData.proximity_hospital_km,
+      validatedData.proximity_brgy_hall_mins,
+      validatedData.proximity_brgy_hall_km,
+      validatedData.proximity_muni_hall_mins,
+      validatedData.proximity_muni_hall_km,
+      validatedData.proximity_sdo_mins,
+      validatedData.proximity_sdo_km,
+      validatedData.proximity_clinic_mins,
+      validatedData.proximity_clinic_km,
+      validatedData.proximity_terminal_mins,
+      validatedData.proximity_terminal_km,
+      validatedData.proximity_highway_mins,
+      validatedData.proximity_highway_km,
       validatedData.cellular_coverage,
       validatedData.weather_isolation,
+      JSON.stringify(validatedData.anthropogenic_threats || []),
       riskIndex
     ];
 
@@ -15016,6 +15117,7 @@ app.post('/api/school-location', async (req, res) => {
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     if (err instanceof z.ZodError) {
+      console.error("Zod Validation Error:", JSON.stringify(err.errors, null, 2));
       return res.status(400).json({ error: "Validation failed", details: err.errors });
     }
     console.error("POST School Location Error:", err);
@@ -15089,12 +15191,14 @@ app.get('/api/health', (req, res) => {
 const startServer = async () => {
   try {
     console.log("🚀 Starting database initialization...");
+    await runAutoMigrations();
     await initDB();
-    console.log("✅ initDB finished.");
-    await initFinanceDB();
-    console.log("✅ initFinanceDB finished.");
-    await initMasterlistDB();
-    console.log("✅ initMasterlistDB finished.");
+    console.log("✅ Primary DB Init finished. Running secondary modules in parallel...");
+
+    await Promise.all([
+        initFinanceDB().then(() => console.log("   [Parallel] initFinanceDB completed.")),
+        initMasterlistDB().then(() => console.log("   [Parallel] initMasterlistDB completed."))
+    ]);
 
     const PORT = process.env.PORT || 3000;
     const server = app.listen(PORT, '0.0.0.0', () => {
