@@ -12,6 +12,10 @@ const Unit9SchoolLocation = () => {
         navigate('/modular-dashboard');
     };
 
+    const handleSaveSuccess = () => {
+        navigate('/modular-dashboard');
+    };
+
     return (
         <motion.div 
             initial={{ opacity: 0 }} 
@@ -40,7 +44,10 @@ const Unit9SchoolLocation = () => {
             </header>
 
             <main className="max-w-md mx-auto px-4 pt-6">
-                <SchoolLocation schoolId={localStorage.getItem('schoolId')} />
+                <SchoolLocation 
+                    schoolId={localStorage.getItem('schoolId')} 
+                    onSaveSuccess={handleSaveSuccess}
+                />
             </main>
 
             <BottomNav userRole="School Head" />

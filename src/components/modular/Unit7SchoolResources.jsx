@@ -257,9 +257,9 @@ const Unit7SchoolResources = () => {
                         }
 
                         // Load Phase 1
-                        if (d.unit9_furniture) {
+                        if (d.unit7_furniture) {
                             try {
-                                const parsed = typeof d.unit9_furniture === 'string' ? JSON.parse(d.unit9_furniture) : d.unit9_furniture;
+                                const parsed = typeof d.unit7_furniture === 'string' ? JSON.parse(d.unit7_furniture) : d.unit7_furniture;
                                 
                                 // Merge saved furniture data into expected grades
                                 if (parsed.grades) {
@@ -284,34 +284,34 @@ const Unit7SchoolResources = () => {
                         }
 
                         // Load Phase 2
-                        if (d.unit9_ict) {
+                        if (d.unit7_ict) {
                             try {
-                                const parsed = typeof d.unit9_ict === 'string' ? JSON.parse(d.unit9_ict) : d.unit9_ict;
+                                const parsed = typeof d.unit7_ict === 'string' ? JSON.parse(d.unit7_ict) : d.unit7_ict;
                                 setIctData(prev => ({ ...prev, ...parsed }));
                             } catch (e) { console.warn(e); }
                         }
 
                         // Load Phase 3
-                        if (d.unit9_has_ecart !== undefined) setHasEcart(d.unit9_has_ecart);
-                        if (d.unit9_ecarts) {
+                        if (d.unit7_has_ecart !== undefined) setHasEcart(d.unit7_has_ecart);
+                        if (d.unit7_ecarts) {
                             try {
-                                const parsed = typeof d.unit9_ecarts === 'string' ? JSON.parse(d.unit9_ecarts) : d.unit9_ecarts;
+                                const parsed = typeof d.unit7_ecarts === 'string' ? JSON.parse(d.unit7_ecarts) : d.unit7_ecarts;
                                 setECarts(Array.isArray(parsed) ? parsed : []);
                             } catch (e) { console.warn(e); }
                         }
 
                         // Load Phase 4
-                        if (d.unit9_wash) {
+                        if (d.unit7_wash) {
                             try {
-                                const parsed = typeof d.unit9_wash === 'string' ? JSON.parse(d.unit9_wash) : d.unit9_wash;
+                                const parsed = typeof d.unit7_wash === 'string' ? JSON.parse(d.unit7_wash) : d.unit7_wash;
                                 setWashData(prev => ({ ...prev, ...parsed }));
                             } catch (e) { console.warn(e); }
                         }
 
                         // Load Phase 5
-                        if (d.unit9_utilities) {
+                        if (d.unit7_utilities) {
                             try {
-                                const parsed = typeof d.unit9_utilities === 'string' ? JSON.parse(d.unit9_utilities) : d.unit9_utilities;
+                                const parsed = typeof d.unit7_utilities === 'string' ? JSON.parse(d.unit7_utilities) : d.unit7_utilities;
                                 setUtilitiesData(prev => ({ ...prev, ...parsed }));
                             } catch (e) { console.warn(e); }
                         }
@@ -320,7 +320,7 @@ const Unit7SchoolResources = () => {
                             setHasMultigradeContext(true);
                         }
 
-                        if (d.unit9_completed) {
+                        if (d.unit7_completed) {
                             setIsReviewMode(true);
                         }
 
@@ -499,15 +499,15 @@ const Unit7SchoolResources = () => {
         const storedId = localStorage.getItem("schoolId");
         
         try {
-            // Compile payload — includes unit9_completed flag so backend marks it done
+            // Compile payload — includes unit7_completed flag so backend marks it done
             const payload = {
-                unit9_furniture: JSON.stringify({ grades: gradesData.filter(g => g.isVerified), general: generalRoomsData }),
-                unit9_ict: JSON.stringify(ictData),
-                unit9_has_ecart: hasEcart,
-                unit9_ecarts: JSON.stringify(eCarts), // kept for backwards compatibility
-                unit9_wash: JSON.stringify(washData),
-                unit9_utilities: JSON.stringify(utilitiesData),
-                unit9_completed: true
+                unit7_furniture: JSON.stringify({ grades: gradesData.filter(g => g.isVerified), general: generalRoomsData }),
+                unit7_ict: JSON.stringify(ictData),
+                unit7_has_ecart: hasEcart,
+                unit7_ecarts: JSON.stringify(eCarts), // kept for backwards compatibility
+                unit7_wash: JSON.stringify(washData),
+                unit7_utilities: JSON.stringify(utilitiesData),
+                unit7_completed: true
             };
 
             const res = await fetch(`/api/ph_schools/${storedId}`, {

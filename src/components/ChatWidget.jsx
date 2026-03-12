@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const ChatWidget = () => {
+const ChatWidget = ({ showFloatingButton = true }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState([
@@ -33,6 +33,12 @@ const ChatWidget = () => {
     useEffect(() => {
         if (isOpen) scrollToBottom();
     }, [messages, isOpen]);
+
+    useEffect(() => {
+        const handleToggle = () => setIsOpen(prev => !prev);
+        window.addEventListener('toggle-chatbot', handleToggle);
+        return () => window.removeEventListener('toggle-chatbot', handleToggle);
+    }, []);
 
     useEffect(() => {
         let interval;
@@ -147,8 +153,10 @@ const ChatWidget = () => {
         }
     };
 
+    const isLoginScreen = window.location.hash === '#/' || window.location.pathname === '/';
+
     return (
-        <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-4 pointer-events-none">
+        <div className={`fixed ${isLoginScreen ? 'top-6 right-6' : 'bottom-6 right-6'} z-[9999] flex flex-col items-end gap-4 pointer-events-none`}>
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
@@ -357,19 +365,21 @@ const ChatWidget = () => {
             </AnimatePresence>
 
             {/* Toggle Button */}
-            <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-14 h-14 bg-[#004A99] text-white rounded-full shadow-2xl flex items-center justify-center pointer-events-auto hover:bg-blue-800 transition-all relative group"
-            >
-                {isOpen ? <FiX size={24} /> : <FiMessageSquare size={24} />}
-                {!isOpen && (
-                    <div className="absolute right-full mr-3 px-3 py-2 bg-white text-[#004A99] text-xs font-bold rounded-xl shadow-lg border border-gray-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                        Need help? Ask me!
-                    </div>
-                )}
-            </motion.button>
+            {showFloatingButton && (
+                <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="w-14 h-14 bg-[#004A99] text-white rounded-full shadow-2xl flex items-center justify-center pointer-events-auto hover:bg-blue-800 transition-all relative group"
+                >
+                    {isOpen ? <FiX size={24} /> : <FiMessageSquare size={24} />}
+                    {!isOpen && (
+                        <div className="absolute right-full mr-3 px-3 py-2 bg-white text-[#004A99] text-xs font-bold rounded-xl shadow-lg border border-gray-100 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                            Need help? Ask me!
+                        </div>
+                    )}
+                </motion.button>
+            )}
         </div>
     );
 };
