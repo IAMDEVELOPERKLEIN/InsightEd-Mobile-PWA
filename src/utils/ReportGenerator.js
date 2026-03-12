@@ -195,7 +195,7 @@ export const generateMonitoringReport = (kpiData) => {
 // ============================================================================
 
 export const generateEngineerReport = (projects, division) => {
-    const context = { role: 'Division Engineer', location: division || 'All Divisions' };
+    const context = { role: 'DepEd Engineer', location: division || 'All Divisions' };
     const { pdf, startY } = createBrandedPDF('Engineer Projects Report', context);
 
     const tableData = projects.map((p, i) => [

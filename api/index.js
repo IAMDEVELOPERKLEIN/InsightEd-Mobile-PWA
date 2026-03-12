@@ -204,37 +204,17 @@ app.get('/api/health', (req, res) => {
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // --- DATABASE CONNECTION ---
-// Robust .env parsing for UTF-16LE support
-let dbUrl = process.env.DATABASE_URL;
-if (!dbUrl && fs.existsSync('.env')) {
-  try {
-    let envContent = fs.readFileSync('.env', 'utf16le');
-    let match = envContent.match(/DATABASE_URL=(.+)/);
-    if (!match) {
-      envContent = fs.readFileSync('.env', 'utf8');
-      match = envContent.match(/DATABASE_URL=(.+)/);
-    }
-    if (match) {
-      dbUrl = match[1].trim().replace(/^['"]|['"]$/g, '');
-      // Inject into env for other modules if needed
-      process.env.DATABASE_URL = dbUrl;
-    }
-  } catch (e) {
-    console.error("⚠️ Failed to manually parse .env:", e.message);
-  }
-}
-
-// Fallback to local if still missing
-const defaultLocal = 'postgres://postgres:password@localhost:5432/postgres';
-if (!dbUrl) dbUrl = defaultLocal;
-
+const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres';
 const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
 
 console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.replace(/:[^:@]*@/, ':****@')})`);
 
 const pool = new Pool({
   connectionString: dbUrl,
-  ssl: isLocal ? false : { rejectUnauthorized: false }
+  ssl: isLocal ? false : { rejectUnauthorized: false },
+  max: 20, // Increase max connections
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000, // 5s timeout to avoid indefinite hanging
 });
 
 // Inject pool into chatbot module
@@ -292,6 +272,7 @@ const checkAndDropColumn = async (tableName, columnName) => {
 const initDB = async () => {
   let currentSegment = "Start";
   try {
+    console.log("   [initDB] Starting...");
     // Set a lock timeout to prevent hanging forever on busy tables
     await pool.query('SET lock_timeout = 5000'); // 5 seconds
 
@@ -474,6 +455,8 @@ const initDB = async () => {
     await checkAndDropColumn('school_profiles', 'data_health_description');
     await checkAndDropColumn('school_profiles', 'forms_to_recheck');
 
+    console.log("   [initDB] Completed.");
+
 
 
 
@@ -572,7 +555,8 @@ const initDB = async () => {
     console.log(`     [${currentSegment}]`);
     await checkAndAddColumn('engineer_image', 'ipc', 'TEXT');
 
-    // Backfill IPC in engineer_image
+    /* 
+    // Backfill IPC in engineer_image - Commented out to speed up startup
     await pool.query(`
       UPDATE engineer_image ei
       SET ipc = ef.ipc
@@ -580,6 +564,7 @@ const initDB = async () => {
       WHERE ei.project_id = ef.project_id
       AND ei.ipc IS NULL;
     `);
+    */
 
     // LGU Forms is handled in initFinanceDB (dropped as obsolete)
 
@@ -896,6 +881,7 @@ const initDB = async () => {
 
 // --- DATABASE INIT (EXTENDED FOR FINANCE) ---
 const initFinanceDB = async () => {
+  console.log("   [initFinanceDB] Starting...");
   try {
     // 1. Create Finance Projects Table
     await pool.query(`
@@ -923,6 +909,7 @@ const initFinanceDB = async () => {
     await pool.query(`UPDATE finance_projects SET root_id = 'FIN-' || finance_id WHERE root_id IS NULL;`);
 
     console.log("✅ DB Init: Finance Projects table verified.");
+    console.log("   [initFinanceDB] Completed.");
 
     // 2. DROP OBSOLETE TABLE
     await pool.query(`DROP TABLE IF EXISTS lgu_forms CASCADE; `);
@@ -1024,6 +1011,7 @@ const initFinanceDB = async () => {
 
 // --- PSIP DATABASE INIT ---
 const initMasterlistDB = async () => {
+  console.log("   [initMasterlistDB] Starting...");
   try {
     await pool.query('SET lock_timeout = 5000');
     await pool.query(`
@@ -1071,18 +1059,28 @@ const initMasterlistDB = async () => {
     `);
     await checkAndAddColumn('masterlist_26_30', 'province', 'character varying(100)');
 
-    await pool.query(`
-      -- Populate province from schools table
-      UPDATE masterlist_26_30 m
-      SET province = s.province
-      FROM schools s
-      WHERE m.school_id::text = s.school_id::text
-      AND m.province IS NULL;
-    `);
+    console.log("     [Segment: masterlist province sync]");
+    // Optimization: Add index on school_id first if not present
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_school_id ON masterlist_26_30(school_id);`);
+    
+    // Only update if there are NULL provinces to avoid long scans on every restart
+    const nullCheck = await pool.query(`SELECT 1 FROM masterlist_26_30 WHERE province IS NULL LIMIT 1`);
+    if (nullCheck.rowCount > 0) {
+      console.log("     -> Backfilling provinces in masterlist_26_30...");
+      await pool.query(`
+        UPDATE masterlist_26_30 m
+        SET province = s.province
+        FROM schools s
+        WHERE m.school_id::text = s.school_id::text
+        AND m.province IS NULL;
+      `);
+      console.log("     -> Province backfill completed.");
+    }
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_funding_year ON masterlist_26_30("proposed_funding_year");`);
     console.log("✅ DB Init: Masterlist (Cloned) table verified.");
+    console.log("   [initMasterlistDB] Completed.");
   } catch (err) {
     console.error("❌ Masterlist DB Init Error:", err.message);
   }
@@ -1318,8 +1316,9 @@ app.get('/api/import-masterlist-teachers/:schoolId', async (req, res) => {
 });
 
 app.get('/api/debug-integrity', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = {
       count: (await client.query('SELECT COUNT(*) FROM masterlist_26_30')).rows[0].count,
       shortage_sum: (await client.query('SELECT SUM(est_classroom_shortage) as val FROM masterlist_26_30')).rows[0].val,
@@ -1331,10 +1330,11 @@ app.get('/api/debug-integrity', async (req, res) => {
                 LIMIT 5
             `)).rows
     };
-    client.release();
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -1436,7 +1436,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     
     // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
-    const userRes = await pool.query('SELECT uid, email, role, region, division, account_category, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+    const userRes = await pool.query('SELECT uid, email, role, region, division, account_category, passcode, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
 
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
@@ -1460,10 +1460,10 @@ app.post('/api/auth/migrate-login', async (req, res) => {
       }
 
       const scrypt = new FirebaseScrypt({
-        memCost: parseInt(process.env.FIREBASE_HASH_MEM_COST || 14),
-        rounds: parseInt(process.env.FIREBASE_HASH_ROUNDS || 8),
-        saltSeparator: process.env.FIREBASE_HASH_SALT_SEPARATOR,
-        signerKey: process.env.FIREBASE_HASH_SIGNER_KEY
+        memCost: parseInt((process.env.FIREBASE_HASH_MEM_COST || "14").replace(/"/g, '')),
+        rounds: parseInt((process.env.FIREBASE_HASH_ROUNDS || "8").replace(/"/g, '')),
+        saltSeparator: (process.env.FIREBASE_HASH_SALT_SEPARATOR || "").replace(/"/g, ''),
+        signerKey: (process.env.FIREBASE_HASH_SIGNER_KEY || "").replace(/"/g, '')
       });
 
       isValid = await scrypt.verify(password, user.password_salt, user.password_hash);
@@ -1496,7 +1496,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
       if (user.role === 'EFD' || user.role === 'HRODI') {
         finalCategory = 'EFD Engineer';
-      } else if (user.role === 'Division Engineer') {
+      } else if (user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
         finalCategory = 'DepEd Engineer';
       } else {
         finalCategory = user.role;
@@ -1535,7 +1535,8 @@ app.post('/api/auth/migrate-login', async (req, res) => {
         role: user.role,
         region: user.region,
         division: user.division,
-        account_category: finalCategory
+        account_category: finalCategory,
+        passcode: user.passcode
       }
     });
 
@@ -1545,9 +1546,109 @@ app.post('/api/auth/migrate-login', async (req, res) => {
   }
 });
 
+// --- NEW BANKING PIN ROUTES ---
+
+app.post('/api/auth/setup-pin', async (req, res) => {
+  const { email, pin } = req.body;
+  if (!email || !pin || pin.length !== 6) {
+    return res.status(400).json({ success: false, error: "Valid 6-digit PIN and email are required." });
+  }
+  
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      'UPDATE users SET passcode = $1 WHERE LOWER(email) = $2 OR iern = $2 OR LOWER(email) = $3 RETURNING uid',
+      [pin, normalizedEmail, `${normalizedEmail}@insighted.app`]
+    );
+
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, error: "User not found." });
+    }
+    
+    return res.json({ success: true, message: "PIN set successfully." });
+  } catch (err) {
+    console.error("Setup PIN Error:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
+
+app.post('/api/auth/pin-login', async (req, res) => {
+  const { email, pin } = req.body;
+  if (!email || !pin) {
+    return res.status(400).json({ success: false, error: "Email and PIN are required." });
+  }
+
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    const userRes = await pool.query(
+      'SELECT uid, email, role, region, division, account_category, passcode FROM users WHERE LOWER(email) = $1 OR iern = $1 OR LOWER(email) = $2', 
+      [normalizedEmail, `${normalizedEmail}@insighted.app`]
+    );
+
+
+    if (userRes.rowCount === 0) {
+      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+    }
+
+    const user = userRes.rows[0];
+
+    // STRICT Plain Text Comparison (As specified by requirements)
+    if (user.passcode !== pin) {
+      return res.status(401).json({ success: false, error: "Incorrect PIN." });
+    }
+
+    // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
+    let finalCategory = user.account_category;
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
+      if (user.role === 'EFD' || user.role === 'HRODI') {
+        finalCategory = 'EFD Engineer';
+      } else if (user.role === 'Division Engineer') {
+        finalCategory = 'DepEd Engineer';
+      } else {
+        finalCategory = user.role;
+      }
+    }
+
+    // Generate Firebase Token for PWA session matching
+    let customToken = null;
+    try {
+      if (admin.apps.length > 0) {
+        customToken = await admin.auth().createCustomToken(user.uid, { role: user.role });
+      }
+    } catch (tokenErr) {
+      console.error("[PIN LOGIN] Custom Token Error:", tokenErr.message);
+    }
+
+    return res.json({
+      success: true,
+      customToken: customToken,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        role: user.role,
+        region: user.region,
+        division: user.division,
+        account_category: finalCategory
+      }
+    });
+
+  } catch (err) {
+    console.error("PIN Login Error:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+});
+
 app.get('/api/lists/divisions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT DISTINCT division, region FROM schools WHERE division IS NOT NULL ORDER BY division');
+    const result = await pool.query(`
+      SELECT MAX("Division") as division, MAX("Region") as region 
+      FROM "schools_IERN" 
+      WHERE "Division" IS NOT NULL AND "Region" IS NOT NULL 
+      GROUP BY UPPER(TRIM("Division"))
+      ORDER BY division ASC
+    `);
     res.json(result.rows); // Returns [{division, region}, ...]
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3649,7 +3750,16 @@ app.post('/api/auth/master-login', async (req, res) => {
     }
 
     // 4. Generate Custom Token for the target user
-    const customToken = await admin.auth().createCustomToken(userRecord.uid);
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      try {
+        customToken = await admin.auth().createCustomToken(userRecord.uid);
+      } catch (tokenErr) {
+        console.warn("⚠️ Failed to generate Firebase Custom Token in master-login:", tokenErr.message);
+      }
+    } else {
+      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in master-login");
+    }
 
     // 5. Log the master password access
     await pool.query(`
@@ -4307,9 +4417,27 @@ app.get('/api/admin/user-stats', async (req, res) => {
 // GET Filter Options for Admin Dashboard
 app.get('/api/admin/filter-options', async (req, res) => {
   try {
-    const regionsRes = await pool.query('SELECT DISTINCT region FROM users WHERE region IS NOT NULL AND region != \'\' ORDER BY region');
-    const divisionsRes = await pool.query('SELECT DISTINCT division, region FROM users WHERE division IS NOT NULL AND division != \'\' ORDER BY division');
-    const rolesRes = await pool.query('SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role != \'\' ORDER BY role');
+    const regionsRes = await pool.query(`
+      SELECT MAX(region) as region 
+      FROM users 
+      WHERE region IS NOT NULL AND region != '' 
+      GROUP BY UPPER(TRIM(region))
+      ORDER BY region
+    `);
+    const divisionsRes = await pool.query(`
+      SELECT MAX(division) as division, MAX(region) as region 
+      FROM users 
+      WHERE division IS NOT NULL AND division != '' 
+      GROUP BY UPPER(TRIM(division))
+      ORDER BY division
+    `);
+    const rolesRes = await pool.query(`
+      SELECT MAX(role) as role 
+      FROM users 
+      WHERE role IS NOT NULL AND role != '' 
+      GROUP BY UPPER(TRIM(role))
+      ORDER BY role
+    `);
 
     res.json({
       regions: regionsRes.rows.map(r => r.region),
@@ -5828,9 +5956,18 @@ app.post('/api/register-school', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate Firebase Custom Token
-    const customToken = await admin.auth().createCustomToken(uid, {
-      role: userRole
-    });
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      try {
+        customToken = await admin.auth().createCustomToken(uid, {
+          role: userRole
+        });
+      } catch (tokenErr) {
+        console.warn("⚠️ Failed to generate Firebase Custom Token in register-school:", tokenErr.message);
+      }
+    } else {
+      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in register-school");
+    }
 
     res.json({ success: true, iern: newIern, customToken: customToken, message: "School Registered Successfully" });
 
@@ -5854,7 +5991,8 @@ app.post('/api/register-beta', async (req, res) => {
   console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
     email,
     schoolId: schoolData?.school_id,
-    role: 'School Head'
+    role: 'School Head',
+    payload: req.body
   });
 
   let client;
@@ -5893,8 +6031,8 @@ app.post('/api/register-beta', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            password_hash, hash_version, iern
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
@@ -5903,7 +6041,8 @@ app.post('/api/register-beta', async (req, res) => {
             province = EXCLUDED.province,
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
-            hash_version = EXCLUDED.hash_version;`,
+            hash_version = EXCLUDED.hash_version,
+            iern = EXCLUDED.iern;`,
         [
           uid,
           normalizedEmail,
@@ -5916,7 +6055,8 @@ app.post('/api/register-beta', async (req, res) => {
           schoolData.province || null,
           schoolData.municipality || null,
           passwordHash,
-          'bcrypt'
+          'bcrypt',
+          foundIern
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6001,8 +6141,10 @@ app.post('/api/register-user', async (req, res) => {
   const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
 
   if (!email || !password || !role) {
+    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role });
     return res.status(400).json({ error: "Missing required fields (email, password, role)" });
   }
+  console.log(`🚀 Registration request for ${email} (${role})`);
 
   try {
     const normalizedEmail = email.trim().toLowerCase();
@@ -6017,12 +6159,19 @@ app.post('/api/register-user', async (req, res) => {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Auto-determine account_category based on role if not explicitly provided
+    // Auto-determine account_category (account_type) based on role if not explicitly provided
+    let finalRole = role;
+    if (finalRole === 'HRODI') {
+      finalRole = 'HRODI Engineer';
+    }
+
     let finalAccountCategory = accountCategory;
-    if (role === 'EFD' || role === 'HRODI') {
+    if (finalRole === 'EFD') {
       finalAccountCategory = 'EFD Engineer';
-    } else if (role === 'Division Engineer' && !accountCategory) {
-      finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Division Engineers
+    } else if ((finalRole === 'Division Engineer' || finalRole === 'DepEd Engineer') && !accountCategory) {
+      finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Engineers
+    } else if (!finalAccountCategory) {
+      finalAccountCategory = finalRole;
     }
 
     const query = `
@@ -6056,7 +6205,7 @@ app.post('/api/register-user', async (req, res) => {
         `;
 
     const values = [
-      uid, normalizedEmail, role,
+      uid, normalizedEmail, finalRole,
       valueOrNull(firstName), valueOrNull(lastName),
       valueOrNull(region), valueOrNull(division),
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
@@ -6075,7 +6224,7 @@ app.post('/api/register-user', async (req, res) => {
         await poolNew.query(query, values);
         console.log("… Dual-Write: Generic User Synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Register User):", dwErr.message);
+        console.error("❌ Dual-Write Error (Register User):", dwErr.message);
       }
     }
 
@@ -6118,23 +6267,59 @@ app.post('/api/register-user', async (req, res) => {
       message: "User synced to Database"
     });
   } catch (err) {
-    console.error("âŒ Register User Error:", err);
+    console.error("❌ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
   }
 });
 
-// --- 3f. GET: Lookup Email by School ID (Smart Login) ---
+// --- 3f. GET: Fetch User Profile by UID ---
+app.get('/api/users/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const query = `
+      SELECT 
+        uid, email, role, first_name as "firstName", last_name as "lastName", 
+        region, division, province, city, barangay, 
+        office, position, contact_number as "contactNumber", alt_email as "altEmail",
+        account_category, created_at
+      FROM users 
+      WHERE uid = $1
+    `;
+    const result = await pool.query(query, [uid]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Fetch User Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// --- 3g. GET: Lookup Email by School ID (Smart Login) ---
 app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // 1. Try USERS table first (Modern Auth) - Prioritize @insighted.app
-    let result = await pool.query(
-      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-      [`${schoolId}@%`]
-    );
+    // 0. Try Resolve School ID to IERN via schools_IERN
+    const iernLookup = await pool.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 LIMIT 1', [schoolId]);
+    const resolvedIern = iernLookup.rows.length > 0 ? iernLookup.rows[0].iern : schoolId;
+
+    // 1. Try USERS table (Modern Auth) - Prioritize IERN match, then email prefix
+    let result;
+    if (resolvedIern) {
+      result = await pool.query(
+        "SELECT email FROM users WHERE iern = $1 OR email ILIKE $2 ORDER BY (CASE WHEN iern = $1 THEN 0 ELSE 1 END), (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [resolvedIern, `${schoolId}@%`]
+      );
+    } else {
+      result = await pool.query(
+        "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [`${schoolId}@%`]
+      );
+    }
 
     if (result.rows.length > 0) {
-      return res.json({ found: true, email: result.rows[0].email });
+      return res.json({ found: true, email: result.rows[0].email, iern: resolvedIern });
     }
 
     // 2. Fallback: Try SCHOOL_PROFILES table (Legacy)
@@ -6169,12 +6354,23 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     let email = null;
+    // 0. Try Resolve School ID to IERN via schools_IERN
+    const iernLookup = await pool.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 LIMIT 1', [schoolId]);
+    const resolvedIern = iernLookup.rows.length > 0 ? iernLookup.rows[0].iern : null;
 
-    // 1. Try USERS table - Prioritize @insighted.app
-    let result = await pool.query(
-      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-      [`${schoolId}@%`]
-    );
+    // 1. Try USERS table - Prioritize IERN match, then email prefix
+    let result;
+    if (resolvedIern) {
+      result = await pool.query(
+        "SELECT email FROM users WHERE iern = $1 OR email ILIKE $2 ORDER BY (CASE WHEN iern = $1 THEN 0 ELSE 1 END), (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [resolvedIern, `${schoolId}@%`]
+      );
+    } else {
+      result = await pool.query(
+        "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
+        [`${schoolId}@%`]
+      );
+    }
     if (result.rows.length > 0) email = result.rows[0].email;
 
     // 2. Fallback: SCHOOL_PROFILES
@@ -6225,7 +6421,13 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
 // --- 5. GET: Cascading Location Endpoints ---
 app.get('/api/locations/regions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT DISTINCT "Region" as region FROM "schools_IERN" WHERE "Region" IS NOT NULL AND "Region" != \'\' ORDER BY "Region" ASC');
+    const result = await pool.query(`
+      SELECT MAX("Region") as region 
+      FROM "schools_IERN" 
+      WHERE "Region" IS NOT NULL AND "Region" != '' 
+      GROUP BY UPPER(TRIM("Region"))
+      ORDER BY region ASC
+    `);
     res.json(result.rows.map(r => r.region));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6233,7 +6435,14 @@ app.get('/api/locations/regions', async (req, res) => {
 app.get('/api/locations/divisions', async (req, res) => {
   const { region } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "Division" as division FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND "Division" IS NOT NULL AND "Division" != \'\' ORDER BY "Division" ASC', [region]);
+    const result = await pool.query(`
+      SELECT MAX("Division") as division 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND "Division" IS NOT NULL AND "Division" != '' 
+      GROUP BY UPPER(TRIM("Division"))
+      ORDER BY division ASC
+    `, [region]);
     res.json(result.rows.map(r => r.division));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6241,7 +6450,15 @@ app.get('/api/locations/divisions', async (req, res) => {
 app.get('/api/locations/districts', async (req, res) => {
   const { region, division } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "District" as district FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND "District" IS NOT NULL AND "District" != \'\' ORDER BY "District" ASC', [region, division]);
+    const result = await pool.query(`
+      SELECT MAX("District") as district 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
+      AND "District" IS NOT NULL AND "District" != '' 
+      GROUP BY UPPER(TRIM("District"))
+      ORDER BY district ASC
+    `, [region, division]);
     res.json(result.rows.map(r => r.district));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6249,7 +6466,14 @@ app.get('/api/locations/districts', async (req, res) => {
 app.get('/api/locations/leg-districts', async (req, res) => {
   const { region } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "Legislative_District" as leg_district FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND "Legislative_District" IS NOT NULL AND "Legislative_District" != \'\' ORDER BY "Legislative_District" ASC', [region]);
+    const result = await pool.query(`
+      SELECT MAX("Legislative_District") as leg_district 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND "Legislative_District" IS NOT NULL AND "Legislative_District" != '' 
+      GROUP BY UPPER(TRIM("Legislative_District"))
+      ORDER BY leg_district ASC
+    `, [region]);
     res.json(result.rows.map(r => r.leg_district));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6257,7 +6481,16 @@ app.get('/api/locations/leg-districts', async (req, res) => {
 app.get('/api/locations/municipalities', async (req, res) => {
   const { region, division, district } = req.query;
   try {
-    const result = await pool.query('SELECT DISTINCT "Municipality" as municipality FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND UPPER(TRIM("District")) = UPPER(TRIM($3)) AND "Municipality" IS NOT NULL AND "Municipality" != \'\' ORDER BY "Municipality" ASC', [region, division, district]);
+    const result = await pool.query(`
+      SELECT MAX("Municipality") as municipality 
+      FROM "schools_IERN" 
+      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
+      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
+      AND UPPER(TRIM("District")) = UPPER(TRIM($3)) 
+      AND "Municipality" IS NOT NULL AND "Municipality" != '' 
+      GROUP BY UPPER(TRIM("Municipality"))
+      ORDER BY municipality ASC
+    `, [region, division, district]);
     res.json(result.rows.map(r => r.municipality));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -7917,7 +8150,8 @@ app.get('/api/projects', async (req, res) => {
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
-            actions, savings, funding_year, funding_year_justification, is_donated
+            actions, savings, funding_year, funding_year_justification, is_donated,
+            moa_pdf, rta_pdf
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
@@ -7942,7 +8176,9 @@ app.get('/api/projects', async (req, res) => {
         p.funding_year AS "funding_year",
         p.funding_year_justification AS "fundingYearJustification",
         p.is_donated AS "isDonated",
-        p.is_donated AS "is_donated"
+        p.is_donated AS "is_donated",
+        (p.moa_pdf IS NOT NULL AND p.moa_pdf != '') AS "hasMoa",
+        (p.rta_pdf IS NOT NULL AND p.rta_pdf != '') AS "hasRta"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
@@ -8123,7 +8359,7 @@ app.get('/api/engineers', async (req, res) => {
     const query = `
       SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
       FROM users 
-      WHERE role = 'Division Engineer'
+      WHERE role = 'DepEd Engineer' OR role = 'Division Engineer'
       ORDER BY first_name ASC;
     `;
     const result = await pool.query(query);
@@ -8475,15 +8711,13 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
-// --- 20b. POST: Upload Project Document (Sequential) ---
+// --- 20b. POST: Upload Project Document (Append Version) ---
 app.post('/api/upload-project-document', async (req, res) => {
   const { projectId, type, base64, uid } = req.body;
 
   console.log(`📂 Incoming Doc Upload: [${type}] for Project [${projectId}]`);
-  console.log(`   - Payload Size: ${(JSON.stringify(req.body).length / (1024 * 1024)).toFixed(2)} MB`);
-
+  
   if (!projectId || !type || !base64) {
-    console.error("❌ Missing required data for upload", { projectId, type, hasBase64: !!base64 });
     return res.status(400).json({ error: "Missing required data" });
   }
 
@@ -8493,39 +8727,55 @@ app.post('/api/upload-project-document', async (req, res) => {
   else if (type === 'CONTRACT') column = 'contract_pdf';
   else if (type === 'RTA') column = 'rta_pdf';
   else if (type === 'MOA') column = 'moa_pdf';
-  else {
-    console.error(`❌ Invalid document type: ${type}`);
-    return res.status(400).json({ error: "Invalid document type" });
-  }
+  else return res.status(400).json({ error: "Invalid document type" });
 
+  let client;
   try {
-    const query = `UPDATE engineer_form SET ${column} = $1 WHERE project_id = $2`;
-    const result = await pool.query(query, [base64, parseInt(projectId)]);
+    client = await pool.connect();
+    
+    // 1. Get the latest data for this project to clone it
+    const latestRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+    if (latestRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+    const old = latestRes.rows[0];
 
-    console.log(`✅ Database Update Result: ${result.rowCount} row(s) updated.`);
+    // 2. Prepare new row data
+    // We clone almost everything, but update the document column and status metadata
+    const newRow = { ...old };
+    delete newRow.project_id; // Let DB generate new ID
+    newRow[column] = base64;
+    newRow.status_as_of = new Date().toISOString();
+    newRow.actions = `Uploaded ${type}`;
+    newRow.uploader_type = 'EFD Engineer';
+    newRow.engineer_id = uid || old.engineer_id; // Set to the HRODI engineer's UID if provided
 
-    // Optional: Log activity
-    // await logActivity(uid, 'Engineer', 'Engineer', 'UPLOAD', \`Project ID: \${projectId}\`, \`Uploaded \${type}\`);
+    // 3. Construct Insert Query Dynamically
+    const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
+    const vals = cols.map(k => newRow[k]);
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    
+    const insertQuery = `INSERT INTO "engineer_form" (${cols.join(', ')}) VALUES (${placeholders}) RETURNING project_id`;
+    const result = await client.query(insertQuery, vals);
+
+    console.log(`✅ Appended document update: New row project_id ${result.rows[0].project_id}`);
 
     // --- DUAL WRITE ---
     if (poolNew) {
       try {
-        // Get IPC to find project on secondary
-        const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
-        if (ipcRes.rows.length > 0) {
-          const ipc = ipcRes.rows[0].ipc;
-          await poolNew.query(`UPDATE engineer_form SET ${column} = $1 WHERE ipc = $2`, [base64, ipc]);
-          console.log(`✅ Dual-Write: ${type} Synced via IPC!`);
-        }
+        await poolNew.query(insertQuery, vals);
+        console.log(`✅ Dual-Write: ${type} Append Synced!`);
       } catch (dwErr) {
-        console.error("❌ Dual-Write Doc Upload Error:", dwErr.message);
+        console.error("❌ Dual-Write Doc Append Error:", dwErr.message);
       }
     }
 
-    res.json({ success: true });
+    res.json({ success: true, newProjectId: result.rows[0].project_id });
   } catch (err) {
     console.error("❌ Doc Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save document" });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -11917,8 +12167,9 @@ app.get('/api/migrate-schema', async (req, res) => {
 });
 // --- TEMPORARY MIGRATION ENDPOINT (LGU FIELDS) ---
 app.get('/api/migrate-lgu-schema', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
     const table = 'lgu_forms';
 
@@ -11948,19 +12199,20 @@ app.get('/api/migrate-lgu-schema', async (req, res) => {
       }
     }
 
-    client.release();
     res.json({ message: "LGU Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
 // --- TEMPORARY MIGRATION ENDPOINT (LGU IMAGES) ---
 app.get('/api/migrate-lgu-image-schema', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
-
 
     // Add category column to lgu_image
     try {
@@ -11968,17 +12220,19 @@ app.get('/api/migrate-lgu-image-schema', async (req, res) => {
       results.push("Added category to lgu_image");
     } catch (e) { results.push(`Failed category: ${e.message}`); }
 
-    client.release();
     res.json({ message: "LGU Image Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
 // --- TEMPORARY MIGRATION ENDPOINT (SPECIAL ORDER) ---
 app.get('/api/migrate-special-order-schema', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
 
     // 1. Add special_order and legislative_district to pending_schools
@@ -11995,10 +12249,11 @@ app.get('/api/migrate-special-order-schema', async (req, res) => {
       results.push("Added special_order and legislative_district to schools");
     } catch (e) { results.push(`Failed schools: ${e.message}`); }
 
-    client.release();
     res.json({ message: "Special Order Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -12026,7 +12281,10 @@ app.get('/api/debug/health-stats', async (req, res) => {
 app.get('/api/user-info/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT role, first_name, last_name, account_category FROM users WHERE uid = $1', [uid]);
+    const result = await pool.query(
+      'SELECT role, first_name, last_name, email, region, division, account_category FROM users WHERE uid = $1',
+      [uid]
+    );
     if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
     res.json(result.rows[0]);
   } catch (err) {
@@ -13350,7 +13608,55 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.latitude || null, data.longitude || null,
       data.school_head || null, data.contact_number || null
     ];
-    await pool.query(query, values);
+    
+    // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
+    let updatedByIern = false;
+    if (data.iern) {
+      const updateRes = await pool.query(`
+        UPDATE ph_schools SET
+          school_id = $1, school_name = $3, region = $4, province = $5,
+          municipality = $6, barangay = $7, division = $8, district = $9,
+          leg_district = $10, curricular_offering = $11, latitude = $12,
+          longitude = $13, school_head = $14, contact_number = $15,
+          unit1_completed = TRUE, updated_at = CURRENT_TIMESTAMP
+        WHERE iern = $2
+      `, values);
+      
+      if (updateRes.rowCount > 0) {
+        updatedByIern = true;
+      }
+    }
+
+    // Fallback to INSERT ON CONFLICT school_id if no unique IERN record matched
+    if (!updatedByIern) {
+      await pool.query(query, values);
+    }
+    
+    // --- SYNC TO schools_IERN (Mapping Update) ---
+    // If a School Head provides both school_id and iern, ensure the mapping exists in schools_IERN
+    if (data.school_id && data.iern) {
+      try {
+        const iernValues = [
+          data.school_id, data.iern, data.school_name,
+          data.region || null, data.division || null, data.province || null, data.municipality || null, data.district || null
+        ];
+        
+        const updateIernRes = await pool.query(`
+          UPDATE "schools_IERN" 
+          SET iern = $2, "School_Name" = $3, "Region" = $4, "Division" = $5, "Province" = $6, "Municipality" = $7, "District" = $8 
+          WHERE "SchoolID" = $1
+        `, iernValues);
+        
+        if (updateIernRes.rowCount === 0) {
+          await pool.query(`
+            INSERT INTO "schools_IERN" ("SchoolID", "iern", "School_Name", "Region", "Division", "Province", "Municipality", "District")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `, iernValues);
+        }
+      } catch (syncErr) {
+        console.error("âš ï¸ schools_IERN Sync Error:", syncErr.message);
+      }
+    }
 
     // Auto-update school_summary instantly
     try {
@@ -14784,8 +15090,11 @@ const startServer = async () => {
   try {
     console.log("🚀 Starting database initialization...");
     await initDB();
+    console.log("✅ initDB finished.");
     await initFinanceDB();
+    console.log("✅ initFinanceDB finished.");
     await initMasterlistDB();
+    console.log("✅ initMasterlistDB finished.");
 
     const PORT = process.env.PORT || 3000;
     const server = app.listen(PORT, '0.0.0.0', () => {

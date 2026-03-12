@@ -18,6 +18,7 @@ const EFDHome = () => {
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedFundingYear, setSelectedFundingYear] = useState('');
     const [selectedDonated, setSelectedDonated] = useState('All'); // 'All', 'Donated', 'Non-Donated'
+    const [selectedDocStatus, setSelectedDocStatus] = useState('All'); // 'All', 'Complete', 'Missing RTA', 'Missing MOA', 'Missing Both'
     const [fundingYears, setFundingYears] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [efdLocations, setEfdLocations] = useState([]);
@@ -28,6 +29,7 @@ const EFDHome = () => {
         setSelectedCategory('');
         setSelectedFundingYear('');
         setSelectedDonated('All');
+        setSelectedDocStatus('All');
         setSearchTerm('');
     };
 
@@ -53,13 +55,16 @@ const EFDHome = () => {
                     return;
                 }
 
-                // Fetch user data first to set region/division defaults
-                const userDoc = await getDoc(doc(db, 'users', uid));
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
-                    setUserData(data);
-                    if (data.region) setSelectedRegion(data.region);
-                    if (data.division) setSelectedDivision(data.division);
+                try {
+                    const response = await fetch(`/api/users/${uid}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setUserData(data);
+                        if (data.region) setSelectedRegion(data.region);
+                        if (data.division) setSelectedDivision(data.division);
+                    }
+                } catch (err) {
+                    console.error("Error fetching PostgreSQL user data:", err);
                 }
 
                 // Concurrent fetch for project and reference data
@@ -99,10 +104,15 @@ const EFDHome = () => {
             const matchesDonated = selectedDonated === 'All' ||
                 (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
                 (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+            const matchesDocStatus = selectedDocStatus === 'All' ||
+                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
+                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
             const matchesSearch = !searchTerm ||
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase());
-            return matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
+            return matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch;
         });
 
         baseProjects.forEach(p => {
@@ -111,7 +121,7 @@ const EFDHome = () => {
         });
         return Object.entries(counts).map(([name, count]) => ({ name, value: count }))
             .sort((a, b) => b.value - a.value);
-    }, [projects, selectedCategory, selectedFundingYear, searchTerm, selectedDonated]);
+    }, [projects, selectedCategory, selectedFundingYear, searchTerm, selectedDonated, selectedDocStatus]);
 
     const allRegions = useMemo(() => {
         const regions = new Set();
@@ -141,10 +151,15 @@ const EFDHome = () => {
             const matchesDonated = selectedDonated === 'All' ||
                 (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
                 (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+            const matchesDocStatus = selectedDocStatus === 'All' ||
+                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
+                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
             const matchesSearch = !searchTerm ||
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase());
-            return matchesRegion && matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
+            return matchesRegion && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch;
         });
 
         baseProjects.forEach(p => {
@@ -153,7 +168,7 @@ const EFDHome = () => {
         });
         return Object.entries(counts).map(([name, count]) => ({ name, value: count }))
             .sort((a, b) => b.value - a.value);
-    }, [projects, selectedRegion, selectedCategory, selectedFundingYear, searchTerm, selectedDonated]);
+    }, [projects, selectedRegion, selectedCategory, selectedFundingYear, searchTerm, selectedDonated, selectedDocStatus]);
 
     const newlyCreatedCount = useMemo(() => {
         return projects.length;
@@ -168,13 +183,18 @@ const EFDHome = () => {
             const matchesDonated = selectedDonated === 'All' ||
                 (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
                 (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+            const matchesDocStatus = selectedDocStatus === 'All' ||
+                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
+                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
+                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
             const matchesSearch = !searchTerm ||
                 p.projectName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 p.schoolId?.toString().includes(searchTerm);
-            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesSearch;
+            return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch;
         });
-    }, [projects, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, searchTerm, selectedDonated]);
+    }, [projects, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, searchTerm, selectedDonated, selectedDocStatus]);
 
     if (loading) {
         return (
@@ -193,7 +213,7 @@ const EFDHome = () => {
                     <div className="relative z-10">
                         <div className="flex justify-between items-center mb-8">
                             <div>
-                                <h1 className="text-2xl font-black tracking-tight leading-none">HRODI Dashboard</h1>
+                                <h1 className="text-2xl font-black tracking-tight leading-none">HRODI Engineer Dashboard</h1>
                                 <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
                                     {userData?.region || 'Central Office'} • Infrastructure Monitoring
                                 </p>
@@ -238,7 +258,7 @@ const EFDHome = () => {
                                 <FiFilter className="text-blue-500" />
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Advanced Filters</span>
                             </div>
-                            {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || searchTerm) && (
+                            {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || selectedDocStatus !== 'All' || searchTerm) && (
                                 <button
                                     onClick={handleClearFilters}
                                     className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full transition-all active:scale-95"
@@ -307,6 +327,20 @@ const EFDHome = () => {
                                     <option value="All">All Projects</option>
                                     <option value="Donated">Donated Projects</option>
                                     <option value="Non-Donated">Not Donated Projects</option>
+                                </select>
+                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                            </div>
+                            <div className="relative col-span-1">
+                                <select
+                                    value={selectedDocStatus}
+                                    onChange={(e) => setSelectedDocStatus(e.target.value)}
+                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
+                                >
+                                    <option value="All">All Documents</option>
+                                    <option value="Complete">Complete (MOA & RTA)</option>
+                                    <option value="Missing RTA">Missing RTA</option>
+                                    <option value="Missing MOA">Missing MOA</option>
+                                    <option value="Missing Both">Missing Both</option>
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -463,8 +497,19 @@ const EFDHome = () => {
                                             </div>
                                         </div>
                                         <div className="text-right shrink-0">
+                                            <div className="mb-2">
+                                                {!p.hasMoa && !p.hasRta ? (
+                                                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">Missing MOA/RTA</span>
+                                                ) : p.hasMoa && p.hasRta ? (
+                                                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200">Docs Complete</span>
+                                                ) : !p.hasMoa ? (
+                                                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">Missing MOA</span>
+                                                ) : (
+                                                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">Missing RTA</span>
+                                                )}
+                                            </div>
                                             <p className="text-xs font-black text-slate-800">{p.accomplishmentPercentage}%</p>
-                                            <div className="w-16 bg-slate-100 h-1 rounded-full mt-1 overflow-hidden">
+                                            <div className="w-16 bg-slate-100 h-1 rounded-full mt-1 overflow-hidden ml-auto">
                                                 <div
                                                     className="h-full bg-blue-500 transition-all"
                                                     style={{ width: `${p.accomplishmentPercentage}%` }}

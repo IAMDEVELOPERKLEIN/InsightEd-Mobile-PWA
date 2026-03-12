@@ -31,7 +31,8 @@ const AUTHORIZATION_CODES = {
     'Central Office': '8XK2-M9P4',
     'Regional Office': 'H7V3-L5N1',
     'School Division Office': 'Q9D2-R4J6',
-    'Division Engineer': 'E5T8-B2W3',
+    'DepEd Engineer': 'E5T8-B2W3',
+    'Non-DepEd Engineer': 'E5T8-B2W3',
     'Local Government Unit': 'L2G7-X4Z9',
     'Central Office Finance': '8XK2-M9P4', // Same as Central Office
     'Super User': 'SUP3R-US3R', // Added for testing
@@ -43,14 +44,15 @@ const AUTHORIZATION_CODES = {
 import locationData from './locations.json';
 
 const getDashboardPath = (role, accountCategory) => {
-    // Division Engineer redirect depends on their account category
-    if (role === 'Division Engineer') {
-        return accountCategory === 'Non-DepEd Engineer'
+    // DepEd Engineer redirect depends on their account category
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
+        return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
             ? '/non-deped-dashboard'
             : '/engineer-dashboard';
     }
     const roleMap = {
         'EFD': '/efd-dashboard',
+        'HRODI Engineer': '/efd-dashboard',
         'HRODI': '/efd-dashboard',
         'Local Government Unit': '/lgu-dashboard',
         'School Head': '/my-activity',
@@ -89,7 +91,6 @@ const Register = () => {
         city: '',
         barangay: '',
         authCode: '',
-        // New Fields for Division Engineer
         altEmail: '',
         accountCategory: '' // Added this line
     });
@@ -207,29 +208,47 @@ const Register = () => {
     // --- OFFICE DROPDOWN LOGIC ---
     const regionalOffices = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Regional Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     const divisionOffices = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Schools Division Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     const centralOfficeBureaus = useMemo(() => {
         if (!isOfficeCsvLoaded) return [];
-        return [...new Set(officeData
+        const divisionsMap = {};
+        officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Central Office'))
-            .map(row => row['Functional Division'])
-            .filter(Boolean)
-        )].sort();
+            .forEach(row => {
+                const val = row['Functional Division'];
+                if (val) {
+                    const u = val.toUpperCase().trim();
+                    if (!divisionsMap[u]) divisionsMap[u] = val.trim();
+                }
+            });
+        return Object.values(divisionsMap).sort();
     }, [officeData, isOfficeCsvLoaded]);
 
     // --- HANDLERS ---
@@ -407,8 +426,8 @@ const Register = () => {
             return;
         }
 
-        // Division Engineer Specific Validations
-        if (formData.role === 'Division Engineer') {
+        // Division/DepEd/Non-DepEd Engineer Specific Validations
+        if (formData.role === 'DepEd Engineer' || formData.role === 'Non-DepEd Engineer') {
             if (formData.contactNumber.length !== 11) {
                 alert("Please enter a valid 11-digit mobile number.");
                 return;
@@ -552,7 +571,10 @@ const Register = () => {
                         })
                     });
 
-                    regData = await regRes.json();
+                    const regText = await regRes.text();
+                    console.log("Generic Registration response text:", regText);
+                    if (!regText) throw new Error("Empty response from /api/register-user");
+                    regData = JSON.parse(regText);
                     if (!regData.success) {
                        throw new Error(regData.error || "Server Registration Failed.");
                     }
@@ -561,6 +583,7 @@ const Register = () => {
                     console.log("✅ Registration Successful! Setting native session...");
                     localStorage.setItem('uid', regData.uid);
                     localStorage.setItem('userRole', regData.role);
+                    localStorage.setItem('userEmail', authEmail);
                     if (regData.region) localStorage.setItem('userRegion', regData.region);
                     if (regData.division) localStorage.setItem('userDivision', regData.division);
                     if (regData.accountCategory) {
@@ -569,10 +592,12 @@ const Register = () => {
 
                     // For specialized redirects, we need to pass these directly
                     const destPath = getDashboardPath(regData.role, regData.accountCategory);
-                    console.log("Redirecting to:", destPath);
+                    console.log("Intended Dashboard:", destPath);
+                    
+                    localStorage.setItem('needs_pin_setup', 'true');
                     
                     alert("✅ Account created successfully!");
-                    navigate(destPath);
+                    navigate('/setup-pin');
                     return;
 
                 } catch (backendErr) {
@@ -610,6 +635,16 @@ const Register = () => {
                 if (selectedSchool?.school_id) {
                     localStorage.setItem('schoolId', selectedSchool.school_id);
                 }
+                
+                // Set user email and uid for subsequent steps (like PinSetup)
+                localStorage.setItem('userEmail', contactEmail);
+                if (auth.currentUser?.uid || regData?.uid) {
+                    localStorage.setItem('uid', auth.currentUser?.uid || regData?.uid);
+                }
+
+                // NEW: Mark for PIN setup since they are newly registered
+                localStorage.setItem('needs_pin_setup', 'true');
+
                 setShowSuccessModal(true);
             } else {
                 // Set role in localStorage for immediate access by Dashboard/BottomNav
@@ -617,7 +652,7 @@ const Register = () => {
                 // Save accountCategory so other components can read it
                 if (formData.accountCategory) {
                     localStorage.setItem('accountCategory', formData.accountCategory);
-                } else if (formData.role === 'EFD' || formData.role === 'HRODI') {
+                } else if (formData.role === 'EFD' || formData.role === 'HRODI' || formData.role === 'HRODI Engineer') {
                     localStorage.setItem('accountCategory', 'EFD Engineer');
                 }
                 const destPath = getDashboardPath(formData.role, formData.accountCategory || ( (formData.role === 'EFD' || formData.role === 'HRODI') ? 'EFD Engineer' : '' ));
@@ -665,8 +700,9 @@ const Register = () => {
                                         <option value="Regional Office">RO Personnel</option>
                                         <option value="School Division Office">SDO Personnel</option>
                                         <option value="School Head">School Head</option>
-                                        <option value="Division Engineer">Division Engineer</option>
-                                        <option value="HRODI">HRODI (Human Resource and Organizational Development)</option>
+                                        <option value="DepEd Engineer">DepEd Engineer (Division)</option>
+                                        <option value="Non-DepEd Engineer">Non-DepEd Engineer</option>
+                                        <option value="HRODI Engineer">HRODI Engineer (Human Resource and Organizational Development)</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         <option value="Central Office Finance">Central Office Finance</option>
                                         {/* <option value="Super User" hidden>Super User</option> */}
@@ -1068,8 +1104,8 @@ const Register = () => {
                                         </div>
                                     )}
 
-                                    {/* DIVISION ENGINEER & EFD FIELDS */}
-                                    {(formData.role === 'Division Engineer' || formData.role === 'EFD') && (
+                                    {/* ENGINEER & EFD FIELDS */}
+                                    {(formData.role === 'DepEd Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD') && (
                                         <div className="space-y-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
                                             <h3 className="text-sm font-bold text-teal-800 uppercase flex items-center gap-2">
                                                 <span className="bg-teal-100 text-teal-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>
@@ -1130,20 +1166,7 @@ const Register = () => {
                                                     <option value="Technical Assistant V (COS)">Technical Assistant V (COS)</option>
                                                 </select>
 
-                                                {/* ACCOUNT CATEGORY (DepEd vs Non-DepEd) */}
-                                                {formData.role === 'Division Engineer' && (
-                                                    <select
-                                                        name="accountCategory"
-                                                        value={formData.accountCategory}
-                                                        onChange={handleChange}
-                                                        className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
-                                                        required
-                                                    >
-                                                        <option value="">Select Account Category</option>
-                                                        <option value="DepEd Engineer">DepEd Division Engineer</option>
-                                                        <option value="Non-DepEd Engineer">Non-DepEd Engineer</option>
-                                                    </select>
-                                                )}
+
                                             </div>
 
                                             {/* CONTACT INFO */}
@@ -1418,10 +1441,16 @@ const Register = () => {
                             </div>
 
                             <button
-                                onClick={() => navigate(getDashboardPath(formData.role))}
+                                onClick={() => {
+                                    if (localStorage.getItem('needs_pin_setup') === 'true') {
+                                        navigate('/setup-pin');
+                                    } else {
+                                        navigate(getDashboardPath(formData.role));
+                                    }
+                                }}
                                 className="w-full py-4 rounded-xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
                             >
-                                Continue to Dashboard
+                                Continue
                             </button>
                         </div>
                     </div>

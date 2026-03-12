@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 // Auth
 import Login from './Login';
 import Register from './Register';
+import PinSetup from './components/PinSetup';
 
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
@@ -64,7 +65,7 @@ import TeacherSpecialization from './forms/TeacherSpecialization';
 import PhysicalFacilities from './forms/PhysicalFacilities';
 import LearnerStatistics from './forms/LearnerStatistics';
 
-// Form Imports (Division Engineer)
+// Form Imports (DepEd Engineer)
 import EngineerSchoolResources from './forms/EngineerSchoolResources';
 import DamageAssessment from './forms/DamageAssessment';
 import ProjectMonitoring from './forms/ProjectMonitoring';
@@ -125,6 +126,7 @@ const AnimatedRoutes = () => {
       {/* Authentication */}
       <Route path="/" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/setup-pin" element={<PinSetup />} />
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
@@ -288,7 +290,7 @@ const AnimatedRoutes = () => {
       <Route path="/project-validation" element={<ProjectValidation />} />
       <Route path="/leaderboard" element={<Leaderboard />} />
 
-      {/* Division Engineer Forms */}
+      {/* DepEd Engineer Forms */}
       <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
       <Route path="/damage-assessment" element={<DamageAssessment />} />
       <Route path="/project-monitoring" element={<ProjectMonitoring />} />
