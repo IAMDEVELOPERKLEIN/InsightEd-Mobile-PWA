@@ -61,10 +61,11 @@ export default function Unit8PhysicalFacilities() {
         const cached = localStorage.getItem("nsbi_building_types");
         return cached ? JSON.parse(cached) : DEFAULT_BUILDING_TYPES;
     });
-    const [newBuildingSearch, setNewBuildingSearch] = useState("");
-    const [goodBuildingSearch, setGoodBuildingSearch] = useState("");
-    const [isNewDropdownOpen, setIsNewDropdownOpen] = useState(false);
-    const [isGoodDropdownOpen, setIsGoodDropdownOpen] = useState(false);
+    const [isBuildingDropdownOpen, setIsBuildingDropdownOpen] = useState(false);
+    const [buildingSearch, setBuildingSearch] = useState("");
+
+    // Teacher selection for advisory
+    const [teachers, setTeachers] = useState([]);
 
     // Map & Space State
     const [spaces, setSpaces] = useState([]);
@@ -83,33 +84,15 @@ export default function Unit8PhysicalFacilities() {
     const totalAreaSqm = (newSpace.length_m || 0) * (newSpace.width_m || 0);
 
     // ── Phase 2: Building Inventory State ────────────────────────────────────
-    const [hasNewlyBuilt, setHasNewlyBuilt] = useState(null);
-    const [newlyBuiltBuildings, setNewlyBuiltBuildings] = useState([]);
-    const [showNewBuildingModal, setShowNewBuildingModal] = useState(false);
+    const [buildings, setBuildings] = useState([]);
+    const [showBuildingModal, setShowBuildingModal] = useState(false);
 
     const currentYear = new Date().getFullYear();
-    const [newBuildingFormData, setNewBuildingFormData] = useState({
+    const [buildingFormData, setBuildingFormData] = useState({
         building_name: "",
         category: "Academic Building",
         storey: 1,
         classroom: 1,
-        room_length: 9,
-        room_width: 7,
-        year_completed: currentYear,
-        remarks: ""
-    });
-
-    const [hasGoodCondition, setHasGoodCondition] = useState(null);
-    const [goodConditionBuildings, setGoodConditionBuildings] = useState([]);
-    const [showGoodBuildingModal, setShowGoodBuildingModal] = useState(false);
-
-    const [goodBuildingFormData, setGoodBuildingFormData] = useState({
-        building_name: "",
-        category: "Academic Building",
-        storey: 1,
-        classroom: 1,
-        room_length: 9,
-        room_width: 7,
         year_completed: currentYear,
         remarks: ""
     });
@@ -138,16 +121,20 @@ export default function Unit8PhysicalFacilities() {
 
     const [demolitionFormData, setDemolitionFormData] = useState({
         building_name: "",
-        room_length: 9,
-        room_width: 7,
+        dimension_category: "less_than_7x9",
+        room_count: 1,
         age: false,
         safety: false,
         calamity: false,
         upgrade: false
     });
 
-    const [editingNewBuildingId, setEditingNewBuildingId] = useState(null);
-    const [editingGoodBuildingId, setEditingGoodBuildingId] = useState(null);
+    // Integrated Rooms State
+    const [roomsData, setRoomsData] = useState([]); 
+    const [roomsPage, setRoomsPage] = useState(1);
+    const roomsPerPage = 10;
+
+    const [editingBuildingId, setEditingBuildingId] = useState(null);
     const [editingRepairRoomId, setEditingRepairRoomId] = useState(null);
     const [editingDemolitionId, setEditingDemolitionId] = useState(null);
 
@@ -155,6 +142,7 @@ export default function Unit8PhysicalFacilities() {
 
     // ── Data Fetching ─────────────────────────────────────────────────────
     const [isReadOnly, setIsReadOnly] = useState(false);
+    const allBuildings = buildings;
 
     useEffect(() => {
         const init = async () => {
@@ -183,6 +171,9 @@ export default function Unit8PhysicalFacilities() {
 
                 // Fetch Phase 2 Master Data
                 fetchMasterData(storedId);
+
+                // Fetch Teachers for advisory
+                fetchTeachers(storedId);
             } catch (e) {
                 console.warn("Could not fetch Unit 10 data", e);
             }
@@ -192,27 +183,45 @@ export default function Unit8PhysicalFacilities() {
 
     const fetchMasterData = async (id) => {
         try {
+            // Using the updated Unit 10 master endpoint for consolidated tables
             const res = await fetch(`/api/ph_schools/unit10/${id}/master`);
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && json.data) {
                     const { inventory, repairs, demolitions, isCompleted } = json.data;
 
-                    // Filter Inventory
-                    const newlyBuilt = inventory.filter(i => i.status === 'Newly Built');
-                    const goodCondition = inventory.filter(i => i.status === 'Good Condition');
-                    setNewlyBuiltBuildings(newlyBuilt);
-                    setGoodConditionBuildings(goodCondition);
-                    if (newlyBuilt.length > 0) setHasNewlyBuilt(true);
-                    if (goodCondition.length > 0) setHasGoodCondition(true);
+                    // 1. Unified Inventory
+                    setBuildings(inventory);
 
-                    // Reconstruct Repairs for display/submission (repairAssessments)
+                    // 2. Populate roomsData from all buildings
+                    const allRooms = [];
+                    inventory.forEach(b => {
+                        if (b.rooms && Array.isArray(b.rooms)) {
+                            b.rooms.forEach(r => {
+                                allRooms.push({
+                                    id: r.id,
+                                    building_local_id: b.id, // Linking to building
+                                    room_name: r.room_name,
+                                    grade_level: r.grade_level,
+                                    advisory_teacher: r.advisory_teacher,
+                                    room_length: r.room_length,
+                                    room_width: r.room_width,
+                                    dimension: r.dimension || '',
+                                    condition: r.condition || 'Good Condition'
+                                });
+                            });
+                        }
+                    });
+                    setRoomsData(allRooms);
+
+                    // 3. Reconstruct Repairs
                     const assessments = repairs.map(r => ({
                         id: r.id,
                         roomId: r.building_name + '-' + r.room_name,
                         building_name: r.building_name,
                         room_name: r.room_name,
                         item: r.item_name,
+                        oms: r.oms,
                         condition: r.condition,
                         damage_ratio: r.damage_ratio,
                         recommend_action: r.recommended_action,
@@ -222,11 +231,10 @@ export default function Unit8PhysicalFacilities() {
                     setRepairAssessments(assessments);
                     if (assessments.length > 0) setHasRepair(true);
 
-                    // Demolitions
+                    // 4. Demolitions
                     setDemolitionRecords(demolitions);
                     if (demolitions.length > 0) setHasDemolition(true);
 
-                    // Set ReadOnly based on completion
                     setIsReadOnly(isCompleted);
                 }
             }
@@ -234,6 +242,8 @@ export default function Unit8PhysicalFacilities() {
             console.warn("Error fetching master data:", e);
         }
     };
+
+
 
     const fetchBuildingTypes = async () => {
         try {
@@ -247,6 +257,20 @@ export default function Unit8PhysicalFacilities() {
             }
         } catch (e) {
             console.warn("Could not fetch building types", e);
+        }
+    };
+
+    const fetchTeachers = async (id) => {
+        try {
+            const res = await fetch(`/api/unit8/teachers/${id}`);
+            if (res.ok) {
+                const json = await res.json();
+                if (json.success) {
+                    setTeachers(json.teachers);
+                }
+            }
+        } catch (e) {
+            console.warn("Could not fetch teachers", e);
         }
     };
 
@@ -357,94 +381,80 @@ export default function Unit8PhysicalFacilities() {
     };
 
     // ── Phase 2 Handlers ──────────────────────────────────────────────────
-    const handleSaveNewBuilding = () => {
-        if (!newBuildingFormData.building_name) {
+    const handleSaveBuilding = () => {
+        if (!buildingFormData.building_name) {
             alert("Please enter a building name.");
             return;
         }
 
+        const bId = editingBuildingId || Date.now().toString();
         const newEntry = {
-            ...newBuildingFormData,
-            id: editingNewBuildingId || Date.now().toString(), // local id for the list
-            status: 'Newly Built' // Hardcoded status as requested
+            ...buildingFormData,
+            id: bId
         };
 
-        if (editingNewBuildingId) {
-            setNewlyBuiltBuildings(newlyBuiltBuildings.map(b => b.id === editingNewBuildingId ? newEntry : b));
+        // Automatic Room Generation
+        const generatedRooms = [];
+        const roomsPerFloor = Math.ceil(buildingFormData.classroom / buildingFormData.storey);
+        let roomCount = 0;
+
+        for (let floor = 1; floor <= buildingFormData.storey; floor++) {
+            for (let r = 0; r < roomsPerFloor && roomCount < buildingFormData.classroom; r++) {
+                roomCount++;
+                const roomLetter = String.fromCharCode(65 + r); // A, B, C...
+                const roomName = `${buildingFormData.building_name} ${floor}-${roomLetter}`;
+                
+                generatedRooms.push({
+                    id: `${bId}-room-${roomCount}`,
+                    building_local_id: bId,
+                    building_name: buildingFormData.building_name,
+                    room_name: roomName,
+                    dimensions: "7x9", 
+                    grade_level: "",
+                    teacher_id: "",
+                    condition: "Good Condition", 
+                });
+            }
+        }
+
+        if (editingBuildingId) {
+            setBuildings(buildings.map(b => b.id === editingBuildingId ? newEntry : b));
         } else {
-            setNewlyBuiltBuildings([...newlyBuiltBuildings, newEntry]);
+            setBuildings([...buildings, newEntry]);
         }
 
-        setShowNewBuildingModal(false);
-        setEditingNewBuildingId(null);
-        setNewBuildingFormData({
+        // Update roomsData: Add or replace rooms for this building
+        setRoomsData(prev => [
+            ...prev.filter(r => r.building_local_id !== bId),
+            ...generatedRooms
+        ]);
+
+        setShowBuildingModal(false);
+        setEditingBuildingId(null);
+        setBuildingFormData({
             building_name: "", category: "Academic Building", storey: 1, classroom: 1,
-            room_length: 9, room_width: 7, year_completed: currentYear, remarks: ""
+            year_completed: currentYear, remarks: ""
         });
+        setTimeout(() => handlePartialSync(), 100);
     };
 
-    const handleEditNewBuilding = (building) => {
-        setNewBuildingFormData({
-            building_name: building.building_name,
-            category: building.category,
-            storey: building.storey,
-            classroom: building.classroom,
-            room_length: building.room_length,
-            room_width: building.room_width,
-            year_completed: building.year_completed,
-            remarks: building.remarks || ""
+    const handleEditBuilding = (b) => {
+        setBuildingFormData({
+            building_name: b.building_name,
+            category: b.category,
+            storey: b.storey,
+            classroom: b.classroom,
+            year_completed: b.year_completed,
+            remarks: b.remarks || ""
         });
-        setEditingNewBuildingId(building.id);
-        setShowNewBuildingModal(true);
+        setEditingBuildingId(b.id);
+        setShowBuildingModal(true);
     };
 
-    const handleDeleteNewBuilding = (id) => {
-        setNewlyBuiltBuildings(newlyBuiltBuildings.filter(b => b.id !== id));
-    };
-
-    const handleSaveGoodBuilding = () => {
-        if (!goodBuildingFormData.building_name) {
-            alert("Please enter a building name.");
-            return;
-        }
-
-        const newEntry = {
-            ...goodBuildingFormData,
-            id: editingGoodBuildingId || Date.now().toString(),
-            status: 'Good Condition' // Hardcoded status
-        };
-
-        if (editingGoodBuildingId) {
-            setGoodConditionBuildings(goodConditionBuildings.map(b => b.id === editingGoodBuildingId ? newEntry : b));
-        } else {
-            setGoodConditionBuildings([...goodConditionBuildings, newEntry]);
-        }
-
-        setShowGoodBuildingModal(false);
-        setEditingGoodBuildingId(null);
-        setGoodBuildingFormData({
-            building_name: "", category: "Academic Building", storey: 1, classroom: 1,
-            room_length: 9, room_width: 7, year_completed: currentYear, remarks: ""
-        });
-    };
-
-    const handleEditGoodBuilding = (building) => {
-        setGoodBuildingFormData({
-            building_name: building.building_name,
-            category: building.category,
-            storey: building.storey,
-            classroom: building.classroom,
-            room_length: building.room_length,
-            room_width: building.room_width,
-            year_completed: building.year_completed,
-            remarks: building.remarks || ""
-        });
-        setEditingGoodBuildingId(building.id);
-        setShowGoodBuildingModal(true);
-    };
-
-    const handleDeleteGoodBuilding = (id) => {
-        setGoodConditionBuildings(goodConditionBuildings.filter(b => b.id !== id));
+    const handleDeleteBuilding = (bId) => {
+        if (!window.confirm("Delete this building and all its rooms?")) return;
+        setBuildings(prev => prev.filter(b => b.id !== bId));
+        setRoomsData(prev => prev.filter(r => r.building_local_id !== bId));
     };
 
     const handleToggleRepairItem = (category) => {
@@ -457,7 +467,7 @@ export default function Unit8PhysicalFacilities() {
                 return {
                     ...prev,
                     [category]: {
-                        made_of: "",
+                        oms: "",
                         condition: "Good",
                         damage_ratio: 0,
                         recommend_action: "Routine Repair",
@@ -492,7 +502,7 @@ export default function Unit8PhysicalFacilities() {
         }
 
         // Flattening Logic: one object per checked category
-        const roomId = editingRepairRoomId || Date.now().toString(); // unique ID for the whole room group
+        const roomId = repairRoomFormData.building_name + "-" + repairRoomFormData.room_name;
 
         const newAssessments = selectedCategories.map(category => ({
             id: roomId + "-" + category.replace(/\s/g, ''),
@@ -505,12 +515,8 @@ export default function Unit8PhysicalFacilities() {
             ...repairItemsState[category]
         }));
 
-        if (editingRepairRoomId) {
-            // Remove old items for this room, then append the new ones
-            setRepairAssessments(prev => [...prev.filter(a => a.roomId !== editingRepairRoomId), ...newAssessments]);
-        } else {
-            setRepairAssessments(prev => [...prev, ...newAssessments]);
-        }
+        // Always replace existing items for this room (building_name + room_name)
+        setRepairAssessments(prev => [...prev.filter(a => a.roomId !== roomId), ...newAssessments]);
 
         setShowRepairModal(false);
         setEditingRepairRoomId(null);
@@ -521,6 +527,7 @@ export default function Unit8PhysicalFacilities() {
             room_width: 7
         });
         setRepairItemsState({});
+        setTimeout(() => handlePartialSync(), 100);
     };
 
     const handleEditRepairRoom = (roomGroup) => {
@@ -585,7 +592,14 @@ export default function Unit8PhysicalFacilities() {
         }
 
         const newRecord = {
-            ...demolitionFormData,
+            building_name: demolitionFormData.building_name,
+            less_than_7x9: demolitionFormData.dimension_category === 'less_than_7x9' ? demolitionFormData.room_count : 0,
+            "7x9": demolitionFormData.dimension_category === '7x9' ? demolitionFormData.room_count : 0,
+            above_7x9: demolitionFormData.dimension_category === 'above_7x9' ? demolitionFormData.room_count : 0,
+            age: demolitionFormData.age,
+            safety: demolitionFormData.safety,
+            calamity: demolitionFormData.calamity,
+            upgrade: demolitionFormData.upgrade,
             id: editingDemolitionId || Date.now().toString()
         };
 
@@ -597,10 +611,11 @@ export default function Unit8PhysicalFacilities() {
 
         setShowDemolitionModal(false);
         setEditingDemolitionId(null);
+        setTimeout(() => handlePartialSync(), 100);
         setDemolitionFormData({
             building_name: "",
-            room_length: 9,
-            room_width: 7,
+            dimension_category: "less_than_7x9",
+            room_count: 1,
             age: false,
             safety: false,
             calamity: false,
@@ -609,10 +624,16 @@ export default function Unit8PhysicalFacilities() {
     };
 
     const handleEditDemolition = (demoRecord) => {
+        let category = "less_than_7x9";
+        let count = 0;
+        if (demoRecord.above_7x9 > 0) { category = "above_7x9"; count = demoRecord.above_7x9; }
+        else if (demoRecord["7x9"] > 0) { category = "7x9"; count = demoRecord["7x9"]; }
+        else { category = "less_than_7x9"; count = demoRecord.less_than_7x9; }
+
         setDemolitionFormData({
             building_name: demoRecord.building_name,
-            room_length: demoRecord.room_length || 9,
-            room_width: demoRecord.room_width || 7,
+            dimension_category: category,
+            room_count: count,
             age: demoRecord.age || false,
             safety: demoRecord.safety || false,
             calamity: demoRecord.calamity || false,
@@ -624,58 +645,138 @@ export default function Unit8PhysicalFacilities() {
 
     const handleDeleteDemolition = (id) => {
         setDemolitionRecords(prev => prev.filter(r => r.id !== id));
+        setTimeout(() => handlePartialSync(), 100);
+    };
+
+    const handlePartialSync = async () => {
+        try {
+            const inventoryPayload = buildings;
+            const repairPayload = repairAssessments.map(a => ({
+                building_no: a.building_name,
+                room_no: a.room_name,
+                item_name: a.item,
+                oms: a.oms,
+                condition: a.condition,
+                damage_ratio: a.damage_ratio,
+                recommended_action: a.recommend_action,
+                demo_justification: a.demo_justification,
+                remarks: a.remarks
+            }));
+            const demoPayload = [...demolitionRecords];
+            const build_classrooms_total = roomsData.length;
+
+            await fetch(`/api/save-physical-facilities`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    schoolId: schoolId,
+                    school_id: schoolId,
+                    inventoryEntries: inventoryPayload,
+                    rooms: roomsData,
+                    repairEntries: repairPayload,
+                    demolitionEntries: demoPayload,
+                    build_classrooms_total,
+                    isPartial: true // Flag to backend
+                })
+            });
+        } catch (e) {
+            console.warn("Partial sync failed", e);
+        }
     };
 
     const handleMasterSubmit = async () => {
-        const confirmSubmit = window.confirm("Are you sure you want to finalize and save this entire Unit 10 Audit?");
+        const confirmSubmit = window.confirm("Are you sure you want to finalize and save this entire Unit 8 Audit?");
         if (!confirmSubmit) return;
 
         try {
             setLoading(true);
 
             // Phase 2 Step 1 & 2: Building Inventory
-            const inventoryPayload = [...newlyBuiltBuildings, ...goodConditionBuildings];
+            const inventoryPayload = buildings;
 
-            // Phase 2 Step 3: Repair Assessments
-            const repairPayload = [...groupedRepairsArray];
+            // Phase 2 Step 3: Granular Room Setup
+            // roomsData is already flat
 
-            // Phase 2 Step 4: Demolitions
+            // Phase 2 Step 4: Repair Assessments
+            const repairPayload = repairAssessments.map(a => ({
+                building_no: a.building_name,
+                room_no: a.room_name,
+                item_name: a.item,
+                oms: a.oms,
+                condition: a.condition,
+                damage_ratio: a.damage_ratio,
+                recommended_action: a.recommend_action,
+                demo_justification: a.demo_justification,
+                remarks: a.remarks
+            }));
+
+            // Phase 3: Demolitions
             const demoPayload = [...demolitionRecords];
+
+            // Summary counts for school profile
+            const build_classrooms_total = roomsData.length;
+            const build_classrooms_new = buildings.filter(b => b.status === "Newly Built").reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
+            const build_classrooms_good = buildings.filter(b => b.status === "Good Condition").reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
+            const build_classrooms_repair = [...new Set(repairAssessments.map(a => `${a.building_name}-${a.room_name}`))].length;
+            const build_classrooms_demolition = demolitionRecords.reduce((acc, d) => acc + (parseInt(d.less_than_7x9) || 0) + (parseInt(d["7x9"]) || 0) + (parseInt(d.above_7x9) || 0), 0);
 
             console.log("--- FINAL PAYLOAD TO BACKEND ---");
             console.log("Inventory:", inventoryPayload);
+            console.log("Rooms:", roomsData);
             console.log("Repairs:", repairPayload);
             console.log("Demolitions:", demoPayload);
 
-            console.log("--- EXACT RAW PAYLOAD ---");
-            console.log(JSON.stringify({ inventory: inventoryPayload, repairs: repairPayload, demolitions: demoPayload }, null, 2));
-
             // Send all data to the backend master endpoint
-            const masterRes = await fetch(`/api/ph_schools/unit10/${schoolId}/master`, {
+            const masterRes = await fetch(`/api/save-physical-facilities`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    inventory: inventoryPayload,
-                    repairs: repairPayload,
-                    demolitions: demoPayload
+                    schoolId: schoolId,
+                    school_id: schoolId, // Backward fallback
+                    inventoryEntries: inventoryPayload,
+                    rooms: roomsData,
+                    repairEntries: repairPayload,
+                    demolitionEntries: demoPayload,
+                    // Classroom profile data
+                    build_classrooms_total,
+                    build_classrooms_new,
+                    build_classrooms_good,
+                    build_classrooms_repair,
+                    build_classrooms_demolition
                 })
             });
 
             if (!masterRes.ok) {
                 const errorData = await masterRes.json().catch(() => null);
                 console.error("Master Submission Error Response:", errorData);
-                throw new Error("Failed to submit Unit 10 master payload.");
+                throw new Error("Failed to submit Unit 8 master payload.");
             }
 
-            // Force Unit 10 completion XP if not done
+            // Force Unit 8 completion XP if not done
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-            if (!progress.completedUnits.includes(10)) {
-                progress.completedUnits.push(10);
+            if (!progress.completedUnits.includes(8)) {
+                progress.completedUnits.push(8);
                 progress.xp += 500;
                 localStorage.setItem('quest_progress', JSON.stringify(progress));
+
+                // Also notify backend about progress
+                fetch('/api/user/progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        unitId: 8,
+                        schoolId: schoolId,
+                        duration_seconds: 0 // Optional
+                    })
+                }).catch(err => console.error("Failed to sync progress to backend", err));
             }
-            navigate("/modular-dashboard");
+            
+            setShowSuccess(true);
+            // Redirection happens via SuccessModal onClose or we can delay it
+            setTimeout(() => {
+                navigate("/modular-dashboard");
+            }, 3000);
 
         } catch (err) {
             console.error("Master submission failed", err);
@@ -691,9 +792,7 @@ export default function Unit8PhysicalFacilities() {
 
     // ── Summary Dashboard Component ─────────────────────────────────────────
     const SummaryDashboard = () => {
-        const totalClassrooms =
-            newlyBuiltBuildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0) +
-            goodConditionBuildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0);
+        const totalClassrooms = buildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0);
 
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden selection:bg-indigo-500/30">
@@ -792,53 +891,27 @@ export default function Unit8PhysicalFacilities() {
                     <div className="space-y-6">
                         <h3 className="text-xl font-black text-gray-800 px-2">Phase 2: Inventory Breakdown</h3>
 
-                        {/* Newly Built */}
-                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-teal-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
-                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                                <span className="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center">✨</span>
-                                Newly Built
-                            </h4>
-                            <div className="space-y-3">
-                                {newlyBuiltBuildings.map(b => (
-                                    <div key={b.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                        <h5 className="font-black text-gray-800">{b.building_name}</h5>
-                                        <div className="mt-2 flex items-center gap-2">
-                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.storey} Storey(s)</span>
-                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.classroom} Classrooms</span>
-                                        </div>
-                                        <div className="mt-3 bg-white p-3 rounded-xl border border-gray-100 text-sm">
-                                            <p className="font-bold text-gray-600">Standard Room Size: <span className="text-gray-800">{b.room_length}m &times; {b.room_width}m</span></p>
-                                            <p className="text-gray-500 mt-0.5 text-xs font-medium">Area per room: {(parseFloat(b.room_length) * parseFloat(b.room_width)).toFixed(1)} m&sup2;</p>
-                                        </div>
-                                    </div>
-                                ))}
-                                {newlyBuiltBuildings.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No newly built structures recorded.</p>}
-                            </div>
-                        </div>
-
-                        {/* Good Condition */}
+                        {/* Registered Buildings */}
                         <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
                             <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">✅</span>
-                                Good Condition
+                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">🏫</span>
+                                Registered Buildings
                             </h4>
                             <div className="space-y-3">
-                                {goodConditionBuildings.map(b => (
+                                {buildings.map(b => (
                                     <div key={b.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                        <h5 className="font-black text-gray-800">{b.building_name}</h5>
-                                        <div className="mt-2 flex items-center gap-2">
+                                        <div className="flex justify-between items-start">
+                                            <h5 className="font-black text-gray-800">{b.building_name}</h5>
+                                            <span className="px-2 py-0.5 bg-white border border-gray-100 rounded-md text-[10px] font-black text-gray-400 uppercase tracking-widest">{b.category}</span>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-2">
                                             <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.storey} Storey(s)</span>
                                             <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.classroom} Classrooms</span>
                                         </div>
-                                        <div className="mt-3 bg-white p-3 rounded-xl border border-gray-100 text-sm">
-                                            <p className="font-bold text-gray-600">Standard Room Size: <span className="text-gray-800">{b.room_length}m &times; {b.room_width}m</span></p>
-                                            <p className="text-gray-500 mt-0.5 text-xs font-medium">Area per room: {(parseFloat(b.room_length) * parseFloat(b.room_width)).toFixed(1)} m&sup2;</p>
-                                        </div>
                                     </div>
                                 ))}
-                                {goodConditionBuildings.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No good condition structures recorded.</p>}
+                                {buildings.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No structures recorded.</p>}
                             </div>
                         </div>
                     </div>
@@ -882,7 +955,11 @@ export default function Unit8PhysicalFacilities() {
                                 {demolitionRecords.map(d => (
                                     <div key={d.id} className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100/50">
                                         <h5 className="font-black text-gray-800 text-lg mb-1">{d.building_name}</h5>
-                                        <p className="text-sm font-bold text-gray-500 mb-3">Losing {(parseFloat(d.room_length) * parseFloat(d.room_width)).toFixed(1)} m&sup2; footprint</p>
+                                        <div className="flex gap-2 mb-3">
+                                            {d.less_than_7x9 > 0 && <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{"< 7x9"}: {d.less_than_7x9}</span>}
+                                            {d["7x9"] > 0 && <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{"7x9"}: {d["7x9"]}</span>}
+                                            {d.above_7x9 > 0 && <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{"> 7x9"}: {d.above_7x9}</span>}
+                                        </div>
                                         <div className="flex flex-wrap gap-2">
                                             {d.age && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Age/Dilapidation</span>}
                                             {d.safety && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Safety Hazard</span>}
@@ -1088,606 +1165,462 @@ export default function Unit8PhysicalFacilities() {
                 )}
 
                 {/* ────────────────────────────────────────────────────────
-                    PHASE 2: Building Inventory - Newly Built
+                    PHASE 2: Register Building
                     ──────────────────────────────────────────────────────── */}
                 {currentPage === 2 && (
                     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                         <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
-                            Building Inventory 🏢
+                            Register Building 🏢
                         </h2>
                         <p className="text-gray-500 mb-6 font-medium">Log the physical structures on your campus.</p>
 
-                        {/* Gatekeeper: Newly Built */}
-                        <div className="bg-white p-5 rounded-[2rem] shadow-sm border-2 border-gray-100 mb-8">
-                            <h3 className="font-bold text-gray-700 mb-4 px-1 text-lg">Do you have any Newly Built buildings?</h3>
-                            <div className="flex gap-3">
-                                <button onClick={() => setHasNewlyBuilt(true)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasNewlyBuilt === true ? "bg-emerald-100 border-emerald-500 text-emerald-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiCheck className="w-6 h-6" /> Yes
-                                </button>
-                                <button onClick={() => setHasNewlyBuilt(false)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasNewlyBuilt === false ? "bg-rose-100 border-rose-500 text-rose-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiX className="w-6 h-6" /> No
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Inventory Area (If Yes) */}
-                        {hasNewlyBuilt && (
-                            <div className="space-y-6">
-
-                                {/* Card List */}
-                                {newlyBuiltBuildings.length > 0 && (
-                                    <div className="space-y-4">
-                                        {newlyBuiltBuildings.map(b => (
-                                            <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center">
-                                                <div>
-                                                    <h4 className="font-black text-xl text-gray-800">{b.building_name}</h4>
-                                                    <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {b.classroom} Rooms</p>
-                                                    <div className="mt-3 inline-flex bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-xl">
-                                                        <span className="text-xs font-bold text-indigo-700">
-                                                            Standard Room Area: {b.room_length * b.room_width} m&sup2;
-                                                        </span>
-                                                    </div>
+                        {/* Inventory Area */}
+                        <div className="space-y-6">
+                            {/* Card List */}
+                            {allBuildings.length > 0 && (
+                                <div className="space-y-4">
+                                    {allBuildings.map(b => (
+                                        <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center">
+                                            <div>
+                                                <h4 className="font-black text-xl text-gray-800">{b.building_name}</h4>
+                                                <div className="flex gap-2 mt-1">
+                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${b.status === 'Newly Built' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        {b.status}
+                                                    </span>
                                                 </div>
-                                                <div className="flex flex-col gap-2">
-                                                    {true && (
+                                                <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {b.classroom} Rooms</p>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <button onClick={() => handleEditBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
+                                                    <FiEdit2 className="w-5 h-5" />
+                                                </button>
+                                                <button onClick={() => handleDeleteBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
+                                                    <FiTrash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Add Button */}
+                            {!showBuildingModal ? (
+                                <motion.button
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    onClick={() => setShowBuildingModal(true)}
+                                    className="bg-indigo-50 w-full py-4 rounded-2xl text-indigo-600 font-black text-lg border-2 border-indigo-200 border-dashed hover:bg-indigo-100 hover:border-indigo-300 transition-all flex justify-center items-center gap-2"
+                                >
+                                    <FiPlus className="w-6 h-6" /> Register Building
+                                </motion.button>
+                            ) : (
+                                /* Form Area */
+                                <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
+                                >
+                                    <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
+                                        <h3 className="font-black text-2xl text-gray-800">Building Details</h3>
+                                        <button onClick={() => setShowBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full">
+                                            <FiX className="w-6 h-6" />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-5">
+                                        <div>
+                                            <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
+                                            <input 
+                                                type="text" 
+                                                value={buildingFormData.building_name} 
+                                                onChange={(e) => setBuildingFormData({ ...buildingFormData, building_name: e.target.value })}
+                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all placeholder-gray-300" 
+                                                placeholder="e.g. Marcos Type Bldg" 
+                                            />
+                                        </div>
+
+                                        <div className={`relative ${isBuildingDropdownOpen ? 'z-50' : 'z-0'}`}>
+                                            <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
+                                            <div className="relative mt-1">
+                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                    <FiSearch className="text-gray-400 w-5 h-5" />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search building type..."
+                                                    value={isBuildingDropdownOpen ? buildingSearch : buildingFormData.category}
+                                                    onFocus={() => {
+                                                        setIsBuildingDropdownOpen(true);
+                                                        setBuildingSearch("");
+                                                    }}
+                                                    onChange={(e) => {
+                                                        setBuildingSearch(e.target.value);
+                                                        setBuildingFormData(prev => ({ ...prev, category: e.target.value }));
+                                                    }}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
+                                                />
+                                                <div
+                                                    className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
+                                                    onClick={() => setIsBuildingDropdownOpen(!isBuildingDropdownOpen)}
+                                                >
+                                                    <FiChevronDown className={`w-6 h-6 transition-transform duration-300 ${isBuildingDropdownOpen ? 'rotate-180' : ''}`} />
+                                                </div>
+
+                                                <AnimatePresence>
+                                                    {isBuildingDropdownOpen && (
                                                         <>
-                                                            <button onClick={() => handleEditNewBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
-                                                                <FiEdit2 className="w-5 h-5" />
-                                                            </button>
-                                                            <button onClick={() => handleDeleteNewBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                                <FiTrash2 className="w-5 h-5" />
-                                                            </button>
+                                                            <motion.div
+                                                                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                                                className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
+                                                            >
+                                                                {(buildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())) : buildingTypes).map(type => (
+                                                                    <button
+                                                                        key={type}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setBuildingFormData({ ...buildingFormData, category: type });
+                                                                            setBuildingSearch(type);
+                                                                            setIsBuildingDropdownOpen(false);
+                                                                        }}
+                                                                        className={`w-full text-left px-6 py-4 font-bold text-gray-700 transition-all border-b border-gray-50 last:border-0 hover:bg-indigo-50 hover:pl-8 flex items-center justify-between ${buildingFormData.category === type ? 'bg-indigo-50 text-indigo-600' : ''}`}
+                                                                    >
+                                                                        <span>{type}</span>
+                                                                        {buildingFormData.category === type && <FiCheck className="w-5 h-5" />}
+                                                                    </button>
+                                                                ))}
+                                                                <div className="px-6 py-8 text-center text-gray-400">
+                                                                    {buildingTypes.length === 0 ? (
+                                                                        <>
+                                                                            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                                                                            <p className="italic font-medium">Fetching building types...</p>
+                                                                        </>
+                                                                    ) : (buildingSearch && buildingTypes.filter(t => t.toLowerCase().includes(buildingSearch.toLowerCase())).length === 0) ? (
+                                                                        <>
+                                                                            <FiSearch className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                                                                            <p className="italic font-medium">No matching building types found</p>
+                                                                        </>
+                                                                    ) : null}
+                                                                </div>
+                                                            </motion.div>
+                                                            <div className="fixed inset-0 z-40" onClick={() => setIsBuildingDropdownOpen(false)}></div>
                                                         </>
                                                     )}
-                                                </div>
+                                                </AnimatePresence>
                                             </div>
-                                        ))}
+                                        </div>
+
+                                        <div className="flex gap-4">
+                                            <div className="flex-1">
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
+                                                <input 
+                                                    type="number" 
+                                                    value={buildingFormData.storey} 
+                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, storey: parseInt(e.target.value) || 0 })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" 
+                                                    min="1" 
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
+                                                <input 
+                                                    type="number" 
+                                                    value={buildingFormData.classroom} 
+                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, classroom: parseInt(e.target.value) || 0 })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" 
+                                                    min="1" 
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
+                                            <select 
+                                                value={buildingFormData.year_completed} 
+                                                onChange={(e) => setBuildingFormData({ ...buildingFormData, year_completed: parseInt(e.target.value) })}
+                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
+                                            >
+                                                {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
+                                            <textarea 
+                                                value={buildingFormData.remarks} 
+                                                onChange={(e) => setBuildingFormData({ ...buildingFormData, remarks: e.target.value })}
+                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]" 
+                                                placeholder="Optional notes..."
+                                            ></textarea>
+                                        </div>
+
+                                        <button 
+                                            onClick={handleSaveBuilding}
+                                            className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50"
+                                        >
+                                            Save Building
+                                        </button>
                                     </div>
-                                )}
-
-                                {/* Add Button */}
-                                {!showNewBuildingModal ? (
-                                    <motion.button
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        onClick={() => setShowNewBuildingModal(true)}
-                                        className="bg-emerald-50 w-full py-4 rounded-2xl text-emerald-600 font-black text-lg border-2 border-emerald-200 border-dashed hover:bg-emerald-100 hover:border-emerald-300 transition-all flex justify-center items-center gap-2"
-                                    >
-                                        <FiPlus className="w-6 h-6" /> Add Newly Built Building
-                                    </motion.button>
-                                ) : showNewBuildingModal ? (
-                                    /* Form Modal Area */
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
-                                    >
-                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                            <h3 className="font-black text-2xl text-gray-800">Newly Built Details</h3>
-                                            <button onClick={() => setShowNewBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
-                                        </div>
-
-                                        <div className="space-y-5">
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input type="text" value={newBuildingFormData.building_name} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, building_name: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all placeholder-gray-300" placeholder="e.g. Marcos Type Bldg" />
-                                            </div>
-
-                                            <div className={`relative ${isNewDropdownOpen ? 'z-50' : 'z-0'}`}>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
-                                                <div className="relative mt-1">
-                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                        <FiSearch className="text-gray-400 w-5 h-5" />
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Search building type..."
-                                                        value={isNewDropdownOpen ? newBuildingSearch : newBuildingFormData.category}
-                                                        onFocus={() => {
-                                                            setIsNewDropdownOpen(true);
-                                                            setNewBuildingSearch("");
-                                                        }}
-                                                        onChange={(e) => {
-                                                            setNewBuildingSearch(e.target.value);
-                                                            setNewBuildingFormData(prev => ({ ...prev, category: e.target.value }));
-                                                        }}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
-                                                    />
-                                                    <div
-                                                        className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
-                                                        onClick={() => setIsNewDropdownOpen(!isNewDropdownOpen)}
-                                                    >
-                                                        <FiChevronDown className={`w-6 h-6 transition-transform duration-300 ${isNewDropdownOpen ? 'rotate-180' : ''}`} />
-                                                    </div>
-
-                                                    <AnimatePresence>
-                                                        {isNewDropdownOpen && (
-                                                            <>
-                                                                <motion.div
-                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                    className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
-                                                                >
-                                                                    {(newBuildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(newBuildingSearch.toLowerCase())) : buildingTypes).map(type => (
-                                                                        <button
-                                                                            key={type}
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                setNewBuildingFormData({ ...newBuildingFormData, category: type });
-                                                                                setNewBuildingSearch(type);
-                                                                                setIsNewDropdownOpen(false);
-                                                                            }}
-                                                                            className={`w-full text-left px-6 py-4 font-bold text-gray-700 transition-all border-b border-gray-50 last:border-0 hover:bg-indigo-50 hover:pl-8 flex items-center justify-between ${newBuildingFormData.category === type ? 'bg-indigo-50 text-indigo-600' : ''}`}
-                                                                        >
-                                                                            <span>{type}</span>
-                                                                            {newBuildingFormData.category === type && <FiCheck className="w-5 h-5" />}
-                                                                        </button>
-                                                                    ))}
-                                                                    <div className="px-6 py-8 text-center text-gray-400">
-                                                                        {buildingTypes.length === 0 ? (
-                                                                            <>
-                                                                                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                                                                <p className="italic font-medium">Fetching building types...</p>
-                                                                            </>
-                                                                        ) : (newBuildingSearch && buildingTypes.filter(t => t.toLowerCase().includes(newBuildingSearch.toLowerCase())).length === 0) ? (
-                                                                            <>
-                                                                                <FiSearch className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                                                                                <p className="italic font-medium">No matching building types found</p>
-                                                                            </>
-                                                                        ) : null}
-                                                                    </div>
-                                                                </motion.div>
-                                                                <div className="fixed inset-0 z-40" onClick={() => setIsNewDropdownOpen(false)}></div>
-                                                            </>
-                                                        )}
-                                                    </AnimatePresence>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
-                                                    <input type="number" value={newBuildingFormData.storey} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, storey: parseInt(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" min="1" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
-                                                    <input type="number" value={newBuildingFormData.classroom} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, classroom: parseInt(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" min="1" />
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
-                                                    <input type="number" value={newBuildingFormData.room_length} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, room_length: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
-                                                    <input type="number" value={newBuildingFormData.room_width} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, room_width: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" />
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
-                                                <select value={newBuildingFormData.year_completed} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, year_completed: parseInt(e.target.value) })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer">
-                                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
-                                                <textarea value={newBuildingFormData.remarks} onChange={(e) => setNewBuildingFormData({ ...newBuildingFormData, remarks: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]" placeholder="Optional notes..."></textarea>
-                                            </div>
-
-                                            <button onClick={handleSaveNewBuilding}
-                                                className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50">
-                                                Save Building
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                ) : null}
-                            </div>
-                        )}
+                                </motion.div>
+                            )}
+                        </div>
                     </motion.div>
                 )}
 
                 {/* ────────────────────────────────────────────────────────
-                    PHASE 2: Building Inventory - Good Condition
+                    PHASE 2: Granular Room Setup
                     ──────────────────────────────────────────────────────── */}
                 {currentPage === 3 && (
                     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                         <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
-                            Good Condition Buildings ✅
+                            Granular Room Setup 🏫
                         </h2>
-                        <p className="text-gray-500 mb-6 font-medium">Log existing structures that are in good physical standing.</p>
+                        <p className="text-gray-500 mb-6 font-medium">Set detailed information for each room in your registered buildings.</p>
 
-                        {/* Gatekeeper: Good Condition */}
-                        <div className="bg-white p-5 rounded-[2rem] shadow-sm border-2 border-gray-100 mb-8">
-                            <h3 className="font-bold text-gray-700 mb-4 px-1 text-lg">Do you have any buildings in Good Condition?</h3>
-                            <div className="flex gap-3">
-                                <button onClick={() => setHasGoodCondition(true)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasGoodCondition === true ? "bg-blue-100 border-blue-500 text-blue-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiCheck className="w-6 h-6" /> Yes
-                                </button>
-                                <button onClick={() => setHasGoodCondition(false)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasGoodCondition === false ? "bg-rose-100 border-rose-500 text-rose-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiX className="w-6 h-6" /> No
-                                </button>
-                            </div>
-                        </div>
+                        <div className="space-y-6">
+                            {roomsData.length === 0 && (
+                                <div className="bg-amber-50 p-8 rounded-3xl border-2 border-amber-200 text-center">
+                                    <p className="text-amber-800 font-bold">No rooms generated yet. Please register a building first!</p>
+                                    <button onClick={() => setCurrentPage(2)} className="mt-4 px-6 py-2 bg-amber-500 text-white rounded-xl font-bold">Go to Step 2</button>
+                                </div>
+                            )}
 
-                        {/* Inventory Area (If Yes) */}
-                        {hasGoodCondition && (
-                            <div className="space-y-6">
-
-                                {/* Card List */}
-                                {goodConditionBuildings.length > 0 && (
-                                    <div className="space-y-4">
-                                        {goodConditionBuildings.map(b => (
-                                            <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center">
-                                                <div>
-                                                    <h4 className="font-black text-xl text-gray-800">{b.building_name}</h4>
-                                                    <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {b.classroom} Rooms</p>
-                                                    <div className="mt-3 inline-flex bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-xl">
-                                                        <span className="text-xs font-bold text-blue-700">
-                                                            Standard Room Area: {b.room_length * b.room_width} m&sup2;
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col gap-2">
-                                                    {true && (
-                                                        <>
-                                                            <button onClick={() => handleEditGoodBuilding(b)} className="p-3 bg-blue-50 text-blue-500 rounded-xl hover:bg-blue-100 transition-colors">
-                                                                <FiEdit2 className="w-5 h-5" />
-                                                            </button>
-                                                            <button onClick={() => handleDeleteGoodBuilding(b.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                                <FiTrash2 className="w-5 h-5" />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
+                            {roomsData.slice((roomsPage - 1) * roomsPerPage, roomsPage * roomsPerPage).map((room) => {
+                                const building = allBuildings.find(b => b.id === room.building_local_id);
+                                return (
+                                    <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="flex-1 mr-4">
+                                                <input 
+                                                    type="text" 
+                                                    value={room.room_name} 
+                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
+                                                    className="font-black text-xl text-gray-800 bg-transparent border-b-2 border-dashed border-gray-200 focus:border-indigo-500 outline-none w-full"
+                                                />
+                                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || 'N/A'}</p>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Add Button */}
-                                {!showGoodBuildingModal ? (
-                                    <motion.button
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        onClick={() => setShowGoodBuildingModal(true)}
-                                        className="bg-blue-50 w-full py-4 rounded-2xl text-blue-600 font-black text-lg border-2 border-blue-200 border-dashed hover:bg-blue-100 hover:border-blue-300 transition-all flex justify-center items-center gap-2"
-                                    >
-                                        <FiPlus className="w-6 h-6" /> Add Good Condition Building
-                                    </motion.button>
-                                ) : showGoodBuildingModal ? (
-                                    /* Form Modal Area */
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
-                                    >
-                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                            <h3 className="font-black text-2xl text-gray-800">Good Condition Details</h3>
-                                            <button onClick={() => setShowGoodBuildingModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
+                                            <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                {room.condition}
+                                            </span>
                                         </div>
 
-                                        <div className="space-y-5">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input type="text" value={goodBuildingFormData.building_name} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, building_name: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all placeholder-gray-300" placeholder="e.g. Quezon Type Bldg" />
-                                            </div>
-
-                                            <div className={`relative ${isGoodDropdownOpen ? 'z-50' : 'z-0'}`}>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Category</label>
-                                                <div className="relative mt-1">
-                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                        <FiSearch className="text-gray-400 w-5 h-5" />
-                                                    </div>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Search building type..."
-                                                        value={isGoodDropdownOpen ? goodBuildingSearch : goodBuildingFormData.category}
-                                                        onFocus={() => {
-                                                            setIsGoodDropdownOpen(true);
-                                                            setGoodBuildingSearch("");
-                                                        }}
-                                                        onChange={(e) => {
-                                                            setGoodBuildingSearch(e.target.value);
-                                                            setGoodBuildingFormData(prev => ({ ...prev, category: e.target.value }));
-                                                        }}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl pl-11 pr-12 py-4 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder-gray-300 shadow-sm"
-                                                    />
-                                                    <div
-                                                        className="absolute inset-y-0 right-0 pr-4 flex items-center cursor-pointer text-gray-400 hover:text-indigo-500"
-                                                        onClick={() => setIsGoodDropdownOpen(!isGoodDropdownOpen)}
-                                                    >
-                                                        <FiChevronDown className={`w-6 h-6 transition-transform duration-300 ${isGoodDropdownOpen ? 'rotate-180' : ''}`} />
-                                                    </div>
-
-                                                    <AnimatePresence>
-                                                        {isGoodDropdownOpen && (
-                                                            <>
-                                                                <motion.div
-                                                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                                                    className="absolute z-[100] w-full mt-2 bg-white border-2 border-gray-100 rounded-3xl shadow-2xl max-h-72 overflow-y-auto overflow-x-hidden py-2"
-                                                                >
-                                                                    {(goodBuildingSearch ? buildingTypes.filter(t => t.toLowerCase().includes(goodBuildingSearch.toLowerCase())) : buildingTypes).map(type => (
-                                                                        <button
-                                                                            key={type}
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                setGoodBuildingFormData({ ...goodBuildingFormData, category: type });
-                                                                                setGoodBuildingSearch(type);
-                                                                                setIsGoodDropdownOpen(false);
-                                                                            }}
-                                                                            className={`w-full text-left px-6 py-4 font-bold text-gray-700 transition-all border-b border-gray-50 last:border-0 hover:bg-indigo-50 hover:pl-8 flex items-center justify-between ${goodBuildingFormData.category === type ? 'bg-indigo-50 text-indigo-600' : ''}`}
-                                                                        >
-                                                                            <span>{type}</span>
-                                                                            {goodBuildingFormData.category === type && <FiCheck className="w-5 h-5" />}
-                                                                        </button>
-                                                                    ))}
-                                                                    <div className="px-6 py-8 text-center text-gray-400">
-                                                                        {buildingTypes.length === 0 ? (
-                                                                            <>
-                                                                                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                                                                <p className="italic font-medium">Fetching building types...</p>
-                                                                            </>
-                                                                        ) : (goodBuildingSearch && buildingTypes.filter(t => t.toLowerCase().includes(goodBuildingSearch.toLowerCase())).length === 0) ? (
-                                                                            <>
-                                                                                <FiSearch className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                                                                                <p className="italic font-medium">No matching building types found</p>
-                                                                            </>
-                                                                        ) : null}
-                                                                    </div>
-                                                                </motion.div>
-                                                                <div className="fixed inset-0 z-40" onClick={() => setIsGoodDropdownOpen(false)}></div>
-                                                            </>
-                                                        )}
-                                                    </AnimatePresence>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
-                                                    <input type="number" value={goodBuildingFormData.storey} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, storey: parseInt(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" min="1" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
-                                                    <input type="number" value={goodBuildingFormData.classroom} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, classroom: parseInt(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" min="1" />
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
-                                                    <input type="number" value={goodBuildingFormData.room_length} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, room_length: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
-                                                    <input type="number" value={goodBuildingFormData.room_width} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, room_width: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all text-center" />
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
-                                                <select value={goodBuildingFormData.year_completed} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, year_completed: parseInt(e.target.value) })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer">
-                                                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Dimensions</label>
+                                                <select 
+                                                    value={room.dimensions} 
+                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, dimensions: e.target.value } : r))}
+                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                >
+                                                    <option value="Less than 7x9">Less than 7x9</option>
+                                                    <option value="7x9">7x9</option>
+                                                    <option value="Above 7x9">Above 7x9</option>
                                                 </select>
                                             </div>
 
                                             <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
-                                                <textarea value={goodBuildingFormData.remarks} onChange={(e) => setGoodBuildingFormData({ ...goodBuildingFormData, remarks: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-blue-500 transition-all min-h-[100px]" placeholder="Optional notes..."></textarea>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
+                                                <select 
+                                                    value={room.condition} 
+                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
+                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                >
+                                                    <option value="Newly Built">Newly Built</option>
+                                                    <option value="Good Condition">Good Condition</option>
+                                                    <option value="Repair">Repair</option>
+                                                </select>
                                             </div>
 
-                                            <button onClick={handleSaveGoodBuilding}
-                                                className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-blue-500 border-b-[6px] border-blue-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-blue-200/50">
-                                                Save Building
-                                            </button>
+                                            <div>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level</label>
+                                                <select 
+                                                    value={room.grade_level} 
+                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: e.target.value } : r))}
+                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                >
+                                                    <option value="">Select Grade Level</option>
+                                                    <option value="Kinder">Kinder</option>
+                                                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(g => <option key={g} value={`Grade ${g}`}>Grade {g}</option>)}
+                                                    <option value="Non-Instructional">Non-Instructional</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                    </motion.div>
-                                ) : null}
-                            </div>
-                        )}
+                                    </div>
+                                );
+                            })}
+                            
+                            {/* Pagination Controls */}
+                            {roomsData.length > roomsPerPage && (
+                                <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
+                                    <button 
+                                        onClick={() => setRoomsPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={roomsPage === 1}
+                                        className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-600 disabled:opacity-50"
+                                    >
+                                        <FiArrowLeft /> Previous
+                                    </button>
+                                    <span className="font-black text-gray-400 uppercase text-xs tracking-widest">
+                                        Page {roomsPage} of {Math.ceil(roomsData.length / roomsPerPage)}
+                                    </span>
+                                    <button 
+                                        onClick={() => setRoomsPage(prev => Math.min(prev + 1, Math.ceil(roomsData.length / roomsPerPage)))}
+                                        disabled={roomsPage === Math.ceil(roomsData.length / roomsPerPage)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-indigo-600 disabled:opacity-50"
+                                    >
+                                        Next <FiArrowRight />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </motion.div>
                 )}
 
                 {/* ────────────────────────────────────────────────────────
-                    PHASE 2: Building Inventory - Repair Assessment
+                    PHASE 2: Repair Assessment
                     ──────────────────────────────────────────────────────── */}
                 {currentPage === 4 && (
                     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                         <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
                             Repair Assessment 🛠️
                         </h2>
-                        <p className="text-gray-500 mb-6 font-medium">Log rooms that require attention or minor repairs.</p>
+                        <p className="text-gray-500 mb-6 font-medium">Assess rooms marked for repair during registration.</p>
 
-                        {/* Gatekeeper: Repair */}
-                        <div className="bg-white p-5 rounded-[2rem] shadow-sm border-2 border-gray-100 mb-8">
-                            <h3 className="font-bold text-gray-700 mb-4 px-1 text-lg">Do you have any rooms needing Repair?</h3>
-                            <div className="flex gap-3">
-                                <button onClick={() => setHasRepair(true)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasRepair === true ? "bg-amber-100 border-amber-500 text-amber-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiCheck className="w-6 h-6" /> Yes
-                                </button>
-                                <button onClick={() => setHasRepair(false)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasRepair === false ? "bg-rose-100 border-rose-500 text-rose-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiX className="w-6 h-6" /> No
-                                </button>
-                            </div>
-                        </div>
+                        <div className="space-y-6">
+                            {roomsData.filter(r => r.condition === 'Repair').length === 0 ? (
+                                <div className="bg-emerald-50 p-8 rounded-3xl border-2 border-emerald-100 text-center">
+                                    <p className="text-emerald-800 font-bold text-xl">✨ All rooms are in good shape!</p>
+                                    <p className="text-emerald-600 mt-2 font-medium">No rooms were marked for repair. You can proceed to the next step.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {roomsData.filter(r => r.condition === 'Repair').map(room => {
+                                        const building = allBuildings.find(b => b.id === room.building_local_id);
+                                        const isAssessed = repairAssessments.some(a => a.building_name === building?.building_name && a.room_name === room.room_name);
+                                        
+                                        return (
+                                            <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <h4 className="font-black text-xl text-gray-800">{room.room_name}</h4>
+                                                        <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{building?.building_name || 'N/A'}</p>
+                                                        {isAssessed && <p className="text-xs font-black text-emerald-500 mt-2 uppercase flex items-center gap-1"><FiCheckCircle /> Assessment Recorded</p>}
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setRepairRoomFormData({
+                                                                building_name: building?.building_name || "",
+                                                                room_name: room.room_name,
+                                                                room_length: room.room_length || 9,
+                                                                room_width: room.room_width || 7
+                                                            });
 
-                        {/* Inventory Area (If Yes) */}
-                        {hasRepair && (
-                            <div className="space-y-6">
+                                                            // Populate previous assessments
+                                                            const existingItems = repairAssessments.filter(a => 
+                                                                a.building_name === building?.building_name && 
+                                                                a.room_name === room.room_name
+                                                            );
+                                                            
+                                                            const initialState = {};
+                                                            existingItems.forEach(item => {
+                                                                initialState[item.item] = {
+                                                                    oms: item.oms || "",
+                                                                    condition: item.condition || "Repair",
+                                                                    damage_ratio: item.damage_ratio || 0,
+                                                                    recommend_action: item.recommend_action || "Routine Repair",
+                                                                    demo_justification: item.demo_justification || "",
+                                                                    remarks: item.remarks || ""
+                                                                };
+                                                            });
+                                                            setRepairItemsState(initialState);
 
-                                {/* Card List */}
-                                {repairAssessments.length > 0 && (
-                                    <div className="space-y-4">
-                                        {groupedRepairsArray.map(b => (
-                                            <div key={b.roomId} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-gray-100 flex justify-between items-center">
-                                                <div>
-                                                    <h4 className="font-black text-xl text-gray-800">{b.building_name} - {b.room_name}</h4>
-                                                    <p className="text-sm font-bold text-gray-500 mt-1">{b.items?.length || 0} Items for Repair</p>
-                                                </div>
-                                                <div className="flex flex-col gap-2">
-                                                    {true && (
-                                                        <>
-                                                            <button onClick={() => handleEditRepairRoom(b)} className="p-3 bg-amber-50 text-amber-500 rounded-xl hover:bg-amber-100 transition-colors">
-                                                                <FiEdit2 className="w-5 h-5" />
-                                                            </button>
-                                                            <button onClick={() => handleDeleteRepairRoom(b.roomId)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors">
-                                                                <FiTrash2 className="w-5 h-5" />
-                                                            </button>
-                                                        </>
-                                                    )}
+                                                            setEditingRepairRoomId(building?.building_name + "-" + room.room_name);
+                                                            setShowRepairModal(true);
+                                                        }}
+                                                        className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${isAssessed ? 'bg-indigo-50 text-indigo-500 shadow-indigo-100' : 'bg-amber-500 text-white shadow-amber-100'}`}
+                                                    >
+                                                        {isAssessed ? <FiEdit2 className="w-6 h-6" /> : <FiPlus className="w-6 h-6" />}
+                                                    </button>
                                                 </div>
                                             </div>
-                                        ))}
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {showRepairModal && (
+                                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-[2rem] shadow-xl border-2 border-amber-100 mt-10">
+                                    <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
+                                        <h3 className="font-black text-2xl text-gray-800">Assessment: {repairRoomFormData.room_name}</h3>
+                                        <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
                                     </div>
-                                )}
 
-                                {/* Add Button */}
-                                {!showRepairModal ? (
-                                    <motion.button
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        onClick={() => setShowRepairModal(true)}
-                                        className="bg-amber-50 w-full py-4 rounded-2xl text-amber-600 font-black text-lg border-2 border-amber-200 border-dashed hover:bg-amber-100 hover:border-amber-300 transition-all flex justify-center items-center gap-2"
-                                    >
-                                        <FiPlus className="w-6 h-6" /> Add Room for Repair
-                                    </motion.button>
-                                ) : showRepairModal ? (
-                                    /* Form Modal Area */
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="bg-white p-6 rounded-[2rem] shadow-xl border border-gray-200"
-                                    >
-                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                            <h3 className="font-black text-2xl text-gray-800">Room Repair Assessment</h3>
-                                            <button onClick={() => setShowRepairModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
-                                        </div>
+                                    {/* Item Checklist */}
+                                    <h4 className="font-bold text-gray-700 mb-4 px-1">Checklist of Damaged Items</h4>
+                                    <div className="space-y-4 mb-8">
+                                        {REPAIR_CATEGORIES.map(category => {
+                                            const isChecked = !!repairItemsState[category];
+                                            const itemData = repairItemsState[category] || {};
 
-                                        {/* Top Section: Room Details */}
-                                        <div className="space-y-4 mb-8 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                            <h4 className="font-bold text-gray-700">Room Details</h4>
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                    <input type="text" value={repairRoomFormData.building_name} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, building_name: e.target.value })}
-                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all placeholder-gray-300" placeholder="e.g. Science Bldg" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Name</label>
-                                                    <input type="text" value={repairRoomFormData.room_name} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, room_name: e.target.value })}
-                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all placeholder-gray-300" placeholder="e.g. Lab 1" />
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
-                                                    <input type="number" value={repairRoomFormData.room_length} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, room_length: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all text-center" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
-                                                    <input type="number" value={repairRoomFormData.room_width} onChange={(e) => setRepairRoomFormData({ ...repairRoomFormData, room_width: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-amber-500 transition-all text-center" />
-                                                </div>
-                                            </div>
-                                        </div>
+                                            return (
+                                                <div key={category} className={`border-2 rounded-2xl overflow-hidden transition-all ${isChecked ? 'border-amber-400 bg-amber-50/30' : 'border-gray-100 bg-white'}`}>
+                                                    <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50">
+                                                        <input type="checkbox" checked={isChecked} onChange={() => handleToggleRepairItem(category)}
+                                                            className="w-6 h-6 rounded text-amber-500 focus:ring-amber-500 border-gray-300" />
+                                                        <span className={`font-bold text-lg ${isChecked ? 'text-amber-800' : 'text-gray-600'}`}>{category}</span>
+                                                    </label>
 
-                                        {/* Bottom Section: Item Checklist */}
-                                        <h4 className="font-bold text-gray-700 mb-4 px-1">Items for Repair</h4>
-                                        <div className="space-y-4">
-                                            {REPAIR_CATEGORIES.map(category => {
-                                                const isChecked = !!repairItemsState[category];
-                                                const itemData = repairItemsState[category] || {};
-
-                                                return (
-                                                    <div key={category} className={`border-2 rounded-2xl overflow-hidden transition-all ${isChecked ? 'border-amber-400 bg-amber-50/30' : 'border-gray-100 bg-white'}`}>
-                                                        <label className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50">
-                                                            <input type="checkbox" checked={isChecked} onChange={() => handleToggleRepairItem(category)}
-                                                                className="w-6 h-6 rounded text-amber-500 focus:ring-amber-500 border-gray-300" />
-                                                            <span className={`font-bold text-lg ${isChecked ? 'text-amber-800' : 'text-gray-600'}`}>{category}</span>
-                                                        </label>
-
-                                                        {isChecked && (
-                                                            <div className="p-4 pt-0 space-y-4 border-t border-amber-100 mt-2">
-                                                                <div className="flex gap-4">
-                                                                    <div className="flex-1">
-                                                                        <label className="text-xs font-bold text-gray-500">Made Of</label>
-                                                                        <input type="text" value={itemData.made_of} onChange={(e) => handleUpdateRepairItem(category, 'made_of', e.target.value)}
-                                                                            className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500" placeholder="e.g. Wood, Steel..." />
-                                                                    </div>
-                                                                    <div className="flex-1">
-                                                                        <label className="text-xs font-bold text-gray-500">Condition</label>
-                                                                        <select value={itemData.condition} onChange={(e) => handleUpdateRepairItem(category, 'condition', e.target.value)}
-                                                                            className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500 appearance-none">
-                                                                            <option value="Good">Good</option>
-                                                                            <option value="Repair">Repair</option>
-                                                                            <option value="Replacement">Replacement</option>
-                                                                        </select>
-                                                                    </div>
-                                                                </div>
-
+                                                    {isChecked && (
+                                                        <div className="p-4 pt-0 space-y-4 border-t border-amber-100 mt-2">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                                 <div>
-                                                                    <label className="text-xs font-bold text-gray-500 flex justify-between">
-                                                                        <span>Damage Ratio</span>
-                                                                        <span className="text-amber-600">{itemData.damage_ratio}%</span>
-                                                                    </label>
-                                                                    <input type="range" min="0" max="100" value={itemData.damage_ratio} onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
-                                                                        className="w-full mt-2 accent-amber-500 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                                                    <label className="text-xs font-bold text-gray-500">What it is made of</label>
+                                                                    <input type="text" value={itemData.oms} onChange={(e) => handleUpdateRepairItem(category, 'oms', e.target.value)}
+                                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500" placeholder="e.g. GI Sheet, Concrete, Wood" />
                                                                 </div>
-
                                                                 <div>
-                                                                    <label className="text-xs font-bold text-gray-500">Recommended Action</label>
+                                                                    <label className="text-xs font-bold text-gray-500">Action</label>
                                                                     <select value={itemData.recommend_action} onChange={(e) => handleUpdateRepairItem(category, 'recommend_action', e.target.value)}
                                                                         className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500 appearance-none">
                                                                         <option value="Routine Repair">Routine Repair</option>
-                                                                        <option value="Major Repair/Rehabilitation">Major Repair/Rehabilitation</option>
+                                                                        <option value="Major Repair / Rehabilitation">Major Repair / Rehabilitation</option>
                                                                         <option value="Structural Retrofit">Structural Retrofit</option>
                                                                         <option value="Recommend for Condemnation">Recommend for Condemnation</option>
                                                                         <option value="Recommend for Demolition">Recommend for Demolition</option>
                                                                     </select>
                                                                 </div>
+                                                            </div>
 
-                                                                {(itemData.recommend_action === 'Recommend for Demolition' || itemData.recommend_action === 'Recommend for Condemnation') && (
-                                                                    <div>
-                                                                        <label className="text-xs font-bold text-rose-500">Demolition/Condemnation Justification</label>
-                                                                        <textarea value={itemData.demo_justification} onChange={(e) => handleUpdateRepairItem(category, 'demo_justification', e.target.value)}
-                                                                            className="w-full bg-rose-50 border-2 border-rose-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-rose-500 min-h-[60px]" placeholder="Explain why..."></textarea>
-                                                                    </div>
-                                                                )}
+                                                            {itemData.recommend_action === 'Recommend for Demolition' && (
+                                                                <div className="bg-rose-50 p-3 rounded-xl border border-rose-100">
+                                                                    <label className="text-[10px] font-black uppercase tracking-wider text-rose-500 mb-1 block">Demolition Justification</label>
+                                                                    <select value={itemData.demo_justification} onChange={(e) => handleUpdateRepairItem(category, 'demo_justification', e.target.value)}
+                                                                        className="w-full bg-white border-2 border-rose-200 rounded-lg px-3 py-2 text-sm font-bold text-rose-700 outline-none focus:border-rose-500">
+                                                                        <option value="">-- Select Justification --</option>
+                                                                        <option value="Beyond repair due to age and lifecycle">Beyond repair due to age and lifecycle</option>
+                                                                        <option value="Structural or safety issues">Structural or safety issues</option>
+                                                                        <option value="Severe damage due to calamity">Severe damage due to calamity</option>
+                                                                        <option value="MGB‑declared hazard‑prone area">MGB‑declared hazard‑prone area</option>
+                                                                        <option value="Site relocation or right-of-way">Site relocation or right-of-way</option>
+                                                                    </select>
+                                                                </div>
+                                                            )}
 
-                                                                <div>
-                                                                    <label className="text-xs font-bold text-gray-500">Remarks</label>
-                                                                    <input type="text" value={itemData.remarks} onChange={(e) => handleUpdateRepairItem(category, 'remarks', e.target.value)}
-                                                                        className="w-full bg-white border-2 border-gray-200 mt-1 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 outline-none focus:border-amber-500" placeholder="Optional notes..." />
+                                                            <div className="flex gap-4">
+                                                                <div className="flex-1">
+                                                                    <label className="text-xs font-bold text-gray-500">Damage Ratio</label>
+                                                                    <input type="range" min="0" max="100" value={itemData.damage_ratio} onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
+                                                                        className="w-full mt-2 accent-amber-500 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+                                                                    <div className="text-right text-xs font-black text-amber-600 mt-1">{itemData.damage_ratio}%</div>
                                                                 </div>
                                                             </div>
+
+                                                            <div>
+                                                                <label className="text-[10px] font-bold text-gray-400 ml-1">REMARKS</label>
+                                                                <input type="text" value={itemData.remarks} onChange={(e) => handleUpdateRepairItem(category, 'remarks', e.target.value)}
+                                                                    className="w-full bg-white border-2 border-gray-100 mt-0.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 outline-none focus:border-amber-400" placeholder="Additional notes..." />
+                                                            </div>
+                                                        </div>
                                                         )}
                                                     </div>
                                                 );
@@ -1697,13 +1630,13 @@ export default function Unit8PhysicalFacilities() {
                                         <button onClick={handleSaveRepairRoom}
                                             className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-amber-500 border-b-[6px] border-amber-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-amber-200/50">
                                             Save Room Assessment ✓
-                                        </button>
-                                    </motion.div>
-                                ) : null}
+                                    </button>
+                                </motion.div>
+                            )}
                             </div>
-                        )}
-                    </motion.div>
-                )}
+                        </motion.div>
+                    )
+                }
 
                 {/* ────────────────────────────────────────────────────────
                     PHASE 2: Building Inventory - Demolition
@@ -1741,7 +1674,11 @@ export default function Unit8PhysicalFacilities() {
                                             <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-rose-100 flex justify-between items-start">
                                                 <div className="flex-1">
                                                     <h4 className="font-black text-2xl text-gray-800">{b.building_name}</h4>
-                                                    <p className="text-sm font-bold text-gray-500 mt-1">Area Lost: {b.room_length * b.room_width} m&sup2;</p>
+                                                    <div className="flex gap-4 mt-2">
+                                                        {b.less_than_7x9 > 0 && <span className="text-xs font-black bg-slate-100 px-2 py-1 rounded-md text-slate-600">{"< 7x9"}: {b.less_than_7x9}</span>}
+                                                        {b["7x9"] > 0 && <span className="text-xs font-black bg-slate-100 px-2 py-1 rounded-md text-slate-600">{"7x9"}: {b["7x9"]}</span>}
+                                                        {b.above_7x9 > 0 && <span className="text-xs font-black bg-slate-100 px-2 py-1 rounded-md text-slate-600">{"> 7x9"}: {b.above_7x9}</span>}
+                                                    </div>
 
                                                     <div className="mt-4 flex flex-wrap gap-2">
                                                         {b.age && <span className="inline-flex bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700">Age / Dilapidation</span>}
@@ -1792,22 +1729,63 @@ export default function Unit8PhysicalFacilities() {
                                         <div className="space-y-6">
                                             <div>
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input type="text" value={demolitionFormData.building_name} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, building_name: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all placeholder-gray-300" placeholder="e.g. Old Marcos Bldg" />
+                                                <input
+                                                    list="building-list"
+                                                    value={demolitionFormData.building_name}
+                                                    onChange={(e) => setDemolitionFormData({ ...demolitionFormData, building_name: e.target.value })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all"
+                                                    placeholder="Select or type building name..."
+                                                />
+                                                <datalist id="building-list">
+                                                    {allBuildings.map(b => (
+                                                        <option key={b.id} value={b.building_name} />
+                                                    ))}
+                                                </datalist>
                                             </div>
 
+                                            {demolitionFormData.building_name && (
+                                                <div>
+                                                    <label className="text-sm font-bold text-gray-500 ml-2">Select Room (Optional)</label>
+                                                    <select
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all cursor-pointer"
+                                                        onChange={(e) => {
+                                                            if (e.target.value) {
+                                                                const room = roomsData.find(r => r.id === e.target.value);
+                                                                if (room) {
+                                                                    setDemolitionFormData(prev => ({
+                                                                        ...prev,
+                                                                        dimension_category: room.dimensions === '7x9' ? '7x9' : (room.dimensions === 'Above 7x9' ? 'above_7x9' : 'less_than_7x9'),
+                                                                        room_count: 1
+                                                                    }));
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        <option value="">-- All Rooms / Bulk Assessment --</option>
+                                                        {roomsData.filter(r => {
+                                                            const b = allBuildings.find(bld => bld.id === r.building_local_id);
+                                                            return b?.building_name === demolitionFormData.building_name;
+                                                        }).map(r => (
+                                                            <option key={r.id} value={r.id}>{r.room_name} ({r.dimensions})</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
                                             <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Length (m)</label>
-                                                    <p className="text-xs text-rose-400 italic ml-2 mb-1">Standard dimension being lost</p>
-                                                    <input type="number" value={demolitionFormData.room_length} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, room_length: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all text-center" />
+                                                <div className="flex-[2]">
+                                                    <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Dimension</label>
+                                                    <select value={demolitionFormData.dimension_category} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, dimension_category: e.target.value })}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all">
+                                                        <option value="less_than_7x9">less than 7x9</option>
+                                                        <option value="7x9">7x9</option>
+                                                        <option value="above_7x9">above 7x9</option>
+                                                    </select>
                                                 </div>
                                                 <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Room Width (m)</label>
-                                                    <p className="text-xs text-rose-400 italic ml-2 mb-1">Standard dimension being lost</p>
-                                                    <input type="number" value={demolitionFormData.room_width} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, room_width: parseFloat(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all text-center" />
+                                                    <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Rooms</label>
+                                                    <input type="number" min="1" value={demolitionFormData.room_count} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, room_count: parseInt(e.target.value) || 0 })}
+                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all text-center" />
                                                 </div>
                                             </div>
 
@@ -1887,7 +1865,10 @@ export default function Unit8PhysicalFacilities() {
                     )}
                     {currentPage < 5 && (
                         <button
-                            onClick={() => setCurrentPage(prev => prev + 1)}
+                            onClick={() => {
+                                setCurrentPage(prev => prev + 1);
+                                handlePartialSync();
+                            }}
                             className="flex-[2] py-4 px-6 rounded-2xl bg-indigo-500 text-white font-black text-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
                         >
                             Next Step <FiArrowRight />
@@ -1899,9 +1880,12 @@ export default function Unit8PhysicalFacilities() {
 
             <SuccessModal
                 isOpen={showSuccess}
-                onClose={() => setShowSuccess(false)}
-                message="Space mapped and recorded successfully!"
-                redirectUrl={null}
+                onClose={() => {
+                    setShowSuccess(false);
+                    navigate("/modular-dashboard");
+                }}
+                message="Unit 8 Physical Facilities Audit finalized and saved successfully! ✨"
+                redirectUrl="/modular-dashboard"
             />
         </div>
     );

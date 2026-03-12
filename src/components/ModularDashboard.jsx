@@ -53,24 +53,15 @@ const getRank = (xp) => {
 const ModularDashboard = () => {
     const navigate = useNavigate();
     const [hasDraft, setHasDraft] = useState(false);
-    const [questProgress, setQuestProgress] = useState({ completedUnits: [], xp: 0 });
+    const [questProgress, setQuestProgress] = useState(() => {
+        const stored = localStorage.getItem('quest_progress');
+        return stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+    });
     const [curricularOffering, setCurricularOffering] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(!localStorage.getItem('quest_progress'));
 
     useEffect(() => {
         const loadProgress = async () => {
-            const stored = localStorage.getItem('quest_progress');
-            let initialProgress = { completedUnits: [], xp: 0 };
-            
-            if (stored) {
-                try {
-                    initialProgress = JSON.parse(stored);
-                    setQuestProgress(initialProgress);
-                } catch (err) {
-                    console.error("Failed to parse quest progress", err);
-                }
-            }
-
             const schoolId = localStorage.getItem('schoolId');
             if (schoolId) {
                 try {
@@ -81,10 +72,9 @@ const ModularDashboard = () => {
                             if (data.progress.curricular_offering) {
                                 setCurricularOffering(data.progress.curricular_offering);
                             }
-                            if (data.progress.completedUnits.length >= initialProgress.completedUnits.length) {
-                                setQuestProgress(data.progress);
-                                localStorage.setItem('quest_progress', JSON.stringify(data.progress));
-                            }
+                            // Sync if server has more/different data
+                            setQuestProgress(data.progress);
+                            localStorage.setItem('quest_progress', JSON.stringify(data.progress));
                         }
                     }
                 } catch (err) {

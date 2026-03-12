@@ -25,7 +25,7 @@ const ALL_GRADES_REF = [
 
 const DEMOGRAPHIC_CARDS = [
     { id: "als",       icon: "📚", label: "ALS Learners",                    color: "amber" },
-    { id: "muslim",    icon: "🕌", label: "Muslim Learners (ALIVE)",         color: "emerald" },
+    { id: "muslim",    icon: "🕌", label: "Muslim Learners",         color: "emerald" },
     { id: "ip",        icon: "⛰️", label: "Indigenous People (IP)",           color: "orange" },
     { id: "displaced", icon: "🏕️", label: "Displaced Learners",              color: "rose" },
     { id: "overage",   icon: "🎂", label: "Overage Learners",                color: "fuchsia" },

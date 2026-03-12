@@ -242,15 +242,18 @@ const tableExists = async (tableName) => {
   return res.rowCount > 0;
 };
 
-const checkAndAddColumn = async (tableName, columnName, columnDefinition) => {
-  const res = await pool.query(`
+const checkAndAddColumn = async (tableName, columnName, columnDefinition, targetClient = null) => {
+  const queryExecutor = targetClient || pool;
+  const res = await queryExecutor.query(`
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = $1 AND column_name = $2
-  `, [tableName, columnName]);
+  `, [tableName, columnName.replace(/"/g, '')]); // Remove quotes for metadata check
 
   if (res.rowCount === 0) {
     console.log(`       -> Adding column ${columnName} to ${tableName}...`);
-    await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+    // Use double quotes for column name in ALTER TABLE to support names like "7x9"
+    const safeColumnName = columnName.startsWith('"') ? columnName : `"${columnName}"`;
+    await queryExecutor.query(`ALTER TABLE ${tableName} ADD COLUMN ${safeColumnName} ${columnDefinition}`);
   }
 };
 
@@ -652,6 +655,10 @@ const initDB = async () => {
       CREATE INDEX IF NOT EXISTS idx_facility_repairs_iern ON facility_repairs(iern);
     `);
 
+    // Ensure facility_repair_details columns exist
+    await checkAndAddColumn('facility_repair_details', 'oms', 'TEXT');
+    await checkAndAddColumn('facility_repair_details', 'demo_justification', 'TEXT');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_demolitions (
         demolition_id SERIAL PRIMARY KEY,
@@ -662,10 +669,27 @@ const initDB = async () => {
         reason_safety BOOLEAN DEFAULT FALSE,
         reason_calamity BOOLEAN DEFAULT FALSE,
         reason_upgrade BOOLEAN DEFAULT FALSE,
+        less_than_7x9 INTEGER DEFAULT 0,
+        "7x9" INTEGER DEFAULT 0,
+        above_7x9 INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_facility_demolitions_iern ON facility_demolitions(iern);
     `);
+
+    // Ensure facility_demolitions has dimension categories
+    await checkAndAddColumn('facility_demolitions', 'less_than_7x9', 'INTEGER DEFAULT 0');
+    await checkAndAddColumn('facility_demolitions', '7x9', 'INTEGER DEFAULT 0');
+    await checkAndAddColumn('facility_demolitions', 'above_7x9', 'INTEGER DEFAULT 0');
+
+    // Ensure ph_buildings_demolition has dimension categories
+    await checkAndAddColumn('ph_buildings_demolition', 'less_than_7x9', 'INTEGER DEFAULT 0');
+    await checkAndAddColumn('ph_buildings_demolition', '7x9', 'INTEGER DEFAULT 0');
+    await checkAndAddColumn('ph_buildings_demolition', 'above_7x9', 'INTEGER DEFAULT 0');
+    await checkAndAddColumn('ph_buildings_demolition', 'room_name', 'TEXT');
+
+    // Ensure ph_buildings_inventory has room_name
+    await checkAndAddColumn('ph_buildings_inventory', 'room_name', 'TEXT');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_inventory(
@@ -9747,27 +9771,50 @@ app.get('/api/physical-facilities/:uid', async (req, res) => {
 app.get('/api/facility-inventory/:iern', async (req, res) => {
   const { iern } = req.params;
   try {
-    const result = await pool.query(
+    const buildings = await pool.query(
       'SELECT * FROM facility_inventory WHERE school_id = $1 OR iern = $1 ORDER BY id', [iern]
     );
-    res.json(result.rows);
+
+    // Fetch rooms for each building
+    const buildingsWithRooms = await Promise.all(buildings.rows.map(async (b) => {
+      const rooms = await pool.query('SELECT * FROM facility_rooms WHERE building_id = $1', [b.id]);
+      return { ...b, rooms: rooms.rows };
+    }));
+
+    res.json(buildingsWithRooms);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- 24c. GET: Teachers for Advisory Dropdown ---
+app.get('/api/unit8/teachers/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT full_name FROM teacher_specialization_details WHERE school_id = $1 ORDER BY full_name',
+      [schoolId]
+    );
+    res.json(result.rows.map(r => r.full_name));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // --- 25. POST: Save Physical Facilities (Unified Submission) ---
 app.post('/api/save-physical-facilities', async (req, res) => {
   const data = req.body;
+  const sId = data.schoolId || data.school_id;
   const client = await pool.connect();
   const sanitize = (val) => (val === '' || val === null || val === undefined) ? 0 : val;
   const toBool = (val) => val === true || val === 'true' || val === 1;
 
   try {
+    if (!sId) throw new Error("Missing schoolId in payload");
     await client.query('BEGIN');
+    // Schema should be initialized via manual SQL or startup, removing to prevent transactional locks
+    // await ensureUnit10Tables(client);
 
     // 1. Update Main Profile
     const queryProfile = `
             UPDATE school_profiles SET
-                build_classrooms_total=$2, 
+                build_classrooms_total=$2,
                 build_classrooms_new=$3,
                 build_classrooms_good=$4,
                 build_classrooms_repair=$5,
@@ -9777,7 +9824,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
         `;
 
     await client.query(queryProfile, [
-      data.schoolId,
+      sId,
       sanitize(data.build_classrooms_total),
       sanitize(data.build_classrooms_new),
       sanitize(data.build_classrooms_good),
@@ -9785,72 +9832,105 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       sanitize(data.build_classrooms_demolition)
     ]);
 
-    // 2. Handle Repairs (Delete All & Re-insert)
-    // 2. Handle Repairs (Delete All & Re-insert)
+    // 2. Handle Repairs (ph_buildings_repairs)
     if (data.repairEntries && Array.isArray(data.repairEntries)) {
-      await client.query('DELETE FROM facility_repair_details WHERE school_id = $1', [data.schoolId]);
+      await client.query('DELETE FROM ph_buildings_repairs WHERE school_id = $1', [sId]);
 
       for (const r of data.repairEntries) {
         await client.query(`
-                INSERT INTO facility_repair_details (
-                    school_id, iern, building_no, room_no, item_name,
+                INSERT INTO ph_buildings_repairs (
+                    school_id, iern, building_name, room_name, item_name,
                     oms, condition, damage_ratio, recommended_action, demo_justification, remarks
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             `, [
-          data.schoolId, data.iern || data.schoolId,
-          r.building_no, r.room_no, r.item_name,
+          sId, data.iern || sId,
+          r.building_name || r.building_no, r.room_name || r.room_no, r.item_name,
           r.oms || '', r.condition || '', r.damage_ratio || 0,
           r.recommended_action || '', r.demo_justification || '', r.remarks || ''
         ]);
       }
     }
 
-    // 3. Handle Demolitions (Delete All & Re-insert)
+    // 3. Handle Demolitions (ph_buildings_demolition) - One row per room
     if (data.demolitionEntries && Array.isArray(data.demolitionEntries)) {
-      await client.query('DELETE FROM facility_demolitions WHERE school_id = $1', [data.schoolId]);
+      await client.query('DELETE FROM ph_buildings_demolition WHERE school_id = $1', [sId]);
 
       for (const d of data.demolitionEntries) {
-        await client.query(`
-                INSERT INTO facility_demolitions (
-                    school_id, iern, building_no,
-                    reason_age, reason_safety, reason_calamity, reason_upgrade
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-            `, [
-          data.schoolId, data.schoolId,
-          d.building_no,
-          toBool(d.reason_age), toBool(d.reason_safety),
-          toBool(d.reason_calamity), toBool(d.reason_upgrade)
-        ]);
+        const counts = [
+          { key: 'less_than_7x9', count: sanitize(d.less_than_7x9) },
+          { key: '7x9', count: sanitize(d["7x9"]) },
+          { key: 'above_7x9', count: sanitize(d.above_7x9) }
+        ];
+
+        let roomIndex = 1;
+        for (const cat of counts) {
+          for (let i = 0; i < cat.count; i++) {
+            await client.query(`
+                    INSERT INTO ph_buildings_demolition (
+                        school_id, iern, building_name, room_name,
+                        age, safety, calamity, upgrade,
+                        less_than_7x9, "7x9", above_7x9
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                `, [
+              sId, data.iern || sId,
+              d.building_name || d.building_no,
+              `${d.building_name || d.building_no} - Room ${roomIndex++}`,
+              toBool(d.reason_age || d.age), toBool(d.reason_safety || d.safety),
+              toBool(d.reason_calamity || d.calamity), toBool(d.reason_upgrade || d.upgrade),
+              cat.key === 'less_than_7x9' ? 1 : 0,
+              cat.key === '7x9' ? 1 : 0,
+              cat.key === 'above_7x9' ? 1 : 0
+            ]);
+          }
+        }
       }
     }
 
-    // 4. Handle Building Inventory (Delete All & Re-insert)
+    // 4. Handle Building Inventory (ph_buildings_inventory) - One row per room
     if (data.inventoryEntries && Array.isArray(data.inventoryEntries)) {
-      await client.query('DELETE FROM facility_inventory WHERE school_id = $1', [data.schoolId]);
+      await client.query('DELETE FROM ph_buildings_inventory WHERE school_id = $1', [sId]);
 
-      for (const inv of data.inventoryEntries) {
+      const allRooms = data.rooms || [];
+      const buildings = data.inventoryEntries;
+
+      for (const room of allRooms) {
+        const parentBuild = buildings.find(b => b.building_name === room.building_name || b.id === room.building_local_id);
+        const roomDim = room.dimension || room.dimensions || '';
+
         await client.query(`
-                INSERT INTO facility_inventory (
-                    school_id, iern, building_name, category, status_of_construction_phase,
-                    no_of_storeys, no_of_classrooms, year_completed, remarks
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            `, [
-          data.schoolId, data.iern || data.schoolId,
-          inv.building_name, inv.category, inv.status_of_construction_phase,
-          sanitize(inv.no_of_storeys) || 1, sanitize(inv.no_of_classrooms),
-          inv.year_completed || null, inv.remarks || ''
+              INSERT INTO ph_buildings_inventory (
+                  school_id, iern, building_name, room_name, category,
+                  storey, classroom, year_completed, remarks,
+                  less_than_7x9, "7x9", above_7x9, 
+                  grade_level, advisory_teacher, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          `, [
+          sId, data.iern || sId,
+          room.building_name, room.room_name,
+          parentBuild?.category || 'Classroom',
+          sanitize(parentBuild?.storey) || 1, 1, // one classroom per row
+          parentBuild?.year_completed || null, parentBuild?.remarks || '',
+          roomDim === 'less than 7x9' ? 1 : 0,
+          roomDim === '7x9' ? 1 : 0,
+          roomDim === 'above 7x9' ? 1 : 0,
+          room.grade_level || '', room.teacher_id || '',
+          room.condition || 'Good Condition'
         ]);
       }
     }
+
+    // 5. Mark unit8_completed flag in ph_schools
+    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
+    await client.query(`UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1 WHERE school_id = $1`, [sId]);
 
     await client.query('COMMIT');
-    res.json({ message: "Facilities and details saved!" });
+    res.json({ success: true, message: "Facilities and details saved!" });
 
-    // SNAPSHOT UPDATE (Primary)
+    // SNAPSHOT UPDATE
     await calculateSchoolProgress(data.schoolId, pool);
 
     // --- DUAL WRITE: PHYSICAL FACILITIES (Async, Best Effort) ---
-    if (poolNew) {
+    if (typeof poolNew !== 'undefined' && poolNew) {
       (async () => {
         const clientNew = await poolNew.connect();
         try {
@@ -9868,7 +9948,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
           ]);
 
           // DW 2. Repairs
-          if (data.repairEntries) {
+          if (data.repairEntries && Array.isArray(data.repairEntries)) {
             await clientNew.query('DELETE FROM facility_repair_details WHERE school_id = $1', [data.schoolId]);
 
             for (const r of data.repairEntries) {
@@ -9887,7 +9967,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
           }
 
           // DW 3. Demolitions
-          if (data.demolitionEntries) {
+          if (data.demolitionEntries && Array.isArray(data.demolitionEntries)) {
             await clientNew.query('DELETE FROM facility_demolitions WHERE school_id = $1', [data.schoolId]);
             for (const d of data.demolitionEntries) {
               await clientNew.query(`
@@ -9897,25 +9977,29 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
                     `, [
                 data.schoolId, data.schoolId, d.building_no,
-                toBool(d.reason_age), toBool(d.reason_safety), toBool(d.reason_calamity), toBool(d.reason_upgrade)
+                toBool(d.reason_age || d.age), toBool(d.reason_safety || d.safety),
+                toBool(d.reason_calamity || d.calamity), toBool(d.reason_upgrade || d.upgrade)
               ]);
             }
           }
 
           // DW 4. Building Inventory
-          if (data.inventoryEntries) {
+          if (data.inventoryEntries && Array.isArray(data.inventoryEntries)) {
             await clientNew.query('DELETE FROM facility_inventory WHERE school_id = $1', [data.schoolId]);
             for (const inv of data.inventoryEntries) {
               await clientNew.query(`
                         INSERT INTO facility_inventory (
                             school_id, iern, building_name, category, status_of_construction_phase,
-                            no_of_storeys, no_of_classrooms, year_completed, remarks
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                            no_of_storeys, no_of_classrooms, year_completed, remarks,
+                            grade_level, teacher_name, less_than_7x9, "7x9", above_7x9
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                     `, [
                 data.schoolId, data.iern || data.schoolId,
-                inv.building_name, inv.category, inv.status_of_construction_phase,
+                inv.building_name, inv.category, inv.status_of_construction_phase || 'Completed',
                 sanitize(inv.no_of_storeys) || 1, sanitize(inv.no_of_classrooms),
-                inv.year_completed || null, inv.remarks || ''
+                inv.year_completed || null, inv.remarks || '',
+                inv.grade_level || '', inv.teacher_name || '',
+                inv.less_than_7x9 || 0, inv["7x9"] || 0, inv.above_7x9 || 0
               ]);
             }
           }
@@ -9932,9 +10016,9 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       })();
     }
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    if (client) await client.query('ROLLBACK');
+    console.error("CRITICAL SQL ERROR in POST /api/save-physical-facilities:", err);
+    res.status(500).json({ error: err.message, detail: err.stack });
   } finally {
     client.release();
   }
@@ -13518,8 +13602,12 @@ pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOO
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
+    // Ensure columns exist to avoid query failure
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0;`);
+
     const result = await pool.query(
-      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed, unit10_completed, curricular_offering FROM ph_schools WHERE school_id = $1',
+      'SELECT unit1_completed, unit2_completed, unit3_completed, unit4_completed, unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed, unit10_completed, curricular_offering, unit8 FROM ph_schools WHERE school_id = $1',
       [schoolId]
     );
 
@@ -13536,8 +13624,27 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       if (row.unit3_completed) { completedUnits.push(3); xp += 200; }
       if (row.unit4_completed) { completedUnits.push(4); xp += 250; }
       if (row.unit5_completed) { completedUnits.push(5); xp += 300; }
-      if (row.unit6_completed) { completedUnits.push(6); xp += 300; } // Teacher Registration
-      if (row.unit7_completed) { completedUnits.push(7); xp += 350; } // Teaching Personnel Summary
+      if (row.unit6_completed) { completedUnits.push(6); xp += 300; }
+      if (row.unit7_completed) { completedUnits.push(7); xp += 350; }
+
+      // Unit 8 Inference Fallback
+      let unit8_is_complete = row.unit8_completed || (row.unit8 === 1);
+      if (!unit8_is_complete) {
+        const checkData = await pool.query(`
+          SELECT 
+            (SELECT COUNT(*) FROM ph_buildings_inventory WHERE school_id = $1) as inv,
+            (SELECT COUNT(*) FROM ph_buildings_repairs WHERE school_id = $1) as rep,
+            (SELECT COUNT(*) FROM ph_buildings_demolition WHERE school_id = $1) as demo
+        `, [schoolId]);
+        const counts = checkData.rows[0];
+        if (parseInt(counts.inv) > 0 || parseInt(counts.rep) > 0 || parseInt(counts.demo) > 0) {
+          unit8_is_complete = true;
+          // Best effort sync
+          pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1 WHERE school_id = $1', [schoolId]).catch(() => {});
+        }
+      }
+
+      if (unit8_is_complete) { completedUnits.push(8); xp += 500; }
       if (row.unit9_completed) { completedUnits.push(9); xp += 500; }
       if (row.unit10_completed) { completedUnits.push(10); xp += 500; }
     }
@@ -14666,17 +14773,29 @@ const ensureUnit10Tables = async (client) => {
       school_id TEXT,
       iern TEXT,
       building_name TEXT,
+      room_name TEXT,
       category TEXT,
       storey INTEGER,
       classroom INTEGER,
       room_length NUMERIC,
       room_width NUMERIC,
+      less_than_7x9 INTEGER DEFAULT 0,
+      "7x9" INTEGER DEFAULT 0,
+      above_7x9 INTEGER DEFAULT 0,
+      grade_level TEXT,
+      advisory_teacher TEXT,
       year_completed INTEGER,
       remarks TEXT,
       status TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  await checkAndAddColumn('ph_buildings_inventory', 'room_name', 'TEXT', client);
+  await checkAndAddColumn('ph_buildings_inventory', 'less_than_7x9', 'INTEGER DEFAULT 0', client);
+  await checkAndAddColumn('ph_buildings_inventory', '"7x9"', 'INTEGER DEFAULT 0', client);
+  await checkAndAddColumn('ph_buildings_inventory', 'above_7x9', 'INTEGER DEFAULT 0', client);
+  await checkAndAddColumn('ph_buildings_inventory', 'grade_level', 'TEXT', client);
+  await checkAndAddColumn('ph_buildings_inventory', 'advisory_teacher', 'TEXT', client);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS ph_buildings_demolition (
@@ -14684,8 +14803,10 @@ const ensureUnit10Tables = async (client) => {
       school_id TEXT,
       iern TEXT,
       building_name TEXT,
-      room_length NUMERIC,
-      room_width NUMERIC,
+      room_name TEXT,
+      less_than_7x9 INTEGER DEFAULT 0,
+      "7x9" INTEGER DEFAULT 0,
+      above_7x9 INTEGER DEFAULT 0,
       age BOOLEAN DEFAULT FALSE,
       safety BOOLEAN DEFAULT FALSE,
       calamity BOOLEAN DEFAULT FALSE,
@@ -14693,6 +14814,10 @@ const ensureUnit10Tables = async (client) => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  await checkAndAddColumn('ph_buildings_demolition', 'room_name', 'TEXT', client);
+  await checkAndAddColumn('ph_buildings_demolition', 'less_than_7x9', 'INTEGER DEFAULT 0', client);
+  await checkAndAddColumn('ph_buildings_demolition', '"7x9"', 'INTEGER DEFAULT 0', client);
+  await checkAndAddColumn('ph_buildings_demolition', 'above_7x9', 'INTEGER DEFAULT 0', client);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS ph_buildings_repairs (
@@ -14711,6 +14836,9 @@ const ensureUnit10Tables = async (client) => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  await checkAndAddColumn('ph_buildings_repairs', 'room_name', 'TEXT', client);
+  await checkAndAddColumn('ph_buildings_repairs', 'oms', 'TEXT', client);
+  await checkAndAddColumn('ph_buildings_repairs', 'demo_justification', 'TEXT', client);
 };
 
 // Master Submission Handle
@@ -14731,8 +14859,8 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
     console.log(`[Unit 10 Master Submit] Transaction BEGIN`);
 
     // 0. Ensure tables exist
-    await ensureUnit10Tables(client);
-    console.log(`[Unit 10 Master Submit] Step 0: Ensure tables exist - Done`);
+    // await ensureUnit10Tables(client);
+    console.log(`[Unit 10 Master Submit] Step 0: Logic bypass - Manual SQL suggested`);
 
     // Get IERN
     const sRes = await client.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
@@ -14752,11 +14880,13 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
         await client.query(`
           INSERT INTO ph_buildings_inventory (
             school_id, iern, building_name, category, storey, classroom, 
-            room_length, room_width, year_completed, remarks, status
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            room_length, room_width, year_completed, remarks, 
+            grade_level, advisory_teacher, status
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `, [
           schoolId, iern, b.building_name, b.category, b.storey || 1, b.classroom || 1,
-          b.room_length || 0, b.room_width || 0, b.year_completed, b.remarks, b.status
+          b.room_length || 0, b.room_width || 0, b.year_completed, b.remarks,
+          b.grade_level || '', b.advisory_teacher || '', b.status
         ]);
         invCount++;
       }
@@ -14771,11 +14901,11 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
           for (const itm of r.items) {
             await client.query(`
               INSERT INTO ph_buildings_repairs (
-                school_id, iern, building_name, room_name, item_name, 
+                school_id, iern, building_name, room_name, item_name, oms,
                 condition, damage_ratio, recommended_action, demo_justification, remarks
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             `, [
-              schoolId, iern, r.building_name, r.room_name, itm.item,
+              schoolId, iern, r.building_name, r.room_name, itm.item, itm.oms,
               itm.condition, itm.damage_ratio || 0, itm.recommend_action, itm.demo_justification, itm.remarks
             ]);
             repCount++;
@@ -14791,11 +14921,13 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
       for (const d of demolitions) {
         await client.query(`
           INSERT INTO ph_buildings_demolition (
-            school_id, iern, building_name, room_length, room_width, 
+            school_id, iern, building_name, 
+            less_than_7x9, "7x9", above_7x9,
             age, safety, calamity, upgrade
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `, [
-          schoolId, iern, d.building_name, d.room_length || 0, d.room_width || 0,
+          schoolId, iern, d.building_name, 
+          d.less_than_7x9 || 0, d["7x9"] || 0, d.above_7x9 || 0,
           !!d.age, !!d.safety, !!d.calamity, !!d.upgrade
         ]);
         demCount++;
@@ -14831,21 +14963,53 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
     const repRes = await pool.query('SELECT * FROM ph_buildings_repairs WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
     const demRes = await pool.query('SELECT * FROM ph_buildings_demolition WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
 
+    // Grouping rooms into buildings by building_name for the frontend
+    const buildingsMap = {};
+    invRes.rows.forEach(row => {
+      const bName = row.building_name;
+      if (!buildingsMap[bName]) {
+        buildingsMap[bName] = {
+          ...row,
+          rooms: []
+        };
+      }
+      buildingsMap[bName].rooms.push({
+        id: row.id,
+        room_name: row.room_name,
+        grade_level: row.grade_level,
+        advisory_teacher: row.advisory_teacher,
+        room_length: row.room_length,
+        room_width: row.room_width,
+        condition: row.status // Mapping 'status' back to condition for UI
+      });
+    });
+
+    const inventory = Object.values(buildingsMap);
+
     // Check completion status from ph_schools
     let completed = false;
     try {
-      const schRes = await pool.query('SELECT unit10_completed FROM ph_schools WHERE school_id = $1', [schoolId]);
+      const schRes = await pool.query('SELECT unit8_completed, unit10_completed FROM ph_schools WHERE school_id = $1', [schoolId]);
       if (schRes.rows.length > 0) {
-        completed = schRes.rows[0].unit10_completed === true;
+        completed = schRes.rows[0].unit8_completed === true || schRes.rows[0].unit10_completed === true;
+      }
+      
+      // Auto-mark as completed if records exist but flag is missing
+      if (!completed) {
+        if (invRes.rows.length > 0 || repRes.rows.length > 0 || demRes.rows.length > 0) {
+            completed = true;
+            // Best effort: sync flag in background
+            pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1 WHERE school_id = $1', [schoolId]).catch(e => {});
+        }
       }
     } catch (e) {
-      console.warn(`Could not check unit10_completed for ${schoolId}:`, e.message);
+      console.warn(`Could not check unit8_completed/unit10_completed for ${schoolId}:`, e.message);
     }
 
     res.json({
       success: true,
       data: {
-        inventory: invRes.rows || [],
+        inventory: inventory,
         repairs: repRes.rows || [],
         demolitions: demRes.rows || [],
         isCompleted: completed
