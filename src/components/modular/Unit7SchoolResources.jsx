@@ -495,6 +495,14 @@ const Unit7SchoolResources = () => {
     }, [utilitiesData]);
 
     const handleFinalSubmit = async () => {
+        // STRICT VALIDATION: Check if any grade levels have been audited
+        const auditedCount = gradesData.filter(g => g.isVerified).length;
+        if (auditedCount === 0 && gradesData.length > 0) {
+            alert("Warning: You must audit at least one Grade Level in Phase 1 before marking this unit as accomplished.");
+            setCurrentPhase(1);
+            return;
+        }
+
         setLoading(true);
         const storedId = localStorage.getItem("schoolId");
         

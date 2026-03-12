@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Ensure we are in the correct directory
+cd /var/www/html/InsightEd-Mobile-PWA
+
 # Deployment Script for STRIDE-PROD-VM-01
 
 echo "------------------------------------------------"

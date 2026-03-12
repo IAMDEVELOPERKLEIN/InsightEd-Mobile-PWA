@@ -157,6 +157,13 @@ const LearnerStatistics = ({ embedded }) => {
 
     const handleGridChange = (category, grade, value) => {
         const key = `stat_${category}_${grade}`;
+        
+        // STRICT VALIDATION: If value contains a minus sign, ignore it or strip it.
+        // The regex /[^0-9]/g already strips it, but let's be explicit and prevent typed '-'
+        if (value.includes('-')) {
+            return;
+        }
+
         // 1. Strip non-numeric characters
         const cleanValue = value.replace(/[^0-9]/g, '');
         // 2. Parse integer to remove leading zeros (or default to 0 if empty)

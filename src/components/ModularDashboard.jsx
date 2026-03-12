@@ -236,11 +236,15 @@ const ModularDashboard = () => {
                                             `}>
                                                 Unit {mod.id}
                                             </span>
-                                            {isCompleted && (
+                                            {isCompleted ? (
                                                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
                                                     Done
                                                 </span>
-                                            )}
+                                            ) : questProgress.incompleteUnits?.includes(mod.id) ? (
+                                                <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                    Incomplete
+                                                </span>
+                                            ) : null}
                                         </div>
                                         <span className={`text-sm font-black tracking-tight ${isLocked ? 'text-slate-500' : 'text-slate-800'}`}>
                                             {mod.title}
