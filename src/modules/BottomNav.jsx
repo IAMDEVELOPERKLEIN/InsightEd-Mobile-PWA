@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings, FiCheckSquare, FiLogOut } from "react-icons/fi"; // Changed to Gear icon
+import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare } from "react-icons/fi"; // Added FiMessageSquare
 
 const BottomNav = ({ userRole }) => {
     const navigate = useNavigate();
@@ -34,92 +34,93 @@ const BottomNav = ({ userRole }) => {
         'Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'DepEd Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Non-DepEd Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Local Government Unit': [
             { label: 'Projects', path: '/lgu-dashboard', icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: TbHomeEdit },
             { label: 'Modules', path: '/modular-dashboard', icon: LuCompass },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
             { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
-            // { label: 'Activity', path: '/activity', icon: TbClipboardList },
-            //  { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
             { label: 'Home', path: '/hr-dashboard', icon: TbHomeEdit },
-            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
-            { label: 'Infrastructure', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
-            // { label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare },
+            { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
-            { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
-            { label: 'Infrastructure', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
-            { label: 'Management', path: '/school-management', icon: TbSchool },
-            //{ label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare }, 
+            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
+            { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
-            { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
-            { label: 'Infra Projects', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
+            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
+            { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office Finance': [
             { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Masterlist': [
             { label: 'Home', path: '/psip', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Data', path: '/psip', state: { activeTab: 'data' }, icon: TbChartBar },
-            { label: 'Settings', path: '/profile', state: { activeTab: 'settings' }, icon: FiSettings },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Settings', path: '/psip', state: { activeTab: 'settings' }, icon: FiSettings },
         ],
         'EFD': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'EFD Engineer': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI Engineer': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
 
@@ -148,6 +149,10 @@ const BottomNav = ({ userRole }) => {
                             key={item.label}
                             style={styles.navButton}
                         onClick={() => {
+                            if (item.id === 'chatbot-toggle') {
+                                window.dispatchEvent(new CustomEvent('toggle-chatbot'));
+                                return;
+                            }
                             if (item.logout) {
                                 localStorage.clear();
                                 sessionStorage.clear();

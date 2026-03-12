@@ -13570,7 +13570,7 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       if (row.unit4_completed) { completedUnits.push(4); xp += 250; }
       if (row.unit5_completed) { completedUnits.push(5); xp += 300; }
       if (row.unit6_completed) { completedUnits.push(6); xp += 300; } // Teacher Registration
-      if (row.unit7_completed) { completedUnits.push(7); xp += 350; } // Teaching Personnel Summary
+      if (row.unit7_completed) { completedUnits.push(7); xp += 350; } // School Resources
       if (row.unit9_completed) { completedUnits.push(9); xp += 500; }
       if (row.unit10_completed) { completedUnits.push(10); xp += 500; }
     }

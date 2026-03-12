@@ -122,6 +122,8 @@ const AnimatedRoutes = () => {
   //   return <MaintenanceScreen />;
   // }
 
+  const showChatFloating = location.pathname === '/' || location.pathname === '/adminlogin';
+
   return (
     <Routes>
       {/* Authentication */}
@@ -324,13 +326,24 @@ function App() {
   return (
     <GlobalErrorBoundary>
       <Router>
-        <ScrollToTop />
-        <SuperUserFloatingSwitch />
-        <ChatWidget />
-        <AnimatedRoutes />
+        <AppContent />
       </Router>
     </GlobalErrorBoundary>
   );
 }
+
+const AppContent = () => {
+  const location = useLocation();
+  const showChatFloating = location.pathname === '/' || location.pathname === '/adminlogin';
+
+  return (
+    <>
+      <ScrollToTop />
+      <SuperUserFloatingSwitch />
+      <ChatWidget showFloatingButton={showChatFloating} />
+      <AnimatedRoutes />
+    </>
+  );
+};
 
 export default App;
