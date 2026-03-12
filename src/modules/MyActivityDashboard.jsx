@@ -10,6 +10,7 @@ import {
 } from 'react-icons/fi';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
+import { DASHBOARD_METADATA } from '../config/dashboardMetadata';
 
 // --- Circular Progress Ring ---
 const ProgressRing = ({ percentage = 0, size = 160, strokeWidth = 10 }) => {
@@ -58,16 +59,14 @@ const ProgressRing = ({ percentage = 0, size = 160, strokeWidth = 10 }) => {
 
 // --- XP calculation helper ---
 const getXPForUnits = (flags) => {
-    const xpPerUnit = [150, 200, 250, 300, 350, 400, 450, 500];
-    let total = 0;
-    for (let i = 1; i <= 8; i++) {
-        if (flags?.[`unit${i}`]) total += xpPerUnit[i - 1];
-    }
-    return total;
+    return DASHBOARD_METADATA.units.reduce((total, unit) => {
+        if (flags?.[`unit${unit.id}`]) total += unit.xp;
+        return total;
+    }, 0);
 };
 
-const getLevelFromXP = (xp) => {
-    if (xp >= 2400) return { level: 8, title: '🏆 STRIDE Master', color: 'from-yellow-400 to-amber-500' };
+const getLevelFromXP = (xp, maxXP) => {
+    if (xp >= maxXP - 50) return { level: 9, title: '🏆 STRIDE Master', color: 'from-yellow-400 to-amber-500' };
     if (xp >= 1800) return { level: 7, title: '⭐ Elite Runner', color: 'from-purple-400 to-indigo-500' };
     if (xp >= 1200) return { level: 6, title: '🔥 Trailblazer', color: 'from-red-400 to-orange-500' };
     if (xp >= 800)  return { level: 5, title: '💎 Data Champion', color: 'from-cyan-400 to-blue-500' };
@@ -83,16 +82,14 @@ const MyActivityDashboard = () => {
     const [loading, setLoading] = useState(true);
     const schoolId = localStorage.getItem('schoolId');
 
-    const unitMap = useMemo(() => ([
-        { id: 1, flagId: 1, name: 'School Identity', path: '/modular/unit-1', xp: 150, icon: '🏫' },
-        { id: 2, flagId: 2, name: 'Learners', path: '/modular/unit-2', xp: 200, icon: '👨‍🎓' },
-        { id: 3, flagId: 3, name: 'Organized Classes', path: '/modular/unit-3', xp: 250, icon: '📚' },
-        { id: 4, flagId: 4, name: 'Learner Profile', path: '/modular/unit-4', xp: 300, icon: '📋' },
-        { id: 5, flagId: 5, name: 'Shifting Modality', path: '/modular/unit-5', xp: 350, icon: '🔄' },
-        { id: 6, flagId: 6, name: 'Teaching Personnel', path: '/modular/unit-6', xp: 400, icon: '👩‍🏫' },
-        { id: 7, flagId: 7, name: 'School Resources', path: '/modular/unit-7', xp: 450, icon: '🧰' },
-        { id: 8, flagId: 8, name: 'Physical Facilities', path: '/modular/unit-8', xp: 500, icon: '🏗️' }
-    ]), []);
+    const unitMap = useMemo(() => DASHBOARD_METADATA.units.map(u => ({
+        id: u.id,
+        flagId: u.id,
+        name: u.title,
+        path: u.path,
+        xp: u.xp,
+        icon: u.emoji
+    })), []);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -113,8 +110,8 @@ const MyActivityDashboard = () => {
     }, [schoolId]);
 
     const xp = useMemo(() => getXPForUnits(data?.progress?.flags), [data]);
-    const levelInfo = useMemo(() => getLevelFromXP(xp), [xp]);
-    const maxXP = 2600;
+    const maxXP = useMemo(() => DASHBOARD_METADATA.units.reduce((sum, u) => sum + u.xp, 0), []);
+    const levelInfo = useMemo(() => getLevelFromXP(xp, maxXP), [xp, maxXP]);
 
     const nextUnit = useMemo(() => {
         if (!data?.progress?.flags) return unitMap[0];
@@ -124,11 +121,14 @@ const MyActivityDashboard = () => {
     const achievements = useMemo(() => {
         const flags = data?.progress?.flags || {};
         const completed = data?.progress?.completedUnits || 0;
+        const totalUnits = DASHBOARD_METADATA.units.length;
+        const halfway = Math.floor(totalUnits / 2);
+
         return [
             { id: 'first', name: 'First Steps', desc: 'Complete your first unit', earned: completed >= 1, icon: '🎯' },
-            { id: 'half', name: 'Halfway Hero', desc: 'Complete 4 units', earned: completed >= 4, icon: '⚡' },
+            { id: 'half', name: 'Halfway Hero', desc: `Complete ${halfway} units`, earned: completed >= halfway, icon: '⚡' },
             { id: 'sprint', name: 'Speed Demon', desc: 'Log a fastest sprint', earned: !!data?.gamification?.fastest_sprint, icon: '🏃' },
-            { id: 'master', name: 'STRIDE Master', desc: 'Complete all 8 units', earned: completed >= 8, icon: '👑' },
+            { id: 'master', name: 'STRIDE Master', desc: `Complete all ${totalUnits} units`, earned: completed >= totalUnits, icon: '👑' },
         ];
     }, [data]);
 
@@ -216,7 +216,7 @@ const MyActivityDashboard = () => {
                             <div className="flex-1">
                                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.15em] mb-2">Mission Progress</p>
                                 <h2 className="text-2xl font-black text-slate-800 mb-1">
-                                    {data?.progress?.completedUnits || 0} <span className="text-slate-300 text-lg">/ {data?.progress?.totalUnits || 8}</span>
+                                    {data?.progress?.completedUnits || 0} <span className="text-slate-300 text-lg">/ {data?.progress?.totalUnits || DASHBOARD_METADATA.units.length}</span>
                                 </h2>
                                 <p className="text-emerald-500 text-[11px] font-bold">Units Conquered</p>
                                 

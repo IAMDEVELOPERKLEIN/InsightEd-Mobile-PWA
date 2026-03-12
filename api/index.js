@@ -145,7 +145,7 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const schoolRes = await pool.query(
-      `SELECT unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8,
+      `SELECT unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9,
               unit_completion, region, division
        FROM ph_schools WHERE school_id = $1`,
       [schoolId]
@@ -153,7 +153,7 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
     if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
 
     const row = schoolRes.rows[0];
-    const totalUnits = 8;
+    const totalUnits = 9; // Synchronized with latest dashboardMetadata.js
     let completedUnitsCount = 0;
     let completedFlags = {};
     for (let i = 1; i <= totalUnits; i++) {
@@ -4039,7 +4039,7 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     const sp = res.rows[0];
 
     let completed = 0;
-    const total = 10;
+    const total = 11;
 
     // --- FORM 1: Profile ---
     // Criteria: School ID exists (which it does if we found the row), and Name is set
@@ -4145,7 +4145,9 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
       // console.log(`[DEBUG] School ${ schoolId } F10 Incomplete.Keys checked: ${ Object.keys(sp).filter(k => k.startsWith('stat_')).length }, HasStats: ${ hasStats } `);
     }
 
-
+    // --- FORM 11: School Location ---
+    const f11 = sp.f11_location ? 1 : 0;
+    if (f11) completed++;
 
     // 2. Calculate and Update
     const percentage = Math.round((completed / total) * 100);
@@ -4156,26 +4158,27 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     */
     await dbClientOrPool.query(`
       UPDATE school_profiles
-SET
-forms_completed_count = $1,
-  completion_percentage = $2,
-  f1_profile = $4,
-  f2_head = $5,
-  f3_enrollment = $6,
-  f4_classes = $7,
-  f5_teachers = $8,
-  f6_specialization = $9,
-  f7_resources = $10,
-  f8_facilities = $11,
-  f9_shifting = $12,
-  f10_stats = $13
+      SET
+        forms_completed_count = $1,
+        completion_percentage = $2,
+        f1_profile = $4,
+        f2_head = $5,
+        f3_enrollment = $6,
+        f4_classes = $7,
+        f5_teachers = $8,
+        f6_specialization = $9,
+        f7_resources = $10,
+        f8_facilities = $11,
+        f9_shifting = $12,
+        f10_stats = $13,
+        f11_location = $14
       WHERE school_id = $3
-  `, [
+    `, [
       completed, percentage, schoolId,
-      f1, f2, f3, f4, f5, f6, f7, f8, f9, f10
+      f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11
     ]);
 
-    console.log(`… Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}]`);
+    console.log(`… Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}${f11}]`);
 
     // --- OPTIMIZATION: INSTANT SUMMARY UPDATE ---
     await updateSchoolSummary(schoolId, dbClientOrPool);
@@ -15114,6 +15117,24 @@ app.post('/api/school-location', async (req, res) => {
     ];
 
     const result = await pool.query(query, values);
+
+    // --- UPDATE COMPLETION FLAGS ---
+    try {
+      const schoolId = validatedData.school_id;
+      // 1. Ph_Schools (Quest)
+      await pool.query('UPDATE ph_schools SET unit9_completed = TRUE, unit9 = 1 WHERE school_id = $1', [schoolId]);
+      
+      // 2. School_Profiles (Main Dashboard FLAG)
+      await pool.query('UPDATE school_profiles SET f11_location = TRUE WHERE school_id = $1', [schoolId]);
+
+      // 3. Recalculate Snapshot (Atomic)
+      await calculateSchoolProgress(schoolId, pool);
+      
+      console.log(`[Dashboard Integration] Flags and Snapshot updated for school ${schoolId}`);
+    } catch (flagErr) {
+      console.warn("[Dashboard Integration] Failed to update flags:", flagErr.message);
+    }
+
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     if (err instanceof z.ZodError) {
