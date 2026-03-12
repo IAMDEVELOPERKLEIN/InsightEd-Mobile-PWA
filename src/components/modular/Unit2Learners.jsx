@@ -531,18 +531,13 @@ const Unit2Learners = () => {
             });
 
             if (res.ok) {
-                // Determine completion
-                const progRes = await fetch(`/api/user/progress`);
-                if (progRes.ok) {
-                    const progData = await progRes.json();
-                    if (progData.progress && (!progData.progress.completed_units || !progData.progress.completed_units.includes(2))) {
-                         await fetch(`/api/user/progress`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ unitId: 2 })
-                        });
-                    }
-                }
+                // Sync progress to cloud for Activity Dashboard
+                fetch(`/api/user/progress`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ unitId: 2, schoolId: storedId })
+                }).catch(e => console.warn("Activity sync failed:", e));
+
                 setHasSubmitted(true);
                 setIsReadOnly(true);
                 setShowSuccess(true);

@@ -333,6 +333,15 @@ const Unit5ShiftingModality = () => {
                 localStorage.setItem("quest_progress", JSON.stringify(progress));
             }
 
+            // Sync progress to dashboard
+            try {
+                await fetch('/api/user/progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ unitId: 5, schoolId })
+                });
+            } catch (e) { console.warn("Progress sync failed", e); }
+
             // Ensure app syncs to start the dashboard animation correctly
             window.dispatchEvent(new Event("storage"));
             setShowSuccess(true);

@@ -40,7 +40,7 @@ const Unit6Summary = () => {
     const handleFinalSubmit = async () => {
         setIsFinalizing(true);
         try {
-            const res = await fetch(`/api/ph_schools/unit7/${schoolId}`, { method: "POST" });
+            const res = await fetch(`/api/ph_schools/unit6/${schoolId}`, { method: "POST" });
             const json = await res.json();
             if (json.success) {
                 // Update Local Progress
@@ -53,6 +53,16 @@ const Unit6Summary = () => {
                         localStorage.setItem('quest_progress', JSON.stringify(progress));
                     }
                 }
+
+                // Sync progress to dashboard
+                try {
+                    await fetch('/api/user/progress', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ unitId: UNIT_ID, schoolId })
+                    });
+                } catch (e) { console.warn("Progress sync failed", e); }
+
                 navigate(NEXT_UNIT_PATH);
             }
         } catch (err) { alert("Finalization failed."); }

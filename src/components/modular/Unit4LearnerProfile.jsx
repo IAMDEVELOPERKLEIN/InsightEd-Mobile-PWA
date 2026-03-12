@@ -433,6 +433,16 @@ const Unit4LearnerProfile = () => {
                 progress.xp += 250;
                 localStorage.setItem("quest_progress", JSON.stringify(progress));
             }
+
+            // Sync progress to dashboard
+            try {
+                await fetch('/api/user/progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ unitId: 4, schoolId })
+                });
+            } catch (e) { console.warn("Progress sync failed", e); }
+
             setShowSuccess(true);
         } catch (err) {
             console.error("UNIT 4 BOTTLENECK CATCH:", err);

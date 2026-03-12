@@ -145,25 +145,32 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const schoolRes = await pool.query(
-      `SELECT unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9,
-              unit_completion, region, division
+      `SELECT 
+        unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9,
+        unit1_completed, unit2_completed, unit3_completed, unit4_completed,
+        unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed,
+        unit_completion, region, division
        FROM ph_schools WHERE school_id = $1`,
       [schoolId]
     );
     if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
 
     const row = schoolRes.rows[0];
-    const totalUnits = 9; // Synchronized with latest dashboardMetadata.js
+    const totalUnits = 9; 
     let completedUnitsCount = 0;
     let completedFlags = {};
+    
     for (let i = 1; i <= totalUnits; i++) {
-      const val = parseInt(row[`unit${i}`]) || 0;
-      completedFlags[`unit${i}`] = val === 1;
-      if (val === 1) completedUnitsCount++;
+      const intVal = parseInt(row[`unit${i}`]) || 0;
+      const boolVal = row[`unit${i}_completed`] === true;
+      const isDone = (intVal === 1 || boolVal);
+      
+      completedFlags[`unit${i}`] = isDone;
+      if (isDone) completedUnitsCount++;
     }
-    const overall_progress_percentage = row.unit_completion !== null
-      ? parseFloat(parseFloat(row.unit_completion).toFixed(2))
-      : (completedUnitsCount / totalUnits) * 100;
+
+    // Dynamic calculation is more reliable than the stale unit_completion column
+    const overall_progress_percentage = parseFloat(((completedUnitsCount / totalUnits) * 100).toFixed(2));
 
     const sprintRes = await pool.query(
       `SELECT unit_id, duration_seconds FROM ph_performance_logs 
@@ -14789,12 +14796,25 @@ app.get('/api/schools/:schoolId/workload-summary', async (req, res) => {
   }
 });
 
+// --- POST: Finalize Unit 6 (Teacher Roster & Workloads) ---
+app.post('/api/ph_schools/unit6/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE;`);
+    await pool.query('UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1 WHERE school_id = $1', [schoolId]);
+    res.json({ success: true, message: "Unit 6 finalized!" });
+  } catch (err) {
+    console.error("Finalize Unit 6 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 // --- POST: Finalize Unit 7 (Teacher Roster & Workloads) ---
 app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query('UPDATE ph_schools SET unit7_completed = TRUE WHERE school_id = $1', [schoolId]);
+    await pool.query('UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1 WHERE school_id = $1', [schoolId]);
     res.json({ success: true, message: "Unit 7 finalized!" });
   } catch (err) {
     console.error("Finalize Unit 7 Error:", err);
@@ -15338,7 +15358,7 @@ app.post('/api/user/progress', async (req, res) => {
 
       // Also update the new integer-based column (unit1-unit8) for the dashboard
       const unitNum = parseInt(unitId);
-      if (unitNum >= 1 && unitNum <= 8) {
+      if (unitNum >= 1 && unitNum <= 9) {
         await pool.query(`UPDATE ph_schools SET unit${unitNum} = 1 WHERE school_id = $1`, [schoolId]);
       }
 
