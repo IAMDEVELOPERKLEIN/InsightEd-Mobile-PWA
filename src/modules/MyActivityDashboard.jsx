@@ -402,7 +402,9 @@ const MyActivityDashboard = () => {
                                                         <p className={`text-[9px] font-bold mt-0.5 ${
                                                             isNext ? 'text-cyan-500/70' : 'text-slate-300'
                                                         }`}>
-                                                            {isNext ? '⚡ ACTIVE QUEST' : `+${unit.xp} XP Reward`}
+                                                            {data?.progress?.incompleteUnits?.includes(unit.id) ? (
+                                                                <span className="text-amber-500 font-black">⚠️ INCOMPLETE</span>
+                                                            ) : isNext ? '⚡ ACTIVE QUEST' : `+${unit.xp} XP Reward`}
                                                         </p>
                                                     </div>
                                                 </div>

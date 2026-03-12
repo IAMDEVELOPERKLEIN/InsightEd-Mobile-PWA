@@ -261,6 +261,22 @@ const Unit1SchoolIdentity = () => {
                 const r = await fetch(`/api/schools_iern/${formData.school_id}`).catch(() => null);
                 if (r?.ok) { const j = await r.json(); if (j.exists && j.data?.iern) finalIern = j.data.iern; }
             }
+            // STRICT VALIDATION WARNING (Frontend)
+            if (!formData.barangay || !formData.leg_district) {
+                const missing = [];
+                if (!formData.barangay) missing.push("Barangay");
+                if (!formData.leg_district) missing.push("Legislative District");
+                
+                const proceed = window.confirm(
+                    `Warning: The following fields are missing: ${missing.join(", ")}.\n\n` +
+                    "While you can save your progress, this unit will NOT be marked as 'Accomplished' on your dashboard until these fields are provided. Do you want to proceed?"
+                );
+                if (!proceed) {
+                    setLoading(false);
+                    return;
+                }
+            }
+
             const res = await fetch("/api/ph_schools/unit1", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -270,7 +286,18 @@ const Unit1SchoolIdentity = () => {
             await clearUnit1Draft("draft_unit_1");
             const stored = localStorage.getItem("quest_progress");
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
-            if (!progress.completedUnits.includes(1)) { progress.completedUnits.push(1); progress.xp += 150; localStorage.setItem("quest_progress", JSON.stringify(progress)); }
+            
+            const isCompleted = !!(formData.barangay && formData.leg_district);
+            if (isCompleted && !progress.completedUnits.includes(1)) { 
+                progress.completedUnits.push(1); 
+                progress.xp += 150; 
+                localStorage.setItem("quest_progress", JSON.stringify(progress)); 
+            } else if (!isCompleted) {
+                // If they cleared it, remove it from progress
+                progress.completedUnits = progress.completedUnits.filter(u => u !== 1);
+                localStorage.setItem("quest_progress", JSON.stringify(progress));
+            }
+
             localStorage.setItem("schoolId", formData.school_id);
             localStorage.setItem("schoolOffering", formData.curricular_offering);
             
@@ -278,7 +305,11 @@ const Unit1SchoolIdentity = () => {
             fetch('/api/user/progress', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ unitId: 1, schoolId: formData.school_id })
+                body: JSON.stringify({ 
+                    unitId: 1, 
+                    schoolId: formData.school_id,
+                    completed: isCompleted // Note: Backend handles this too, but good to be explicit
+                })
             }).catch(e => console.warn("Activity sync failed:", e));
 
             setShowSuccess(true);

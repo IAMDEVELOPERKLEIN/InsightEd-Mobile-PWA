@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown, FiUnlock } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown, FiUnlock, FiAlertTriangle, FiClock, FiAlertOctagon, FiCloudLightning, FiTrendingUp } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMapEvents, useMap } from "react-leaflet";
@@ -94,7 +94,12 @@ export default function Unit8PhysicalFacilities() {
         storey: 1,
         classroom: 1,
         year_completed: currentYear,
-        remarks: ""
+        remarks: "",
+        status: "Good Condition",
+        condemn_age: false,
+        condemn_hazard: false,
+        condemn_calamity: false,
+        condemn_upgrade: false
     });
 
     const REPAIR_CATEGORIES = [
@@ -115,19 +120,6 @@ export default function Unit8PhysicalFacilities() {
 
     const [repairItemsState, setRepairItemsState] = useState({});
 
-    const [hasDemolition, setHasDemolition] = useState(null);
-    const [demolitionRecords, setDemolitionRecords] = useState([]);
-    const [showDemolitionModal, setShowDemolitionModal] = useState(false);
-
-    const [demolitionFormData, setDemolitionFormData] = useState({
-        building_name: "",
-        dimension_category: "less_than_7x9",
-        room_count: 1,
-        age: false,
-        safety: false,
-        calamity: false,
-        upgrade: false
-    });
 
     // Integrated Rooms State
     const [roomsData, setRoomsData] = useState([]); 
@@ -136,7 +128,6 @@ export default function Unit8PhysicalFacilities() {
 
     const [editingBuildingId, setEditingBuildingId] = useState(null);
     const [editingRepairRoomId, setEditingRepairRoomId] = useState(null);
-    const [editingDemolitionId, setEditingDemolitionId] = useState(null);
 
     const years = Array.from({ length: currentYear - 1950 + 1 }, (_, i) => currentYear - i);
 
@@ -188,7 +179,7 @@ export default function Unit8PhysicalFacilities() {
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && json.data) {
-                    const { inventory, repairs, demolitions, isCompleted } = json.data;
+                    const { inventory, repairs, isCompleted } = json.data;
 
                     // 1. Unified Inventory
                     setBuildings(inventory);
@@ -231,9 +222,6 @@ export default function Unit8PhysicalFacilities() {
                     setRepairAssessments(assessments);
                     if (assessments.length > 0) setHasRepair(true);
 
-                    // 4. Demolitions
-                    setDemolitionRecords(demolitions);
-                    if (demolitions.length > 0) setHasDemolition(true);
 
                     setIsReadOnly(isCompleted);
                 }
@@ -387,6 +375,15 @@ export default function Unit8PhysicalFacilities() {
             return;
         }
 
+        const isCondemned = buildingFormData.status === 'For Condemnation' || buildingFormData.status === 'Condemned';
+        if (isCondemned) {
+            const hasReason = buildingFormData.condemn_age || buildingFormData.condemn_hazard || buildingFormData.condemn_calamity || buildingFormData.condemn_upgrade;
+            if (!hasReason) {
+                alert("Please select at least one justification for condemnation.");
+                return;
+            }
+        }
+
         const bId = editingBuildingId || Date.now().toString();
         const newEntry = {
             ...buildingFormData,
@@ -433,7 +430,8 @@ export default function Unit8PhysicalFacilities() {
         setEditingBuildingId(null);
         setBuildingFormData({
             building_name: "", category: "Academic Building", storey: 1, classroom: 1,
-            year_completed: currentYear, remarks: ""
+            year_completed: currentYear, remarks: "", status: "Good Condition",
+            condemn_age: false, condemn_hazard: false, condemn_calamity: false, condemn_upgrade: false
         });
         setTimeout(() => handlePartialSync(), 100);
     };
@@ -445,7 +443,12 @@ export default function Unit8PhysicalFacilities() {
             storey: b.storey,
             classroom: b.classroom,
             year_completed: b.year_completed,
-            remarks: b.remarks || ""
+            remarks: b.remarks || "",
+            status: b.status || "Good Condition",
+            condemn_age: b.condemn_age || false,
+            condemn_hazard: b.condemn_hazard || false,
+            condemn_calamity: b.condemn_calamity || false,
+            condemn_upgrade: b.condemn_upgrade || false
         });
         setEditingBuildingId(b.id);
         setShowBuildingModal(true);
@@ -575,78 +578,6 @@ export default function Unit8PhysicalFacilities() {
     }, {});
     const groupedRepairsArray = Object.values(groupedRepairs);
 
-    const handleToggleDemolitionReason = (reason) => {
-        setDemolitionFormData(prev => ({ ...prev, [reason]: !prev[reason] }));
-    };
-
-    const handleSaveDemolition = () => {
-        if (!demolitionFormData.building_name) {
-            alert("Please provide the building name.");
-            return;
-        }
-
-        const hasReason = demolitionFormData.age || demolitionFormData.safety || demolitionFormData.calamity || demolitionFormData.upgrade;
-        if (!hasReason) {
-            alert("Please select at least one justification for demolition.");
-            return;
-        }
-
-        const newRecord = {
-            building_name: demolitionFormData.building_name,
-            less_than_7x9: demolitionFormData.dimension_category === 'less_than_7x9' ? demolitionFormData.room_count : 0,
-            "7x9": demolitionFormData.dimension_category === '7x9' ? demolitionFormData.room_count : 0,
-            above_7x9: demolitionFormData.dimension_category === 'above_7x9' ? demolitionFormData.room_count : 0,
-            age: demolitionFormData.age,
-            safety: demolitionFormData.safety,
-            calamity: demolitionFormData.calamity,
-            upgrade: demolitionFormData.upgrade,
-            id: editingDemolitionId || Date.now().toString()
-        };
-
-        if (editingDemolitionId) {
-            setDemolitionRecords(prev => prev.map(r => r.id === editingDemolitionId ? newRecord : r));
-        } else {
-            setDemolitionRecords(prev => [...prev, newRecord]);
-        }
-
-        setShowDemolitionModal(false);
-        setEditingDemolitionId(null);
-        setTimeout(() => handlePartialSync(), 100);
-        setDemolitionFormData({
-            building_name: "",
-            dimension_category: "less_than_7x9",
-            room_count: 1,
-            age: false,
-            safety: false,
-            calamity: false,
-            upgrade: false
-        });
-    };
-
-    const handleEditDemolition = (demoRecord) => {
-        let category = "less_than_7x9";
-        let count = 0;
-        if (demoRecord.above_7x9 > 0) { category = "above_7x9"; count = demoRecord.above_7x9; }
-        else if (demoRecord["7x9"] > 0) { category = "7x9"; count = demoRecord["7x9"]; }
-        else { category = "less_than_7x9"; count = demoRecord.less_than_7x9; }
-
-        setDemolitionFormData({
-            building_name: demoRecord.building_name,
-            dimension_category: category,
-            room_count: count,
-            age: demoRecord.age || false,
-            safety: demoRecord.safety || false,
-            calamity: demoRecord.calamity || false,
-            upgrade: demoRecord.upgrade || false
-        });
-        setEditingDemolitionId(demoRecord.id);
-        setShowDemolitionModal(true);
-    };
-
-    const handleDeleteDemolition = (id) => {
-        setDemolitionRecords(prev => prev.filter(r => r.id !== id));
-        setTimeout(() => handlePartialSync(), 100);
-    };
 
     const handlePartialSync = async () => {
         try {
@@ -662,7 +593,6 @@ export default function Unit8PhysicalFacilities() {
                 demo_justification: a.demo_justification,
                 remarks: a.remarks
             }));
-            const demoPayload = [...demolitionRecords];
             const build_classrooms_total = roomsData.length;
 
             await fetch(`/api/save-physical-facilities`, {
@@ -674,7 +604,6 @@ export default function Unit8PhysicalFacilities() {
                     inventoryEntries: inventoryPayload,
                     rooms: roomsData,
                     repairEntries: repairPayload,
-                    demolitionEntries: demoPayload,
                     build_classrooms_total,
                     isPartial: true // Flag to backend
                 })
@@ -685,6 +614,12 @@ export default function Unit8PhysicalFacilities() {
     };
 
     const handleMasterSubmit = async () => {
+        // STRICT VALIDATION: Do not mark Unit 8 as accomplished when there are no buildings registered
+        if (!buildings || buildings.length === 0) {
+            alert("Error: You must register at least one building before marking Unit 8 as accomplished.");
+            return;
+        }
+
         const confirmSubmit = window.confirm("Are you sure you want to finalize and save this entire Unit 8 Audit?");
         if (!confirmSubmit) return;
 
@@ -711,20 +646,20 @@ export default function Unit8PhysicalFacilities() {
             }));
 
             // Phase 3: Demolitions
-            const demoPayload = [...demolitionRecords];
 
             // Summary counts for school profile
             const build_classrooms_total = roomsData.length;
             const build_classrooms_new = buildings.filter(b => b.status === "Newly Built").reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
             const build_classrooms_good = buildings.filter(b => b.status === "Good Condition").reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
             const build_classrooms_repair = [...new Set(repairAssessments.map(a => `${a.building_name}-${a.room_name}`))].length;
-            const build_classrooms_demolition = demolitionRecords.reduce((acc, d) => acc + (parseInt(d.less_than_7x9) || 0) + (parseInt(d["7x9"]) || 0) + (parseInt(d.above_7x9) || 0), 0);
+            const build_classrooms_demolition = buildings
+                .filter(b => b.status === "For Condemnation" || b.status === "Condemned")
+                .reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
 
             console.log("--- FINAL PAYLOAD TO BACKEND ---");
             console.log("Inventory:", inventoryPayload);
             console.log("Rooms:", roomsData);
             console.log("Repairs:", repairPayload);
-            console.log("Demolitions:", demoPayload);
 
             // Send all data to the backend master endpoint
             const masterRes = await fetch(`/api/save-physical-facilities`, {
@@ -736,7 +671,6 @@ export default function Unit8PhysicalFacilities() {
                     inventoryEntries: inventoryPayload,
                     rooms: roomsData,
                     repairEntries: repairPayload,
-                    demolitionEntries: demoPayload,
                     // Classroom profile data
                     build_classrooms_total,
                     build_classrooms_new,
@@ -845,7 +779,9 @@ export default function Unit8PhysicalFacilities() {
                         </div>
                         <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
                             <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <span className="text-4xl font-black text-rose-600 mb-2">{demolitionRecords.length}</span>
+                            <span className="text-4xl font-black text-rose-600 mb-2">
+                                {buildings.filter(b => b.status === "For Condemnation" || b.status === "Condemned").length}
+                            </span>
                             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">For Demolition</span>
                         </div>
                     </div>
@@ -952,23 +888,24 @@ export default function Unit8PhysicalFacilities() {
                                 Slated for Demolition
                             </h4>
                             <div className="space-y-3">
-                                {demolitionRecords.map(d => (
-                                    <div key={d.id} className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100/50">
-                                        <h5 className="font-black text-gray-800 text-lg mb-1">{d.building_name}</h5>
+                                {buildings.filter(b => b.status === "For Condemnation" || b.status === "Condemned").map(b => (
+                                    <div key={b.id} className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100/50">
+                                        <h5 className="font-black text-gray-800 text-lg mb-1">{b.building_name}</h5>
                                         <div className="flex gap-2 mb-3">
-                                            {d.less_than_7x9 > 0 && <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{"< 7x9"}: {d.less_than_7x9}</span>}
-                                            {d["7x9"] > 0 && <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{"7x9"}: {d["7x9"]}</span>}
-                                            {d.above_7x9 > 0 && <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{"> 7x9"}: {d.above_7x9}</span>}
+                                            <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{b.storey} Storey(s)</span>
+                                            <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{b.classroom} Classrooms</span>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
-                                            {d.age && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Age/Dilapidation</span>}
-                                            {d.safety && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Safety Hazard</span>}
-                                            {d.calamity && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Calamity Damage</span>}
-                                            {d.upgrade && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Site Upgrade</span>}
+                                            {b.condemn_age && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Age/Dilapidation</span>}
+                                            {b.condemn_hazard && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Safety Hazard</span>}
+                                            {b.condemn_calamity && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Calamity Damage</span>}
+                                            {b.condemn_upgrade && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Site Upgrade</span>}
                                         </div>
                                     </div>
                                 ))}
-                                {demolitionRecords.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No demolitions recorded.</p>}
+                                {buildings.filter(b => b.status === "For Condemnation" || b.status === "Condemned").length === 0 && (
+                                    <p className="text-gray-400 font-medium italic text-sm text-center py-2">No demolitions recorded.</p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1005,13 +942,13 @@ export default function Unit8PhysicalFacilities() {
                     </button>
                     <div className="flex flex-col items-center">
                         <h1 className="font-bold text-gray-800 text-xl">Unit 8 Audit</h1>
-                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Step {currentPage} of 5</span>
+                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Step {currentPage} of 4</span>
                     </div>
                     <div className="w-10"></div>
                 </div>
                 {/* Visual Progress Bar */}
                 <div className="max-w-3xl mx-auto mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden flex gap-1">
-                    {[1, 2, 3, 4, 5].map(step => (
+                    {[1, 2, 3, 4].map(step => (
                         <div
                             key={step}
                             className={`flex-1 h-full transition-all duration-500 ${currentPage >= step ? "bg-indigo-500" : "bg-gray-200"}`}
@@ -1315,21 +1252,27 @@ export default function Unit8PhysicalFacilities() {
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
                                                 <input 
-                                                    type="number" 
+                                                    type="text" 
+                                                    inputMode="numeric"
                                                     value={buildingFormData.storey} 
-                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, storey: parseInt(e.target.value) || 0 })}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
+                                                        setBuildingFormData({ ...buildingFormData, storey: (val === '' || val === '0') ? 1 : parseInt(val) });
+                                                    }}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" 
-                                                    min="1" 
                                                 />
                                             </div>
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
                                                 <input 
-                                                    type="number" 
+                                                    type="text" 
+                                                    inputMode="numeric"
                                                     value={buildingFormData.classroom} 
-                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, classroom: parseInt(e.target.value) || 0 })}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
+                                                        setBuildingFormData({ ...buildingFormData, classroom: (val === '' || val === '0') ? 1 : parseInt(val) });
+                                                    }}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" 
-                                                    min="1" 
                                                 />
                                             </div>
                                         </div>
@@ -1344,6 +1287,51 @@ export default function Unit8PhysicalFacilities() {
                                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
                                             </select>
                                         </div>
+
+                                        <div className="flex gap-4">
+                                            <div className="flex-1">
+                                                <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Building Status</label>
+                                                <select 
+                                                    value={buildingFormData.status} 
+                                                    onChange={(e) => setBuildingFormData({ ...buildingFormData, status: e.target.value })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                                                >
+                                                    <option value="Newly Built">Newly Built</option>
+                                                    <option value="Good Condition">Good Condition</option>
+                                                    <option value="For Major Repairs">For Major Repairs</option>
+                                                    <option value="For Minor Repairs">For Minor Repairs</option>
+                                                    <option value="For Condemnation">For Condemnation</option>
+                                                    <option value="Condemned">Condemned</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {(buildingFormData.status === 'For Condemnation' || buildingFormData.status === 'Condemned') && (
+                                            <div className="p-5 bg-rose-50 rounded-2xl border-2 border-rose-100 space-y-4">
+                                                <h4 className="text-sm font-black text-rose-600 uppercase tracking-widest flex items-center gap-2">
+                                                    <FiAlertTriangle className="w-4 h-4" /> Justification for Condemnation
+                                                </h4>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {[
+                                                        { id: 'condemn_age', label: 'Age / Dilapidation', icon: <FiClock /> },
+                                                        { id: 'condemn_hazard', label: 'Safety Hazard', icon: <FiAlertOctagon /> },
+                                                        { id: 'condemn_calamity', label: 'Calamity Damage', icon: <FiCloudLightning /> },
+                                                        { id: 'condemn_upgrade', label: 'Site Upgrade / Repurposing', icon: <FiTrendingUp /> }
+                                                    ].map(item => (
+                                                        <button
+                                                            key={item.id}
+                                                            onClick={() => setBuildingFormData({ ...buildingFormData, [item.id]: !buildingFormData[item.id] })}
+                                                            className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${buildingFormData[item.id] ? 'bg-white border-rose-400 text-rose-700 shadow-sm' : 'bg-rose-50/50 border-rose-100 text-rose-300 hover:bg-white hover:border-rose-200'}`}
+                                                        >
+                                                            <span className="flex items-center gap-2">{item.icon} {item.label}</span>
+                                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${buildingFormData[item.id] ? 'bg-rose-500 border-rose-500 text-white' : 'border-rose-200'}`}>
+                                                                {buildingFormData[item.id] && <FiCheck className="w-3 h-3" />}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         <div>
                                             <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
@@ -1634,222 +1622,21 @@ export default function Unit8PhysicalFacilities() {
                                 </motion.div>
                             )}
                             </div>
-                        </motion.div>
-                    )
-                }
 
-                {/* ────────────────────────────────────────────────────────
-                    PHASE 2: Building Inventory - Demolition
-                    ──────────────────────────────────────────────────────── */}
-                {currentPage === 5 && (
-                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="pb-20">
-                        <h2 className="text-3xl font-black text-gray-800 tracking-tight leading-tight mb-2">
-                            Demolition & Finalize 🚜
-                        </h2>
-                        <p className="text-gray-500 mb-6 font-medium">Finalize your audit by documenting buildings for demolition.</p>
-
-                        {/* Gatekeeper: Demolition */}
-                        <div className="bg-white p-5 rounded-[2rem] shadow-sm border-2 border-gray-100 mb-8">
-                            <h3 className="font-bold text-gray-700 mb-4 px-1 text-lg">Are there any buildings slated for demolition?</h3>
-                            <div className="flex gap-3">
-                                <button onClick={() => setHasDemolition(true)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasDemolition === true ? "bg-rose-100 border-rose-500 text-rose-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiCheck className="w-6 h-6" /> Yes
-                                </button>
-                                <button onClick={() => setHasDemolition(false)}
-                                    className={`flex-1 py-4 rounded-2xl font-black text-lg border-2 transition-all flex flex-col items-center gap-1 ${hasDemolition === false ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm" : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100"}`}>
-                                    <FiX className="w-6 h-6" /> No
-                                </button>
+                        {/* FINAL SUBMIT BUTTON on Page 4 */}
+                        <div className="mt-12 p-8 bg-indigo-600 rounded-[2.5rem] shadow-2xl shadow-indigo-200 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-6 opacity-10">
+                                <FiCheckCircle className="w-32 h-32 text-white" />
                             </div>
+                            <h3 className="text-white font-black text-3xl mb-2 relative z-10">Finalize Audit ✨</h3>
+                            <p className="text-indigo-100 font-medium mb-8 relative z-10">Ready to save all your Physical Facilities data for this school?</p>
+
+                            <button onClick={handleMasterSubmit} disabled={loading}
+                                className="w-full py-5 rounded-2xl bg-white text-indigo-600 font-black text-2xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
+                                {loading ? "Processing..." : "Submit Unit Audit"}
+                                <FiArrowRight className="w-6 h-6" />
+                            </button>
                         </div>
-
-                        {/* Inventory Area (If Yes) */}
-                        {hasDemolition && (
-                            <div className="space-y-6">
-
-                                {/* Card List */}
-                                {demolitionRecords.length > 0 && (
-                                    <div className="space-y-4">
-                                        {demolitionRecords.map(b => (
-                                            <div key={b.id} className="bg-white p-5 rounded-3xl shadow-sm border-2 border-rose-100 flex justify-between items-start">
-                                                <div className="flex-1">
-                                                    <h4 className="font-black text-2xl text-gray-800">{b.building_name}</h4>
-                                                    <div className="flex gap-4 mt-2">
-                                                        {b.less_than_7x9 > 0 && <span className="text-xs font-black bg-slate-100 px-2 py-1 rounded-md text-slate-600">{"< 7x9"}: {b.less_than_7x9}</span>}
-                                                        {b["7x9"] > 0 && <span className="text-xs font-black bg-slate-100 px-2 py-1 rounded-md text-slate-600">{"7x9"}: {b["7x9"]}</span>}
-                                                        {b.above_7x9 > 0 && <span className="text-xs font-black bg-slate-100 px-2 py-1 rounded-md text-slate-600">{"> 7x9"}: {b.above_7x9}</span>}
-                                                    </div>
-
-                                                    <div className="mt-4 flex flex-wrap gap-2">
-                                                        {b.age && <span className="inline-flex bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700">Age / Dilapidation</span>}
-                                                        {b.safety && <span className="inline-flex bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700">Safety Hazard</span>}
-                                                        {b.calamity && <span className="inline-flex bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700">Calamity Damage</span>}
-                                                        {b.upgrade && <span className="inline-flex bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-700">Site Upgrade / Repurposing</span>}
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col gap-2 ml-4">
-                                                    {true && (
-                                                        <>
-                                                            <button onClick={() => handleEditDemolition(b)} className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 hover:text-indigo-500 transition-colors border border-gray-200">
-                                                                <FiEdit2 className="w-5 h-5" />
-                                                            </button>
-                                                            <button onClick={() => handleDeleteDemolition(b.id)} className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 hover:text-rose-500 transition-colors border border-gray-200">
-                                                                <FiTrash2 className="w-5 h-5" />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Add Button */}
-                                {!showDemolitionModal ? (
-                                    <motion.button
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        onClick={() => setShowDemolitionModal(true)}
-                                        className="bg-rose-50 w-full py-4 rounded-2xl text-rose-600 font-black text-lg border-2 border-rose-200 border-dashed hover:bg-rose-100 hover:border-rose-300 transition-all flex justify-center items-center gap-2"
-                                    >
-                                        <FiPlus className="w-6 h-6" /> Add Building for Demolition
-                                    </motion.button>
-                                ) : showDemolitionModal ? (
-                                    /* Form Modal Area */
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="bg-white p-6 rounded-[2rem] shadow-xl border-2 border-rose-100"
-                                    >
-                                        <div className="flex justify-between items-center mb-6 border-b-2 border-gray-50 pb-4">
-                                            <h3 className="font-black text-2xl text-gray-800">Demolition Details</h3>
-                                            <button onClick={() => setShowDemolitionModal(false)} className="text-gray-400 hover:text-gray-700 bg-gray-50 p-2 rounded-full"><FiX className="w-6 h-6" /></button>
-                                        </div>
-
-                                        <div className="space-y-6">
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                                <input
-                                                    list="building-list"
-                                                    value={demolitionFormData.building_name}
-                                                    onChange={(e) => setDemolitionFormData({ ...demolitionFormData, building_name: e.target.value })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all"
-                                                    placeholder="Select or type building name..."
-                                                />
-                                                <datalist id="building-list">
-                                                    {allBuildings.map(b => (
-                                                        <option key={b.id} value={b.building_name} />
-                                                    ))}
-                                                </datalist>
-                                            </div>
-
-                                            {demolitionFormData.building_name && (
-                                                <div>
-                                                    <label className="text-sm font-bold text-gray-500 ml-2">Select Room (Optional)</label>
-                                                    <select
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all cursor-pointer"
-                                                        onChange={(e) => {
-                                                            if (e.target.value) {
-                                                                const room = roomsData.find(r => r.id === e.target.value);
-                                                                if (room) {
-                                                                    setDemolitionFormData(prev => ({
-                                                                        ...prev,
-                                                                        dimension_category: room.dimensions === '7x9' ? '7x9' : (room.dimensions === 'Above 7x9' ? 'above_7x9' : 'less_than_7x9'),
-                                                                        room_count: 1
-                                                                    }));
-                                                                }
-                                                            }
-                                                        }}
-                                                    >
-                                                        <option value="">-- All Rooms / Bulk Assessment --</option>
-                                                        {roomsData.filter(r => {
-                                                            const b = allBuildings.find(bld => bld.id === r.building_local_id);
-                                                            return b?.building_name === demolitionFormData.building_name;
-                                                        }).map(r => (
-                                                            <option key={r.id} value={r.id}>{r.room_name} ({r.dimensions})</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-
-                                            <div className="flex gap-4">
-                                                <div className="flex-[2]">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Dimension</label>
-                                                    <select value={demolitionFormData.dimension_category} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, dimension_category: e.target.value })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all">
-                                                        <option value="less_than_7x9">less than 7x9</option>
-                                                        <option value="7x9">7x9</option>
-                                                        <option value="above_7x9">above 7x9</option>
-                                                    </select>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Rooms</label>
-                                                    <input type="number" min="1" value={demolitionFormData.room_count} onChange={(e) => setDemolitionFormData({ ...demolitionFormData, room_count: parseInt(e.target.value) || 0 })}
-                                                        className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-rose-500 transition-all text-center" />
-                                                </div>
-                                            </div>
-
-                                            {/* Justification Toggles */}
-                                            <div>
-                                                <label className="text-sm font-bold text-gray-500 ml-2 mb-2 block">Justifications (Select at least one)</label>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    <button onClick={() => handleToggleDemolitionReason('age')}
-                                                        className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${demolitionFormData.age ? 'bg-rose-50 border-rose-400 text-rose-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                                                        Age / Dilapidation
-                                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${demolitionFormData.age ? 'bg-rose-500 border-rose-500 text-white' : 'border-gray-300'}`}>
-                                                            {demolitionFormData.age && <FiCheck className="w-3 h-3" />}
-                                                        </div>
-                                                    </button>
-                                                    <button onClick={() => handleToggleDemolitionReason('safety')}
-                                                        className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${demolitionFormData.safety ? 'bg-rose-50 border-rose-400 text-rose-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                                                        Safety Hazard
-                                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${demolitionFormData.safety ? 'bg-rose-500 border-rose-500 text-white' : 'border-gray-300'}`}>
-                                                            {demolitionFormData.safety && <FiCheck className="w-3 h-3" />}
-                                                        </div>
-                                                    </button>
-                                                    <button onClick={() => handleToggleDemolitionReason('calamity')}
-                                                        className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${demolitionFormData.calamity ? 'bg-rose-50 border-rose-400 text-rose-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                                                        Calamity Damage
-                                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${demolitionFormData.calamity ? 'bg-rose-500 border-rose-500 text-white' : 'border-gray-300'}`}>
-                                                            {demolitionFormData.calamity && <FiCheck className="w-3 h-3" />}
-                                                        </div>
-                                                    </button>
-                                                    <button onClick={() => handleToggleDemolitionReason('upgrade')}
-                                                        className={`py-3 px-4 rounded-xl font-bold text-sm border-2 text-left flex items-center justify-between transition-all ${demolitionFormData.upgrade ? 'bg-rose-50 border-rose-400 text-rose-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                                                        Site Upgrade / Repurposing
-                                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${demolitionFormData.upgrade ? 'bg-rose-500 border-rose-500 text-white' : 'border-gray-300'}`}>
-                                                            {demolitionFormData.upgrade && <FiCheck className="w-3 h-3" />}
-                                                        </div>
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <button onClick={handleSaveDemolition}
-                                                className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-rose-500 border-b-[6px] border-rose-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-rose-200/50">
-                                                Save Demolition Assessment
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                ) : null}
-                            </div>
-                        )}
-
-                        {/* FINAL SUBMIT BUTTON on Page 5 */}
-                        {true && (
-                            <div className="mt-12 p-8 bg-indigo-600 rounded-[2.5rem] shadow-2xl shadow-indigo-200 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-6 opacity-10">
-                                    <FiCheckCircle className="w-32 h-32 text-white" />
-                                </div>
-                                <h3 className="text-white font-black text-3xl mb-2 relative z-10">Finalize Audit ✨</h3>
-                                <p className="text-indigo-100 font-medium mb-8 relative z-10">Ready to save all your Physical Facilities data for this school?</p>
-
-                                <button onClick={handleMasterSubmit} disabled={loading}
-                                    className="w-full py-5 rounded-2xl bg-white text-indigo-600 font-black text-2xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
-                                    {loading ? "Processing..." : "Submit Unit Audit"}
-                                    <FiArrowRight className="w-6 h-6" />
-                                </button>
-                            </div>
-                        )}
                     </motion.div>
                 )}
 
@@ -1863,9 +1650,17 @@ export default function Unit8PhysicalFacilities() {
                             <FiArrowLeft /> Back
                         </button>
                     )}
-                    {currentPage < 5 && (
+                    {currentPage < 4 && (
                         <button
                             onClick={() => {
+                                // Validation for Phase 2 Step 3: Granular Room Setup
+                                if (currentPage === 3) {
+                                    const missingGradeLevel = roomsData.some(r => !r.grade_level);
+                                    if (missingGradeLevel) {
+                                        alert("Please select a Granular Grade Level for all classrooms before proceeding.");
+                                        return;
+                                    }
+                                }
                                 setCurrentPage(prev => prev + 1);
                                 handlePartialSync();
                             }}

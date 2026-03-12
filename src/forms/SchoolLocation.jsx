@@ -85,6 +85,25 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
     }, [schoolId, reset]);
 
     const onSubmit = async (data) => {
+        // STRICT VALIDATION: Do not mark Unit 9 as accomplished when ALL points of reference questions are 0
+        const refPointsFields = [
+            'emergency_response_mins', 'proximity_hospital_km',
+            'proximity_brgy_hall_mins', 'proximity_brgy_hall_km',
+            'proximity_muni_hall_mins', 'proximity_muni_hall_km',
+            'proximity_sdo_mins', 'proximity_sdo_km',
+            'proximity_clinic_mins', 'proximity_clinic_km',
+            'proximity_terminal_mins', 'proximity_terminal_km',
+            'proximity_highway_mins', 'proximity_highway_km'
+        ];
+        
+        const sumRefPoints = refPointsFields.reduce((acc, field) => acc + (parseFloat(data[field]) || 0), 0);
+        
+        if (sumRefPoints <= 0) {
+            alert("Error: You must provide at least one non-zero point of reference (time or distance) before marking Unit 9 as accomplished.");
+            setCurrentStep(3); // Services step contains points of reference
+            return;
+        }
+
         if (!schoolId) {
             alert("Error: School ID is missing! Please complete Step 1 (School Identity) first or refresh the dashboard.");
             return;
@@ -704,30 +723,27 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
     return (
         <PageTransition>
             <div className="max-w-2xl mx-auto pb-32 pt-4 px-2">
-                {/* Stepper Header */}
-                <div className="flex justify-between items-center mb-8 px-4">
-                    {steps.map((step, idx) => (
-                        <React.Fragment key={step.id}>
-                            <div className="flex flex-col items-center gap-2 relative">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 ${currentStep >= step.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                    {step.icon}
-                                </div>
-                                <span className={`text-[10px] font-black uppercase tracking-widest ${currentStep >= step.id ? 'text-blue-600' : 'text-slate-400'}`}>
-                                    {step.title}
-                                </span>
-                            </div>
-                            {idx < steps.length - 1 && (
-                                <div className="flex-1 h-1 mx-2 bg-slate-100 dark:bg-slate-800 rounded-full relative overflow-hidden">
-                                    <motion.div 
-                                        className="absolute inset-0 bg-blue-600" 
-                                        initial={{ width: '0%' }}
-                                        animate={{ width: currentStep > step.id ? '100%' : '0%' }}
-                                        transition={{ duration: 0.5 }}
-                                    />
-                                </div>
-                            )}
-                        </React.Fragment>
-                    ))}
+                {/* Progress Bar Header */}
+                <div className="mb-8 px-4">
+                    <div className="flex justify-between items-end mb-3">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Current Progress</p>
+                            <h2 className="text-sm font-black text-slate-700 uppercase tracking-tight">
+                                Step {currentStep} <span className="text-slate-300 mx-1">/</span> {steps.length}: <span className="text-blue-600 ml-1">{steps.find(s => s.id === currentStep)?.title}</span>
+                            </h2>
+                        </div>
+                        <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-widest">
+                            {Math.round((currentStep / steps.length) * 100)}% Complete
+                        </span>
+                    </div>
+                    <div className="h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                        <motion.div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(currentStep / steps.length) * 100}%` }}
+                            transition={{ type: "spring", damping: 20, stiffness: 100 }}
+                        />
+                    </div>
                 </div>
 
                 {riskIndex && currentStep === 1 && (
