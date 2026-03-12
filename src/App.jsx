@@ -87,6 +87,7 @@ import TeachingPersonnelUnit from './components/modular/TeachingPersonnel';
 import Unit6Summary from './components/modular/Unit6Summary';
 import Unit7SchoolResources from './components/modular/Unit7SchoolResources';
 import Unit8PhysicalFacilities from './components/modular/Unit8PhysicalFacilities';
+import Unit9SchoolLocation from './components/modular/Unit9SchoolLocation';
 
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
@@ -262,6 +263,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
               <Unit8PhysicalFacilities />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-9"
+          element={
+            <ProtectedRoute allowedRoles={['School Head']}>
+              <Unit9SchoolLocation />
             </ProtectedRoute>
           }
         />

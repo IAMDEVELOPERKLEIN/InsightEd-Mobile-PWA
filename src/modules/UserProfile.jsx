@@ -185,7 +185,6 @@ const UserProfile = () => {
             'Central Office': '/monitoring-dashboard',
             'Central Office Finance': '/finance-dashboard',
             'Super User': '/super-user-selector',
-            'School Head': '/my-activity',
             'EFD': '/efd-dashboard',
         };
         return roleMap[role] || '/';
