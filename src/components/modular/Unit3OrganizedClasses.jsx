@@ -390,6 +390,16 @@ const Unit3OrganizedClasses = () => {
             });
 
             if (!res.ok) throw new Error("Failed to save class organization");
+
+            // Sync progress to dashboard
+            try {
+                await fetch('/api/user/progress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ unitId: 3, schoolId })
+                });
+            } catch (e) { console.warn("Progress sync failed", e); }
+
             setShowSuccess(true);
             setTimeout(() => {
                 setShowSuccess(false);

@@ -537,6 +537,15 @@ const Unit7SchoolResources = () => {
                     }
                 } catch (e) { console.warn("Local progress update failed", e); }
 
+                // Sync progress to dashboard
+                try {
+                    await fetch('/api/user/progress', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ unitId: 7, schoolId: storedId })
+                    });
+                } catch (e) { console.warn("Progress sync failed", e); }
+
                 alert("School Resources module completed and saved successfully!");
                 navigate("/modular/unit-8");
             } else {

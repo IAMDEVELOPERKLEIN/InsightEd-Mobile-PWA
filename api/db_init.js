@@ -655,6 +655,11 @@ const runMigrations = async (client, dbLabel) => {
                 no_of_classrooms INTEGER NOT NULL,
                 year_completed INTEGER,
                 remarks TEXT,
+                grade_level TEXT,
+                teacher_name TEXT,
+                less_than_7x9 INTEGER DEFAULT 0,
+                "7x9" INTEGER DEFAULT 0,
+                above_7x9 INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -662,6 +667,28 @@ const runMigrations = async (client, dbLabel) => {
         console.log(`✅ [${dbLabel}] Facility Inventory Table Initialized`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init facility_inventory table:`, migErr.message);
+    }
+
+    // --- 16b. FACILITY ROOMS TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS facility_rooms (
+                room_id SERIAL PRIMARY KEY,
+                building_id INTEGER REFERENCES facility_inventory(id) ON DELETE CASCADE,
+                school_id TEXT,
+                room_name TEXT NOT NULL,
+                dimension TEXT,
+                grade_level TEXT,
+                advisory_teacher TEXT,
+                condition TEXT, -- NEWLY BUILT, GOOD CONDITION, REPAIR
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_facility_rooms_school_id ON facility_rooms(school_id);`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_facility_rooms_building_id ON facility_rooms(building_id);`);
+        console.log(`✅ [${dbLabel}] Facility Rooms Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init facility_rooms table:`, migErr.message);
     }
     // --- 17. PH_SCHOOLS LOCATION COLUMNS ---
     try {

@@ -78,8 +78,11 @@ const getLevelFromXP = (xp, maxXP) => {
 
 const MyActivityDashboard = () => {
     const navigate = useNavigate();
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [data, setData] = useState(() => {
+        const cached = localStorage.getItem('activity_data');
+        return cached ? JSON.parse(cached) : null;
+    });
+    const [loading, setLoading] = useState(!localStorage.getItem('activity_data'));
     const schoolId = localStorage.getItem('schoolId');
 
     const unitMap = useMemo(() => DASHBOARD_METADATA.units.map(u => ({
@@ -99,6 +102,7 @@ const MyActivityDashboard = () => {
                 if (response.ok) {
                     const json = await response.json();
                     setData(json.data);
+                    localStorage.setItem('activity_data', JSON.stringify(json.data));
                 }
             } catch (err) {
                 console.error('Fetch Error:', err);

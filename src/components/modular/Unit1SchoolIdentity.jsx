@@ -273,6 +273,14 @@ const Unit1SchoolIdentity = () => {
             if (!progress.completedUnits.includes(1)) { progress.completedUnits.push(1); progress.xp += 150; localStorage.setItem("quest_progress", JSON.stringify(progress)); }
             localStorage.setItem("schoolId", formData.school_id);
             localStorage.setItem("schoolOffering", formData.curricular_offering);
+            
+            // Sync progress to cloud for Activity Dashboard
+            fetch('/api/user/progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ unitId: 1, schoolId: formData.school_id })
+            }).catch(e => console.warn("Activity sync failed:", e));
+
             setShowSuccess(true);
         } catch (err) {
             console.error("Submit failed:", err);
