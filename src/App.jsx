@@ -46,6 +46,7 @@ import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRou
 import EFDHome from './modules/EFDHome';
 import EFDMonitoring from './modules/EFDMonitoring';
 import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
+import ChatPage from './modules/ChatPage'; // Import ChatPage
 
 
 
@@ -274,6 +275,7 @@ const AnimatedRoutes = () => {
 
       {/* Utilities */}
       <Route path="/profile" element={<UserProfile />} />
+      <Route path="/chat" element={<ChatPage />} />
       <Route path="/activities" element={<Activity />} />
       <Route path="/outbox" element={<Outbox />} />
       <Route path="/engineer-outbox" element={<EngineerOutbox />} />

@@ -9,6 +9,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { useTheme } from '../context/ThemeContext'; // Import Hook
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import SW Hook
+import ChatWidget from '../components/ChatWidget';
 
 // Icons
 import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool } from "react-icons/fi"; // Added FiTool
@@ -912,6 +913,20 @@ const UserProfile = () => {
                     )}
                 </button>
 
+                {/* Chat with Assistant */}
+                <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => navigate('/chat')}>
+                    <div className="flex items-center gap-4">
+                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-blue-50 dark:bg-blue-900/40 text-[#004A99] dark:text-blue-300">
+                            <FiMessageSquare size={20} />
+                        </div>
+                        <div className="text-left">
+                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">Chat Assistant</span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">Ask, Suggest or Report</span>
+                        </div>
+                    </div>
+                    <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
+                </button>
+
                 {/* FAQ Menu Item */}
                 <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => setActiveTab('faq')}>
                     <div className="flex items-center gap-4">
@@ -977,7 +992,9 @@ const UserProfile = () => {
                     <h2 className="m-0 text-lg font-semibold flex-1 text-center">
                         {activeTab === 'settings' ? 'Settings' :
                             activeTab === 'profile' ? 'Edit Profile' :
-                                activeTab === 'faq' ? 'FAQ' : 'About'}
+                                activeTab === 'faq' ? 'FAQ Help' : 
+                                        activeTab === 'feedback' ? 'App Feedback' :
+                                            'About'}
                     </h2>
                     {/* Spacer to balance header if back button exists */}
                     {activeTab !== 'settings' && <div className="w-6"></div>}
