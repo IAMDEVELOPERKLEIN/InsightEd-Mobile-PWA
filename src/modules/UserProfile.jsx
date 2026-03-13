@@ -12,8 +12,9 @@ import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import SW
 import ChatWidget from '../components/ChatWidget';
 
 // Icons
-import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool } from "react-icons/fi"; // Added FiTool
+import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool, FiSettings, FiArrowLeft, FiCamera, FiEdit, FiTrash, FiShield, FiSmartphone, FiCreditCard, FiLock } from "react-icons/fi"; // Added FiTool, and other icons
 import { TbAlertTriangle } from "react-icons/tb";
+import { safeJsonParse } from '../utils/safeJson';
 
 const FAQ_DATA = [
     {
@@ -104,16 +105,12 @@ const UserProfile = () => {
             let fallbackLastName = "Profile";
             let fallbackEmail = cachedEmail || "";
 
-            try {
-                const remStr = localStorage.getItem('remembered_user');
-                if (remStr) {
-                    const parsed = JSON.parse(remStr);
-                    if (parsed.firstName) fallbackFirstName = parsed.firstName;
-                    if (parsed.lastName) fallbackLastName = parsed.lastName; // (Might not exist, but let's try)
-                    if (parsed.email && !fallbackEmail) fallbackEmail = parsed.email;
-                }
-            } catch (e) {
-                // Ignore parse errors
+            const remStr = localStorage.getItem('remembered_user');
+            const parsed = safeJsonParse(remStr);
+            if (parsed) {
+                if (parsed.firstName) fallbackFirstName = parsed.firstName;
+                if (parsed.lastName) fallbackLastName = parsed.lastName; 
+                if (parsed.email && !fallbackEmail) fallbackEmail = parsed.email;
             }
 
             // 1. Instantly populate fallback so UI doesn't hang/crash

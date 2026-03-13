@@ -4,6 +4,7 @@ import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock } from "rea
 import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
+import { safeJsonParse, safeJsonStringify } from "../../utils/safeJson";
 import LocationPickerMap from "../LocationPickerMap";
 import locationData from "../../locations.json";
 
@@ -285,17 +286,17 @@ const Unit1SchoolIdentity = () => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             await clearUnit1Draft("draft_unit_1");
             const stored = localStorage.getItem("quest_progress");
-            let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+            let progress = safeJsonParse(stored, { completedUnits: [], xp: 0 });
             
             const isCompleted = !!(formData.barangay && formData.leg_district);
             if (isCompleted && !progress.completedUnits.includes(1)) { 
                 progress.completedUnits.push(1); 
                 progress.xp += 150; 
-                localStorage.setItem("quest_progress", JSON.stringify(progress)); 
+                localStorage.setItem("quest_progress", safeJsonStringify(progress)); 
             } else if (!isCompleted) {
                 // If they cleared it, remove it from progress
                 progress.completedUnits = progress.completedUnits.filter(u => u !== 1);
-                localStorage.setItem("quest_progress", JSON.stringify(progress));
+                localStorage.setItem("quest_progress", safeJsonStringify(progress));
             }
 
             localStorage.setItem("schoolId", formData.school_id);

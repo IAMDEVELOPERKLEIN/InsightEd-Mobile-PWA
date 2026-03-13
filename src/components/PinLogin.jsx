@@ -72,6 +72,7 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
         if (data.user.region) localStorage.setItem('userRegion', data.user.region);
         if (data.user.division) localStorage.setItem('userDivision', data.user.division);
         if (data.user.account_category) localStorage.setItem('accountCategory', data.user.account_category);
+        if (data.user.school_id) localStorage.setItem('schoolId', data.user.school_id);
 
         // Sign into Firebase silently if Custom Token is returned
         if (data.customToken) {
@@ -87,7 +88,8 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
         const destPath = getDashboardPath(data.user.role, data.user.account_category);
         navigate(destPath);
       } else {
-        setError(data.error || 'Incorrect PIN');
+        // Descriptive error from backend
+        setError(data.message || data.error || 'Incorrect PIN');
         setPin(''); 
       }
     } catch (err) {

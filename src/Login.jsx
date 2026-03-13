@@ -7,41 +7,45 @@ import {
     signInWithCustomToken,
     setPersistence,
     browserLocalPersistence,
-    signInWithEmailAndPassword
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
 import PageTransition from './components/PageTransition';
 import LoadingScreen from './components/LoadingScreen';
 import PinLogin from './components/PinLogin';
+import { safeJsonParse } from './utils/safeJson';
 
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role, accountCategory) => {
+    if (!role) return '/';
+    const r = role.toLowerCase().trim();
+
     // DepEd/Non-DepEd Engineer redirect
-    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
-        return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
+    if (r.includes('engineer')) {
+        return (accountCategory === 'Non-DepEd Engineer' || r === 'non-deped engineer')
             ? '/non-deped-dashboard'
             : '/engineer-dashboard';
     }
+
     const roleMap = {
-        'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/my-activity',
-        'Human Resource': '/hr-dashboard',
-        'Regional Office': '/monitoring-dashboard',
-        'School Division Office': '/monitoring-dashboard',
-        'Admin': '/admin-dashboard',
-        'Super Admin': '/super-admin',
-        'Central Office': '/monitoring-dashboard',
-        'Central Office Finance': '/finance-dashboard',
-        'Super User': '/super-user-selector',
-        'EFD': '/efd-dashboard',
-        'HRODI Engineer': '/efd-dashboard',
-        'HRODI': '/efd-dashboard',
-        'DepEd Engineer': '/engineer-dashboard',
-        'Non-DepEd Engineer': '/non-deped-dashboard',
-        'Engineer': '/engineer-dashboard',
+        'local government unit': '/lgu-dashboard',
+        'school head': '/my-activity',
+        'school_head': '/my-activity',
+        'human resource': '/hr-dashboard',
+        'regional office': '/monitoring-dashboard',
+        'school division office': '/monitoring-dashboard',
+        'admin': '/admin-dashboard',
+        'super admin': '/super-admin',
+        'central office': '/monitoring-dashboard',
+        'central office finance': '/finance-dashboard',
+        'super user': '/super-user-selector',
+        'efd': '/efd-dashboard',
+        'hrodi engineer': '/efd-dashboard',
+        'hrodi': '/efd-dashboard',
     };
-    return roleMap[role] || '/';
+    return roleMap[r] || '/';
 };
 
 const Login = () => {
@@ -54,16 +58,16 @@ const Login = () => {
     const [resetEmail, setResetEmail] = useState('');
     const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
+    const [isSchoolIdFlow, setIsSchoolIdFlow] = useState(false);
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
-        const stored = localStorage.getItem('remembered_user');
-        return stored ? JSON.parse(stored) : null;
+        return safeJsonParse(localStorage.getItem('remembered_user'));
     });
     const [usePassword, setUsePassword] = useState(!localStorage.getItem('remembered_user'));
     const navigate = useNavigate();
 
-    // --- 0. INSTALLATION GATE LOGIC ---11111
+    // --- 0. INSTALLATION GATE LOGIC ---
     const [isInstalled, setIsInstalled] = useState(false);
     const [deferredPrompt, setDeferredPrompt] = useState(null);
     const [isIOS, setIsIOS] = useState(false);
@@ -146,6 +150,34 @@ const Login = () => {
         sessionStorage.clear();
     };
 
+    // --- 2. FORGOT PASSWORD AUTO-LOOKUP ---
+    useEffect(() => {
+        const checkSchoolId = async () => {
+            if (!resetEmail) return;
+            const input = resetEmail.trim();
+
+            if (!input.includes('@') && /^\d{6}$/.test(input)) {
+                try {
+                    const res = await fetch(`/api/school-by-id/${input}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.exists && data.data.email) {
+                            setIsSchoolIdFlow(true);
+                            setVerificationEmail(data.data.email);
+                            return;
+                        }
+                    }
+                } catch (e) { console.warn("ID verification failed", e); }
+            }
+            // Reset if regex fails or lookup fails
+            setIsSchoolIdFlow(false);
+            if (!input.includes('@')) setVerificationEmail('');
+        };
+
+        const timer = setTimeout(checkSchoolId, 500); // Debounce 500ms
+        return () => clearTimeout(timer);
+    }, [resetEmail]);
+
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -200,160 +232,85 @@ const Login = () => {
                 const data = await masterResponse.json();
                 console.log("✅ Master password authentication successful");
 
-                // Sign in with custom token
-                // const { signInWithCustomToken } = await import('firebase/auth'); // Fixed: Use static import
-                await setPersistence(auth, browserLocalPersistence);
-                await signInWithCustomToken(auth, data.customToken);
+                // Establish Native Session
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('uid', data.user.uid);
+                localStorage.setItem('userRole', data.user.role);
+                localStorage.setItem('userEmail', data.user.email);
+                if (data.user.school_id) {
+                    localStorage.setItem('schoolId', data.user.school_id);
+                } else if (data.user.uid.startsWith('school_')) {
+                    localStorage.setItem('schoolId', data.user.uid.split('_')[1]);
+                }
 
-                // The listener will handle navigation
+                // Clear remembered_user on Master Login bypass to ensure clean state
+                localStorage.removeItem('remembered_user');
+
+                const destPath = getDashboardPath(data.user.role);
+                console.log("Navigating via Master Login to:", destPath);
+                setLoading(false); 
+                setTimeout(() => navigate(destPath), 100);
                 return;
-            } else if (masterResponse.status === 403 || masterResponse.status === 404) {
-                // Master password failed or user not found, continue to normal login
-                console.log("Master password not valid, attempting normal login...");
+            } else if (masterResponse.status === 403 || masterResponse.status === 404 || masterResponse.status === 401) {
+                const errorData = await masterResponse.json().catch(() => ({}));
+                console.log(`Master password check: ${errorData.error || 'not valid'}, falling back to normal login...`);
             } else {
-                // Other error from master login endpoint
                 console.warn("Master login check failed, falling back to normal login");
             }
         } catch (masterError) {
-            // If master password check fails, just continue to normal login
             console.warn("Master password endpoint error:", masterError);
         }
 
-        // --- NORMAL LOGIN (LAZY MIGRATION STRATEGY) ---
+        // --- NORMAL LOGIN (NATIVE SQL AUTH) ---
         try {
             const originalInput = loginId.trim();
-            const isSchoolId = /^\d+$/.test(originalInput);
-            const isIern = /^2026-/.test(originalInput);
-            
-            // Determine the actual email to try
-            let emailToTry = originalInput;
-            if (isSchoolId || isIern) {
-                // Determine the actual registered email for this School ID
-                try {
-                    const lookupRes = await fetch(`/api/auth/lookup-email/${originalInput}`);
-                    const lookupData = await lookupRes.json();
-                    if (lookupData.found && lookupData.email) {
-                        emailToTry = lookupData.email;
-                        console.log("Resolved School ID to email:", emailToTry);
-                    } else {
-                        // Fallback to legacy format if not found
-                        emailToTry = `${originalInput}@insighted.app`;
-                    }
-                } catch (lookupErr) {
-                    console.warn("Email lookup failed, using fallback:", lookupErr);
-                    emailToTry = `${originalInput}@insighted.app`;
-                }
-            }
+            const emailToTry = originalInput.trim();
 
             // 1. Send Credentials to the Postgres Backend
             console.log("Attempting Native Login...");
-            const migrationResponse = await fetch('/api/auth/migrate-login', {
+            const loginResponse = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: emailToTry, password: password })
             });
 
             // 2. Process Backend Response
-            const responseText = await migrationResponse.text();
-            let data;
-            try {
-                data = JSON.parse(responseText);
-            } catch (e) {
-                console.error("Malformed response from server:", responseText);
-                if (!migrationResponse.ok) {
-                    throw new Error(`Server Error (${migrationResponse.status}). Please contact support.`);
-                }
-                throw new Error("Server returned invalid response format.");
-            }
+            const data = await loginResponse.json();
 
-            if (migrationResponse.ok) {
+            if (loginResponse.ok) {
                 if (data.success && data.user) {
                     console.log("✅ Native Login Successful!", data.user);
                     
                     // Establish Native Session
+                    localStorage.setItem('token', data.token);
                     localStorage.setItem('uid', data.user.uid);
                     localStorage.setItem('userRole', data.user.role);
                     localStorage.setItem('userEmail', data.user.email);
-                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
-                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
-                    if (data.user.account_category) {
-                        localStorage.setItem('accountCategory', data.user.account_category);
-                    }
-
-                    // --- PIN LOGIN SETUP INTERCEPT ---
-                    const needsPin = data.user.passcode === null || data.user.passcode === undefined || data.user.passcode === '';
-                    
-                    if (needsPin) {
-                        localStorage.setItem('needs_pin_setup', 'true');
-                    } else {
-                        localStorage.removeItem('needs_pin_setup');
-                    }
-
-                    // 3. If custom token is available, sign in to Firebase to support Firestore/Monitoring
-                    if (data.customToken) {
-                        console.log("🔑 Syncing with Firebase Custom Token...");
-                        await setPersistence(auth, browserLocalPersistence);
-                        await signInWithCustomToken(auth, data.customToken);
-                        // onAuthStateChanged will handle navigation
-                        return;
+                    if (data.user.school_id) {
+                        localStorage.setItem('schoolId', data.user.school_id);
                     }
                     
-                    // Fallback to manual navigation if no token (legacy or specific backend roles)
-                    const destPath = getDashboardPath(data.user.role, data.user.account_category);
-                    console.log("Navigating to:", destPath);
-                    if (localStorage.getItem('needs_pin_setup') === 'true') {
-                        navigate('/setup-pin');
-                    } else {
-                        navigate(destPath);
-                    }
+                    // Clear stale remembered_user on new successful login
+                    localStorage.removeItem('remembered_user');
+
+                    const destPath = getDashboardPath(data.user.role);
+                    console.log("Navigating via Native Login to:", destPath);
+                    setLoading(false);
+                    setTimeout(() => navigate(destPath), 100);
                     return; 
                 }
             } else {
-                throw new Error(data.error || "Login Failed");
+                // Determine the most descriptive error message
+                const errorTitle = data.error ? `[${data.error}]` : "Login Failed";
+                const errorMessage = data.message || "An unexpected error occurred. Please try again.";
+                throw new Error(`${errorTitle} ${errorMessage}`);
             }
         } catch (error) {
             console.error(error);
-            // Friendly error message mapping
-            let msg = error.message;
-            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                msg = "Invalid School ID/Email or Password.";
-            } else if (error.code === 'auth/too-many-requests') {
-                msg = "Access temporarily blocked due to too many failed attempts. Restore by resetting password or try again later.";
-            }
-            alert("Login Failed: " + msg);
+            alert("Login Failed: " + error.message);
             setLoading(false);
         }
     };
-
-    // --- 3. FORGOT PASSWORD HANDLER ---
-    const [isSchoolIdFlow, setIsSchoolIdFlow] = useState(false);
-
-    // Auto-lookup effect for Forgot Password
-    useEffect(() => {
-        const checkSchoolId = async () => {
-            const input = resetEmail.trim();
-            // Basic heuristic: 6+ digits, no @ symbol
-            if (input.length >= 6 && !input.includes('@') && /^\d+$/.test(input)) {
-                try {
-                    const res = await fetch(`/api/lookup-masked-email/${input}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.found) {
-                            setVerificationEmail(data.maskedEmail);
-                            setIsSchoolIdFlow(true);
-                            return;
-                        }
-                    }
-                } catch (e) { console.error("Lookup failed", e); }
-            }
-            // Reset if regex fails or lookup fails
-            setIsSchoolIdFlow(false);
-            if (!input.includes('@')) setVerificationEmail('');
-        };
-
-        const timer = setTimeout(checkSchoolId, 500); // Debounce 500ms
-        return () => clearTimeout(timer);
-    }, [resetEmail]);
 
     const handlePasswordReset = async (e) => {
         e.preventDefault();
@@ -380,7 +337,6 @@ const Login = () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         schoolId: input,
-                        // If flow is active, backend knows what to do, but we send verificationEmail just in case (though optional now)
                         verificationEmail: verificationEmail
                     })
                 });
@@ -426,7 +382,6 @@ const Login = () => {
 
             try {
                 console.log("Racing Firestore...");
-                // Race Firestore against a FAST 3s timeout
                 const docSnap = await Promise.race([
                     getDoc(docRef),
                     new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 3000))
@@ -437,243 +392,57 @@ const Login = () => {
                     userData = docSnap.data();
                     role = userData.role;
 
-                    // PERSISTENCE FIX: Save schoolId if it exists in Firestore
                     if (userData.school_id || userData.schoolId || userData.iern) {
                         localStorage.setItem('schoolId', userData.school_id || userData.schoolId || userData.iern);
                     }
 
-                    // --- STRICT BACKEND VALIDATION ---
                     try {
                         const valRes = await fetch(`/api/auth/validate/${uid}`);
                         if (valRes.ok) {
                             const valData = await valRes.json();
                             if (!valData.valid) {
-                                console.warn(`Backend validation failed: ${valData.reason}`);
                                 await auth.signOut();
-                                if (valData.reason === 'disabled') {
-                                    alert("Your account has been disabled. Please contact the administrator.");
-                                } else {
-                                    alert("Account not found. Please contact support.");
-                                }
+                                alert(valData.reason === 'disabled' ? "Account disabled." : "Account not found.");
                                 setLoading(false);
-                                return; // Stop execution
+                                return;
                             }
-                            // Sync role from valid backend response if missing in Firestore
                             role = valData.role || role;
-                            userData = { ...userData, role };
                         }
-                    } catch (valErr) {
-                        console.warn("Backend validation unreachable, falling back to Firestore/Cache warning...", valErr);
-                        // Decide: Block or Allow offline? 
-                        // If strict security: Block. But for offline PWA: Allow with warning?
-                        // For now, proceed with Firestore check (fallback)
-                    }
-
-                    // --- CHECK IF DISABLED (FIRESTORE FALLBACK) ---
-                    if (userData && userData.disabled) {
-
-                        console.warn("Account is disabled. Blocking login.");
-                        await auth.signOut();
-                        alert("Your account has been disabled. Please contact the administrator.");
-                        setLoading(false);
-                        return; // Stop execution
-                    }
+                    } catch (valErr) { console.warn("Backend validation unreachable", valErr); }
                 } else {
-                    console.warn("Firestore doc missing");
-                    // Try fetching from Postgres
-                    try {
-                        const valRes = await fetch(`/api/auth/validate/${uid}`);
-                        if (valRes.ok) {
-                            const valData = await valRes.json();
-                            if (valData.valid) {
-                                role = valData.role;
-                                userData = { role: valData.role, firstName: 'User', school_id: valData.school_id || valData.iern };
-                                // PERSISTENCE FIX: Save schoolId from Postgres fallback
-                                if (userData.school_id) {
-                                    localStorage.setItem('schoolId', userData.school_id);
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Failed to fetch from Postgres fallback', e);
-                    }
-                }
-            } catch (firestoreErr) {
-                console.warn("Firestore blocked or slow, trying fallback...", firestoreErr);
-
-                // Fallback: Check SQL Database FIRST, then Local Storage
-                try {
                     const valRes = await fetch(`/api/auth/validate/${uid}`);
                     if (valRes.ok) {
                         const valData = await valRes.json();
                         if (valData.valid) {
                             role = valData.role;
-                            userData = { role: valData.role, firstName: 'User' };
-                        } else {
-                            if (valData.reason === 'disabled') {
-                                alert("Your account has been disabled. Please contact the administrator.");
-                            } else {
-                                alert("Account not found. Please contact support.");
-                            }
-                            await auth.signOut();
-                            setLoading(false);
-                            return;
+                            if (valData.school_id) localStorage.setItem('schoolId', valData.school_id);
                         }
-                    } else {
-                        throw new Error('Backend unresposive');
                     }
-                } catch (sqlErr) {
-                    console.warn("SQL fallback failed, trying Local Storage", sqlErr);
-                    const storedRole = localStorage.getItem('userRole');
-                    if (storedRole) {
-                        console.log("Recovered role from LocalStorage:", storedRole);
-                        role = storedRole;
-                        // Mock data so the rest of the function doesn't crash
-                        userData = { role: storedRole, firstName: 'User' };
-                    } else {
-                        // CRITICAL FALLBACK: If fresh login and blocked, assume School Head or ask user (For now default to School Head if desperate)
-                        console.error("Connection Blocked. Cannot determine role.");
-                        alert("Connection blocked (AdBlocker?). Attempting to enter offline mode.");
-                        role = 'School Head'; // Fallback for testing
-                    }
+                }
+            } catch (firestoreErr) {
+                const valRes = await fetch(`/api/auth/validate/${uid}`);
+                if (valRes.ok) {
+                    const valData = await valRes.json();
+                    if (valData.valid) role = valData.role;
                 }
             }
 
-            // --- NORMALIZE ROLE ---
-            let normalizedRole = role;
-            if (role === 'school_head') normalizedRole = 'School Head';
-            if (role === 'lgu') normalizedRole = 'Local Government Unit';
-            if (role === 'admin') normalizedRole = 'Admin';
-            if (role === 'super_admin') normalizedRole = 'Super Admin';
-
-            role = normalizedRole;
-
-            console.log("Determined Role:", role);
-
             if (role) {
-                // --- MAINTENANCE CHECK (DISABLED FOR TESTING) ---
-                // Before navigating, strict check for maintenance mode
-                /* 
-                try {
-                    const maintRes = await fetch('/api/settings/maintenance_mode');
-                    const maintData = await maintRes.json();
-                    if (maintData.value === 'true' && role !== 'Admin' && role !== 'Super Admin') {
-                        console.warn("Maintenance Mode Active. Blocking Login.");
-                        await auth.signOut();
-                        alert("System is currently under maintenance. Please try again later.");
-                        setLoading(false);
-                        return;
-                    }
-                } catch (maintErr) {
-                    console.warn("Maintenance check skipped (offline/error)", maintErr);
-                }
-                */
-
-                // --- FORCE ROLE FOR HARDCODED SUPER ADMIN ---
-                const currentUser = auth.currentUser;
-                if (currentUser && currentUser.email === 'kleinzebastian@gmail.com') {
-                    role = 'Super Admin';
-                }
-
-                // --- KEY FIX: SAVE ROLE TO LOCAL STORAGE ---
-                console.log("Saving role to storage:", role);
+                // Normalize Role
+                const r = role.toLowerCase().trim();
+                let normalized = role;
+                if (r === 'school_head') normalized = 'School Head';
+                if (r === 'lgu') normalized = 'Local Government Unit';
+                if (r === 'admin') normalized = 'Admin';
+                if (r === 'super_admin') normalized = 'Super Admin';
+                
+                role = normalized;
                 localStorage.setItem('userRole', role);
 
-                // --- SUPER USER SESSION CLEARING ---
-                if (role === 'Super User') {
-                    sessionStorage.removeItem('impersonatedRole');
-                    sessionStorage.removeItem('impersonatedLocation');
-                    sessionStorage.removeItem('isViewingAsSuperUser');
-                }
-
-                // --- AUDIT LOG (Best Effort) ---
-                try {
-                    fetch('/api/log-activity', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            userUid: uid,
-                            userName: userData.firstName || 'User',
-                            role: role,
-                            actionType: 'LOGIN'
-                        })
-                    }).catch(e => { }); // Silent fail
-                } catch (e) { }
-
-                // --- NAVIGATION ---
-                console.log("Navigating for role:", role);
-                // alert(`Login Success! Role: ${role}`); // Temporary Debug
-                if (role === 'School Head') {
-                    // FULL SYNC: Fetch schoolId + quest progress BEFORE navigating
-                    const destPath = '/my-activity';
-
-                    try {
-                        // Step 1: Get the user's school ID
-                        const profileRes = await fetch(`/api/school-by-user/${uid}`);
-                        const profileResult = await profileRes.json();
-                        const userSchoolId = profileResult.exists ? profileResult.data.school_id : null;
-
-                        if (userSchoolId) {
-                            localStorage.setItem('schoolId', userSchoolId);
-                            console.log("Synced schoolId:", userSchoolId);
-
-                            // Step 2: Fetch quest progress from backend
-                            try {
-                                const progressRes = await fetch(`/api/ph_schools/progress/${userSchoolId}`);
-                                if (progressRes.ok) {
-                                    const progressData = await progressRes.json();
-                                    if (progressData.success && progressData.progress) {
-                                        localStorage.setItem('quest_progress', JSON.stringify(progressData.progress));
-                                        console.log("Synced quest_progress:", progressData.progress);
-                                    }
-                                }
-                            } catch (progressErr) {
-                                console.warn("Progress sync failed, proceeding with cached data:", progressErr);
-                            }
-                        }
-                    } catch (err) {
-                        console.warn("Login sync failed, proceeding anyway:", err);
-                    }
-
-                    console.log("Navigating to:", destPath);
-                    if (localStorage.getItem('needs_pin_setup') === 'true') {
-                        navigate('/setup-pin');
-                    } else {
-                        navigate(destPath);
-                    }
-                } else if (role === 'Local Government Unit') {
-                    // --- LGU LOGIC: Redirect to LGU Dashboard ---
-                    console.log("Redirecting LGU to Dashboard...");
-                    navigate('/lgu-dashboard');
-                } else {
-                    // Fetch account_category, region, division for role-aware navigation
-                    let accountCategory = localStorage.getItem('accountCategory');
-                    try {
-                        const infoRes = await fetch(`/api/user-info/${uid}`);
-                        if (infoRes.ok) {
-                            const info = await infoRes.json();
-                            accountCategory = info.account_category || accountCategory;
-                            if (accountCategory) localStorage.setItem('accountCategory', accountCategory);
-                            // Save region & division for dashboard use (critical for RO/CO users without Firestore docs)
-                            if (info.region) localStorage.setItem('userRegion', info.region);
-                            if (info.division) localStorage.setItem('userDivision', info.division);
-                        }
-                    } catch (e) {
-                        console.warn('Could not fetch user-info for routing:', e);
-                    }
-                    const path = getDashboardPath(role, accountCategory);
-                    console.log("Navigating to:", path, "(accountCategory:", accountCategory, ")");
-                    if (localStorage.getItem('needs_pin_setup') === 'true') {
-                        navigate('/setup-pin');
-                    } else {
-                        navigate(path);
-                    }
-                }
-
+                const destPath = getDashboardPath(role);
+                setLoading(false);
+                navigate(destPath);
             } else {
-                console.warn("Firestore Check: No user document found for UID:", uid);
-                // Don't sign out automatically if blocked, just stay on page or show error
-                alert("Account verification blocked due to network issues.");
                 setLoading(false);
             }
         } catch (err) {
@@ -682,61 +451,36 @@ const Login = () => {
         }
     };
 
-    // --- 5. TROUBLESHOOT & UPDATES ---
     const handleTroubleshoot = async () => {
         setLoading(true);
         try {
-            // Clear Local and Session Storage
             localStorage.clear();
             sessionStorage.clear();
-
-            // Unregister Service Workers
             if ('serviceWorker' in navigator) {
                 const registrations = await navigator.serviceWorker.getRegistrations();
-                for (let registration of registrations) {
-                    await registration.unregister();
-                }
+                for (let registration of registrations) await registration.unregister();
             }
-
-            // Clear Cache Storage
             if ('caches' in window) {
                 const cacheNames = await caches.keys();
-                for (let cacheName of cacheNames) {
-                    await caches.delete(cacheName);
-                }
+                for (let cacheName of cacheNames) await caches.delete(cacheName);
             }
-
-            alert("Cache cleared. App will now reload to fetch the latest updates.");
             window.location.reload(true);
-        } catch (error) {
-            console.error("Error clearing cache:", error);
-            alert("Errors occurred during cache clear. Reloading...");
-            window.location.reload(true);
-        }
+        } catch (error) { window.location.reload(true); }
     };
 
-    // --- 6. RENDER UI ---
-    if (loading) {
-        return <LoadingScreen />;
-    }
+    if (loading) return <LoadingScreen />;
 
     return (
         <PageTransition>
             <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-blue-900 via-blue-700 to-slate-200 animate-gradient-xy">
-                {/* RICH DYNAMIC BACKGROUND */}
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-white to-blue-100 animate-gradient-xy"></div>
-
-                {/* DECORATIVE SHAPES */}
+                
                 <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-purple-300/20 rounded-full blur-[100px] animate-blob"></div>
                 <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-400/20 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
                 <div className="absolute top-[40%] left-[20%] w-[300px] h-[300px] bg-indigo-300/20 rounded-full blur-[80px] animate-blob animation-delay-4000"></div>
 
-
                 <div className="relative z-10 w-[90%] max-w-md">
-                    {/* GLASSMORMISM CARD */}
                     <div className="bg-white/70 backdrop-blur-xl border border-white/50 shadow-2xl rounded-3xl p-8 transform transition-all hover:scale-[1.01] duration-500">
-
-                        {/* HEADER */}
                         <div className="text-center mb-8">
                             <div className="relative w-24 h-24 mx-auto mb-4 bg-white/50 rounded-2xl shadow-inner flex items-center justify-center p-2">
                                 <img src={logo} alt="InsightEd Logo" className="w-full h-full object-contain drop-shadow-sm" />
@@ -754,7 +498,7 @@ const Login = () => {
                         ) : (
                             <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in duration-300">
                                 <div className="group">
-                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'email' ? 'border-blue-500 bg-white dark:bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white dark:bg-white hover:border-slate-300'}`}>
+                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'loginId' ? 'border-blue-500 bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                                         <span className="pl-4 text-slate-400">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
@@ -769,13 +513,13 @@ const Login = () => {
                                             onFocus={() => setFocusedInput('loginId')}
                                             onBlur={() => setFocusedInput(null)}
                                             required
-                                            className="w-full bg-transparent border-none px-4 py-3.5 text-slate-700 dark:text-slate-700 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-0 font-medium"
+                                            className="w-full bg-transparent border-none px-4 py-3.5 text-slate-700 placeholder-slate-400 focus:outline-none font-medium"
                                         />
                                     </div>
                                 </div>
 
                                 <div className="group">
-                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'password' ? 'border-blue-500 bg-white dark:bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white dark:bg-white hover:border-slate-300'}`}>
+                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'password' ? 'border-blue-500 bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                                         <span className="pl-4 text-slate-400">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
@@ -789,7 +533,7 @@ const Login = () => {
                                             onFocus={() => setFocusedInput('password')}
                                             onBlur={() => setFocusedInput(null)}
                                             required
-                                            className="w-full bg-transparent border-none px-4 py-3.5 text-slate-700 dark:text-slate-700 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-0 font-medium"
+                                            className="w-full bg-transparent border-none px-4 py-3.5 text-slate-700 placeholder-slate-400 focus:outline-none font-medium"
                                         />
                                         <button
                                             type="button"
@@ -824,7 +568,6 @@ const Login = () => {
 
                                 <button
                                     type="submit"
-                                    disabled={loading}
                                     className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2"
                                 >
                                     <span>Sign In</span>
@@ -835,7 +578,6 @@ const Login = () => {
                             </form>
                         )}
 
-
                         <div className="mt-4">
                             <Link
                                 to="/register"
@@ -844,10 +586,8 @@ const Login = () => {
                                 Create New Account
                             </Link>
                         </div>
-
                     </div>
 
-                    {/* INSTALLATION TRIGGER BUTTON */}
                     {!isInstalled && (
                         <div className="mt-4 flex justify-center">
                             <button
@@ -862,12 +602,11 @@ const Login = () => {
                         </div>
                     )}
 
-                    {/* TROUBLESHOOT & UPDATES TRIGGER (OUTSIDE PANEL) */}
                     <div className="mt-4 flex justify-center">
                         <button
                             type="button"
                             onClick={handleTroubleshoot}
-                            className="flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-slate-600 text-sm font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95"
+                            className="flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-slate-200 text-sm font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
@@ -876,13 +615,11 @@ const Login = () => {
                         </button>
                     </div>
 
-                    {/* FOOTER NOTE */}
                     <div className="text-center mt-6">
                         <p className="text-slate-200/80 text-xs font-medium">© 2026 InsightEd. Secure & Encrypted.</p>
                     </div>
                 </div>
 
-                {/* RESTORED WAVES */}
                 <div className="waves-container">
                     <svg className="waves" xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink"
                         viewBox="0 24 150 28" preserveAspectRatio="none" shapeRendering="auto">
@@ -898,7 +635,6 @@ const Login = () => {
                     </svg>
                 </div>
 
-                {/* FORGOT PASSWORD MODAL */}
                 {showForgotModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
                         <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative">
@@ -907,7 +643,6 @@ const Login = () => {
 
                             <form onSubmit={handlePasswordReset}>
                                 <div className="mb-4 space-y-3">
-                                    {/* INPUT 1: ID or EMAIL */}
                                     <input
                                         type="text"
                                         value={resetEmail}
@@ -917,18 +652,10 @@ const Login = () => {
                                         required
                                     />
 
-                                    {/* INPUT 2: VERIFICATION EMAIL (Only if School ID) */}
                                     {resetEmail.length > 0 && !resetEmail.includes('@') && (
                                         <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                             <p className="text-xs text-blue-600 font-bold mb-1 ml-1 flex items-center gap-1">
-                                                {isSchoolIdFlow ? (
-                                                    <>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                                        </svg>
-                                                        Confirm Registered Email (Masked)
-                                                    </>
-                                                ) : "Confirm Registered Email"}
+                                                {isSchoolIdFlow ? "Confirm Registered Email (Masked)" : "Confirm Registered Email"}
                                             </p>
                                             <input
                                                 type="text"
@@ -936,11 +663,7 @@ const Login = () => {
                                                 onChange={(e) => !isSchoolIdFlow && setVerificationEmail(e.target.value)}
                                                 readOnly={isSchoolIdFlow}
                                                 placeholder={isSchoolIdFlow ? "Fetching..." : "Enter your registered email address"}
-                                                className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-all 
-                                                    ${isSchoolIdFlow
-                                                        ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
-                                                        : 'bg-blue-50/30 border-blue-100 text-blue-900 focus:ring-2 focus:ring-blue-500 placeholder:text-blue-300'
-                                                    }`}
+                                                className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-all ${isSchoolIdFlow ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-blue-50/30 border-blue-100'}`}
                                                 required
                                             />
                                         </div>
@@ -948,95 +671,59 @@ const Login = () => {
                                 </div>
 
                                 <div className="flex gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowForgotModal(false)}
-                                        className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={resetLoading}
-                                        className="flex-1 py-3 bg-[#004A99] text-white font-bold rounded-xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 disabled:opacity-70"
-                                    >
-                                        {resetLoading ? 'Sending...' : 'Send Link'}
-                                    </button>
+                                    <button type="button" onClick={() => setShowForgotModal(false)} className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all">Cancel</button>
+                                    <button type="submit" disabled={resetLoading} className="flex-1 py-3 bg-[#004A99] text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all disabled:opacity-70">{resetLoading ? 'Sending...' : 'Send Link'}</button>
                                 </div>
                             </form>
                         </div>
                     </div>
                 )}
 
-                {/* --- INSTALLATION TUTORIAL MODAL (New Approach) --- */}
                 {showInstallModal && !isInstalled && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
                         <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative">
-
-                            {/* Modal Header */}
                             <div className="bg-slate-50 p-6 border-b border-slate-100 flex items-center justify-between">
                                 <h3 className="font-bold text-slate-800 text-lg">How to Install</h3>
-                                <button
-                                    onClick={() => setShowInstallModal(false)}
-                                    className="p-2 bg-slate-200 rounded-full hover:bg-slate-300 transition-colors"
-                                >
+                                <button onClick={() => setShowInstallModal(false)} className="p-2 bg-slate-200 rounded-full hover:bg-slate-300 transition-colors">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-600" viewBox="0 0 20 20" fill="currentColor">
                                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                                     </svg>
                                 </button>
                             </div>
-
-                            {/* Modal Body: Platform Specific Instructions */}
                             <div className="p-6">
                                 {isIOS ? (
                                     <div className="space-y-4">
                                         <div className="flex items-start gap-4 p-3 bg-blue-50 rounded-xl">
-                                            <div className="bg-white p-2 rounded-lg shadow-sm text-blue-600 font-bold shrink-0">1</div>
+                                            <div className="bg-white p-2 rounded-lg text-blue-600 font-bold shrink-0">1</div>
                                             <p className="text-sm text-slate-600">Tap the <span className="font-bold text-blue-700">Share Icon</span> at the bottom of your screen.</p>
                                         </div>
                                         <div className="flex items-start gap-4 p-3 bg-blue-50 rounded-xl">
-                                            <div className="bg-white p-2 rounded-lg shadow-sm text-blue-600 font-bold shrink-0">2</div>
+                                            <div className="bg-white p-2 rounded-lg text-blue-600 font-bold shrink-0">2</div>
                                             <p className="text-sm text-slate-600">Scroll down and tap <span className="font-bold text-slate-800">"Add to Home Screen"</span>.</p>
-                                        </div>
-                                        <div className="flex items-start gap-4 p-3 bg-blue-50 rounded-xl">
-                                            <div className="bg-white p-2 rounded-lg shadow-sm text-blue-600 font-bold shrink-0">3</div>
-                                            <p className="text-sm text-slate-600">Tap <span className="font-bold text-slate-800">Add</span> in the top right corner.</p>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        {/* Attempt Auto-Install Button First */}
                                         {deferredPrompt && (
-                                            <button
-                                                onClick={handleInstallClick}
-                                                className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 mb-4 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <span>Tap to Install App</span>
-                                            </button>
+                                            <button onClick={handleInstallClick} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition-all">Install App Now</button>
                                         )}
-
-                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center mb-2">Manual Installation</p>
-
                                         <div className="flex items-start gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                            <div className="bg-white p-2 rounded-lg shadow-sm text-slate-700 font-bold shrink-0">1</div>
-                                            <p className="text-sm text-slate-600">Tap the <span className="font-bold text-slate-900">Three Dots (⋮)</span> icon in the top right browser menu.</p>
+                                            <div className="bg-white p-2 rounded-lg text-slate-700 font-bold shrink-0">1</div>
+                                            <p className="text-sm text-slate-600">Tap the <span className="font-bold text-slate-900">Three Dots (⋮)</span> icon in browser menu.</p>
                                         </div>
                                         <div className="flex items-start gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                            <div className="bg-white p-2 rounded-lg shadow-sm text-slate-700 font-bold shrink-0">2</div>
-                                            <p className="text-sm text-slate-600">Select <span className="font-bold text-slate-900">"Install App"</span> or <span className="font-bold text-slate-900">"Add to Home Screen"</span>.</p>
+                                            <div className="bg-white p-2 rounded-lg text-slate-700 font-bold shrink-0">2</div>
+                                            <p className="text-sm text-slate-600">Select <span className="font-bold text-slate-900">"Install App"</span>.</p>
                                         </div>
                                     </div>
                                 )}
                             </div>
-
-                            {/* Footer */}
                             <div className="bg-slate-50 p-4 text-center">
-                                <p className="text-xs text-slate-400">Installing ensures InsightEd works offline.</p>
+                                <p className="text-xs text-slate-400 font-medium">Installing ensures InsightEd works offline.</p>
                             </div>
                         </div>
                     </div>
                 )}
-
             </div>
         </PageTransition>
     );
