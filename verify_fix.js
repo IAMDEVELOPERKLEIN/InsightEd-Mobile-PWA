@@ -1,52 +1,48 @@
+
 import pg from 'pg';
-import fs from 'fs';
 import dotenv from 'dotenv';
 dotenv.config();
-let dbUrl = process.env.DATABASE_URL;
-if (!dbUrl && fs.existsSync('.env')) {
-    try {
-        let envContent = fs.readFileSync('.env', 'utf16le');
-        let match = envContent.match(/DATABASE_URL=(.+)/);
-        if (!match) {
-            envContent = fs.readFileSync('.env', 'utf8');
-            match = envContent.match(/DATABASE_URL=(.+)/);
-        }
-        if (match) dbUrl = match[1].trim().replace(/^['"]|['"]$/g, '');
-    } catch (e) { }
-}
+
 const pool = new pg.Pool({
-    connectionString: dbUrl || 'postgres://postgres:password@localhost:5432/postgres',
-    ssl: dbUrl && !dbUrl.includes('localhost') ? { rejectUnauthorized: false } : false
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
+
 async function verify() {
-    try {
-        const region = 'Region III';
-        console.log(`\n--- VERIFYING FIX FOR REGION: ${region} ---\n`);
+  try {
+    // 1. Find a project to test with (one that has engineer_id and engineer_name)
+    const res = await pool.query('SELECT project_id, engineer_id, engineer_name FROM engineer_form WHERE engineer_id IS NOT NULL AND engineer_name IS NOT NULL LIMIT 1');
+    if (res.rows.length === 0) {
+      console.log("No projects found to test with.");
+      return;
+    }
+    const original = res.rows[0];
+    console.log("Original Ownership:", original);
 
-        // simulate the API query after fix
-        const query = `
-            WITH LatestProjects AS (
-                SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-                    project_id, project_name, school_id, school_name, region, division, created_at
-                FROM engineer_form
-                ORDER BY COALESCE(ipc, project_id::text), created_at DESC
-            )
-            SELECT * FROM LatestProjects
-            WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
-        `;
-        const res = await pool.query(query, [region]);
+    // 2. Simulate a PUT update as a different user
+    // In actual app, this is done via API, but we'll check the logic in index.js by looking at how the DB is updated.
+    // Wait, it's better to check the 'api/index.js' logic by reading the code, which I've already done.
+    // Let's check if the column was added successfully.
+    const colCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'engineer_form' AND column_name = 'uploader_id_update_moa_rta'
+    `);
+    console.log("Auditing column exists:", colCheck.rowCount > 0);
 
-        console.log(`Projects returned by fixed query: ${res.rows.length}`);
-        res.rows.forEach(r => {
-            console.log(`- ID: ${r.project_id}, IPC: ${r.ipc}, Region: "${r.region}", School: ${r.school_name}`);
-        });
+    // 3. Check if any RECENT records in engineer_form (history) have the issue or fix
+    const recentRes = await pool.query(`
+      SELECT engineer_id, engineer_name, uploader_id_update_moa_rta, actions 
+      FROM engineer_form 
+      ORDER BY project_id DESC LIMIT 5
+    `);
+    console.log("Recent project rows (history):");
+    console.table(recentRes.rows);
 
-        if (res.rows.length >= 5) {
-            console.log("\n✅ SUCCESS: Verification passed. All projects are now visible.");
-        } else {
-            console.log(`\n❌ FAILURE: Expected at least 5 projects, but found ${res.rows.length}.`);
-        }
-
-    } catch (err) { console.error("\nVERIFICATION FAILED:", err.message); } finally { await pool.end(); }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    await pool.end();
+  }
 }
 verify();

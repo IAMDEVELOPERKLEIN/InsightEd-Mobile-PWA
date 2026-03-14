@@ -43,7 +43,7 @@ const projects = [
         division: 'Benguet',
         engineer_id: 'ENG-001',
         mode_of_project: 'MOA',
-        implementing_agencies: 'PGO Benguet',
+        implementing_agency: 'PGO Benguet',
         moa: 'MOA-2026-001',
         rta: 'RTA-2026-001',
         tranche_1: 5000000.00,
@@ -57,7 +57,7 @@ const projects = [
         division: 'Ifugao',
         engineer_id: 'ENG-001',
         mode_of_project: 'MOA',
-        implementing_agencies: 'PGO Ifugao',
+        implementing_agency: 'PGO Ifugao',
         moa: 'MOA-2026-002',
         rta: 'RTA-2026-002',
         tranche_1: 3000000.00,
@@ -72,7 +72,7 @@ const projects = [
         division: 'Kalinga',
         engineer_id: 'ENG-002',
         mode_of_project: 'RTA',
-        implementing_agencies: null,
+        implementing_agency: null,
         moa: null,
         rta: null,
         tranche_1: 1500000.00,
@@ -86,7 +86,7 @@ const projects = [
         division: 'Mountain Province',
         engineer_id: 'ENG-002',
         mode_of_project: 'MOA',
-        implementing_agencies: 'PGO Kalinga',
+        implementing_agency: 'PGO Kalinga',
         moa: 'MOA-2026-004',
         rta: 'RTA-2026-004',
         tranche_1: null,
@@ -100,7 +100,7 @@ const projects = [
         division: 'Apayao',
         engineer_id: 'ENG-003',
         mode_of_project: 'Direct',
-        implementing_agencies: null,
+        implementing_agency: null,
         moa: null,
         rta: null,
         tranche_1: null,
@@ -118,7 +118,7 @@ async function seed() {
         await client.query(`
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS mode_of_project VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS implementing_agencies TEXT,
+            ADD COLUMN IF NOT EXISTS implementing_agency TEXT,
             ADD COLUMN IF NOT EXISTS moa TEXT,
             ADD COLUMN IF NOT EXISTS rta TEXT,
             ADD COLUMN IF NOT EXISTS tranche_1 NUMERIC,
@@ -133,14 +133,14 @@ async function seed() {
             const query = `
                 INSERT INTO engineer_form (
                     project_name, school_name, school_id, region, division, engineer_id,
-                    mode_of_project, implementing_agencies, 
+                    mode_of_project, implementing_agency, 
                     moa, rta, tranche_1, tranche_2, tranche_3, status
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 RETURNING project_id;
             `;
             const values = [
                 p.project_name, p.school_name, p.school_id, p.region, p.division, p.engineer_id,
-                p.mode_of_project, p.implementing_agencies,
+                p.mode_of_project, p.implementing_agency,
                 p.moa, p.rta, p.tranche_1, p.tranche_2 || null, p.tranche_3 || null, p.status
             ];
 
