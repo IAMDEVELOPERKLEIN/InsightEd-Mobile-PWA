@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { FiDollarSign, FiFileText, FiTrendingUp, FiCheckCircle, FiX } from 'react-icons/fi';
+import { FiDollarSign, FiFileText, FiTrendingUp, FiCheckCircle, FiX, FiEye } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
+import BottomNav from './BottomNav';
 
 const FinanceDashboard = () => {
     const [aggregates, setAggregates] = useState({
@@ -12,6 +14,7 @@ const FinanceDashboard = () => {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const navigate = useNavigate();
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -154,8 +157,8 @@ const FinanceDashboard = () => {
                             <FiDollarSign size={24} />
                         </div>
                         <div>
-                            <p className="text-sm font-medium text-slate-500">W/ Tranche 1</p>
-                            <h3 className="text-2xl font-bold text-slate-800">{aggregates.totalTranche1}</h3>
+                            <p className="text-sm font-medium text-slate-500">Total Tranche 1</p>
+                            <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(aggregates.totalTranche1)}</h3>
                         </div>
                     </div>
 
@@ -164,8 +167,8 @@ const FinanceDashboard = () => {
                             <FiTrendingUp size={24} />
                         </div>
                         <div>
-                            <p className="text-sm font-medium text-slate-500">W/ Tranche 2</p>
-                            <h3 className="text-2xl font-bold text-slate-800">{aggregates.totalTranche2}</h3>
+                            <p className="text-sm font-medium text-slate-500">Total Tranche 2</p>
+                            <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(aggregates.totalTranche2)}</h3>
                         </div>
                     </div>
 
@@ -174,8 +177,8 @@ const FinanceDashboard = () => {
                             <FiCheckCircle size={24} />
                         </div>
                         <div>
-                            <p className="text-sm font-medium text-slate-500">W/ Tranche 3</p>
-                            <h3 className="text-2xl font-bold text-slate-800">{aggregates.totalTranche3}</h3>
+                            <p className="text-sm font-medium text-slate-500">Total Tranche 3</p>
+                            <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(aggregates.totalTranche3)}</h3>
                         </div>
                     </div>
                 </div>
@@ -194,7 +197,9 @@ const FinanceDashboard = () => {
                             <thead className="text-xs text-slate-500 bg-slate-50 uppercase border-b border-slate-100">
                                 <tr>
                                     <th className="px-6 py-4 font-medium tracking-wider">Project ID</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider">IPC</th>
                                     <th className="px-6 py-4 font-medium tracking-wider">Project Name</th>
+                                    <th className="px-6 py-4 font-medium tracking-wider">School Name</th>
                                     <th className="px-6 py-4 font-medium tracking-wider">Status</th>
                                     <th className="px-6 py-4 font-medium tracking-wider">Tranche 1</th>
                                     <th className="px-6 py-4 font-medium tracking-wider">Tranche 2</th>
@@ -205,7 +210,7 @@ const FinanceDashboard = () => {
                             <tbody>
                                 {projects.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="px-6 py-8 text-center text-slate-500">
+                                        <td colSpan="10" className="px-6 py-8 text-center text-slate-500">
                                             No MOA projects found.
                                         </td>
                                     </tr>
@@ -213,26 +218,41 @@ const FinanceDashboard = () => {
                                     projects.map((project) => (
                                         <tr key={project.project_id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                                             <td className="px-6 py-4 font-medium text-slate-800">#{project.project_id}</td>
+                                            <td className="px-6 py-4 font-medium text-blue-600 font-mono text-xs">{project.ipc || 'N/A'}</td>
                                             <td className="px-6 py-4">
-                                                <div className="font-medium text-slate-800 line-clamp-2" title={project.project_name || 'N/A'}>
+                                                <div className="font-medium text-slate-800 line-clamp-2 text-xs" title={project.project_name || 'N/A'}>
                                                     {project.project_name || 'N/A'}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                                                <div className="text-slate-500 line-clamp-2 text-[10px] font-medium" title={project.school_name || 'N/A'}>
+                                                    {project.school_name || 'N/A'}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 uppercase tracking-tighter">
                                                     {project.status || 'Pending'}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{formatCurrency(project.tranche_1)}</td>
-                                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{formatCurrency(project.tranche_2)}</td>
-                                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{formatCurrency(project.tranche_3)}</td>
+                                            <td className="px-6 py-4 text-slate-600 font-mono text-[10px]">{formatCurrency(project.tranche_1)}</td>
+                                            <td className="px-6 py-4 text-slate-600 font-mono text-[10px]">{formatCurrency(project.tranche_2)}</td>
+                                            <td className="px-6 py-4 text-slate-600 font-mono text-[10px]">{formatCurrency(project.tranche_3)}</td>
                                             <td className="px-6 py-4 text-right">
-                                                <button
-                                                    onClick={() => openModal(project)}
-                                                    className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:text-blue-700 transition-colors focus:ring-4 focus:ring-blue-100 outline-none"
-                                                >
-                                                    Update Tranches
-                                                </button>
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => navigate(`/project-details/${project.project_id}`)}
+                                                        className="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+                                                        title="View Details"
+                                                    >
+                                                        <FiEye className="mr-1" /> View
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openModal(project)}
+                                                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:text-blue-700 transition-colors focus:ring-4 focus:ring-blue-100 outline-none"
+                                                    >
+                                                        Update Tranches
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
@@ -242,7 +262,11 @@ const FinanceDashboard = () => {
                     </div>
                 </div>
 
+                {/* Spacer for BottomNav */}
+                <div className="h-24"></div>
             </div>
+
+            <BottomNav userRole="Finance" />
 
             {/* Update Modal */}
             {isModalOpen && selectedProject && (

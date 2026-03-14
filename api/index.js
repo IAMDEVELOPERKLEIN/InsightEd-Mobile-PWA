@@ -116,9 +116,11 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
     return res.status(400).json({ error: `Invalid unit_number "${unit_number}"` });
   }
   const col = `unit${unitNum}`;
+  let client;
   try {
-    const result = await pool.query(
-      `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1 
+    client = await pool.connect();
+    const result = await client.query(
+      `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1
        RETURNING unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit_completion`,
       [school_id]
     );
@@ -135,6 +137,8 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
   } catch (err) {
     console.error('PATCH unit complete error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -210,9 +214,9 @@ console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 20, // Increase max connections
+  max: 20, // Keep at 20 for now, but monitor
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000, // 5s timeout to avoid indefinite hanging
+  connectionTimeoutMillis: 10000, // Increased to 10s to handle incidental large transfers
 });
 
 // Inject pool into chatbot module
@@ -292,6 +296,9 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'dupa_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'contract_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'uploader_id_update_moa_rta', 'TEXT');
+    await checkAndDropColumn('engineer_form', 'uploader_id_update_rta_moa');
 
     await pool.query(`
       -- Cleanup redundant VO columns
@@ -336,7 +343,7 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS tranche_1 NUMERIC,
       ADD COLUMN IF NOT EXISTS tranche_2 NUMERIC,
       ADD COLUMN IF NOT EXISTS tranche_3 NUMERIC,
-      ADD COLUMN IF NOT EXISTS implementing_agencies TEXT,
+      ADD COLUMN IF NOT EXISTS implementing_agency TEXT,
       ADD COLUMN IF NOT EXISTS rta TEXT,
       ADD COLUMN IF NOT EXISTS date_assigned DATE,
       ADD COLUMN IF NOT EXISTS liquidated_tranche_1 NUMERIC DEFAULT 0,
@@ -574,6 +581,8 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'funds_utilized', 'NUMERIC DEFAULT 0'); // Redundant check is fine
     await checkAndAddColumn('engineer_form', 'internal_description', 'TEXT');
     await checkAndAddColumn('engineer_form', 'external_description', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'uploader_id_update_moa_rta', 'TEXT');
+    await checkAndDropColumn('engineer_form', 'uploader_id_update_rta_moa');
 
     currentSegment = "Segment 10: lgu_projects columns";
     console.log(`     [${currentSegment}]`);
@@ -7397,7 +7406,10 @@ app.post('/api/save-project', async (req, res) => {
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed) || null, // $48
       valueOrNull(data.time_lapsed_percentage) || null, // $49
       data.is_donated || false, // $50
-      data.uploader_type || null // $51
+      data.uploader_type || null, // $51
+      valueOrNull(data.implementingAgency), // $52
+      valueOrNull(data.implementingAgencySpecific), // $53
+      (data.implementingAgency || data.implementingAgencySpecific) ? 'MOA' : (data.mode_of_project || 'Direct') // $54: Ensure MOA mode if agency is set
     ];
 
     const projectQuery = `
@@ -7415,8 +7427,9 @@ app.post('/api/save-project', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
+        implementing_agency, implementing_agency_specific, mode_of_project
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -7596,7 +7609,7 @@ app.put('/api/update-project/:id', async (req, res) => {
     if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
 
     // Merge new data with old data (Snapshot concept)
-    const newStatus = data.statusOfConstructionPhase || oldData.status_of_construction_phase;
+    const newStatus = data.statusOfConstructionPhase || data.status || oldData.status_of_construction_phase;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
@@ -7619,7 +7632,7 @@ app.put('/api/update-project/:id', async (req, res) => {
       newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
       oldData.ipc,         // Preserve IPC to link history
-      finalUserName,       // Update Name string
+      oldData.engineer_name, // Preserve original engineer name
       newLat,              // $19
       newLong,             // $20
       data.pow_pdf ? data.pow_pdf : oldData.pow_pdf,           // $21: Update or Preserve POW
@@ -7651,7 +7664,21 @@ app.put('/api/update-project/:id', async (req, res) => {
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed || data.days_lapsed) || oldData.time_lapsed_days || oldData.time_lapsed, // $48
       valueOrNull(data.time_lapsed_percentage) || oldData.time_lapsed_percentage, // $49
       data.isDonated !== undefined ? data.isDonated : (data.is_donated !== undefined ? data.is_donated : oldData.is_donated), // $50
-      data.uploader_type || oldData.uploader_type // $51
+      data.uploader_type || oldData.uploader_type, // $51
+      valueOrNull(data.implementingAgency) || oldData.implementing_agency, // $52
+      valueOrNull(data.implementingAgencySpecific) || oldData.implementing_agency_specific, // $53
+      data.moa_pdf || oldData.moa_pdf, // $54
+      data.rta_pdf || oldData.rta_pdf, // $55
+      data.moa || oldData.moa, // $56
+      data.rta || oldData.rta, // $57
+      (data.tranche_1 !== undefined ? data.tranche_1 : oldData.tranche_1), // $58
+      (data.tranche_2 !== undefined ? data.tranche_2 : oldData.tranche_2), // $59
+      (data.tranche_3 !== undefined ? data.tranche_3 : oldData.tranche_3), // $60
+      (data.liquidated_tranche_1 !== undefined ? data.liquidated_tranche_1 : oldData.liquidated_tranche_1), // $61
+      (data.liquidated_tranche_2 !== undefined ? data.liquidated_tranche_2 : oldData.liquidated_tranche_2), // $62
+      (data.liquidated_tranche_3 !== undefined ? data.liquidated_tranche_3 : oldData.liquidated_tranche_3), // $63
+      data.mode_of_project || oldData.mode_of_project, // $64
+      ((data.moa_pdf || data.rta_pdf || data.moa || data.rta) ? (data.uid || 'Unknown') : (oldData.uploader_id_update_moa_rta || null)) // $65: Update UID ONLY if new MOA/RTA is provided
     ];
 
     const insertQuery = `
@@ -7669,8 +7696,12 @@ app.put('/api/update-project/:id', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
+        implementing_agency, implementing_agency_specific,
+        moa_pdf, rta_pdf, moa, rta, tranche_1, tranche_2, tranche_3, 
+        liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3, mode_of_project,
+        uploader_id_update_moa_rta
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65)
       RETURNING *;
     `;
 
@@ -7981,43 +8012,47 @@ app.post('/api/projects/realign', async (req, res) => {
 //               FINANCE DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/finance-dashboard/projects', async (req, res) => {
+  const hbLog = `[FINANCE_HEARTBEAT] ${new Date().toISOString()} - ${req.method} ${req.url}\n`;
+  fs.appendFileSync('finance_request_log.txt', hbLog);
   try {
+    const baseQuery = `
+      SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+        project_id, project_name, school_name, school_id, region, division,
+        status_of_construction_phase AS status,
+        mode_of_project, tranche_1, tranche_2, tranche_3,
+        ipc, date_assigned,
+        (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+        (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
+      FROM engineer_form
+      WHERE NULLIF(moa_pdf, '') IS NOT NULL
+        AND NULLIF(rta_pdf, '') IS NOT NULL
+      ORDER BY COALESCE(ipc, project_id::text), project_id DESC
+    `;
+
     const aggregateQuery = `
       SELECT 
         COUNT(*) as total_projects,
-        COUNT(tranche_1) as total_tranche_1,
-        COUNT(tranche_2) as total_tranche_2,
-        COUNT(tranche_3) as total_tranche_3
-      FROM engineer_form
+        SUM(COALESCE(tranche_1, 0)) as total_tranche_1,
+        SUM(COALESCE(tranche_2, 0)) as total_tranche_2,
+        SUM(COALESCE(tranche_3, 0)) as total_tranche_3
+      FROM (${baseQuery}) Latest
     `;
     const aggResult = await pool.query(aggregateQuery);
-
-    const tableQuery = `
-      WITH LatestProjects AS (
-          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-            project_id, project_name, status_of_construction_phase AS status,
-            mode_of_project, tranche_1, tranche_2, tranche_3
-          FROM engineer_form
-          ORDER BY COALESCE(ipc, project_id::text), project_id DESC
-      )
-      SELECT * FROM LatestProjects
-      WHERE mode_of_project = 'MOA'
-      ORDER BY project_id DESC
-    `;
+    const tableQuery = `SELECT * FROM (${baseQuery}) Latest ORDER BY project_id DESC`;
     const tableResult = await pool.query(tableQuery);
 
     res.json({
       aggregates: {
-        totalProjects: parseInt(aggResult.rows[0].total_projects, 10),
-        totalTranche1: parseInt(aggResult.rows[0].total_tranche_1, 10),
-        totalTranche2: parseInt(aggResult.rows[0].total_tranche_2, 10),
-        totalTranche3: parseInt(aggResult.rows[0].total_tranche_3, 10)
+        totalProjects: parseInt(aggResult.rows[0].total_projects || 0, 10),
+        totalTranche1: parseFloat(aggResult.rows[0].total_tranche_1 || 0),
+        totalTranche2: parseFloat(aggResult.rows[0].total_tranche_2 || 0),
+        totalTranche3: parseFloat(aggResult.rows[0].total_tranche_3 || 0)
       },
       projects: tableResult.rows
     });
   } catch (err) {
-    console.error("❌ Error fetching finance projects:", err.message);
-    res.status(500).json({ error: "Failed to fetch finance projects" });
+    console.error("❌ Error fetching finance projects:", err);
+    res.status(500).json({ error: "Failed to fetch finance projects", details: err.message, stack: err.stack });
   }
 });
 
@@ -8051,54 +8086,88 @@ app.patch('/api/finance-dashboard/projects/:id/tranches', async (req, res) => {
 //               IMPLEMENTING AGENCY DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/agency-dashboard/projects', async (req, res) => {
-  try {
+    const { agency, region } = req.query;
+    try {
+      let filterClause = '';
+      let params = [];
+      let paramCount = 1;
+
+      if (agency && agency !== 'All') {
+        const agencyClean = agency.replace(/^MGO\s+|PGO\s+|CGO\s+/i, '').trim();
+        filterClause += ` AND (implementing_agency ILIKE $${paramCount} OR implementing_agency_specific ILIKE $${paramCount})`;
+        params.push(`%${agencyClean}%`);
+        paramCount++;
+      }
+
+      if (region && region !== 'All') {
+        filterClause += ` AND region = $${paramCount}`;
+        params.push(region);
+        paramCount++;
+      }
+
+    const baseConditions = `
+        (implementing_agency IS NOT NULL OR implementing_agency_specific IS NOT NULL)
+        AND NULLIF(moa_pdf, '') IS NOT NULL
+        AND NULLIF(rta_pdf, '') IS NOT NULL
+        AND NULLIF(regexp_replace(tranche_1::text, '[^0-9.]', '', 'g'), '') IS NOT NULL 
+        AND CAST(NULLIF(regexp_replace(tranche_1::text, '[^0-9.]', '', 'g'), '') AS NUMERIC) > 0
+    `;
+
     const aggregateQuery = `
       WITH ValidProjects AS (
           SELECT DISTINCT ON (COALESCE(ipc, project_id::text))
-            project_id, implementing_agencies, tranche_1, status_of_construction_phase AS status
+            project_id, implementing_agency, region, tranche_1, tranche_2, tranche_3, status_of_construction_phase AS status
           FROM engineer_form
-          WHERE mode_of_project = 'MOA'
-            AND implementing_agencies IS NOT NULL
-            AND tranche_1 IS NOT NULL
-            AND moa IS NOT NULL
-            AND rta IS NOT NULL
+          WHERE ${baseConditions} ${filterClause}
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
       SELECT 
-        COUNT(DISTINCT implementing_agencies) as total_active_agencies,
+        COUNT(DISTINCT implementing_agency) as total_active_agencies,
         COUNT(*) as total_moa_projects,
-        SUM(tranche_1) as total_tranche_1_value,
+        SUM(COALESCE(NULLIF(regexp_replace(tranche_1::text, '[^0-9.]', '', 'g'), '')::NUMERIC, 0) + 
+            COALESCE(NULLIF(regexp_replace(tranche_2::text, '[^0-9.]', '', 'g'), '')::NUMERIC, 0) + 
+            COALESCE(NULLIF(regexp_replace(tranche_3::text, '[^0-9.]', '', 'g'), '')::NUMERIC, 0)) as total_tranche_value,
         COUNT(*) FILTER (WHERE status != 'Completed' AND status IS NOT NULL) as pending_moa_tasks
       FROM ValidProjects
     `;
-    const aggResult = await pool.query(aggregateQuery);
+    const aggResult = await pool.query(aggregateQuery, params);
 
     const tableQuery = `
-      WITH LatestProjects AS (
+      WITH LatestFiltered AS (
           SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-            project_id, implementing_agencies, project_name, moa, rta, tranche_1, date_assigned, mode_of_project, status_of_construction_phase AS status,
-            liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3
+            project_id, implementing_agency, region, project_name, tranche_1, tranche_2, tranche_3, date_assigned, mode_of_project, status_of_construction_phase AS status,
+            liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3,
+            (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+            (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
           FROM engineer_form
+          WHERE ${baseConditions} ${filterClause}
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
-      SELECT * FROM LatestProjects
-      WHERE mode_of_project = 'MOA'
-        AND implementing_agencies IS NOT NULL
-        AND tranche_1 IS NOT NULL
-        AND moa IS NOT NULL
-        AND rta IS NOT NULL
+      SELECT * FROM LatestFiltered
       ORDER BY project_id DESC
     `;
-    const tableResult = await pool.query(tableQuery);
+    const tableResult = await pool.query(tableQuery, params);
+    
+    const allProjectsQuery = `
+      SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+        project_id, implementing_agency, implementing_agency_specific, region, project_name, tranche_1, tranche_2, tranche_3, date_assigned, mode_of_project, status_of_construction_phase AS status,
+        (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+        (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
+      FROM engineer_form
+      WHERE ${baseConditions} ${filterClause}
+      ORDER BY COALESCE(ipc, project_id::text), project_id DESC
+    `;
+    const allProjectsResult = await pool.query(allProjectsQuery, params);
 
     res.json({
       aggregates: {
         totalActiveAgencies: parseInt(aggResult.rows[0].total_active_agencies || 0, 10),
         totalMoaProjects: parseInt(aggResult.rows[0].total_moa_projects || 0, 10),
-        totalTranche1Value: parseFloat(aggResult.rows[0].total_tranche_1_value || 0),
+        totalTrancheValue: parseFloat(aggResult.rows[0].total_tranche_value || 0),
         pendingMoaTasks: parseInt(aggResult.rows[0].pending_moa_tasks || 0, 10)
       },
-      projects: tableResult.rows
+      projects: tableResult.rows,
+      allProjects: allProjectsResult.rows
     });
   } catch (err) {
     console.error("❌ Error fetching agency projects:", err.message);
@@ -8136,7 +8205,7 @@ app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => 
 app.get('/api/projects', async (req, res) => {
   try {
     // We catch the engineer_id sent from EngineerDashboard.jsx
-    const { status, region, division, search, engineer_id, is_donated } = req.query;
+    const { status, region, division, search, engineer_id, is_donated, implementing_agency } = req.query;
     let queryParams = [];
     let whereClauses = [];
 
@@ -8149,7 +8218,8 @@ app.get('/api/projects', async (req, res) => {
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
             actions, savings, funding_year, funding_year_justification, is_donated,
-            moa_pdf, rta_pdf
+            (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+            (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
@@ -8175,16 +8245,23 @@ app.get('/api/projects', async (req, res) => {
         p.funding_year_justification AS "fundingYearJustification",
         p.is_donated AS "isDonated",
         p.is_donated AS "is_donated",
-        (p.moa_pdf IS NOT NULL AND p.moa_pdf != '') AS "hasMoa",
-        (p.rta_pdf IS NOT NULL AND p.rta_pdf != '') AS "hasRta"
+        p.has_moa AS "hasMoa",
+        p.has_rta AS "hasRta"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
 
-    // 1. ADD FILTER: Only show projects belonging to this engineer
-    if (engineer_id) {
+    // 1. ADD FILTER: Only show projects belonging to this engineer or their agency
+    if (engineer_id && implementing_agency) {
+      queryParams.push(engineer_id);
+      queryParams.push(implementing_agency);
+      whereClauses.push(`(p.engineer_id = $${queryParams.length - 1} OR p.implementing_agency = $${queryParams.length})`);
+    } else if (engineer_id) {
       queryParams.push(engineer_id);
       whereClauses.push(`p.engineer_id = $${queryParams.length}`);
+    } else if (implementing_agency) {
+      queryParams.push(implementing_agency);
+      whereClauses.push(`p.implementing_agency = $${queryParams.length}`);
     }
 
     // 2. Add your existing filters
@@ -8353,14 +8430,29 @@ app.post('/api/upload/multipart-finalize', async (req, res) => {
 });
 // --- 11f. GET: List Engineers (For EFD Assignment) ---
 app.get('/api/engineers', async (req, res) => {
+  const { role } = req.query;
   try {
-    const query = `
-      SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
-      FROM users 
-      WHERE role = 'DepEd Engineer' OR role = 'Division Engineer'
-      ORDER BY first_name ASC;
-    `;
-    const result = await pool.query(query);
+    let query;
+    let values = [];
+    
+    if (role) {
+      query = `
+        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
+        FROM users 
+        WHERE role = $1
+        ORDER BY first_name ASC;
+      `;
+      values = [role];
+    } else {
+      query = `
+        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
+        FROM users 
+        WHERE role = 'DepEd Engineer' OR role = 'Division Engineer' OR role = 'Non-DepEd Engineer'
+        ORDER BY first_name ASC;
+      `;
+    }
+    
+    const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch Engineers Error:", err);
@@ -8477,7 +8569,9 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         project_category AS "projectCategory", scope_of_work AS "scopeOfWork",
         number_of_classrooms AS "numberOfClassrooms", number_of_storeys AS "numberOfStoreys",
         number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
-        pow_pdf, dupa_pdf, contract_pdf,
+        (NULLIF(pow_pdf, '') IS NOT NULL) AS "hasPow",
+        (NULLIF(dupa_pdf, '') IS NOT NULL) AS "hasDupa",
+        (NULLIF(contract_pdf, '') IS NOT NULL) AS "hasContract",
         latitude, longitude,
         actions AS "updateType",
         savings,
@@ -8745,8 +8839,11 @@ app.post('/api/upload-project-document', async (req, res) => {
     newRow[column] = base64;
     newRow.status_as_of = new Date().toISOString();
     newRow.actions = `Uploaded ${type}`;
-    newRow.uploader_type = 'EFD Engineer';
-    newRow.engineer_id = uid || old.engineer_id; // Set to the HRODI engineer's UID if provided
+    // Store updater UID for auditing ONLY if MOA or RTA
+    if (type === 'MOA' || type === 'RTA') {
+      newRow.uploader_id_update_moa_rta = uid || 'Unknown';
+    }
+    newRow.engineer_id = old.engineer_id; // Preserve original owner
 
     // 3. Construct Insert Query Dynamically
     const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
@@ -8776,6 +8873,84 @@ app.post('/api/upload-project-document', async (req, res) => {
     if (client) client.release();
   }
 });
+
+// --- NEW BLUK UPLOAD ENDPOINT TO PREVENT DUPLICATES ---
+app.post('/api/bulk-upload-project-documents', async (req, res) => {
+  const { projectId, documents, uid } = req.body; // documents = { RTA: base64, MOA: base64 }
+
+  console.log(`📂 Incoming Bulk Doc Upload for Project [${projectId}]`);
+  
+  if (!projectId || !documents || Object.keys(documents).length === 0) {
+    return res.status(400).json({ error: "Missing required data" });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // 1. Get the latest data for this project to clone it
+    const latestRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+    if (latestRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+    const old = latestRes.rows[0];
+
+    // 2. Prepare new row data
+    const newRow = { ...old };
+    delete newRow.project_id;
+    
+    let actions = [];
+    for (const [type, base64] of Object.entries(documents)) {
+      let column = '';
+      if (type === 'POW') column = 'pow_pdf';
+      else if (type === 'DUPA') column = 'dupa_pdf';
+      else if (type === 'CONTRACT') column = 'contract_pdf';
+      else if (type === 'RTA') column = 'rta_pdf';
+      else if (type === 'MOA') column = 'moa_pdf';
+      
+      if (column) {
+        newRow[column] = base64;
+        actions.push(type);
+      }
+    }
+
+    newRow.status_as_of = new Date().toISOString();
+    newRow.actions = `Bulk Upload: ${actions.join(', ')}`;
+    // Store updater UID for auditing ONLY if MOA or RTA was included
+    if (actions.includes('MOA') || actions.includes('RTA')) {
+      newRow.uploader_id_update_moa_rta = uid || 'Unknown';
+    }
+    newRow.engineer_id = old.engineer_id; // Preserve original owner
+
+    // 3. Construct Insert Query Dynamically
+    const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
+    const vals = cols.map(k => newRow[k]);
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    
+    const insertQuery = `INSERT INTO "engineer_form" (${cols.join(', ')}) VALUES (${placeholders}) RETURNING project_id`;
+    const result = await client.query(insertQuery, vals);
+
+    console.log(`✅ Appended bulk document update: New row project_id ${result.rows[0].project_id}`);
+
+    // --- DUAL WRITE ---
+    if (poolNew) {
+      try {
+        await poolNew.query(insertQuery, vals);
+        console.log(`✅ Dual-Write: Bulk Append Synced!`);
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Bulk Doc Append Error:", dwErr.message);
+      }
+    }
+
+    res.json({ success: true, newProjectId: result.rows[0].project_id });
+  } catch (err) {
+    console.error("❌ Bulk Doc Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save documents" });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 
 // --- 21. GET: Fetch Project Images (Active) ---
 
@@ -9855,8 +10030,6 @@ app.post('/api/save-physical-facilities', async (req, res) => {
         const clientNew = await poolNew.connect();
         try {
           await clientNew.query('BEGIN');
-          console.log("🔄 Dual-Write: Syncing Physical Facilities...");
-
           // DW 1. Update Profile
           await clientNew.query(queryProfile, [
             data.schoolId,
@@ -11556,7 +11729,10 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
       WITH LatestProjects AS (
          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
             project_id, project_name, school_id, school_name, accomplishment_percentage, status_of_construction_phase AS status, 
-            approved_budget_for_contract, contract_amount, validation_status, status_as_of, region, division, created_at
+            approved_budget_for_contract, contract_amount, validation_status, status_as_of, region, division, created_at,
+            -- Metadata flags instead of large blobs
+            (NULLIF(rta_pdf, '') IS NOT NULL OR NULLIF(rta, '') IS NOT NULL) AS has_rta,
+            (NULLIF(moa_pdf, '') IS NOT NULL OR NULLIF(moa, '') IS NOT NULL) AS has_moa
          FROM engineer_form
          ORDER BY COALESCE(ipc, project_id::text), created_at DESC
       )
@@ -11609,7 +11785,14 @@ app.get('/api/monitoring/school-projects/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const query = `
-SELECT * FROM engineer_form WHERE school_id = $1 ORDER BY created_at DESC
+SELECT 
+  project_id, project_name, school_id, school_name, status_of_construction_phase, accomplishment_percentage,
+  approved_budget_for_contract, contract_amount, status_as_of, created_at,
+  (NULLIF(rta_pdf, '') IS NOT NULL OR NULLIF(rta, '') IS NOT NULL) AS has_rta,
+  (NULLIF(moa_pdf, '') IS NOT NULL OR NULLIF(moa, '') IS NOT NULL) AS has_moa
+FROM engineer_form 
+WHERE school_id = $1 
+ORDER BY created_at DESC
   `;
     const result = await pool.query(query, [schoolId]);
     res.json(result.rows);
@@ -12730,7 +12913,10 @@ app.get('/api/lgu/projects', async (req, res) => {
     // We want the LATEST version for each project.
     // Group by root_project_id and take the one with the latest created_at.
     let query = `
-      SELECT DISTINCT ON (root_project_id) *
+      SELECT DISTINCT ON (root_project_id) 
+        lgu_project_id, root_project_id, school_id, school_name, project_name, municipality, project_status, created_at,
+        (NULLIF(moa_pdf, '') IS NOT NULL) AS "hasMoa",
+        (NULLIF(rta_pdf, '') IS NOT NULL) AS "hasRta"
       FROM lgu_projects
     `;
     const params = [];
@@ -12931,7 +13117,7 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
 
     const values = [
       data.projectName, data.schoolName, data.schoolId,
-      data.status_of_construction_phase, parseIntOrNull(data.accomplishmentPercentage),
+      data.status_of_construction_phase || data.statusOfConstructionPhase, parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),

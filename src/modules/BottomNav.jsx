@@ -24,6 +24,11 @@ const BottomNav = ({ userRole }) => {
     if (effectiveRole === 'school_head') effectiveRole = 'School Head';
     if (effectiveRole === 'lgu') effectiveRole = 'Local Government Unit';
 
+    // Normalize Implementing Agency sub-roles
+    if (['PGO', 'CGO', 'MGO', 'DPWH', 'CSO'].includes(effectiveRole)) {
+        effectiveRole = 'Implementing Agency';
+    }
+
     if (localStorage.getItem('userRole') === 'Super User') {
         const impRole = sessionStorage.getItem('impersonatedRole');
         if (impRole) effectiveRole = impRole;
@@ -44,7 +49,7 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Non-DepEd Engineer': [
-            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/non-deped-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
@@ -93,6 +98,10 @@ const BottomNav = ({ userRole }) => {
             { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
+        'Finance': [
+            { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
         'Masterlist': [
             { label: 'Home', path: '/psip', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Data', path: '/psip', state: { activeTab: 'data' }, icon: TbChartBar },
@@ -100,29 +109,33 @@ const BottomNav = ({ userRole }) => {
         ],
         'EFD': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'EFD Engineer': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI Engineer': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'Project Assignment', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
-
+        'Implementing Agency': [
+            { label: 'Home', path: '/agency-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
+            { label: 'Deployment', path: '/agency-dashboard', state: { activeTab: 'deployment' }, icon: TbClipboardList },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
     };
 
     const currentNavItems = navConfigs[effectiveRole];
@@ -139,7 +152,7 @@ const BottomNav = ({ userRole }) => {
             <div style={styles.navContainer}>
                 {finalNavItems.map((item) => {
                     const isActive = location.pathname === item.path &&
-                        (!item.state || location.state?.activeTab === item.state.activeTab || (!location.state?.activeTab && item.state.activeTab === 'all'));
+                        (!item.state || location.state?.activeTab === item.state.activeTab || (!location.state?.activeTab && (item.state.activeTab === 'all' || item.state.activeTab === 'home')));
 
                     const Icon = item.icon;
 
