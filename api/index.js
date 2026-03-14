@@ -36,7 +36,8 @@ app.use(cors({
     'http://localhost:5173',           // Vite Local Default
     'http://localhost:5174',           // Vite Local Alternate
     'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
-    'https://insight-ed-frontend.vercel.app'
+    'https://insight-ed-frontend.vercel.app',
+    'https://stride.deped.gov.ph',    // Azure VM Production
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
