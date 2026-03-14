@@ -85,9 +85,10 @@ const Unit7SchoolResources = () => {
     const [showGradeModal, setShowGradeModal] = useState(false);
     
     const initialGradeForm = {
-        armchairs_func: "", armchairs_broken: "",
-        tables_func: "", tables_broken: "",
-        desks_func: "", desks_broken: "",
+        armchairs_deped: "", armchairs_donated: "", armchairs_func: "", armchairs_broken: 0,
+        tables_deped: "", tables_donated: "", tables_func: "", tables_broken: 0,
+        desks_deped: "", desks_donated: "", desks_func: "", desks_broken: 0,
+        isAssessmentConfirmed: false
     };
     const [currentGradeForm, setCurrentGradeForm] = useState(initialGradeForm);
 
@@ -122,6 +123,9 @@ const Unit7SchoolResources = () => {
         pwd_seats_total: "", pwd_seats_func: "",
         faucets_total: "", faucets_func: "",
         water_source: "",
+        no_piped_line_confirmed: false,
+        no_toilets_confirmed: false,
+        no_faucets_confirmed: false,
         attached_cr_classrooms: "",
         attached_cr_seats: "",
         attached_cr_included_in_main: false,
@@ -130,12 +134,25 @@ const Unit7SchoolResources = () => {
     // PHASE 5 State (Utilities & Hardship)
     const [utilitiesData, setUtilitiesData] = useState({
         utility_electricity: "",
+        no_grid_confirmed: false,
         has_solar_or_gen: false,
         utility_internet_yesno: null,
+        no_wired_internet_confirmed: false,
         utility_internet_funder: "",
         sha_category: "",
     });
     const [hasMultigradeContext, setHasMultigradeContext] = useState(false);
+
+    const totalToilets = useMemo(() => {
+        return (parseInt(washData.male_seats_total) || 0) + 
+               (parseInt(washData.female_seats_total) || 0) + 
+               (parseInt(washData.common_seats_total) || 0) + 
+               (parseInt(washData.pwd_seats_total) || 0);
+    }, [washData]);
+
+    const totalFaucets = useMemo(() => {
+        return parseInt(washData.faucets_total) || 0;
+    }, [washData]);
 
     // ── Data Fetching ───────────────────────────────────────────────────────────
     useEffect(() => {
@@ -337,7 +354,26 @@ const Unit7SchoolResources = () => {
 
     const handleGradeFormChange = (e) => {
         const { name, value } = e.target;
-        setCurrentGradeForm(prev => ({ ...prev, [name]: value }));
+        setCurrentGradeForm(prev => {
+            const next = { ...prev, [name]: value };
+            
+            // Auto-compute broken for each category
+            const categories = ['armchairs', 'tables', 'desks'];
+            categories.forEach(cat => {
+                const deped = parseInt(next[`${cat}_deped`]) || 0;
+                const donated = parseInt(next[`${cat}_donated`]) || 0;
+                const total = deped + donated;
+                
+                let func = parseInt(next[`${cat}_func`]) || 0;
+                // Cap functional at total
+                if (func > total) func = total;
+                
+                next[`${cat}_func`] = func === 0 && next[`${cat}_func`] === "" ? "" : func.toString();
+                next[`${cat}_broken`] = Math.max(0, total - func);
+            });
+
+            return next;
+        });
     };
 
     const handleGeneralChange = (e) => {
@@ -366,12 +402,19 @@ const Unit7SchoolResources = () => {
     const openGradeModal = (grade) => {
         setSelectedGradeId(grade.id);
         setCurrentGradeForm({
+            armchairs_deped: grade.armchairs_deped || "",
+            armchairs_donated: grade.armchairs_donated || "",
             armchairs_func: grade.armchairs_func || "",
-            armchairs_broken: grade.armchairs_broken || "",
+            armchairs_broken: grade.armchairs_broken || 0,
+            tables_deped: grade.tables_deped || "",
+            tables_donated: grade.tables_donated || "",
             tables_func: grade.tables_func || "",
-            tables_broken: grade.tables_broken || "",
+            tables_broken: grade.tables_broken || 0,
+            desks_deped: grade.desks_deped || "",
+            desks_donated: grade.desks_donated || "",
             desks_func: grade.desks_func || "",
-            desks_broken: grade.desks_broken || "",
+            desks_broken: grade.desks_broken || 0,
+            isAssessmentConfirmed: false
         });
         setShowGradeModal(true);
     };
@@ -475,6 +518,28 @@ const Unit7SchoolResources = () => {
         // Water source is required
         if (!washData.water_source) isValid = false;
 
+        // Confirmation for Natural/No water source
+        if ((washData.water_source?.includes("Natural resources") || washData.water_source === "No water source") && !washData.no_piped_line_confirmed) {
+            isValid = false;
+        }
+
+        // Confirmation for Zero Toilets
+        const totalToilets = 
+            (parseInt(washData.male_seats_total) || 0) + 
+            (parseInt(washData.female_seats_total) || 0) + 
+            (parseInt(washData.common_seats_total) || 0) + 
+            (parseInt(washData.pwd_seats_total) || 0);
+        
+        if (totalToilets === 0 && !washData.no_toilets_confirmed) {
+            isValid = false;
+        }
+
+        // Confirmation for Zero Faucets
+        const totalFaucets = parseInt(washData.faucets_total) || 0;
+        if (totalFaucets === 0 && !washData.no_faucets_confirmed) {
+            isValid = false;
+        }
+
         return { isValid, errors };
     }, [washData]);
 
@@ -488,7 +553,19 @@ const Unit7SchoolResources = () => {
 
     const isPhase5Valid = useMemo(() => {
         if (!utilitiesData.utility_electricity) return false;
+        
+        // Electricity confirmation
+        if ((utilitiesData.utility_electricity === "Off-grid supply" || utilitiesData.utility_electricity === "No electricity") && !utilitiesData.no_grid_confirmed) {
+            return false;
+        }
+
         if (utilitiesData.utility_internet_yesno === null) return false;
+        
+        // Internet confirmation
+        if (utilitiesData.utility_internet_yesno === false && !utilitiesData.no_wired_internet_confirmed) {
+            return false;
+        }
+
         if (utilitiesData.utility_internet_yesno === true && !utilitiesData.utility_internet_funder) return false;
         if (!utilitiesData.sha_category) return false;
         return true;
@@ -991,6 +1068,25 @@ const Unit7SchoolResources = () => {
                                         <option value="" disabled>Tap to select...</option>
                                         {WATER_SOURCES.map(src => <option key={src} value={src}>{src}</option>)}
                                     </select>
+
+                                    <AnimatePresence>
+                                        {(washData.water_source?.includes("Natural resources") || washData.water_source === "No water source") && (
+                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
+                                                <div 
+                                                    onClick={() => setWashData(p => ({...p, no_piped_line_confirmed: !p.no_piped_line_confirmed}))}
+                                                    className={`mt-4 rounded-2xl p-4 border-2 flex items-start gap-3 cursor-pointer transition-colors ${washData.no_piped_line_confirmed ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"}`}
+                                                >
+                                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${washData.no_piped_line_confirmed ? "bg-amber-500 border-amber-500" : "bg-white border-red-300"}`}>
+                                                        {washData.no_piped_line_confirmed && <FiCheck className="text-white w-4 h-4" />}
+                                                    </div>
+                                                    <div>
+                                                        <p className={`text-sm font-bold ${washData.no_piped_line_confirmed ? "text-amber-800" : "text-red-800"}`}>Confirmation Required</p>
+                                                        <p className={`text-xs mt-1 ${washData.no_piped_line_confirmed ? "text-amber-700" : "text-red-700"}`}>I confirm that this school has **no piped water line** connection and relies solely on the selected source.</p>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
 
                                 {/* Main Sanitation Audit List */}
@@ -1045,6 +1141,45 @@ const Unit7SchoolResources = () => {
                                         );
                                     })}
                                 </div>
+
+                                {/* Zero Count Confirmations */}
+                                <AnimatePresence>
+                                    {totalToilets === 0 && (
+                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mb-4">
+                                            <div 
+                                                onClick={() => setWashData(p => ({...p, no_toilets_confirmed: !p.no_toilets_confirmed}))}
+                                                className={`rounded-2xl p-4 border-2 flex items-start gap-3 cursor-pointer transition-colors ${washData.no_toilets_confirmed ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"}`}
+                                            >
+                                                <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${washData.no_toilets_confirmed ? "bg-amber-500 border-amber-500" : "bg-white border-red-300"}`}>
+                                                    {washData.no_toilets_confirmed && <FiCheck className="text-white w-4 h-4" />}
+                                                </div>
+                                                <div>
+                                                    <p className={`text-sm font-bold ${washData.no_toilets_confirmed ? "text-amber-800" : "text-red-800"}`}>No Toilets Confirmed</p>
+                                                    <p className={`text-xs mt-1 ${washData.no_toilets_confirmed ? "text-amber-700" : "text-red-700"}`}>I confirm that this school has **zero functional or non-functional toilets** on the premises.</p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                <AnimatePresence>
+                                    {totalFaucets === 0 && (
+                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mb-6">
+                                            <div 
+                                                onClick={() => setWashData(p => ({...p, no_faucets_confirmed: !p.no_faucets_confirmed}))}
+                                                className={`rounded-2xl p-4 border-2 flex items-start gap-3 cursor-pointer transition-colors ${washData.no_faucets_confirmed ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"}`}
+                                            >
+                                                <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${washData.no_faucets_confirmed ? "bg-amber-500 border-amber-500" : "bg-white border-red-300"}`}>
+                                                    {washData.no_faucets_confirmed && <FiCheck className="text-white w-4 h-4" />}
+                                                </div>
+                                                <div>
+                                                    <p className={`text-sm font-bold ${washData.no_faucets_confirmed ? "text-amber-800" : "text-red-800"}`}>No Faucets Confirmed</p>
+                                                    <p className={`text-xs mt-1 ${washData.no_faucets_confirmed ? "text-amber-700" : "text-red-700"}`}>I confirm that this school has **no handwashing faucets** available.</p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
 
                                 {/* Attached CR Breakdown */}
                                 <div className="bg-indigo-50 border-2 border-indigo-100 rounded-3xl p-5 shadow-sm">
@@ -1107,6 +1242,25 @@ const Unit7SchoolResources = () => {
                                         <option value="Off-grid supply">Off-grid supply</option>
                                         <option value="No electricity">No electricity</option>
                                     </select>
+
+                                    <AnimatePresence>
+                                        {(utilitiesData.utility_electricity === "Off-grid supply" || utilitiesData.utility_electricity === "No electricity") && (
+                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
+                                                <div 
+                                                    onClick={() => setUtilitiesData(p => ({...p, no_grid_confirmed: !p.no_grid_confirmed}))}
+                                                    className={`mt-4 rounded-2xl p-4 border-2 flex items-start gap-3 cursor-pointer transition-colors ${utilitiesData.no_grid_confirmed ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"}`}
+                                                >
+                                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${utilitiesData.no_grid_confirmed ? "bg-amber-500 border-amber-500" : "bg-white border-red-300"}`}>
+                                                        {utilitiesData.no_grid_confirmed && <FiCheck className="text-white w-4 h-4" />}
+                                                    </div>
+                                                    <div>
+                                                        <p className={`text-sm font-bold ${utilitiesData.no_grid_confirmed ? "text-amber-800" : "text-red-800"}`}>No Grid Connection</p>
+                                                        <p className={`text-xs mt-1 ${utilitiesData.no_grid_confirmed ? "text-amber-700" : "text-red-700"}`}>I confirm that this school has **no connection to a power grid** (e.g. ECs like Meralco, VECO, etc.).</p>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                     
                                     <AnimatePresence>
                                         {(utilitiesData.utility_electricity === "Grid & Off-grid supply" || utilitiesData.utility_electricity === "Off-grid supply") && (
@@ -1136,6 +1290,25 @@ const Unit7SchoolResources = () => {
                                         <button onClick={() => setUtilitiesData(p => ({...p, utility_internet_yesno: true}))} className={`${toggleBtnBase} ${utilitiesData.utility_internet_yesno === true ? toggleBtnActive : toggleBtnInactive}`}><span>👍</span> Yes</button>
                                         <button onClick={() => setUtilitiesData(p => ({...p, utility_internet_yesno: false}))} className={`${toggleBtnBase} ${utilitiesData.utility_internet_yesno === false ? toggleBtnActive : toggleBtnInactive}`}><span>👎</span> No</button>
                                     </div>
+
+                                    <AnimatePresence>
+                                        {utilitiesData.utility_internet_yesno === false && (
+                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
+                                                <div 
+                                                    onClick={() => setUtilitiesData(p => ({...p, no_wired_internet_confirmed: !p.no_wired_internet_confirmed}))}
+                                                    className={`mt-4 rounded-2xl p-4 border-2 flex items-start gap-3 cursor-pointer transition-colors ${utilitiesData.no_wired_internet_confirmed ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"}`}
+                                                >
+                                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${utilitiesData.no_wired_internet_confirmed ? "bg-amber-500 border-amber-500" : "bg-white border-red-300"}`}>
+                                                        {utilitiesData.no_wired_internet_confirmed && <FiCheck className="text-white w-4 h-4" />}
+                                                    </div>
+                                                    <div>
+                                                        <p className={`text-sm font-bold ${utilitiesData.no_wired_internet_confirmed ? "text-amber-800" : "text-red-800"}`}>No Wired Internet</p>
+                                                        <p className={`text-xs mt-1 ${utilitiesData.no_wired_internet_confirmed ? "text-amber-700" : "text-red-700"}`}>I confirm that this school has **no wired or stable internet** connection available.</p>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                     
                                     <AnimatePresence>
                                         {utilitiesData.utility_internet_yesno === true && (
@@ -1301,23 +1474,35 @@ const Unit7SchoolResources = () => {
                                     <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3 pb-2 border-b border-gray-100">Learner Seating (Aggregated Totals)</h4>
                                     <div>
                                         <p className="text-sm font-bold text-gray-700 mb-2">Individual Armchairs 🪑</p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
+                                        <div className="grid grid-cols-2 gap-3 mb-3">
+                                            <div><p className="text-[10px] font-black text-indigo-400 uppercase text-center mb-1">DepEd-Funded</p><input type="number" name="armchairs_deped" value={currentGradeForm.armchairs_deped} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-indigo-50/50 text-indigo-700 focus:!border-indigo-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-indigo-400 uppercase text-center mb-1">Donated</p><input type="number" name="armchairs_donated" value={currentGradeForm.armchairs_donated} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-indigo-50/50 text-indigo-700 focus:!border-indigo-400 !mt-0`} /></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 mb-6">
                                             <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchairs_func" value={currentGradeForm.armchairs_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchairs_broken" value={currentGradeForm.armchairs_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken (Auto)</p><input type="number" name="armchairs_broken" value={currentGradeForm.armchairs_broken} readOnly className={`${chunkyInput} !bg-red-50 text-red-700 border-red-100 !mt-0 cursor-not-allowed`} /></div>
                                         </div>
                                     </div>
                                     <div>
                                         <p className="text-sm font-bold text-gray-700 mb-2">Table &amp; Chair Sets <span className="text-xs text-indigo-400 font-normal">(2-seaters)</span></p>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
+                                        <div className="grid grid-cols-2 gap-3 mb-3">
+                                            <div><p className="text-[10px] font-black text-indigo-400 uppercase text-center mb-1">DepEd-Funded</p><input type="number" name="tables_deped" value={currentGradeForm.tables_deped} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-indigo-50/50 text-indigo-700 focus:!border-indigo-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-indigo-400 uppercase text-center mb-1">Donated</p><input type="number" name="tables_donated" value={currentGradeForm.tables_donated} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-indigo-50/50 text-indigo-700 focus:!border-indigo-400 !mt-0`} /></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 mb-6">
                                             <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="tables_func" value={currentGradeForm.tables_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="tables_broken" value={currentGradeForm.tables_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken (Auto)</p><input type="number" name="tables_broken" value={currentGradeForm.tables_broken} readOnly className={`${chunkyInput} !bg-red-50 text-red-700 border-red-100 !mt-0 cursor-not-allowed`} /></div>
                                         </div>
                                     </div>
                                     <div>
                                         <p className="text-sm font-bold text-gray-700 mb-2">Student Desks <span className="text-xs text-indigo-400 font-normal">(2-seaters)</span></p>
+                                        <div className="grid grid-cols-2 gap-3 mb-3">
+                                            <div><p className="text-[10px] font-black text-indigo-400 uppercase text-center mb-1">DepEd-Funded</p><input type="number" name="desks_deped" value={currentGradeForm.desks_deped} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-indigo-50/50 text-indigo-700 focus:!border-indigo-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-indigo-400 uppercase text-center mb-1">Donated</p><input type="number" name="desks_donated" value={currentGradeForm.desks_donated} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-indigo-50/50 text-indigo-700 focus:!border-indigo-400 !mt-0`} /></div>
+                                        </div>
                                         <div className="grid grid-cols-2 gap-3 mb-4">
                                             <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="desks_func" value={currentGradeForm.desks_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="desks_broken" value={currentGradeForm.desks_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken (Auto)</p><input type="number" name="desks_broken" value={currentGradeForm.desks_broken} readOnly className={`${chunkyInput} !bg-red-50 text-red-700 border-red-100 !mt-0 cursor-not-allowed`} /></div>
                                         </div>
                                     </div>
                                 </div>
@@ -1341,12 +1526,26 @@ const Unit7SchoolResources = () => {
                                                     <p className="text-sm font-bold pt-0.5">Shortage of <span className="text-red-600 text-lg font-black">{Math.abs(gradeStats.diff)}</span> seats flagged for this grade level.</p>
                                                 </div>
                                             )}
+
+                                            {/* Integrated Confirmation */}
+                                            <div 
+                                                onClick={() => setCurrentGradeForm(p => ({...p, isAssessmentConfirmed: !p.isAssessmentConfirmed}))}
+                                                className={`mt-4 rounded-2xl p-4 border-2 flex items-start gap-3 cursor-pointer transition-colors ${currentGradeForm.isAssessmentConfirmed ? "bg-white border-emerald-300 shadow-sm" : "bg-white/50 border-white/40"}`}
+                                            >
+                                                <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${currentGradeForm.isAssessmentConfirmed ? "bg-emerald-500 border-emerald-500" : "bg-white border-gray-300"}`}>
+                                                    {currentGradeForm.isAssessmentConfirmed && <FiCheck className="text-white w-4 h-4" />}
+                                                </div>
+                                                <div>
+                                                    <p className={`text-sm font-bold ${currentGradeForm.isAssessmentConfirmed ? "text-emerald-800" : "text-gray-600"}`}>Confirm Assessment</p>
+                                                    <p className={`text-xs mt-1 ${currentGradeForm.isAssessmentConfirmed ? "text-emerald-700" : "text-gray-400"}`}>I confirm that this aggregated furniture data is accurate for this grade level.</p>
+                                                </div>
+                                            </div>
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
                             </div>
-                            <div className="p-5 border-t border-gray-100 flex gap-3 bg-white rounded-b-3xl">
-                                <button onClick={handleSaveGradeLevel} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all">Save &amp; Verify Grade</button>
+                            <div className="p-5 border-t border-gray-100 flex flex-col gap-3 bg-white rounded-b-3xl">
+                                <button disabled={!currentGradeForm.isAssessmentConfirmed} onClick={handleSaveGradeLevel} className="w-full py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 disabled:grayscale">Save &amp; Verify Grade</button>
                             </div>
                         </motion.div>
                     </motion.div>

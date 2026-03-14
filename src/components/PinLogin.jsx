@@ -74,6 +74,14 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
         if (data.user.account_category) localStorage.setItem('accountCategory', data.user.account_category);
         if (data.user.school_id) localStorage.setItem('schoolId', data.user.school_id);
 
+        // Sync/Update remembered_user
+        localStorage.setItem('remembered_user', JSON.stringify({
+            email: data.user.email,
+            firstName: data.user.first_name || 'User',
+            role: data.user.role,
+            school_id: data.user.school_id
+        }));
+
         // Sign into Firebase silently if Custom Token is returned
         if (data.customToken) {
           try {
@@ -106,12 +114,22 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
       <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center shadow-inner mb-4 overflow-hidden outline outline-4 outline-white outline-offset-[-2px]">
         {/* Placeholder avatar or just the first initial */}
         <span className="text-blue-600 text-3xl font-black uppercase tracking-tighter">
-            {rememberedUser?.firstName?.charAt(0) || 'U'}
+            {
+              (rememberedUser?.role?.toLowerCase() === 'school head' || 
+               rememberedUser?.role?.toLowerCase() === 'school_head')
+                ? (rememberedUser?.school_id?.charAt(0) || rememberedUser?.schoolId?.charAt(0) || rememberedUser?.firstName?.charAt(0) || rememberedUser?.first_name?.charAt(0) || 'S')
+                : (rememberedUser?.email?.charAt(0) || rememberedUser?.firstName?.charAt(0) || rememberedUser?.first_name?.charAt(0) || 'U')
+            }
         </span>
       </div>
       
       <h2 className="text-2xl font-bold mb-1 text-slate-800">
-        Welcome back, {rememberedUser?.firstName}!
+        Welcome back, {
+          (rememberedUser?.role?.toLowerCase() === 'school head' || 
+           rememberedUser?.role?.toLowerCase() === 'school_head')
+            ? (rememberedUser?.school_id || rememberedUser?.schoolId || 'School Head')
+            : (rememberedUser?.email || rememberedUser?.firstName || 'User')
+        }!
       </h2>
       <p className="text-slate-500 mb-6 text-sm">
         Enter your 6-digit PIN to continue

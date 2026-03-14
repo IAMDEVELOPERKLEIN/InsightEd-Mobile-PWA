@@ -96,10 +96,10 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
             'proximity_highway_mins', 'proximity_highway_km'
         ];
         
-        const sumRefPoints = refPointsFields.reduce((acc, field) => acc + (parseFloat(data[field]) || 0), 0);
+        const anyZero = refPointsFields.some(field => (parseFloat(data[field]) || 0) <= 0);
         
-        if (sumRefPoints <= 0) {
-            alert("Error: You must provide at least one non-zero point of reference (time or distance) before marking Unit 9 as accomplished.");
+        if (anyZero) {
+            alert("Error: You must provide a non-zero value for ALL points of reference (both time and distance) before marking Unit 9 as accomplished.");
             setCurrentStep(3); // Services step contains points of reference
             return;
         }
@@ -172,7 +172,26 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
         { id: 5, title: "Threats", icon: <FaShieldAlt /> }
     ];
 
-    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
+    const nextStep = () => {
+        if (currentStep === 3) {
+            const refPointsFields = [
+                'emergency_response_mins', 'proximity_hospital_km',
+                'proximity_brgy_hall_mins', 'proximity_brgy_hall_km',
+                'proximity_muni_hall_mins', 'proximity_muni_hall_km',
+                'proximity_sdo_mins', 'proximity_sdo_km',
+                'proximity_clinic_mins', 'proximity_clinic_km',
+                'proximity_terminal_mins', 'proximity_terminal_km',
+                'proximity_highway_mins', 'proximity_highway_km'
+            ];
+            const values = watch();
+            const anyZero = refPointsFields.some(field => (parseFloat(values[field]) || 0) <= 0);
+            if (anyZero) {
+                alert("Error: You must provide a non-zero value for ALL points of reference (both time and distance) before proceeding.");
+                return;
+            }
+        }
+        setCurrentStep(prev => Math.min(prev + 1, 5));
+    };
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
     const sectionStyle = "bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-sm mb-6";
@@ -390,6 +409,7 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                                                                     step="0.1"
                                                                     placeholder="Distance (km)"
                                                                     value={item.distance_km}
+                                                                    onFocus={(e) => e.target.select()}
                                                                     onChange={(e) => {
                                                                         e.target.value = e.target.value.replace(/^0+(?=\d)/, '');
                                                                         const val = e.target.value;
@@ -458,9 +478,12 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                                                 type="number" 
                                                 min="0"
                                                 {...register('river_crossing_count', { 
-                                                    onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
+                                                    onChange: (e) => { 
+                                                        e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); 
+                                                    },
                                                     valueAsNumber: true 
                                                 })} 
+                                                onFocus={(e) => e.target.select()}
                                                 placeholder="Enter number of crossings"
                                                 className="w-full bg-white dark:bg-slate-800 border-0 rounded-xl p-4 text-sm font-bold shadow-sm"
                                                 disabled={isReadOnly}
@@ -513,6 +536,7 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                                                             onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
                                                             valueAsNumber: true 
                                                         })} 
+                                                        onFocus={(e) => e.target.select()}
                                                         className="w-full bg-white dark:bg-slate-800 border-0 rounded-xl p-3 text-sm font-bold shadow-sm pr-12"
                                                         placeholder="0"
                                                         disabled={isReadOnly} 
@@ -528,6 +552,7 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                                                             onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
                                                             valueAsNumber: true 
                                                         })} 
+                                                        onFocus={(e) => e.target.select()}
                                                         className="w-full bg-white dark:bg-slate-800 border-0 rounded-xl p-3 text-sm font-bold shadow-sm pr-10"
                                                         placeholder="0.0"
                                                         disabled={isReadOnly} 
@@ -602,6 +627,7 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                                                                 newList[index] = { ...item, incidences: parseInt(val) || 0 };
                                                                 setValue('natural_calamities', newList);
                                                             }}
+                                                            onFocus={(e) => e.target.select()}
                                                             placeholder="0"
                                                             className="w-full bg-white dark:bg-slate-800 border-0 rounded-xl p-3 text-center text-sm font-bold shadow-sm"
                                                         />
@@ -691,6 +717,7 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                                                                             type="number" 
                                                                             min="0"
                                                                             value={item.incidences}
+                                                                            onFocus={(e) => e.target.select()}
                                                                             onChange={(e) => {
                                                                                 e.target.value = e.target.value.replace(/^0+(?=\d)/, '');
                                                                                 const val = e.target.value;

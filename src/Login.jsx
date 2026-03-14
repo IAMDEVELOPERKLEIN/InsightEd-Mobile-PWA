@@ -59,6 +59,8 @@ const Login = () => {
     const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
     const [isSchoolIdFlow, setIsSchoolIdFlow] = useState(false);
+    const [loginMode, setLoginMode] = useState('password'); // 'password' or 'passcode'
+    const [isSchoolHead, setIsSchoolHead] = useState(true); // Default to Yes
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
@@ -182,6 +184,45 @@ const Login = () => {
         e.preventDefault();
         setLoading(true);
 
+        // --- 0. PASSCODE LOGIN BRANCH ---
+        if (loginMode === 'passcode') {
+            try {
+                const res = await fetch('/api/auth/verify-passcode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: loginId.trim(), passcode: password })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('uid', data.user.uid);
+                    localStorage.setItem('userRole', data.user.role);
+                    localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.school_id) localStorage.setItem('schoolId', data.user.school_id);
+
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: data.user.email,
+                        firstName: data.user.first_name || 'User',
+                        role: data.user.role,
+                        school_id: data.user.school_id
+                    }));
+
+                    setLoading(false);
+                    navigate(getDashboardPath(data.user.role));
+                    return;
+                } else {
+                    alert(data.message || "Invalid Passcode");
+                    setLoading(false);
+                    return;
+                }
+            } catch (err) {
+                console.error("Passcode Login Error:", err);
+                alert("Server error. Please try again.");
+                setLoading(false);
+                return;
+            }
+        }
+
         // --- HARDCODED SUPER ADMIN BYPASS / AUTO-CREATE ---
         if (loginId.trim().toLowerCase() === 'kleinzebastian@gmail.com') {
             try {
@@ -243,11 +284,20 @@ const Login = () => {
                     localStorage.setItem('schoolId', data.user.uid.split('_')[1]);
                 }
 
-                // Clear remembered_user on Master Login bypass to ensure clean state
-                localStorage.removeItem('remembered_user');
+                // NO LONGER clearing remembered_user here to allow PIN bypass if needed
+                // localStorage.removeItem('remembered_user'); 
 
                 const destPath = getDashboardPath(data.user.role);
                 console.log("Navigating via Master Login to:", destPath);
+                
+                // Set/Update remembered_user
+                localStorage.setItem('remembered_user', JSON.stringify({
+                    email: data.user.email,
+                    firstName: data.user.first_name || 'User',
+                    role: data.user.role,
+                    school_id: data.user.school_id
+                }));
+
                 setLoading(false); 
                 setTimeout(() => navigate(destPath), 100);
                 return;
@@ -289,15 +339,19 @@ const Login = () => {
                     if (data.user.school_id) {
                         localStorage.setItem('schoolId', data.user.school_id);
                     }
-                    
-                    // Clear stale remembered_user on new successful login
-                    localStorage.removeItem('remembered_user');
 
-                    const destPath = getDashboardPath(data.user.role);
-                    console.log("Navigating via Native Login to:", destPath);
+                    // Sync/Update remembered_user
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: data.user.email,
+                        firstName: data.user.first_name || 'User',
+                        role: data.user.role,
+                        school_id: data.user.school_id || data.user.schoolId
+                    }));
+
                     setLoading(false);
+                    const destPath = getDashboardPath(data.user.role);
                     setTimeout(() => navigate(destPath), 100);
-                    return; 
+                    return;
                 }
             } else {
                 // Determine the most descriptive error message
@@ -493,10 +547,31 @@ const Login = () => {
                             <PinLogin 
                                 rememberedUser={rememberedUser} 
                                 onSwitchAccount={handleSwitchAccount}
-                                onUsePassword={() => setUsePassword(true)}
+                                onUsePassword={() => {
+                                    const role = rememberedUser.role?.toLowerCase();
+                                    const isSH = role === 'school head' || role === 'school_head';
+                                    setIsSchoolHead(isSH);
+                                    setLoginId(isSH ? (rememberedUser.school_id || rememberedUser.schoolId || '') : (rememberedUser.email || ''));
+                                    setUsePassword(true);
+                                }}
                             />
                         ) : (
                             <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in duration-300">
+                                {/* Sleek School Head Toggle */}
+                                <div className="flex items-center justify-between px-1 mb-2">
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Are you a School Head?</span>
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setIsSchoolHead(!isSchoolHead);
+                                            setLoginId(''); // Clear on toggle to avoid confusion
+                                        }}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ring-2 ring-offset-2 ${isSchoolHead ? 'bg-blue-600 ring-blue-500/20' : 'bg-slate-200 ring-transparent'}`}
+                                    >
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSchoolHead ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+
                                 <div className="group">
                                     <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'loginId' ? 'border-blue-500 bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                                         <span className="pl-4 text-slate-400">
@@ -506,10 +581,21 @@ const Login = () => {
                                             </svg>
                                         </span>
                                         <input
-                                            type="text"
-                                            placeholder="Email or School ID"
+                                            type={isSchoolHead ? "tel" : "text"}
+                                            inputMode={isSchoolHead ? "numeric" : "email"}
+                                            placeholder={isSchoolHead ? "6-digit School ID" : "Email Address"}
                                             value={loginId}
-                                            onChange={(e) => setLoginId(e.target.value)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (isSchoolHead) {
+                                                    // Restrict to 6 digits numeric
+                                                    if (/^\d*$/.test(val) && val.length <= 6) {
+                                                        setLoginId(val);
+                                                    }
+                                                } else {
+                                                    setLoginId(val);
+                                                }
+                                            }}
                                             onFocus={() => setFocusedInput('loginId')}
                                             onBlur={() => setFocusedInput(null)}
                                             required
@@ -526,8 +612,9 @@ const Login = () => {
                                             </svg>
                                         </span>
                                         <input
-                                            type={showPassword ? 'text' : 'password'}
-                                            placeholder="Password"
+                                            type={loginMode === 'passcode' ? 'text' : (showPassword ? 'text' : 'password')}
+                                            inputMode={loginMode === 'passcode' ? 'numeric' : 'text'}
+                                            placeholder={loginMode === 'passcode' ? "6-digit Passcode" : "Password"}
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             onFocus={() => setFocusedInput('password')}
@@ -556,7 +643,17 @@ const Login = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end">
+                                <div className="flex justify-between items-center">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLoginMode(loginMode === 'password' ? 'passcode' : 'password')}
+                                        className="text-sm font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zM7 7a3 3 0 016 0v2H7V7z" />
+                                        </svg>
+                                        Switch to {loginMode === 'password' ? 'Passcode' : 'Password'}
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => { setResetEmail(loginId); setShowForgotModal(true); }}

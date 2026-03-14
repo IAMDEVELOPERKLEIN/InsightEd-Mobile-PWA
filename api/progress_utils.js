@@ -10,7 +10,10 @@ export const calculateRigorousSchoolProgress = async (pool, schoolId) => {
       unit5_completed, unit6_completed, unit7_completed, unit8_completed,
       unit9_completed, unit10_completed, curricular_offering,
       unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9, unit10,
-      school_name, total_enrollment, division, region, unit_completion
+      school_id, school_name, total_enrollment, division, region, unit_completion,
+      province, municipality, barangay, district, leg_district, latitude, longitude,
+      head_first_name, head_last_name, head_sex, head_position_title, 
+      head_date_of_birth, head_date_hired
      FROM ph_schools WHERE school_id = $1`,
     [schoolId]
   );
@@ -24,9 +27,26 @@ export const calculateRigorousSchoolProgress = async (pool, schoolId) => {
   const backfillClauses = [];
 
   // --- Unit 1: School Identity ---
-  let u1 = row.unit1_completed;
-  if (!u1 && row.school_name) { u1 = true; backfillClauses.push("unit1_completed = TRUE, unit1 = 1"); }
-  if (u1) { completedUnits.push(1); xp += 150; } else if (row.unit1 === 2) { incompleteUnits.push(1); }
+  const u1Fields = [
+    row.school_id, row.school_name, row.region, row.province, 
+    row.municipality, row.barangay, row.division, row.district, 
+    row.leg_district, row.curricular_offering, row.latitude, 
+    row.longitude, row.head_first_name, row.head_last_name, 
+    row.head_sex, row.head_position_title, row.head_date_of_birth, 
+    row.head_date_hired
+  ];
+  const u1StrictlyDone = u1Fields.every(f => f !== null && f !== undefined && String(f).trim() !== "");
+  
+  let u1 = row.unit1_completed || u1StrictlyDone;
+  
+  if (u1StrictlyDone && !row.unit1_completed) {
+    backfillClauses.push("unit1_completed = TRUE, unit1 = 1");
+  } else if (!u1StrictlyDone && row.unit1_completed) {
+    u1 = false;
+    backfillClauses.push("unit1_completed = FALSE, unit1 = 2");
+  }
+
+  if (u1) { completedUnits.push(1); xp += 150; } else if (row.unit1 === 2 || !u1StrictlyDone) { incompleteUnits.push(1); }
 
   // --- Unit 2: Enrollment ---
   let u2 = row.unit2_completed;

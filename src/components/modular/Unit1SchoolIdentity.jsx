@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock } from "react-icons/fi";
-import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
+import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft, addToOutbox } from "../../db";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { safeJsonParse, safeJsonStringify } from "../../utils/safeJson";
 import LocationPickerMap from "../LocationPickerMap";
 import locationData from "../../locations.json";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 const chunkyInput = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm placeholder:text-gray-300";
 const chunkySelect = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:24px] bg-[right_1rem_center] bg-no-repeat disabled:opacity-50 disabled:bg-gray-50";
@@ -41,6 +41,17 @@ const SkeletonWizard = () => (
 );
 
 // ── Main Component ───────────────────────────────────────────────────────────
+const formatDateForInput = (dateStr) => {
+    if (!dateStr) return "";
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return "";
+        return date.toISOString().split('T')[0];
+    } catch (e) {
+        return "";
+    }
+};
+
 const Unit1SchoolIdentity = () => {
     const navigate = useNavigate();
     const [currentStep, setCurrentStep] = useState(0);
@@ -51,6 +62,8 @@ const Unit1SchoolIdentity = () => {
     const [fetchedIern, setFetchedIern] = useState(null);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [isModeLoading, setIsModeLoading] = useState(true);
+    const userEmail = localStorage.getItem("userEmail") || "anonymous";
+    const draftKey = `draft_unit_1_${userEmail}`;
 
     const [formData, setFormData] = useState({
         school_id: "",
@@ -63,6 +76,13 @@ const Unit1SchoolIdentity = () => {
         district: "",
         leg_district: "",
         curricular_offering: "",
+        head_first_name: "",
+        head_middle_name: "",
+        head_last_name: "",
+        head_sex: "",
+        head_position_title: "",
+        head_date_of_birth: "",
+        head_date_hired: "",
         latitude: "",
         longitude: "",
         iern: "",
@@ -129,11 +149,18 @@ const Unit1SchoolIdentity = () => {
                     division:            d.division || iernRow?.Division || "",
                     district:            d.district || iernRow?.District || "",
                     leg_district:        d.leg_district || iernRow?.Legislative_District || "",
-                    curricular_offering: d.curricular_offering || iernRow?.Curricular_Offering || "",
+                    curricular_offering: d.curricular_offering || "", // Don't autopopulate from IERN per user request
                     latitude:            d.latitude || iernRow?.Latitude || "",
                     longitude:           d.longitude || iernRow?.Longitude || "",
                     school_head:         d.school_head || "",
                     contact_number:      d.contact_number || "",
+                    head_first_name:     d.head_first_name || "",
+                    head_middle_name:    d.head_middle_name || "",
+                    head_last_name:      d.head_last_name || "",
+                    head_sex:            d.head_sex || "",
+                    head_position_title: d.head_position_title || "",
+                    head_date_of_birth:  formatDateForInput(d.head_date_of_birth),
+                    head_date_hired:     formatDateForInput(d.head_date_hired),
                 };
                 setFormData(merged);
 
@@ -165,7 +192,7 @@ const Unit1SchoolIdentity = () => {
             }
 
             // Not yet completed — check draft or auto-fill
-            const draft = await getUnit1Draft("draft_unit_1");
+            const draft = await getUnit1Draft(draftKey);
             if (draft) {
                 setFormData(prev => ({ ...prev, ...draft.formData }));
                 setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
@@ -185,7 +212,7 @@ const Unit1SchoolIdentity = () => {
                         division:            iernRow.Division || prev.division,
                         district:            iernRow.District || prev.district,
                         leg_district:        iernRow.Legislative_District || prev.leg_district,
-                        curricular_offering: iernRow.Curricular_Offering || prev.curricular_offering,
+                        curricular_offering: prev.curricular_offering, // Don't autopopulate from IERN per user request
                         latitude:            iernRow.Latitude || prev.latitude,
                         longitude:           iernRow.Longitude || prev.longitude,
                         iern:                iernRow.iern || prev.iern,
@@ -201,20 +228,42 @@ const Unit1SchoolIdentity = () => {
 
     // ── Logic sync ───────────────────────────────────────────────────────────
     useEffect(() => {
-        if (!formData.region || !locationData?.[formData.region]) return;
-        setProvinceOptions(Object.keys(locationData[formData.region]).sort());
+        if (formData.region && locationData?.[formData.region]) {
+            const provinces = Object.keys(locationData[formData.region]).sort();
+            setProvinceOptions(provinces);
+            // Reset if current province is no longer valid
+            if (formData.province && !provinces.includes(formData.province)) {
+                setFormData(prev => ({ ...prev, province: "", municipality: "", barangay: "" }));
+            }
+        } else {
+            setProvinceOptions([]);
+        }
     }, [formData.region]);
 
     useEffect(() => {
-        if (!formData.region || !formData.province) return;
-        const opts = locationData?.[formData.region]?.[formData.province];
-        if (opts) setCityOptions(Object.keys(opts).sort());
+        if (formData.region && formData.province && locationData?.[formData.region]?.[formData.province]) {
+            const cities = Object.keys(locationData[formData.region][formData.province]).sort();
+            setCityOptions(cities);
+            // Reset if current municipality is no longer valid
+            if (formData.municipality && !cities.includes(formData.municipality)) {
+                setFormData(prev => ({ ...prev, municipality: "", barangay: "" }));
+            }
+        } else {
+            setCityOptions([]);
+        }
     }, [formData.region, formData.province]);
 
     useEffect(() => {
-        if (!formData.region || !formData.province || !formData.municipality) return;
-        const opts = locationData?.[formData.region]?.[formData.province]?.[formData.municipality];
-        if (opts) setBarangayOptions(opts.sort());
+        if (formData.region && formData.province && formData.municipality && locationData?.[formData.region]?.[formData.province]?.[formData.municipality]) {
+            const brgys = locationData[formData.region][formData.province][formData.municipality].sort();
+            setBarangayOptions(brgys);
+            // Reset if current barangay is no longer valid
+            if (formData.barangay && !brgys.includes(formData.barangay)) {
+                setFormData(prev => ({ ...prev, barangay: "" }));
+            }
+        } else {
+            setBarangayOptions([]);
+        }
     }, [formData.region, formData.province, formData.municipality]);
 
     useEffect(() => {
@@ -233,12 +282,30 @@ const Unit1SchoolIdentity = () => {
 
     useEffect(() => {
         if (!isModeLoading) {
-            saveUnit1Draft("draft_unit_1", { formData, step: currentStep });
+            saveUnit1Draft(draftKey, { formData, step: currentStep });
         }
-    }, [formData, currentStep, isModeLoading]);
+    }, [formData, currentStep, isModeLoading, draftKey]);
 
     // ── Handlers ─────────────────────────────────────────────────────────────
-    const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const toProperCase = (str) => {
+        return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    };
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        let newValue = value;
+        
+        // Auto-Proper Case for names
+        if (['head_first_name', 'head_middle_name', 'head_last_name'].includes(name)) {
+            // We wait for blur or just do it live but carefully. 
+            // Better to do it live but keep the cursor position if possible, 
+            // or just do it on blur. Let's do a simple live one for now.
+            newValue = toProperCase(value);
+        }
+        
+        setFormData(prev => ({ ...prev, [name]: newValue }));
+    };
+
     const handleRegionChange = (e) => setFormData(prev => ({ ...prev, region: e.target.value, province: "", municipality: "", barangay: "", division: "", district: "" }));
     const handleProvinceChange = (e) => setFormData(prev => ({ ...prev, province: e.target.value, municipality: "", barangay: "" }));
     const handleCityChange = (e) => setFormData(prev => ({ ...prev, municipality: e.target.value, barangay: "" }));
@@ -262,17 +329,58 @@ const Unit1SchoolIdentity = () => {
                 const r = await fetch(`/api/schools_iern/${formData.school_id}`).catch(() => null);
                 if (r?.ok) { const j = await r.json(); if (j.exists && j.data?.iern) finalIern = j.data.iern; }
             }
-            // STRICT VALIDATION WARNING (Frontend)
-            if (!formData.barangay || !formData.leg_district) {
+            // STRICT VALIDATION: Require ALL fields for Unit 1
+            const requiredFields = [
+                'school_id', 'school_name', 'region', 'province', 'municipality', 
+                'barangay', 'division', 'district', 'leg_district', 
+                'curricular_offering', 'latitude', 'longitude', 
+                'head_first_name', 'head_last_name', 'head_sex', 
+                'head_position_title', 'head_date_of_birth', 'head_date_hired'
+            ];
+            
+            const missingFields = requiredFields.filter(f => !formData[f] || String(formData[f]).trim() === "");
+            
+            if (missingFields.length > 0) {
+                alert(`Please complete all fields before saving. Missing: ${missingFields.join(", ").replace(/_/g, " ")}`);
+                setLoading(false);
+                return;
+            }
+
+            const isCompleted = !!(
+                formData.region && 
+                formData.province && 
+                formData.municipality && 
+                formData.barangay && 
+                formData.division && 
+                formData.district && 
+                formData.leg_district &&
+                formData.head_first_name &&
+                formData.head_last_name &&
+                formData.head_sex &&
+                formData.head_position_title &&
+                formData.head_date_of_birth &&
+                formData.head_date_hired
+            );
+
+            // Double check strict validation before actual POST
+            if (!isCompleted) {
                 const missing = [];
+                if (!formData.region) missing.push("Region");
+                if (!formData.province) missing.push("Province");
+                if (!formData.municipality) missing.push("Municipality");
                 if (!formData.barangay) missing.push("Barangay");
+                if (!formData.division) missing.push("Division");
+                if (!formData.district) missing.push("District");
                 if (!formData.leg_district) missing.push("Legislative District");
+                if (!formData.head_first_name) missing.push("Head First Name");
+                if (!formData.head_last_name) missing.push("Head Last Name");
+                if (!formData.head_sex) missing.push("Head Sex");
+                if (!formData.head_position_title) missing.push("Head Position Title");
+                if (!formData.head_date_of_birth) missing.push("Head Date of Birth");
+                if (!formData.head_date_hired) missing.push("Head Date of Assignment");
                 
-                const proceed = window.confirm(
-                    `Warning: The following fields are missing: ${missing.join(", ")}.\n\n` +
-                    "While you can save your progress, this unit will NOT be marked as 'Accomplished' on your dashboard until these fields are provided. Do you want to proceed?"
-                );
-                if (!proceed) {
+                if (missing.length > 0) {
+                    alert(`Missing required fields: ${missing.join(", ")}`);
                     setLoading(false);
                     return;
                 }
@@ -284,19 +392,14 @@ const Unit1SchoolIdentity = () => {
                 body: JSON.stringify({ ...formData, iern: finalIern || null }),
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            await clearUnit1Draft("draft_unit_1");
+            await clearUnit1Draft(draftKey);
             const stored = localStorage.getItem("quest_progress");
             let progress = safeJsonParse(stored, { completedUnits: [], xp: 0 });
             
-            const isCompleted = !!(formData.barangay && formData.leg_district);
-            if (isCompleted && !progress.completedUnits.includes(1)) { 
+            if (!progress.completedUnits.includes(1)) { 
                 progress.completedUnits.push(1); 
                 progress.xp += 150; 
                 localStorage.setItem("quest_progress", safeJsonStringify(progress)); 
-            } else if (!isCompleted) {
-                // If they cleared it, remove it from progress
-                progress.completedUnits = progress.completedUnits.filter(u => u !== 1);
-                localStorage.setItem("quest_progress", safeJsonStringify(progress));
             }
 
             localStorage.setItem("schoolId", formData.school_id);
@@ -312,11 +415,27 @@ const Unit1SchoolIdentity = () => {
                     completed: isCompleted // Note: Backend handles this too, but good to be explicit
                 })
             }).catch(e => console.warn("Activity sync failed:", e));
-
+            
             setShowSuccess(true);
         } catch (err) {
             console.error("Submit failed:", err);
-            alert("Failed to sync. Progress saved locally.");
+            
+            // Queue for offline sync if fetch fail or offline
+            try {
+                await addToOutbox({
+                    url: "/api/ph_schools/unit1",
+                    method: "POST",
+                    type: "UNIT_1_IDENTITY",
+                    label: "School Identity (Unit 1)",
+                    payload: { ...formData, iern: finalIern || null }
+                });
+                alert("You are currently offline or connection is unstable. Your School Identity has been saved to the Outbox and will sync once connection is restored.");
+                await clearUnit1Draft(draftKey);
+                setShowSuccess(true); // Still show success modal but with outbox context
+            } catch (outboxErr) {
+                console.error("Outbox save failed:", outboxErr);
+                alert("Failed to sync and failed to save to Outbox. Please try again when you have a better connection.");
+            }
         } finally {
             setLoading(false);
         }
@@ -329,20 +448,52 @@ const Unit1SchoolIdentity = () => {
         { q: "Confirm the school name", sub: "Is this the official name of the institution?" },
         { q: "Where is the school located?", sub: "Select the specific region, division, and district details." },
         { q: "What does the school offer?", sub: "Choose the curricular levels provided by the school." },
+        { q: "Who is the School Head?", sub: "Provide the official details of the current head of institution." },
         { q: "Pin the school 📍", sub: "Confirm the coordinates to update the school's map registry." },
     ];
 
-    const isStep0Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id);
-    const isStep1Valid = formData.school_name.trim().length > 3;
-    const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
-    const isStep3Valid = formData.curricular_offering !== "";
-    const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
+    const positionOptions = [
+        "Teacher I", "Teacher II", "Teacher III", "Master Teacher I", "Master Teacher II",
+        "Master Teacher III", "Master Teacher IV", "SPED Teacher I", "SPED Teacher II",
+        "SPED Teacher III", "SPED Teacher IV", "SPED Teacher V", "Special Science Teacher I",
+        "Special Science Teacher II", "Head Teacher I", "Head Teacher II", "Head Teacher III",
+        "Head Teacher IV", "Head Teacher V", "Head Teacher VI", "Assistant School Principal I",
+        "Assistant School Principal II", "School Principal I", "School Principal II",
+        "School Principal III", "School Principal IV", "Special School Principal I",
+        "Special School Principal II", "Vocational School Administrator I",
+        "Vocational School Administrator II", "Vocational School Administrator III",
+        "Public School District Supervisor"
+    ];
+
+    const isStep0Valid = formData.school_id?.length === 6 && /^\d+$/.test(formData.school_id);
+    const isStep1Valid = formData.school_name?.trim().length > 3;
+    const isStep2Valid = !!(
+        formData.region && 
+        formData.province && 
+        formData.municipality && 
+        formData.barangay && 
+        formData.division && 
+        formData.district && 
+        formData.leg_district
+    );
+    const isStep3Valid = !!formData.curricular_offering;
+    const isStep4Valid = !!(
+        formData.head_first_name?.trim() && 
+        formData.head_last_name?.trim() && 
+        formData.head_sex && 
+        formData.head_position_title && 
+        formData.head_date_of_birth && 
+        formData.head_date_hired
+    );
+    const isStep5Valid = formData.latitude !== "" && formData.longitude !== "";
+
     const isCurrentStepValid = () => {
         if (currentStep === 0) return isStep0Valid;
         if (currentStep === 1) return isStep1Valid;
         if (currentStep === 2) return isStep2Valid;
         if (currentStep === 3) return isStep3Valid;
         if (currentStep === 4) return isStep4Valid;
+        if (currentStep === 5) return isStep5Valid;
         return false;
     };
 
@@ -511,7 +662,7 @@ const Unit1SchoolIdentity = () => {
                                                     {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-4">
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Province</label>
                                                     <select name="province" value={formData.province} onChange={handleProvinceChange} className={chunkySelect} disabled={!formData.region}>
@@ -534,7 +685,7 @@ const Unit1SchoolIdentity = () => {
                                                     {divisionOptions.map(d => <option key={d}>{d}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-4">
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">District</label>
                                                     <select name="district" value={formData.district} onChange={handleChange} className={chunkySelect} disabled={!formData.division}>
@@ -580,7 +731,96 @@ const Unit1SchoolIdentity = () => {
                                     </div>
                                 )}
 
-                                { currentStep === 4 && (
+                                {currentStep === 4 && (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 gap-4">
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">First Name</label>
+                                                <input
+                                                    type="text"
+                                                    name="head_first_name"
+                                                    value={formData.head_first_name}
+                                                    onChange={handleChange}
+                                                    placeholder="First Name"
+                                                    className={chunkyInput}
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Middle Name</label>
+                                                    <input
+                                                        type="text"
+                                                        name="head_middle_name"
+                                                        value={formData.head_middle_name}
+                                                        onChange={handleChange}
+                                                        placeholder="Middle (Optional)"
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Last Name</label>
+                                                    <input
+                                                        type="text"
+                                                        name="head_last_name"
+                                                        value={formData.head_last_name}
+                                                        onChange={handleChange}
+                                                        placeholder="Last Name"
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Sex</label>
+                                                <select
+                                                    name="head_sex"
+                                                    value={formData.head_sex}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="">Select Sex</option>
+                                                    <option value="Male">Male</option>
+                                                    <option value="Female">Female</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Position Title</label>
+                                                <select
+                                                    name="head_position_title"
+                                                    value={formData.head_position_title}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="">Select Position</option>
+                                                    {positionOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date of Birth</label>
+                                                    <input
+                                                        type="date"
+                                                        name="head_date_of_birth"
+                                                        value={formData.head_date_of_birth}
+                                                        onChange={handleChange}
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date Assigned</label>
+                                                    <input
+                                                        type="date"
+                                                        name="head_date_hired"
+                                                        value={formData.head_date_hired}
+                                                        onChange={handleChange}
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                { currentStep === 5 && (
                                     <div className="space-y-4 pb-20">
                                         
                                         <div className="h-48 rounded-[2rem] overflow-hidden border-2 border-gray-100 shadow-inner relative mt-4">

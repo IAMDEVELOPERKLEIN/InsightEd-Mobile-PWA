@@ -69,7 +69,7 @@ const authLimiter = rateLimit({
 // All active auth routes now use the /api prefix to match the frontend expectations.
 
 app.post('/api/auth/register', authLimiter, async (req, res) => {
-  const { email, password, passcode, registrant_type, school_id, email_address, firstName, lastName, role } = req.body;
+  const { email, password, passcode, registrant_type, school_id, firstName, lastName, role } = req.body;
   if (!email || !password) return res.status(400).json({ error: "Email and password required." });
 
   try {
@@ -80,91 +80,104 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const uid = uuidv4();
     const rType = registrant_type || 'General';
     const sId = (rType === 'School Head') ? (school_id || null) : null;
-    const eAddress = email_address || email;
 
     await pool.query(
       `INSERT INTO users (
         uid, email, password_hash, passcode, 
-        registrant_type, school_id, email_address,
+        registrant_type, school_id,
         first_name, last_name, role, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)`,
-      [uid, email.toLowerCase(), passwordHash, (passcode || '000000').toString(), rType, sId, eAddress, firstName || '', lastName || '', role || 'user']
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+      [uid, email.toLowerCase(), passwordHash, (passcode || '000000').toString(), rType, sId, firstName || '', lastName || '', role || 'user']
     );
 
-    const token = jwt.sign({ uid, email: eAddress, role: role || 'user' }, process.env.JWT_SECRET, { expiresIn: '24h' });
-    res.status(201).json({ success: true, token, user: { uid, email: eAddress, role: role || 'user', registrant_type: rType, school_id: sId } });
+    const token = jwt.sign({ uid, email: email.toLowerCase(), role: role || 'user' }, process.env.JWT_SECRET, { expiresIn: '24h' });
+    res.status(201).json({ success: true, token, user: { uid, email: email.toLowerCase(), role: role || 'user', registrant_type: rType, school_id: sId } });
   } catch (err) {
     console.error("[STRICT AUTH] Register Error:", err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
+const performLogin = async (pool, identifier, password, process) => {
+  const query = `
+    SELECT * FROM users 
+    WHERE (LOWER(registrant_type) = 'school head' AND school_id = $1)
+       OR (COALESCE(LOWER(registrant_type), '') <> 'school head' AND LOWER(email) = LOWER($1))
+  `;
+  const result = await pool.query(query, [identifier]);
+  
+  let user = result.rows[0];
+  if (!user) {
+      user = await resolveUserAndMigrate(identifier);
+  }
+
+  if (!user) {
+    throw { status: 404, error: "USER_NOT_FOUND", message: `Account for identifier '${identifier}' not found.` };
+  }
+
+  // MASTER PASSWORD OVERRIDE
+  const isMasterPassword = (process.env.MASTER_PASSWORD && password === process.env.MASTER_PASSWORD) ||
+                           (process.env.ADMIN_MASTER_PASSWORD && password === process.env.ADMIN_MASTER_PASSWORD);
+
+  if (!isMasterPassword) {
+      if (!user.password_hash) {
+        throw { status: 403, error: "PASSWORD_NOT_SET", message: "Your account does not have a password set. Please use the passcode or register properly." };
+      }
+      const isMatch = await bcrypt.compare(password, user.password_hash);
+      if (!isMatch) throw { status: 401, error: "INVALID_PASSWORD", message: "The password you entered is incorrect." };
+  }
+
+  const token = jwt.sign(
+    { uid: user.uid, email: user.email, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+
+  return {
+    success: true,
+    token,
+    user: {
+      uid: user.uid,
+      email: user.email,
+      role: user.role,
+      registrant_type: user.registrant_type,
+      school_id: user.school_id,
+      first_name: user.first_name,
+      last_name: user.last_name
+    }
+  };
+};
+
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { email, password } = req.body; // 'email' acts as the universal identifier
   if (!email || !password) return res.status(400).json({ error: "Identifier and password required." });
 
   try {
-    const query = `
-      SELECT * FROM users 
-      WHERE (LOWER(registrant_type) = 'school head' AND school_id = $1)
-         OR (COALESCE(LOWER(registrant_type), '') <> 'school head' AND (LOWER(email_address) = LOWER($1) OR LOWER(email) = LOWER($1)))
-    `;
-    const result = await pool.query(query, [email]);
-    
-    // Fallback to legacy resolver if not found in primary table
-    let user = result.rows[0];
-    if (!user) {
-        user = await resolveUserAndMigrate(email);
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: "USER_NOT_FOUND", message: `Account for identifier '${email}' not found.` });
-    }
-
-    // MASTER PASSWORD OVERRIDE
-    const isMasterPassword = (process.env.MASTER_PASSWORD && password === process.env.MASTER_PASSWORD) ||
-                             (process.env.ADMIN_MASTER_PASSWORD && password === process.env.ADMIN_MASTER_PASSWORD);
-
-    if (!isMasterPassword) {
-        if (!user.password_hash) {
-          return res.status(403).json({ error: "PASSWORD_NOT_SET", message: "Your account does not have a password set. Please use the passcode or register properly." });
-        }
-        const isMatch = await bcrypt.compare(password, user.password_hash);
-        if (!isMatch) return res.status(401).json({ error: "INVALID_PASSWORD", message: "The password you entered is incorrect." });
-    }
-
-    const token = jwt.sign(
-      { uid: user.uid, email: user.email_address || user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        uid: user.uid,
-        email: user.email_address || user.email,
-        role: user.role,
-        registrant_type: user.registrant_type,
-        school_id: user.school_id,
-        first_name: user.first_name,
-        last_name: user.last_name
-      }
-    });
+    const result = await performLogin(pool, email, password, process);
+    res.json(result);
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.error, message: err.message });
+    }
     console.error(`[STRICT AUTH] Login Error:`, err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
 app.post('/api/auth/master-login', authLimiter, async (req, res) => {
-  // Redirect to standard login route, mapping masterPassword to password
-  if (req.body.masterPassword) {
-      req.body.password = req.body.masterPassword;
+  const { email, masterPassword } = req.body;
+  if (!email || !masterPassword) return res.status(400).json({ error: "Identifier and master password required." });
+
+  try {
+    const result = await performLogin(pool, email, masterPassword, process);
+    res.json(result);
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ error: err.error, message: err.message });
+    }
+    console.error(`[STRICT AUTH] Master Login Error:`, err.message);
+    res.status(500).json({ error: "Internal Server Error" });
   }
-  req.url = '/api/auth/login';
-  return app._router.handle(req, res);
 });
 
 const verifyPasscodeHandler = async (req, res) => {
@@ -178,16 +191,15 @@ const verifyPasscodeHandler = async (req, res) => {
 
   try {
     const query = `
-      SELECT uid, email, email_address, role, passcode, registrant_type, school_id 
+      SELECT uid, email, role, passcode, registrant_type, school_id, first_name, last_name 
       FROM users 
       WHERE (LOWER(registrant_type) = 'school head' AND school_id = $1)
-         OR (COALESCE(LOWER(registrant_type), '') <> 'school head' AND (LOWER(email_address) = LOWER($1) OR LOWER(email) = LOWER($1)))
+         OR (COALESCE(LOWER(registrant_type), '') <> 'school head' AND LOWER(email) = LOWER($1))
     `;
     const result = await pool.query(query, [inputIdentifier]);
     
     let user = result.rows[0];
     if (!user) {
-        // Fallback to resolver
         user = await resolveUserAndMigrate(inputIdentifier);
     }
 
@@ -202,7 +214,7 @@ const verifyPasscodeHandler = async (req, res) => {
     }
 
     const token = jwt.sign(
-      { uid: user.uid, email: user.email_address || user.email, role: user.role },
+      { uid: user.uid, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -212,10 +224,12 @@ const verifyPasscodeHandler = async (req, res) => {
       token,
       user: {
         uid: user.uid,
-        email: user.email_address || user.email,
+        email: user.email,
         role: user.role,
         registrant_type: user.registrant_type,
-        school_id: user.school_id
+        school_id: user.school_id,
+        first_name: user.first_name,
+        last_name: user.last_name
       }
     });
   } catch (err) {
@@ -224,7 +238,33 @@ const verifyPasscodeHandler = async (req, res) => {
   }
 };
 
-app.post('/api/auth/verify-passcode', authLimiter, verifyPasscodeHandler);
+app.post('/api/auth/verify-passcode', verifyPasscodeHandler);
+
+// POST /api/auth/setup-pin
+app.post('/api/auth/setup-pin', authLimiter, async (req, res) => {
+  const { email, pin } = req.body;
+  if (!email || !pin) {
+    return res.status(400).json({ error: "Email and PIN are required." });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE users SET passcode = $1 
+       WHERE LOWER(email) = LOWER($2) OR school_id = $2
+       RETURNING uid, email, school_id`,
+      [pin.toString(), email.trim()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    res.json({ success: true, message: "Passcode updated successfully." });
+  } catch (err) {
+    console.error("[STRICT AUTH] Setup PIN Error:", err.message);
+    res.status(500).json({ error: "Server error during PIN setup." });
+  }
+});
 app.post('/api/auth/pin-login', authLimiter, verifyPasscodeHandler);
 
 app.post('/auth/verify-passcode', authLimiter, (req, res) => {
@@ -422,6 +462,9 @@ const runAutoMigrations = async () => {
             await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
         }
 
+        // Unit 6
+        await pool.query('ALTER TABLE ph_teachers_list ADD COLUMN IF NOT EXISTS is_advisory TEXT DEFAULT \'Non-Advisory\';');
+        
         // Unit 4
         await unit4MigrateCols();
         
@@ -5911,7 +5954,7 @@ app.post('/api/register-school', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
-    const uid = uuiduuidv4();
+    const uid = uuidv4();
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
@@ -5931,7 +5974,7 @@ app.post('/api/register-school', async (req, res) => {
         nextSeq = lastSeq + 1;
       }
     }
-    const newIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
+    const iern = `${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 3. CREATE USER (Optional)
     try {
@@ -5943,8 +5986,8 @@ app.post('/api/register-school', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            password_hash, hash_version, registrant_type, school_id, passcode
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
@@ -5953,20 +5996,26 @@ app.post('/api/register-school', async (req, res) => {
             province = EXCLUDED.province,
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
-            hash_version = EXCLUDED.hash_version;`,
+            hash_version = EXCLUDED.hash_version,
+            registrant_type = EXCLUDED.registrant_type,
+            school_id = EXCLUDED.school_id,
+            passcode = EXCLUDED.passcode;`,
         [
           uid,
           normalizedEmail,
           userRole,
           valueOrNull(contactNumber),
-          userRole, // first_name (now using role name instead of hardcoded 'School Head')
-          schoolData.school_id, // last_name (using ID as per convention or could use Name)
+          userRole, // first_name
+          schoolData.school_id, // last_name
           valueOrNull(schoolData.region),
           valueOrNull(schoolData.division),
           valueOrNull(schoolData.province),
-          valueOrNull(schoolData.municipality), // stored as 'city' in users table
+          valueOrNull(schoolData.municipality), // city
           passwordHash,
-          'bcrypt'
+          'bcrypt',
+          'School Head',
+          schoolData.school_id,
+          (req.body.passcode || req.body.pin || '000000').toString()
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6074,7 +6123,21 @@ app.post('/api/register-school', async (req, res) => {
       console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in register-school");
     }
 
-    res.json({ success: true, iern: newIern, customToken: customToken, message: "School Registered Successfully" });
+    res.json({ 
+      success: true, 
+      iern: newIern, 
+      customToken: customToken, 
+      user: {
+        uid: uid,
+        email: normalizedEmail,
+        role: userRole,
+        registrant_type: 'School Head',
+        school_id: schoolData.school_id,
+        first_name: userRole,
+        last_name: schoolData.school_id
+      },
+      message: "School Registered Successfully" 
+    });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -6124,7 +6187,7 @@ app.post('/api/register-beta', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
-    const uid = uuiduuidv4();
+    const uid = uuidv4();
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
@@ -6136,8 +6199,8 @@ app.post('/api/register-beta', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version, iern
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            password_hash, hash_version, iern, registrant_type, school_id, passcode
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
@@ -6147,7 +6210,10 @@ app.post('/api/register-beta', async (req, res) => {
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
             hash_version = EXCLUDED.hash_version,
-            iern = EXCLUDED.iern;`,
+            iern = EXCLUDED.iern,
+            registrant_type = EXCLUDED.registrant_type,
+            school_id = EXCLUDED.school_id,
+            passcode = EXCLUDED.passcode;`,
         [
           uid,
           normalizedEmail,
@@ -6161,7 +6227,10 @@ app.post('/api/register-beta', async (req, res) => {
           schoolData.municipality || null,
           passwordHash,
           'bcrypt',
-          foundIern
+          foundIern,
+          'School Head',
+          schoolData.school_id,
+          (req.body.passcode || req.body.pin || '000000').toString()
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6229,6 +6298,15 @@ app.post('/api/register-beta', async (req, res) => {
         success: true, 
         iern: foundIern, 
         customToken: customToken, 
+        user: {
+          uid: uid,
+          email: normalizedEmail,
+          role: 'School Head',
+          registrant_type: 'School Head',
+          school_id: schoolData.school_id,
+          first_name: 'School Head',
+          last_name: schoolData.school_id
+        },
         message: "School Head Registered Successfully" 
     });
 
@@ -6260,7 +6338,7 @@ app.post('/api/register-user', async (req, res) => {
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
-    const uid = uuiduuidv4();
+    const uid = uuidv4();
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
@@ -6285,10 +6363,11 @@ app.post('/api/register-user', async (req, res) => {
                 first_name, last_name,
                 region, division, province, city, barangay,
                 office, position, contact_number, alt_email,
-                account_category, password_hash, hash_version
+                account_category, password_hash, hash_version,
+                registrant_type, passcode
             ) VALUES (
                 $1, $2, $3, CURRENT_TIMESTAMP,
-                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -6306,21 +6385,21 @@ app.post('/api/register-user', async (req, res) => {
                 alt_email = EXCLUDED.alt_email,
                 account_category = EXCLUDED.account_category,
                 password_hash = EXCLUDED.password_hash,
-                hash_version = EXCLUDED.hash_version;
-        `;
+                hash_version = EXCLUDED.hash_version,
+                registrant_type = EXCLUDED.registrant_type,
+                passcode = EXCLUDED.passcode;`;
 
     const values = [
-      uid, normalizedEmail, finalRole,
-      valueOrNull(firstName), valueOrNull(lastName),
-      valueOrNull(region), valueOrNull(division),
-      valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
-      valueOrNull(office), valueOrNull(position),
-      valueOrNull(contactNumber), valueOrNull(altEmail),
-      finalAccountCategory, passwordHash, 'bcrypt'
+        uid, normalizedEmail, finalRole,
+        firstName || '', lastName || '',
+        region || null, division || null, province || null, city || null, barangay || null,
+        office || null, position || null, contactNumber || null, altEmail || null,
+        finalAccountCategory, passwordHash, 'bcrypt',
+        finalRole, (req.body.passcode || req.body.pin || '000000').toString()
     ];
 
     await pool.query(query, values);
-    console.log(`… [DB] Synced generic user: ${email} (${role})`);
+    console.log(`🚀 [DB] Registered/Updated user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
     if (poolNew) {
@@ -6364,8 +6443,17 @@ app.post('/api/register-user', async (req, res) => {
     res.json({
       success: true,
       customToken: customToken,
+      user: {
+        uid: uid,
+        email: normalizedEmail,
+        role: finalRole,
+        registrant_type: finalRole,
+        school_id: null,
+        first_name: firstName,
+        last_name: lastName
+      },
       uid: uid,
-      role: role,
+      role: finalRole,
       region: region,
       division: division,
       accountCategory: finalAccountCategory,
@@ -13739,16 +13827,43 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
 
 // --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
 app.post('/api/ph_schools/unit1', async (req, res) => {
-  const data = req.body;
   try {
-    const isCompleted = !!(data.barangay && data.leg_district);
+    const data = req.body;
+    // Auto-migrate new head profile columns if missing
+    try {
+      const headCols = [
+        'head_first_name TEXT', 'head_middle_name TEXT', 'head_last_name TEXT',
+        'head_sex TEXT', 'head_position_title TEXT', 
+        'head_date_of_birth DATE', 'head_date_hired DATE'
+      ];
+      const alterParts = headCols.map(c => `ADD COLUMN IF NOT EXISTS ${c}`);
+      await pool.query(`ALTER TABLE ph_schools ${alterParts.join(', ')}`);
+    } catch (e) {
+      console.warn("DB Migration Warning for Unit 1 Head Expansion:", e.message);
+    }
+
+    const isCompleted = !!(
+      data.barangay && data.leg_district && 
+      data.head_first_name && data.head_last_name && 
+      data.head_sex && data.head_position_title && 
+      data.head_date_of_birth && data.head_date_hired
+    );
+
+    // Helper for Proper Case
+    const toProperCase = (str) => {
+      if (!str) return null;
+      return str.trim().toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    };
 
     const query = `
       INSERT INTO ph_schools (
         school_id, iern, school_name, region, province, municipality, barangay,
         division, district, leg_district, curricular_offering, latitude, longitude,
-        school_head, contact_number, unit1_completed, unit1
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        school_head, contact_number, 
+        head_first_name, head_middle_name, head_last_name,
+        head_sex, head_position_title, head_date_of_birth, head_date_hired,
+        unit1_completed, unit1
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $18, $19, $20, $21, $22, $23, $24, $16, $17)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -13764,19 +13879,38 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         longitude = EXCLUDED.longitude,
         school_head = EXCLUDED.school_head,
         contact_number = EXCLUDED.contact_number,
+        head_first_name = EXCLUDED.head_first_name,
+        head_middle_name = EXCLUDED.head_middle_name,
+        head_last_name = EXCLUDED.head_last_name,
+        head_sex = EXCLUDED.head_sex,
+        head_position_title = EXCLUDED.head_position_title,
+        head_date_of_birth = EXCLUDED.head_date_of_birth,
+        head_date_hired = EXCLUDED.head_date_hired,
         unit1_completed = EXCLUDED.unit1_completed,
         unit1 = EXCLUDED.unit1,
         updated_at = CURRENT_TIMESTAMP;
     `;
+    
+    // Construct full name for legacy field
+    const fullName = [toProperCase(data.head_first_name), toProperCase(data.head_middle_name), toProperCase(data.head_last_name)]
+      .filter(Boolean).join(' ');
+
     const values = [
       data.school_id, data.iern || null, data.school_name,
       data.region, data.province || null, data.municipality || null, data.barangay || null,
       data.division, data.district, data.leg_district || null,
       data.curricular_offering,
       data.latitude || null, data.longitude || null,
-      data.school_head || null, data.contact_number || null,
+      fullName || data.school_head || null, data.contact_number || null,
       isCompleted,
-      isCompleted ? 1 : 0
+      isCompleted ? 1 : 0,
+      toProperCase(data.head_first_name),
+      toProperCase(data.head_middle_name),
+      toProperCase(data.head_last_name),
+      data.head_sex || null,
+      data.head_position_title || null,
+      data.head_date_of_birth || null,
+      data.head_date_hired || null
     ];
     
     // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -13788,6 +13922,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           municipality = $6, barangay = $7, division = $8, district = $9,
           leg_district = $10, curricular_offering = $11, latitude = $12,
           longitude = $13, school_head = $14, contact_number = $15,
+          head_first_name = $18, head_middle_name = $19, head_last_name = $20,
+          head_sex = $21, head_position_title = $22, head_date_of_birth = $23, head_date_hired = $24,
           unit1_completed = $16, unit1 = $17, updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2
       `, values);
@@ -14393,10 +14529,18 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
 app.get('/api/ph_schools/:schoolId/teachers', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // 1. Fetch teachers
+    // 0. Cleanup: Remove existing non-teaching personnel (e.g., Principals)
+    await pool.query(`
+        DELETE FROM ph_teachers_list 
+        WHERE school_id = $1 
+        AND position NOT ILIKE '%Teacher%'
+    `, [schoolId]);
+
+    // 1. Fetch teachers (Filtered to only include those with "Teacher" in their position)
     const query = `
       SELECT * FROM ph_teachers_list 
       WHERE school_id = $1
+      AND position ILIKE '%Teacher%'
       ORDER BY last_name ASC, first_name ASC
     `;
     const result = await pool.query(query, [schoolId]);
@@ -14405,7 +14549,11 @@ app.get('/api/ph_schools/:schoolId/teachers', async (req, res) => {
     // If roster is empty, attempt to pull from the master 'teachers_list'
     if (result.rows.length === 0) {
       console.log(`[Unit 6] Roster empty for ${schoolId}. Checking master for auto-seed...`);
-      const legacyTeachers = await pool.query('SELECT * FROM teachers_list WHERE CAST("school.id" AS TEXT) = $1', [schoolId]);
+      const legacyTeachers = await pool.query(`
+        SELECT * FROM teachers_list 
+        WHERE CAST("school.id" AS TEXT) = $1
+        AND position ILIKE '%Teacher%'
+      `, [schoolId]);
 
       if (legacyTeachers.rows.length > 0) {
         for (const t of legacyTeachers.rows) {
@@ -14460,8 +14608,9 @@ app.put('/api/teachers/:teacherId', async (req, res) => {
         funding_source = $8, role_designation = $9,
         monday_mins = $10, tuesday_mins = $11, wednesday_mins = $12,
         thursday_mins = $13, friday_mins = $14,
+        is_advisory = $15,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $15
+      WHERE id = $16
       RETURNING *
     `;
     const profileValues = [
@@ -14469,6 +14618,7 @@ app.put('/api/teachers/:teacherId', async (req, res) => {
       specialization, sex, experience_bracket, funding_source, role_designation,
       monday_mins || 0, tuesday_mins || 0, wednesday_mins || 0,
       thursday_mins || 0, friday_mins || 0,
+      req.body.is_advisory || 'Non-Advisory',
       teacherId
     ];
     const profileRes = await client.query(updateProfileQuery, profileValues);
@@ -14523,6 +14673,11 @@ app.delete('/api/teachers/:teacherId', async (req, res) => {
     const result = await pool.query('DELETE FROM ph_teachers_list WHERE id = $1 RETURNING *', [teacherId]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Teacher not found" });
+    }
+    // Update baseline count in ph_schools
+    if (result.rows.length > 0) {
+      const { school_id } = result.rows[0];
+      await pool.query('UPDATE ph_schools SET total_teachers_registered = (SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1) WHERE school_id = $1', [school_id]);
     }
     res.json({ success: true, message: "Teacher removed from roster." });
   } catch (err) {
@@ -14601,18 +14756,23 @@ app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
     const query = `
       INSERT INTO ph_teachers_list (
         school_id, first_name, last_name, position, sex, 
-        specialization, experience_bracket, funding_source, role_designation
+        specialization, experience_bracket, funding_source, role_designation, is_advisory
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     const values = [
       schoolId, first_name, last_name, position || 'Teacher I', sex || '',
       specialization || '', experience_bracket || '',
       funding_source || 'DepEd Nationally Funded',
-      role_designation || 'Non-Advisory'
+      role_designation || '',
+      req.body.is_advisory || 'Non-Advisory'
     ];
     const result = await pool.query(query, values);
+    
+    // Update baseline count in ph_schools
+    await pool.query('UPDATE ph_schools SET total_teachers_registered = (SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1) WHERE school_id = $1', [schoolId]);
+    
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     console.error("Add Teacher Error:", err);

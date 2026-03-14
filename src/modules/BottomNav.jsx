@@ -57,6 +57,7 @@ const BottomNav = ({ userRole }) => {
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: TbHomeEdit },
             { label: 'Modules', path: '/modular-dashboard', icon: LuCompass },
+            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
@@ -150,8 +151,10 @@ const BottomNav = ({ userRole }) => {
                             style={styles.navButton}
                         onClick={() => {
                             if (item.logout) {
+                                const persistence = localStorage.getItem('remembered_user');
                                 localStorage.clear();
                                 sessionStorage.clear();
+                                if (persistence) localStorage.setItem('remembered_user', persistence);
                                 navigate('/');
                                 return;
                             }
