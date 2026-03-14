@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck } from "react-icons/fi";
+import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
 import BarongMascot from "./BarongMascot";
 import BottomNav from "../modules/BottomNav";
+import { DASHBOARD_METADATA } from "../config/dashboardMetadata";
 
 const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, isLocked }) => {
     const radius = (size - strokeWidth) / 2;
@@ -53,24 +54,15 @@ const getRank = (xp) => {
 const ModularDashboard = () => {
     const navigate = useNavigate();
     const [hasDraft, setHasDraft] = useState(false);
-    const [questProgress, setQuestProgress] = useState({ completedUnits: [], xp: 0 });
+    const [questProgress, setQuestProgress] = useState(() => {
+        const stored = localStorage.getItem('quest_progress');
+        return stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+    });
     const [curricularOffering, setCurricularOffering] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(!localStorage.getItem('quest_progress'));
 
     useEffect(() => {
         const loadProgress = async () => {
-            const stored = localStorage.getItem('quest_progress');
-            let initialProgress = { completedUnits: [], xp: 0 };
-            
-            if (stored) {
-                try {
-                    initialProgress = JSON.parse(stored);
-                    setQuestProgress(initialProgress);
-                } catch (err) {
-                    console.error("Failed to parse quest progress", err);
-                }
-            }
-
             const schoolId = localStorage.getItem('schoolId');
             if (schoolId) {
                 try {
@@ -81,10 +73,9 @@ const ModularDashboard = () => {
                             if (data.progress.curricular_offering) {
                                 setCurricularOffering(data.progress.curricular_offering);
                             }
-                            if (data.progress.completedUnits.length >= initialProgress.completedUnits.length) {
-                                setQuestProgress(data.progress);
-                                localStorage.setItem('quest_progress', JSON.stringify(data.progress));
-                            }
+                            // Sync if server has more/different data
+                            setQuestProgress(data.progress);
+                            localStorage.setItem('quest_progress', JSON.stringify(data.progress));
                         }
                     }
                 } catch (err) {
@@ -115,17 +106,23 @@ const ModularDashboard = () => {
                               offering.includes('10') || offering.includes('11') || offering.includes('12') || 
                               offering.includes('high school');
 
-        let mods = [
-            { id: 1, title: "School Profile", icon: <FiHome className="w-5 h-5" />, path: "/modular/unit-1", locked: false },
-            { id: 2, title: hasHighSchool ? "JHS/SHS Enrollment" : "Enrollment", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-2", locked: false },
-            { id: 3, title: "Organized Classes", icon: <FiGrid className="w-5 h-5" />, path: "/modular/unit-3", locked: false },
-            { id: 4, title: hasHighSchool ? "JHS/SHS Profile" : "Learner Profile", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-4", locked: false },
-            { id: 5, title: "Shifting & Modality", icon: <FiClock className="w-5 h-5" />, path: "/modular/unit-5", locked: false },
-            { id: 6, title: "Teaching Personnel", icon: <FiUsers className="w-5 h-5" />, path: "/modular/unit-6", locked: false },
-            { id: 7, title: "School Resources", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-7", locked: false },
-            { id: 8, title: "Physical Facilities", icon: <FiBookOpen className="w-5 h-5" />, path: "/modular/unit-8", locked: false },
-        ];
-        return mods;
+        return DASHBOARD_METADATA.units.map(u => {
+            let title = u.title;
+            if (u.dynamicTitle) {
+                if (u.id === 2) title = hasHighSchool ? "JHS/SHS Enrollment" : "Enrollment";
+                if (u.id === 4) title = hasHighSchool ? "JHS/SHS Profile" : "Learner Profile";
+            }
+
+            const Icon = u.icon;
+
+            return {
+                id: u.id,
+                title: title,
+                icon: <Icon className="w-5 h-5" />,
+                path: u.path,
+                locked: false // Logic for locking can be added here if needed
+            };
+        });
     }, [curricularOffering, questProgress.completedUnits]);
 
     const handleModuleClick = (mod) => {
@@ -143,7 +140,11 @@ const ModularDashboard = () => {
         if (completed === 2) return "Excellent progress! Log your organized classes! 📈";
         if (completed === 3) return "Halfway there! Complete the learner profile. 📚";
         if (completed === 4) return "Almost done! Let's configure shifting modalities! ⏱️";
-        if (completed === total - 1) return "Final stretch! Ready up the Facilities report! 🏫";
+        if (completed === 5) return "Keep it going! Update your Teaching Personnel. 👨‍🏫";
+        if (completed === 6) return "Great! Tell us about teacher specializations. 🎓";
+        if (completed === 7) return "You're doing amazing! Check your School Resources. 📦";
+        if (completed === 8) return "Almost at the finish line! Physical Facilities next! 🏫";
+        if (completed === 9) return "One last step! Let's secure the School Location! 📍";
         if (completed === total) return "Phenomenal! You've conquered all modules! 🏆";
         return "Keep up the great work! ✨";
     };
@@ -235,11 +236,15 @@ const ModularDashboard = () => {
                                             `}>
                                                 Unit {mod.id}
                                             </span>
-                                            {isCompleted && (
+                                            {isCompleted ? (
                                                 <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
                                                     Done
                                                 </span>
-                                            )}
+                                            ) : questProgress.incompleteUnits?.includes(mod.id) ? (
+                                                <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                    Incomplete
+                                                </span>
+                                            ) : null}
                                         </div>
                                         <span className={`text-sm font-black tracking-tight ${isLocked ? 'text-slate-500' : 'text-slate-800'}`}>
                                             {mod.title}

@@ -30,13 +30,13 @@ export default defineConfig({
         scope: './',
         icons: [
           {
-            src: 'InsightED app.png', // Relative path
+            src: 'insighted_app.png', // Relative path
             sizes: '192x192', // Ensure your file is high res enough
             type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: 'InsightED app.png', // Relative path
+            src: 'insighted_app.png', // Relative path
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'

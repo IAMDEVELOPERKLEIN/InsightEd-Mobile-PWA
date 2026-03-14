@@ -128,12 +128,17 @@ const TeachingPersonnelUnit = () => {
     const [teachers, setTeachers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [baselineTeachers, setBaselineTeachers] = useState(0);
+    const [isFinalizing, setIsFinalizing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     
     // UI States
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [newTeacherFirst, setNewTeacherFirst] = useState("");
+    const [newTeacherLast, setNewTeacherLast] = useState("");
+    const [newTeacherPosition, setNewTeacherPosition] = useState("Teacher I");
+
     // Pagination & Filter State
     const [currentPage, setCurrentPage] = useState(1);
     const [rosterSearch, setRosterSearch] = useState("");
@@ -152,8 +157,70 @@ const TeachingPersonnelUnit = () => {
     const [activeTeacher, setActiveTeacher] = useState(null);
 
     const handleFinalize = async () => {
-        // Navigate to the summary screen first
-        navigate("/modular/unit-6-summary");
+        // Detection: Check if any teacher has zero teaching load
+        const teachersWithZeroLoad = teachers.filter(t => {
+            const totalLoad = (t.monday_mins || 0) + (t.tuesday_mins || 0) + 
+                              (t.wednesday_mins || 0) + (t.thursday_mins || 0) + 
+                              (t.friday_mins || 0);
+            return totalLoad === 0;
+        });
+
+        const isFullyComplete = teachersWithZeroLoad.length === 0;
+
+        if (!isFullyComplete) {
+            const proceed = window.confirm(
+                `Warning: Some teachers have 0 total teaching load. \n\nYou can proceed to Unit 7, but Unit 6 will be marked as "Incomplete" until all personnel have assigned workloads. \n\nDo you want to proceed?`
+            );
+            if (!proceed) return;
+        }
+
+        setIsFinalizing(true);
+        try {
+            const res = await fetch(`/api/ph_schools/unit6/${schoolId}`, { 
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ partial: !isFullyComplete })
+            });
+            const json = await res.json();
+            if (json.success) {
+                // Update Local Progress
+                const stored = localStorage.getItem('quest_progress');
+                if (stored) {
+                    const progress = JSON.parse(stored);
+                    if (!progress.incompleteUnits) progress.incompleteUnits = [];
+                    
+                    if (isFullyComplete) {
+                        // Mark as done
+                        if (!progress.completedUnits.includes(UNIT_ID)) {
+                            progress.completedUnits.push(UNIT_ID);
+                            progress.xp += 100;
+                        }
+                        // Remove from incomplete if it was there
+                        progress.incompleteUnits = progress.incompleteUnits.filter(id => id !== UNIT_ID);
+                    } else {
+                        // Mark as incomplete
+                        if (!progress.incompleteUnits.includes(UNIT_ID)) {
+                            progress.incompleteUnits.push(UNIT_ID);
+                        }
+                        // Ensure it's not in completed
+                        progress.completedUnits = progress.completedUnits.filter(id => id !== UNIT_ID);
+                    }
+                    localStorage.setItem('quest_progress', JSON.stringify(progress));
+                }
+
+                // Sync progress to dashboard
+                try {
+                    await fetch('/api/user/progress', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ unitId: UNIT_ID, schoolId, partial: !isFullyComplete })
+                    });
+                } catch (e) { console.warn("Progress sync failed", e); }
+
+                navigate(NEXT_UNIT_PATH);
+            }
+        } catch (err) { alert("Finalization failed."); }
+        setIsFinalizing(false);
     };
 
     // Initial Load
@@ -235,23 +302,31 @@ const TeachingPersonnelUnit = () => {
         return () => clearTimeout(delay);
     }, [searchQuery]);
 
-    const handleImport = async (masterTeacher) => {
-        // Prepare local record from master data
+    const handleManualAdd = async () => {
+        if (!newTeacherFirst || !newTeacherLast) {
+            alert("Please enter both first and last name.");
+            return;
+        }
+
         const newTeacher = {
             id: 'temp-' + Date.now(),
-            first_name: masterTeacher.first || "",
-            middle_name: masterTeacher.middle || "",
-            last_name: masterTeacher.last || "",
-            position: masterTeacher.position || "Teacher I",
-            specialization: masterTeacher["specialization.final"] || "",
-            sex: (masterTeacher.sex === 'M' ? 'Male' : (masterTeacher.sex === 'F' ? 'Female' : (masterTeacher.sex || ""))),
-            experience_bracket: "",
+            school_id: schoolId,
+            first_name: newTeacherFirst,
+            last_name: newTeacherLast,
+            position: newTeacherPosition,
+            specialization: "",
+            sex: "Male",
+            experience_bracket: "0-1",
             funding_source: "DepEd Nationally Funded",
             role_designation: "Non-Advisory",
+            monday_hrs: 0, monday_mins_remain: 0,
+            tuesday_hrs: 0, tuesday_mins_remain: 0,
+            wednesday_hrs: 0, wednesday_mins_remain: 0,
+            thursday_hrs: 0, thursday_mins_remain: 0,
+            friday_hrs: 0, friday_mins_remain: 0,
             workloads: []
         };
-        
-        // Save to DB first to get real ID
+
         try {
             const res = await fetch(`/api/ph_schools/${schoolId}/teachers`, {
                 method: "POST",
@@ -262,11 +337,17 @@ const TeachingPersonnelUnit = () => {
             if (json.success) {
                 setTeachers(prev => [json.data, ...prev]);
                 setIsSearchOpen(false);
-                setSearchQuery("");
-                handleEdit(json.data);
+                setNewTeacherFirst("");
+                setNewTeacherLast("");
+                setNewTeacherPosition("Teacher I");
+                handleEdit(json.data); // Open edit modal for the newly added teacher
             }
-        } catch (err) { alert("Import failed. Please try again."); }
+        } catch (err) {
+            console.error("Manual Add Err:", err);
+            alert("Failed to add teacher.");
+        }
     };
+
 
     // ── CRUD Logic ──────────────────────────────────────────────────────────
 
@@ -623,7 +704,7 @@ const TeachingPersonnelUnit = () => {
                 )}
             </main>
 
-            {/* ── Search Modal ── */}
+            {/* ── Add New Teacher Modal ── */}
             <AnimatePresence>
                 {isSearchOpen && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-end justify-center">
@@ -632,43 +713,56 @@ const TeachingPersonnelUnit = () => {
                                 <FiX size={24} />
                             </button>
                             
-                            <h2 className="text-3xl font-black text-slate-800 mb-2 uppercase tracking-tighter">Master Directory</h2>
-                            <p className="text-slate-400 text-sm font-medium mb-8 italic">Search within the 800k+ teacher records to import to your school.</p>
+                            <h2 className="text-3xl font-black text-slate-800 mb-2 uppercase tracking-tighter">Add Personnel</h2>
+                            <p className="text-slate-400 text-sm font-medium mb-8 italic">Add newly hired or existing teacher to your school roster.</p>
                             
-                            <div className="relative mb-8">
-                                <FiSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-                                <input 
-                                    type="text" 
-                                    placeholder="Search by First or Last Name..." 
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-14 pr-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-3xl text-lg font-bold placeholder:text-slate-300 focus:outline-none focus:border-blue-500 transition-all shadow-inner"
-                                    autoFocus
-                                />
-                            </div>
+                            <div className="space-y-6">
+                                <div>
+                                    <label className={labelStyle}>First Name</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Enter first name" 
+                                        value={newTeacherFirst}
+                                        onChange={(e) => setNewTeacherFirst(e.target.value)}
+                                        className={inputStyle}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelStyle}>Last Name</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Enter last name" 
+                                        value={newTeacherLast}
+                                        onChange={(e) => setNewTeacherLast(e.target.value)}
+                                        className={inputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelStyle}>Position</label>
+                                    <select 
+                                        value={newTeacherPosition}
+                                        onChange={(e) => setNewTeacherPosition(e.target.value)}
+                                        className={inputStyle}
+                                    >
+                                        <option value="Teacher I">Teacher I</option>
+                                        <option value="Teacher II">Teacher II</option>
+                                        <option value="Teacher III">Teacher III</option>
+                                        <option value="Master Teacher I">Master Teacher I</option>
+                                        <option value="Master Teacher II">Master Teacher II</option>
+                                        <option value="SPET I">SPET I</option>
+                                        <option value="Head Teacher I">Head Teacher I</option>
+                                        <option value="Administrative Assistant">Administrative Assistant</option>
+                                        <option value="Others">Others</option>
+                                    </select>
+                                </div>
 
-                            <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
-                                {searching ? (
-                                    <div className="text-center py-10">
-                                        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                                    </div>
-                                ) : searchResults.length > 0 ? (
-                                    searchResults.map((res, i) => (
-                                        <button 
-                                            key={i} 
-                                            onClick={() => handleImport(res)}
-                                            className="w-full text-left p-5 rounded-2xl border-2 border-slate-50 hover:border-blue-100 hover:bg-blue-50/50 transition-all flex justify-between items-center group"
-                                        >
-                                            <div>
-                                                <h4 className="font-black text-slate-700 uppercase group-hover:text-blue-700 transition-colors">{res.last}, {res.first}</h4>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{res.position || 'Teacher'}</p>
-                                            </div>
-                                            <FiPlusCircle className="text-slate-200 group-hover:text-blue-500 transition-all" size={24} />
-                                        </button>
-                                    ))
-                                ) : searchQuery.length >= 2 ? (
-                                    <div className="text-center py-10 text-slate-400 font-bold italic">No results found for "{searchQuery}"</div>
-                                ) : null}
+                                <button 
+                                    onClick={handleManualAdd}
+                                    className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 mt-4"
+                                >
+                                    Add to Roster
+                                </button>
                             </div>
                         </motion.div>
                     </motion.div>
@@ -794,11 +888,11 @@ const TeachingPersonnelUnit = () => {
                                     </div>
                                 </section>
 
-                                {/* Weekly Workload Capacity Tracking (Active) */}
+                                {/* Daily Teaching Load Tracking (Active) */}
                                 <section>
                                     <div className="flex items-center gap-2 mb-6">
                                         <div className="w-1 h-4 bg-orange-500 rounded-full" />
-                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Weekly Capacity Tracking</h3>
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Daily Teaching Load</h3>
                                     </div>
 
                                     <div className="space-y-6">
@@ -851,16 +945,16 @@ const TeachingPersonnelUnit = () => {
                                             return (
                                                 <div className="space-y-4">
                                                     <div className="grid grid-cols-2 gap-4">
-                                                        <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100">
-                                                            <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Weekly Total</div>
-                                                            <div className="text-2xl font-black text-blue-600">
-                                                                {Math.floor(weeklyTotalMins / 60)}h {weeklyTotalMins % 60}m
-                                                            </div>
-                                                        </div>
                                                         <div className={`p-6 rounded-3xl border-2 transition-colors ${isOver ? 'bg-orange-50 border-orange-100' : 'bg-green-50 border-green-100'}`}>
-                                                            <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isOver ? 'text-orange-400' : 'text-green-400'}`}>Daily Average</div>
+                                                            <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isOver ? 'text-orange-400' : 'text-green-400'}`}>Daily Teaching Load</div>
                                                             <div className={`text-2xl font-black ${isOver ? 'text-orange-600' : 'text-green-600'}`}>
                                                                 {Math.floor(dailyAverageMins / 60)}h {Math.floor(dailyAverageMins % 60)}m
+                                                            </div>
+                                                        </div>
+                                                        <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 opacity-80">
+                                                            <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Cumulative Weekly Load</div>
+                                                            <div className="text-2xl font-black text-blue-600">
+                                                                {Math.floor(weeklyTotalMins / 60)}h {weeklyTotalMins % 60}m
                                                             </div>
                                                         </div>
                                                     </div>
@@ -971,13 +1065,7 @@ const TeachingPersonnelUnit = () => {
                             </div>
 
                             <div className="p-8 border-t border-slate-100 bg-white shadow-[0_-10px_30px_rgba(0,0,0,0.03)] flex gap-4 shrink-0">
-                                 <div className="flex-1">
-                                     <span className={labelStyle}>Total Minutes</span>
-                                     <div className={`text-2xl font-black ${isOverLimit ? 'text-orange-600' : 'text-slate-800'}`}>
-                                         {totalWorkloadMins} <span className="text-xs opacity-40">/ 360</span>
-                                     </div>
-                                 </div>
-                                 <button onClick={handleSaveTeacher} className="flex-[2] py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95">
+                                 <button onClick={handleSaveTeacher} className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-2xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95">
                                      Update Profile & Workload
                                  </button>
                             </div>
@@ -990,10 +1078,14 @@ const TeachingPersonnelUnit = () => {
             <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 flex justify-center z-30 pointer-events-none">
                 <button 
                   onClick={handleFinalize}
-                  disabled={teachers.length === 0}
+                  disabled={teachers.length === 0 || isFinalizing}
                   className="w-full max-w-sm py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 pointer-events-auto disabled:opacity-50 disabled:grayscale"
                 >
-                    Finalize Roster {teachers.length > 0 && `(${teachers.length})`} <FiChevronRight size={20} />
+                    {isFinalizing ? (
+                        <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <>Finalize & Submit Unit 6 {teachers.length > 0 && `(${teachers.length})`} <FiChevronRight size={20} /></>
+                    )}
                 </button>
             </footer>
 

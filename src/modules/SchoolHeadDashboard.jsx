@@ -20,6 +20,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import NotificationCenter from '../components/NotificationCenter';
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import Context
+import { DASHBOARD_METADATA } from '../config/dashboardMetadata';
 
 const SchoolHeadDashboard = () => {
     const navigate = useNavigate();
@@ -36,7 +37,7 @@ const SchoolHeadDashboard = () => {
     // Stats State
     const [stats, setStats] = useState({
         completedForms: 0,
-        totalForms: 10,
+        totalForms: DASHBOARD_METADATA.forms.length,
         enrollment: 0,
         teachers: 0
     });
@@ -182,26 +183,8 @@ const SchoolHeadDashboard = () => {
         }
     }, [schoolProfile?.school_id, location.state?.refreshTrigger]); // Run on initial load and when Home tab is clicked
 
-    // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
-    const SEARCHABLE_ITEMS = [
-        // IDENTITY
-        { name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600" },
-        { name: "School Head Info", route: "/school-information", icon: FiUser, color: "bg-indigo-100 text-indigo-600" },
-
-        // LEARNERS
-        { name: "Enrollment", route: "/enrolment", icon: TbUsers, color: "bg-orange-100 text-orange-600" },
-        { name: "Organized Classes", route: "/organized-classes", icon: FiLayers, color: "bg-purple-100 text-purple-600" },
-        { name: "Learner Statistics", route: "/learner-statistics", icon: TbActivity, color: "bg-pink-100 text-pink-600" },
-        { name: "Shifting & Modality", route: "/shifting-modalities", icon: TbReportAnalytics, color: "bg-cyan-100 text-cyan-600" },
-
-        // FACULTY
-        { name: "Teaching Personnel", route: "/teaching-personnel", icon: FiUser, color: "bg-teal-100 text-teal-600" },
-        { name: "Specialization", route: "/teacher-specialization", icon: FiLayers, color: "bg-lime-100 text-lime-600" },
-
-        // ASSETS
-        { name: "School Resources", route: "/school-resources", icon: FiBox, color: "bg-emerald-100 text-emerald-600" },
-        { name: "Physical Facilities", route: "/physical-facilities", icon: FiLayers, color: "bg-amber-100 text-amber-600" },
-    ];
+    // --- SEARCH & QUICK ACTION ITEMS (Dynamic from Metadata) ---
+    const SEARCHABLE_ITEMS = DASHBOARD_METADATA.forms;
 
     // Reuse SEARCHABLE_ITEMS for search logic to keep them in sync
     const ALL_ITEMS = SEARCHABLE_ITEMS;
@@ -229,7 +212,7 @@ const SchoolHeadDashboard = () => {
 
         // Use values directly from DB (calculated by backend)
         const dbCompleted = schoolProfile.forms_completed_count || 0;
-        const dbTotal = 10; // Fixed total
+        const dbTotal = 11; // Fixed total
 
         setStats(prev => ({
             ...prev,
@@ -238,20 +221,10 @@ const SchoolHeadDashboard = () => {
             enrollment: schoolProfile.total_enrollment || 0
         }));
 
-        // construct completedItems list based on f1-f10 flags for UI highligthing if needed
-        // (Optional: You can keep the list logic if you use it for highlighting specific buttons, 
-        //  but for the progress bar, we MUST use the DB value)
-        const completedList = [];
-        if (schoolProfile.f1_profile) completedList.push("School Profile");
-        if (schoolProfile.f2_head) completedList.push("School Head Info");
-        if (schoolProfile.f3_enrollment) completedList.push("Enrollment");
-        if (schoolProfile.f4_classes) completedList.push("Organized Classes");
-        if (schoolProfile.f5_teachers) completedList.push("Teaching Personnel");
-        if (schoolProfile.f6_specialization) completedList.push("Specialization");
-        if (schoolProfile.f7_resources) completedList.push("School Resources");
-        if (schoolProfile.f8_facilities) completedList.push("Physical Facilities");
-        if (schoolProfile.f9_shifting) completedList.push("Shifting & Modality");
-        if (schoolProfile.f10_stats) completedList.push("Learner Statistics");
+        // construct completedItems list based on metadata flags for UI highligthing
+        const completedList = DASHBOARD_METADATA.forms
+            .filter(form => schoolProfile[form.flag])
+            .map(form => form.name);
 
         setCompletedItems(completedList);
 

@@ -85,9 +85,9 @@ import Unit3OrganizedClasses from './components/modular/Unit3OrganizedClasses';
 import Unit4LearnerProfile from './components/modular/Unit4LearnerProfile';
 import Unit5ShiftingModality from './components/modular/Unit5ShiftingModality';
 import TeachingPersonnelUnit from './components/modular/TeachingPersonnel';
-import Unit6Summary from './components/modular/Unit6Summary';
 import Unit7SchoolResources from './components/modular/Unit7SchoolResources';
 import Unit8PhysicalFacilities from './components/modular/Unit8PhysicalFacilities';
+import Unit9SchoolLocation from './components/modular/Unit9SchoolLocation';
 
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
@@ -121,6 +121,8 @@ const AnimatedRoutes = () => {
   // if (maintenanceMode && isProtected && !isAdmin) {
   //   return <MaintenanceScreen />;
   // }
+
+  const showChatFloating = location.pathname === '/' || location.pathname === '/adminlogin';
 
   return (
     <Routes>
@@ -243,14 +245,6 @@ const AnimatedRoutes = () => {
           }
         />
         <Route
-          path="/modular/unit-6-summary"
-          element={
-            <ProtectedRoute allowedRoles={['School Head']}>
-              <Unit6Summary />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/modular/unit-7"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
@@ -263,6 +257,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
               <Unit8PhysicalFacilities />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-9"
+          element={
+            <ProtectedRoute allowedRoles={['School Head']}>
+              <Unit9SchoolLocation />
             </ProtectedRoute>
           }
         />
@@ -316,13 +318,24 @@ function App() {
   return (
     <GlobalErrorBoundary>
       <Router>
-        <ScrollToTop />
-        <SuperUserFloatingSwitch />
-        <ChatWidget />
-        <AnimatedRoutes />
+        <AppContent />
       </Router>
     </GlobalErrorBoundary>
   );
 }
+
+const AppContent = () => {
+  const location = useLocation();
+  const showChatFloating = location.pathname === '/' || location.pathname === '/adminlogin';
+
+  return (
+    <>
+      <ScrollToTop />
+      <SuperUserFloatingSwitch />
+      <ChatWidget showFloatingButton={showChatFloating} />
+      <AnimatedRoutes />
+    </>
+  );
+};
 
 export default App;
