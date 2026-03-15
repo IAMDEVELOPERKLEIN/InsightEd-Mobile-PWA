@@ -38,7 +38,8 @@ const AUTHORIZATION_CODES = {
     'Super User': 'SUP3R-US3R', // Added for testing
     // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
     'Admin': 'A3M6-Y1K8',
-    'EFD': 'EFD8-C1D9'
+    'EFD': 'EFD8-C1D9',
+    'Implementing Agency': 'AG5N-K9L2'
 };
 
 import locationData from './locations.json';
@@ -92,7 +93,9 @@ const Register = () => {
         barangay: '',
         authCode: '',
         altEmail: '',
-        accountCategory: '' // Added this line
+        accountCategory: '', // Added this line
+        agencyType: '',
+        specificAgency: ''
     });
 
     // --- OTP STATE --- (REMOVED)
@@ -129,6 +132,7 @@ const Register = () => {
     // --- REGISTRATION SUCCESS STATE ---
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [registeredIern, setRegisteredIern] = useState('');
+    const [activeTab, setActiveTab] = useState('internal'); // 'internal' | 'external'
 
 
     // --- 1. LOAD INITIAL DATA (Regions + Office CSV) ---
@@ -267,6 +271,18 @@ const Register = () => {
             schoolEmail: '', contactNumber: '', altEmail: '', accountCategory: ''
         }));
         // Reset school selection if moving away
+        setSelectedSchool(null);
+    };
+
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        setFormData(prev => ({
+            ...prev,
+            role: tab === 'external' ? 'Implementing Agency' : 'Regional Office',
+            region: '', division: '', province: '', city: '', barangay: '', office: '', position: '',
+            schoolEmail: '', contactNumber: '', altEmail: '', accountCategory: '', authCode: '',
+            agencyType: '', specificAgency: ''
+        }));
         setSelectedSchool(null);
     };
 
@@ -421,7 +437,7 @@ const Register = () => {
 
 
         // STRICT EMAIL VALIDATION (Global Check)
-        if (formData.role !== 'Local Government Unit' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
+        if (formData.role !== 'Local Government Unit' && formData.role !== 'Implementing Agency' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
             alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
         }
@@ -434,8 +450,8 @@ const Register = () => {
             }
         }
 
-        // Local Government Unit Specific Validations
-        if (formData.role === 'Local Government Unit') {
+        // Local Government Unit & Implementing Agency Specific Validations
+        if (formData.role === 'Local Government Unit' || formData.role === 'Implementing Agency') {
             if (formData.contactNumber.length !== 11) {
                 alert("Please enter a valid 11-digit mobile number.");
                 return;
@@ -555,11 +571,11 @@ const Register = () => {
                         body: JSON.stringify({
                             email: authEmail,
                             password: formData.password,
-                            role: formData.role,
+                            role: formData.role === 'Implementing Agency' ? (formData.agencyType || formData.role) : formData.role,
                             firstName: formData.firstName,
                             lastName: formData.lastName,
                             region: formData.region,
-                            division: formData.division,
+                            division: formData.role === 'Implementing Agency' ? `${formData.agencyType} ${formData.specificAgency}`.trim() : formData.division,
                             province: formData.province,
                             city: formData.city,
                             barangay: formData.barangay,
@@ -589,14 +605,6 @@ const Register = () => {
                     if (regData.accountCategory) {
                         localStorage.setItem('accountCategory', regData.accountCategory);
                     }
-
-                    // Sync remembered_user for PIN login
-                    localStorage.setItem('remembered_user', JSON.stringify({
-                        email: authEmail,
-                        firstName: formData.firstName || 'User',
-                        role: regData.role,
-                        school_id: null
-                    }));
 
                     // For specialized redirects, we need to pass these directly
                     const destPath = getDashboardPath(regData.role, regData.accountCategory);
@@ -650,14 +658,6 @@ const Register = () => {
                     localStorage.setItem('uid', auth.currentUser?.uid || regData?.uid);
                 }
 
-                // Sync remembered_user for PIN login
-                localStorage.setItem('remembered_user', JSON.stringify({
-                    email: contactEmail,
-                    firstName: formData.role, // "School Head"
-                    role: formData.role,
-                    school_id: selectedSchool?.school_id
-                }));
-
                 // NEW: Mark for PIN setup since they are newly registered
                 localStorage.setItem('needs_pin_setup', 'true');
 
@@ -703,8 +703,35 @@ const Register = () => {
 
                         <form onSubmit={handleRegister} className="space-y-6">
 
-                            <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
-                                <label className="block text-xs font-bold text-blue-800 uppercase tracking-wider mb-2">Registering As</label>
+                            {/* REGISTRATION TABS */}
+                            <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
+                                <button
+                                    type="button"
+                                    onClick={() => handleTabChange('internal')}
+                                    className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
+                                        activeTab === 'internal'
+                                            ? 'bg-white text-blue-700 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                                >
+                                    Internal Personnel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleTabChange('external')}
+                                    className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
+                                        activeTab === 'external'
+                                            ? 'bg-white text-purple-700 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                                >
+                                    External Agency
+                                </button>
+                            </div>
+
+                            {activeTab === 'internal' && (
+                                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
+                                    <label className="block text-xs font-bold text-blue-800 uppercase tracking-wider mb-2">Registering As</label>
                                 <div className="relative">
                                     <select
                                         name="role"
@@ -729,7 +756,154 @@ const Register = () => {
                                         <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
                                     </div>
                                 </div>
-                            </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'external' && (
+                                <div className="space-y-4 p-4 bg-purple-50 rounded-xl border border-purple-100 animate-in fade-in slide-in-from-top-2">
+                                    <h3 className="text-sm font-bold text-purple-800 uppercase flex items-center gap-2">
+                                        <span className="bg-purple-100 text-purple-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">1</span>
+                                        Agency & Assignment
+                                    </h3>
+                                    {/* 1. AGENCY DETAILS (Moved to top) */}
+                                    <div className="space-y-3">
+                                        <label className="text-xs font-bold text-purple-700 uppercase">Agency Details</label>
+                                        
+                                        <select
+                                            name="agencyType"
+                                            value={formData.agencyType || ''}
+                                            onChange={handleChange}
+                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
+                                            required
+                                        >
+                                            <option value="">Select Agency Type</option>
+                                            <option value="PGO">PGO (Provincial Government Office)</option>
+                                            <option value="CGO">CGO (City Government Office)</option>
+                                            <option value="MGO">MGO (Municipal Government Office)</option>
+                                            <option value="DPWH">DPWH (Department of Public Works and Highways)</option>
+                                            <option value="CSO">CSO (Civil Society Organization)</option>
+                                        </select>
+
+                                        {formData.agencyType && (
+                                            <div className="animate-in fade-in slide-in-from-top-1">
+                                                <input
+                                                    name="specificAgency"
+                                                    value={formData.specificAgency || ''}
+                                                    placeholder={
+                                                        formData.agencyType === 'DPWH' ? "Specify District (e.g., District 1)" :
+                                                        `Specific ${formData.agencyType} Name (e.g., ${formData.province || 'Benguet'})`
+                                                    }
+                                                    onChange={handleChange}
+                                                    className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                                    required
+                                                />
+                                                <p className="text-[10px] text-purple-400 mt-1 ml-1">Provide the specific name or district of the agency.</p>
+                                            </div>
+                                        )}
+                                        
+                                        <input
+                                            name="position"
+                                            value={formData.position}
+                                            placeholder="Position / Designation"
+                                            onChange={handleChange}
+                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                            required
+                                        />
+                                    </div>
+
+                                    {/* 2. JURISDICTION (Moved down) */}
+                                    <div className="space-y-3 pt-3 border-t border-purple-200/50">
+                                        <label className="text-xs font-bold text-purple-700 uppercase">Jurisdiction</label>
+
+                                        {/* REGION */}
+                                        <select
+                                            name="region"
+                                            onChange={handleRegionChange}
+                                            value={formData.region}
+                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
+                                            required
+                                        >
+                                            <option value="">Select Region</option>
+                                            {regions.map((reg) => (
+                                                <option key={reg} value={reg}>{reg}</option>
+                                            ))}
+                                        </select>
+
+                                        {/* PROVINCE */}
+                                        <select
+                                            name="province"
+                                            onChange={handleProvinceChange}
+                                            value={formData.province}
+                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                                            disabled={!formData.region}
+                                            required
+                                        >
+                                            <option value="">Select Province</option>
+                                            {provinceOptions.map((prov) => (
+                                                <option key={prov} value={prov}>{prov}</option>
+                                            ))}
+                                        </select>
+
+                                        {/* MUNICIPALITY */}
+                                        <select
+                                            name="city"
+                                            onChange={handleCityChange}
+                                            value={formData.city}
+                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                                            disabled={!formData.province}
+                                            required
+                                        >
+                                            <option value="">Select Municipality/City</option>
+                                            {cityOptions.map((city) => (
+                                                <option key={city} value={city}>{city}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* 3. CONTACT INFO (Added to fix mobile number validation) */}
+                                    <div className="space-y-3 pt-3 border-t border-purple-200/50">
+                                        <label className="text-xs font-bold text-purple-700 uppercase">Contact Information</label>
+
+                                        {/* MOBILE */}
+                                        <div>
+                                            <input
+                                                name="contactNumber"
+                                                inputMode="numeric"
+                                                value={formData.contactNumber}
+                                                onFocus={() => {
+                                                    if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
+                                                }}
+                                                onChange={(e) => {
+                                                    let val = e.target.value.replace(/\D/g, '');
+                                                    if (!val.startsWith('09')) {
+                                                        if (val.startsWith('9')) val = '0' + val;
+                                                        else if (val.length < 2) val = '09';
+                                                        else val = '09' + val.substring(2);
+                                                    }
+                                                    val = val.slice(0, 11);
+                                                    setFormData(prev => ({ ...prev, contactNumber: val }));
+                                                }}
+                                                placeholder="Mobile No. (09xx xxx xxxx)"
+                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                                maxLength={11}
+                                                required
+                                            />
+                                            <p className="text-[10px] text-purple-600 mt-1 ml-1">Must be 11 digits.</p>
+                                        </div>
+
+                                        {/* ALT EMAIL */}
+                                        <input
+                                            name="altEmail"
+                                            type="email"
+                                            value={formData.altEmail}
+                                            onChange={handleChange}
+                                            placeholder="Alternative Email Address (Optional)"
+                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                        />
+                                    </div>
+
+                                </div>
+                            )}
 
                             {/* AUTHORIZATION CODE INPUT (For Non-School Heads and Non-Super Users) */}
                             {formData.role !== 'School Head' && formData.role !== 'Super User' && (
@@ -1119,6 +1293,7 @@ const Register = () => {
                                             />
                                         </div>
                                     )}
+
 
                                     {/* ENGINEER & EFD FIELDS */}
                                     {(formData.role === 'DepEd Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD') && (

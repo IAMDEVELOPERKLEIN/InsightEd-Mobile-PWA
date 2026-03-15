@@ -1,0 +1,74 @@
+accomplishment_percentage: integer
+actions: text
+actual_completion_date: date
+approved_budget_for_contract: numeric
+batch_of_funds: character varying
+construction_start_date: timestamp without time zone
+contract_amount: numeric
+contract_id: character varying
+contract_pdf: text
+contractor_name: text
+created_at: timestamp without time zone
+date_assigned: date
+date_notice_of_award: date
+delay_reason: text
+division: character varying
+dupa_pdf: text
+engineer_id: text
+engineer_name: text
+external_description: text
+funding_year: integer
+funding_year_justification: text
+funds_utilized: numeric
+iern: text
+implementing_agencies: text
+internal_description: text
+ipc: text
+is_donated: boolean
+issuance_of_invitation_to_bid: date
+latitude: text
+liquidated_tranche_1: numeric
+liquidated_tranche_2: numeric
+liquidated_tranche_3: numeric
+longitude: text
+moa: text
+moa_pdf: text
+mode_of_project: character varying
+negotiation: date
+notice_to_proceed: date
+number_of_classrooms: integer
+number_of_sites: integer
+number_of_storeys: integer
+opening_of_financial_proposal: date
+opening_of_quotation: date
+opening_of_technical_proposal: date
+other_remarks: text
+pow_pdf: text
+pre_bid_conference: date
+project_category: text
+project_id: integer
+project_name: text
+region: character varying
+request_for_quotation: date
+revised_target_completion_date: date
+rta: text
+rta_pdf: text
+savings: numeric
+school_id: character varying
+school_name: text
+scope_of_work: text
+status: text
+status_as_of: date
+status_design_phase: text
+status_of_construction_phase: character varying
+target_completion_date: date
+time_lapsed_days: integer
+time_lapsed_percentage: numeric
+tranche_1: numeric
+tranche_2: numeric
+tranche_3: numeric
+uploader_id_update_rta_moa: text
+uploader_type: text
+validated_by: character varying
+validation_remarks: text
+validation_status: character varying

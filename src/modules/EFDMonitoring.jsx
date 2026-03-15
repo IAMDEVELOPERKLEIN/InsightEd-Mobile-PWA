@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText } from 'react-icons/fi';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus } from 'react-icons/fi';
 import { auth } from '../firebase';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
@@ -39,6 +39,11 @@ const EFDMonitoring = () => {
     const [isAssigning, setIsAssigning] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
     const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
+    const [userRole, setUserRole] = useState(() => {
+        const saved = localStorage.getItem('userRole');
+        if (saved === 'hrodi_engineer') return 'HRODI Engineer';
+        return saved || '';
+    });
     
     // New State for Document Uploads
     const [selectedProjectForDocs, setSelectedProjectForDocs] = useState(null);
@@ -202,41 +207,45 @@ const EFDMonitoring = () => {
             return;
         }
 
-        console.log(`🚀 Starting upload for project: ${selectedProjectForDocs.id}`);
+        console.log(`🚀 Starting bulk upload for project: ${selectedProjectForDocs.id}`);
         setIsUploadingDocs(true);
         try {
-            const uploadDoc = async (type, file) => {
-                if (!file) return;
-                console.log(`   - Converting ${type} to base64...`);
-                const base64 = await convertFullFileToBase64(file);
-                console.log(`   - Sending ${type} to API (${(base64.length / (1024 * 1024)).toFixed(2)} MB)...`);
-                const response = await fetch('/api/upload-project-document', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        projectId: selectedProjectForDocs.id,
-                        type: type,
-                        base64: base64,
-                        uid: localStorage.getItem('uid')
-                    })
-                });
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error || `Failed to upload ${type}`);
-                }
-                console.log(`   - ✅ ${type} uploaded successfully.`);
-            };
+            const documents = {};
+            
+            if (uploadDocs.RTA) {
+                console.log(`   - Converting RTA to base64...`);
+                documents.RTA = await convertFullFileToBase64(uploadDocs.RTA);
+            }
+            if (uploadDocs.MOA) {
+                console.log(`   - Converting MOA to base64...`);
+                documents.MOA = await convertFullFileToBase64(uploadDocs.MOA);
+            }
 
-            if (uploadDocs.RTA) await uploadDoc('RTA', uploadDocs.RTA);
-            if (uploadDocs.MOA) await uploadDoc('MOA', uploadDocs.MOA);
+            console.log(`   - Sending bulk documents to API...`);
+            const response = await fetch('/api/bulk-upload-project-documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectId: selectedProjectForDocs.id,
+                    documents: documents,
+                    uid: localStorage.getItem('uid')
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || "Failed to upload documents");
+            }
+            
+            console.log(`   - ✅ Bulk upload successful.`);
 
             // Update local state so UI reflects the new documents immediately
             setProjects(prevProjects => prevProjects.map(p => {
                 if (p.id === selectedProjectForDocs.id) {
                     return {
                         ...p,
-                        hasMoa: uploadDocs.MOA ? true : p.hasMoa,
-                        hasRta: uploadDocs.RTA ? true : p.hasRta,
+                        hasMoa: documents.MOA ? true : p.hasMoa,
+                        hasRta: documents.RTA ? true : p.hasRta,
                     };
                 }
                 return p;
@@ -268,10 +277,23 @@ const EFDMonitoring = () => {
                 <div className="bg-[#004A99] text-white pt-8 pb-10 px-6 rounded-b-[3rem] shadow-xl mb-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                     <div className="relative z-10">
-                        <h1 className="text-2xl font-black tracking-tight leading-none">Project Assignment</h1>
-                        <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
-                            Engineer Resource Allocation • System Monitoring
-                        </p>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h1 className="text-2xl font-black tracking-tight leading-none">Projects</h1>
+                                <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
+                                    Engineer Resource Allocation • System Monitoring
+                                </p>
+                            </div>
+                            {userRole === 'HRODI Engineer' && (
+                                <button
+                                    onClick={() => navigate('/new-project')}
+                                    className="group bg-white text-[#004A99] px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                                >
+                                    <FiPlus size={16} className="group-hover:rotate-90 transition-transform" />
+                                    New Project
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -641,7 +663,7 @@ const EFDMonitoring = () => {
                 )}
 
 
-                <BottomNav userRole="EFD" />
+                <BottomNav userRole={userRole} />
             </div>
         </PageTransition>
     );

@@ -17,6 +17,11 @@ const EFDNewconMonitoring = () => {
     const [search, setSearch] = useState('');
     const [importMsg, setImportMsg] = useState('');
     const [selectedVersion, setSelectedVersion] = useState('2026');
+    const [userRole, setUserRole] = useState(() => {
+        const saved = localStorage.getItem('userRole');
+        if (saved === 'hrodi_engineer') return 'HRODI Engineer';
+        return saved || '';
+    });
 
     // Load data on mount
     useEffect(() => {
@@ -270,7 +275,7 @@ const EFDNewconMonitoring = () => {
                     </div>
                 </motion.div>
             </main>
-            <BottomNav userRole="EFD" />
+            <BottomNav userRole={userRole} />
         </div>
     );
 };

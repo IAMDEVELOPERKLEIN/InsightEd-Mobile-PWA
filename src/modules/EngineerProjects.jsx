@@ -638,8 +638,8 @@ const EngineerProjects = () => {
     try {
       // Create payload copy
       // Determine uploader_type from the logged-in user's role and account category
-      let uploaderType = 'Uploaded by DepEd Engineer'; // Default
-      if (userRole === 'EFD') uploaderType = 'EFD Engineer';
+      let uploaderType = 'DepEd Engineer'; // Default
+      if (userRole === 'EFD' || userRole === 'HRODI Engineer') uploaderType = 'EFD Engineer';
       else if (userRole === 'Non-DepEd Engineer' || (userRole === 'DepEd Engineer' && accountCategory === 'Non-DepEd Engineer')) uploaderType = 'Non-DepEd Engineer';
 
       const payload = { ...updatedProject, uid: uid, modifiedBy: userName, uploader_type: uploaderType };

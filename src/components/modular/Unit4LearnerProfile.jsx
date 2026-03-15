@@ -111,8 +111,7 @@ const Unit4LearnerProfile = () => {
                     setSavedData(d);
 
                     // 1. Determine Allowed Grades based on Curricular Offering (Hard Guard)
-                    const storedProgress = localStorage.getItem('quest_progress');
-                    const qp = (storedProgress && storedProgress !== 'undefined') ? JSON.parse(storedProgress) : {};
+                    const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
                     const co = (qp.curricular_offering || d.curricular_offering || "").toLowerCase();
                     let offeringAllowed = [];
                     if (co.includes("kinder")) offeringAllowed.push("kinder");

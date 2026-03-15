@@ -1,33 +1,29 @@
-import dotenv from 'dotenv';
+
 import pg from 'pg';
-import fs from 'fs';
+import dotenv from 'dotenv';
+dotenv.config();
 
-let envContent = fs.readFileSync('.env', 'utf8');
-let match = envContent.match(/DATABASE_URL=(.+)/);
-if (!match) {
-    envContent = fs.readFileSync('.env', 'utf16le');
-    match = envContent.match(/DATABASE_URL=(.+)/);
-}
-let dbUrl = match[1].trim().replace(/^['"]|['"]$/g, '');
-
-const { Pool } = pg;
-const pool = new Pool({
-    connectionString: dbUrl,
-    ssl: { rejectUnauthorized: false }
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
-(async () => {
-    try {
-        const res = await pool.query("SELECT * FROM engineer_form LIMIT 1");
-        if (res.rows.length > 0) {
-            console.log("COLUMNS:", Object.keys(res.rows[0]).join(', '));
-        } else {
-            // Even if no rows, we can get columns from query results fields
-            console.log("FIELDS:", res.fields.map(f => f.name).join(', '));
-        }
-    } catch (e) {
-        console.error("ERROR:", e.message);
-    } finally {
-        pool.end();
-    }
-})();
+async function checkCols() {
+  try {
+    const res = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'engineer_form'
+      ORDER BY ordinal_position;
+    `);
+    const cols = res.rows.map(r => r.column_name);
+    console.log("COL_CHECK:Has uploaded_by:" + cols.includes('uploaded_by'));
+    console.log("COL_CHECK:Has engineer_id:" + cols.includes('engineer_id'));
+    console.log("COL_CHECK:Has engineer_name:" + cols.includes('engineer_name'));
+  } catch (err) {
+    console.error(err);
+  } finally {
+    await pool.end();
+  }
+}
+checkCols();

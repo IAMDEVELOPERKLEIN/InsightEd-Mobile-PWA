@@ -163,11 +163,9 @@ const SuperUserSelector = () => {
 
     const handleLogout = async () => {
         try {
-            const persistence = localStorage.getItem('remembered_user');
             await auth.signOut();
             localStorage.clear();
             sessionStorage.clear();
-            if (persistence) localStorage.setItem('remembered_user', persistence);
             navigate('/', { replace: true });
         } catch (error) {
             console.error("Logout Failed:", error);

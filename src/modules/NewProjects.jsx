@@ -42,6 +42,15 @@ const NewProjects = () => {
     const isDummy = location.state?.isDummy || false;
     const [userRole, setUserRole] = useState(null);
     const [accountCategory, setAccountCategory] = useState(null);
+    const [activeTab, setActiveTab] = useState(0);
+
+    const TABS = [
+        { id: 0, label: 'Overview', icon: '🏢' },
+        { id: 1, label: 'Location', icon: '📍' },
+        { id: 2, label: 'Status', icon: '📈' },
+        { id: 3, label: 'Finance', icon: '💰' },
+        { id: 4, label: 'Media', icon: '📸' }
+    ];
 
     // --- FETCH ROLE ---
     useEffect(() => {
@@ -218,7 +227,11 @@ const NewProjects = () => {
         construction_start_date: '',
         funds_downloaded: '',
         funds_utilized: '',
-        is_donated: false
+        is_donated: false,
+
+        // --- HRODI FIELDS ---
+        implementingAgency: '',
+        implementingAgencySpecific: ''
     });
 
     // --- NEW: GEOLOCATION LOGIC ---
@@ -648,8 +661,10 @@ const NewProjects = () => {
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString(),
-                uploader_type: userRole === 'EFD' || userRole === 'HRODI Engineer' ? 'EFD Engineer' :
-                               (userRole === 'Non-DepEd Engineer' || accountCategory === 'Non-DepEd Engineer' ? 'Non-DepEd Engineer' : 'DepEd Engineer')
+                uploader_type: (userRole === 'EFD' || userRole === 'HRODI Engineer') ? 'EFD Engineer' :
+                               ((userRole === 'Non-DepEd Engineer' || accountCategory === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'DepEd Engineer'),
+                implementingAgency: (userRole === 'DepEd Engineer' || userRole === 'Engineer') ? 'DepEd' : (formData.implementingAgency || null),
+                implementingAgencySpecific: formData.implementingAgencySpecific || null
             };
 
             // --- OFFLINE/ONLINE CHECK ---
@@ -667,7 +682,12 @@ const NewProjects = () => {
                 await addEngineerToOutbox(payload);
                 alert("📁 No internet. Project (Metadata & Images) saved to Sync Center.\n⚠️ Documents must be uploaded when online.");
                 setIsSubmitting(false);
-                navigate('/engineer-dashboard');
+                
+                if (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'EFD Engineer') {
+                    navigate('/efd-monitoring');
+                } else {
+                    navigate('/engineer-dashboard');
+                }
                 return;
             }
 
@@ -740,7 +760,12 @@ const NewProjects = () => {
             const ipc = projectData.ipc;
 
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
-            navigate('/engineer-dashboard');
+            
+            if (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'EFD Engineer') {
+                navigate('/efd-monitoring');
+            } else {
+                navigate('/engineer-dashboard');
+            }
 
         } catch (error) {
             console.error("Submission failed:", error);
@@ -799,9 +824,31 @@ const NewProjects = () => {
                 )}
 
                 <form onSubmit={handleSubmit} className="px-6 -mt-10">
-                    <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
+                    {/* --- TAB NAVIGATION --- */}
+                    <div className="flex bg-white/80 backdrop-blur-md p-1.5 rounded-2xl shadow-lg border border-slate-100 mb-4 z-30 overflow-x-auto no-scrollbar">
+                        {TABS.map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex-1 justify-center ${
+                                    activeTab === tab.id 
+                                    ? 'bg-[#004A99] text-white shadow-md shadow-blue-200' 
+                                    : 'text-slate-400 hover:bg-slate-50'
+                                }`}
+                            >
+                                <span className="text-sm">{tab.icon}</span>
+                                <span className={activeTab === tab.id ? 'block' : 'hidden sm:block'}>{tab.label}</span>
+                            </button>
+                        ))}
+                    </div>
 
-                        <SectionHeader title="Project Identification" icon="🏢" />
+                    <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 min-h-[400px]">
+
+                        {/* --- TAB 0: OVERVIEW --- */}
+                        {activeTab === 0 && (
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
+                                <SectionHeader title="Project Identification" icon="🏢" />
                         <div className="space-y-4">
                             {/* 0. PROJECT CATEGORY (New - Dropdown) */}
                             <div>
@@ -982,300 +1029,415 @@ const NewProjects = () => {
 
                         </div>
 
-                        <SectionHeader title="Project Location" icon="📍" />
-                        <div className="space-y-4">
-                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                                <div className="flex items-start gap-3 mb-4">
-                                    <div className="text-blue-600 text-xl">ℹ️</div>
-                                    <p className="text-xs text-blue-800 leading-relaxed">
-                                        <strong>COA Requirement:</strong> Drag the pin to the exact project site, or stand on-site and click "Get Current Location".
-                                    </p>
-                                </div>
-
-                                <div className="mb-4 rounded-xl overflow-hidden shadow-sm border border-slate-200">
-                                    <LocationPickerMap
-                                        latitude={formData.latitude}
-                                        longitude={formData.longitude}
-                                        onLocationSelect={handleLocationSelect}
-                                        disabled={isDummy}
-                                    />
-                                </div>
-
-                                <div className="flex gap-3 mb-3">
-                                    <div className="flex-1">
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude</label>
-                                        <input
-                                            name="latitude"
-                                            value={formData.latitude}
-                                            readOnly
-                                            placeholder="0.000000"
-                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none"
-                                        />
-                                    </div>
-                                    <div className="flex-1">
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude</label>
-                                        <input
-                                            name="longitude"
-                                            value={formData.longitude}
-                                            readOnly
-                                            placeholder="0.000000"
-                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={handleGetLocation}
-                                    disabled={isDummy}
-                                    className="w-full py-3 bg-blue-600 text-white font-bold text-xs uppercase rounded-lg shadow-md hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <span>📡</span> {formData.latitude ? 'Refine with GPS' : 'Get Current Location'}
-                                </button>
-                            </div>
-                        </div>
-
-                        {userRole === 'Local Government Unit' && (
+                        {/* --- IMPLEMENTING AGENCY SECTION (HRODI Engineer only) --- */}
+                        {(userRole === 'HRODI Engineer' || userRole === 'HRODI') && (
                             <>
-                                <SectionHeader title="LGU Project Details" icon="🏛️" />
-                                <div className="space-y-4">
-                                    {/* Location Details */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province</label>
-                                            <input name="province" value={formData.province} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality</label>
-                                            <input name="municipality" value={formData.municipality} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District</label>
-                                            <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                        </div>
-                                    </div>
-
-                                    {/* Funding & MOA */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fund Source</label>
-                                            <input name="fund_source" value={formData.fund_source} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Date</label>
-                                            <input type="date" name="moa_date" value={formData.moa_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                        </div>
-                                    </div>
-
-                                    {/* Tranches */}
-                                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                                        <h4 className="font-bold text-blue-800 text-xs uppercase mb-3">Fund Tranches</h4>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches</label>
-                                                <input type="number" name="tranches_count" value={formData.tranches_count} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche</label>
-                                                <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded</label>
-                                                <input name="funds_downloaded" value={formData.funds_downloaded} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
-                                                <input name="funds_utilized" value={formData.funds_utilized} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Scope */}
-                                    <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="block text-xs font-bold text-slate-500 uppercase">Scope of Works</label>
-                                            <span className={`text-[10px] font-bold ${formData.scope_of_works?.length >= 200 ? 'text-red-500' : 'text-slate-400'}`}>
-                                                {formData.scope_of_works?.length || 0}/200
-                                            </span>
-                                        </div>
-                                        <textarea 
-                                            name="scope_of_works" 
-                                            rows="2" 
-                                            value={formData.scope_of_works} 
-                                            onChange={handleChange} 
-                                            maxLength="200"
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" 
-                                        />
-                                    </div>
-                                </div>
-
-                                <SectionHeader title="Procurement Details" icon="⚖️" />
+                                <SectionHeader title="Implementing Agency" icon="🏛️" />
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage</label>
-                                        <select name="procurement_stage" value={formData.procurement_stage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
-                                            <option value="">Select Stage...</option>
-                                            <option value="Pre-Procurement">Pre-Procurement</option>
-                                            <option value="Advertisement">Advertisement</option>
-                                            <option value="Pre-Bid Conference">Pre-Bid Conference</option>
-                                            <option value="Opening of Bids">Opening of Bids</option>
-                                            <option value="Bid Evaluation">Bid Evaluation</option>
-                                            <option value="Post Qualification">Post Qualification</option>
-                                            <option value="Awarded">Awarded</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
-                                            <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Construction Start Date</label>
-                                            <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                        </div>
-                                    </div>
-
-                                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                        <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Dates</h4>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bidding Date</label>
-                                                <input type="date" name="bidding_date" value={formData.bidding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bid Opening</label>
-                                                <input type="date" name="bid_opening_date" value={formData.bid_opening_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Awarding Date</label>
-                                                <input type="date" name="awarding_date" value={formData.awarding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
-                                            </div>
-
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                            Implementing Agency <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <select
+                                                name="implementingAgency"
+                                                value={formData.implementingAgency || ''}
+                                                onChange={(e) => {
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        implementingAgency: e.target.value,
+                                                        implementingAgencySpecific: ''
+                                                    }));
+                                                }}
+                                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 appearance-none"
+                                            >
+                                                <option value="">Select Implementing Agency</option>
+                                                <option value="mgo">MGO (Municipal Government Office)</option>
+                                                <option value="pgo">PGO (Provincial Government Office)</option>
+                                                <option value="cgo">CGO (City Government Office)</option>
+                                                <option value="deped">DepEd (Department of Education)</option>
+                                                <option value="dpwh">DPWH (Dept. of Public Works and Highways)</option>
+                                                <option value="cso">CSO (Civil Society Organization)</option>
+                                            </select>
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
                                         </div>
                                     </div>
-                                </div>
-                            </>
-                        )}
 
-                        <SectionHeader title="Status and Progress" icon="📊" />
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status Design Phase</label>
-                                <select name="statusDesignPhase" value={formData.statusDesignPhase || ''} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
-                                    <option value="">Select Design Phase Status...</option>
-                                    <option value="Not Yet Started">Not Yet Started</option>
-                                    <option value="Under Procurement">Under Procurement</option>
-                                    <option value="Ongoing">Ongoing</option>
-                                    <option value="For Final Inspection">For Final Inspection</option>
-                                    <option value="Completed">Completed</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status of Construction Phase</label>
-                                <select name="status" value={formData.status} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
-                                    <option value="Not Yet Started">Not Yet Started</option>
-                                    <option value="Under Procurement">Under Procurement</option>
-                                    <option value="Ongoing">Ongoing</option>
-                                    <option value="For Final Inspection">For Final Inspection</option>
-                                    <option value="Completed">Completed</option>
-                                </select>
-                            </div>
-                            {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date</label>
-                                        <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} max={new Date().toISOString().split('T')[0]} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                                    </div>
-                                    <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
-                                            {!isDummy && (
-                                                <div className="flex gap-1">
-                                                    <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
-                                                    <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                    <SectionHeader title="Procurement Milestones" icon="⚖️" />
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
-                        <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Procurement Dates</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Issuance of Invitation to Bid</label>
-                                <input type="date" name="issuanceOfInvitationToBid" value={formData.issuanceOfInvitationToBid || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pre-Bid Conference</label>
-                                <input type="date" name="preBidConference" value={formData.preBidConference || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Technical Proposal</label>
-                                <input type="date" name="openingOfTechnicalProposal" value={formData.openingOfTechnicalProposal || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Financial Proposal</label>
-                                <input type="date" name="openingOfFinancialProposal" value={formData.openingOfFinancialProposal || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Request for Quotation</label>
-                                <input type="date" name="requestForQuotation" value={formData.requestForQuotation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Negotiation</label>
-                                <input type="date" name="negotiation" value={formData.negotiation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Quotation</label>
-                                <input type="date" name="openingOfQuotation" value={formData.openingOfQuotation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Notice of Award</label>
-                                <input type="date" name="dateNoticeOfAward" value={formData.dateNoticeOfAward || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                        </div>
-                    </div>
-
-                        {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
-                            <>
-                                <SectionHeader title="Timelines" icon="📅" />
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed Date</label>
-                                        <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                                    </div>
-                                    {/* Start of Construction (New) */}
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Start of Construction</label>
-                                        <input type="date" name="constructionStartDate" value={formData.constructionStartDate || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion Date</label>
-                                        <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                                    </div>
-                                    {formData.status === 'Completed' && (
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion Date</label>
-                                            <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                    {/* Sub-question: shown only for mgo, pgo, cgo, cso */}
+                                    {['mgo', 'pgo', 'cgo', 'cso'].includes(formData.implementingAgency) && (
+                                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                            <label className="block text-xs font-bold text-blue-700 uppercase mb-1">
+                                                Which {formData.implementingAgency?.toUpperCase()}? <span className="text-red-500">*</span>
+                                            </label>
+                                                    <input
+                                                        type="text"
+                                                        name="implementingAgencySpecific"
+                                                        value={formData.implementingAgencySpecific || ''}
+                                                        onChange={handleChange}
+                                                        placeholder={`e.g. Bataan ${formData.implementingAgency?.toUpperCase()}`}
+                                                        className="w-full p-3 bg-white border border-blue-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                                    />
+                                            <p className="text-[10px] text-blue-500 mt-1 font-medium">
+                                                Specify the exact {formData.implementingAgency?.toUpperCase()} implementing this project.
+                                            </p>
                                         </div>
                                     )}
                                 </div>
                             </>
                         )}
 
-                        {/* --- SITE PHOTOS SECTION (Conditional) --- */}
-                        {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
-                            <div className="mt-4 pt-4 border-t border-slate-100">
+                        <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
+                            <button type="button" onClick={() => setActiveTab(1)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
+                        </div>
+                    </div>
+                )}
+
+
+
+                        {/* --- TAB 1: LOCATION --- */}
+                        {activeTab === 1 && (
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
+                                <SectionHeader title="Project Location" icon="📍" />
+                                <div className="space-y-4">
+                                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                        <div className="flex items-start gap-3 mb-4">
+                                            <div className="text-blue-600 text-xl">ℹ️</div>
+                                            <p className="text-xs text-blue-800 leading-relaxed">
+                                                <strong>COA Requirement:</strong> Drag the pin to the exact project site, or stand on-site and click "Get Current Location".
+                                            </p>
+                                        </div>
+
+                                        <div className="mb-4 rounded-xl overflow-hidden shadow-sm border border-slate-200">
+                                            <LocationPickerMap
+                                                latitude={formData.latitude}
+                                                longitude={formData.longitude}
+                                                onLocationSelect={handleLocationSelect}
+                                                disabled={isDummy}
+                                            />
+                                        </div>
+
+                                        <div className="flex gap-3 mb-3">
+                                            <div className="flex-1">
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude</label>
+                                                <input
+                                                    name="latitude"
+                                                    value={formData.latitude}
+                                                    readOnly
+                                                    placeholder="0.000000"
+                                                    className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none"
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude</label>
+                                                <input
+                                                    name="longitude"
+                                                    value={formData.longitude}
+                                                    readOnly
+                                                    placeholder="0.000000"
+                                                    className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleGetCurrentLocation}
+                                            className="w-full py-2.5 bg-white border border-blue-200 rounded-xl text-[10px] font-black uppercase tracking-wider text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center gap-2 shadow-sm"
+                                        >
+                                            <span>📍</span> Get Current Location
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
+                                        <button type="button" onClick={() => setActiveTab(0)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
+                                        <button type="button" onClick={() => setActiveTab(2)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- TAB 2: STATUS & TIMELINES --- */}
+                        {activeTab === 2 && (
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
+                                <SectionHeader title="Status and Progress" icon="📊" />
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status Design Phase</label>
+                                        <select name="statusDesignPhase" value={formData.statusDesignPhase || ''} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
+                                            <option value="">Select Design Phase Status...</option>
+                                            <option value="Not Yet Started">Not Yet Started</option>
+                                            <option value="Under Procurement">Under Procurement</option>
+                                            <option value="Ongoing">Ongoing</option>
+                                            <option value="For Final Inspection">For Final Inspection</option>
+                                            <option value="Completed">Completed</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status of Construction Phase</label>
+                                        <select name="status" value={formData.status} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
+                                            <option value="Not Yet Started">Not Yet Started</option>
+                                            <option value="Under Procurement">Under Procurement</option>
+                                            <option value="Ongoing">Ongoing</option>
+                                            <option value="For Final Inspection">For Final Inspection</option>
+                                            <option value="Completed">Completed</option>
+                                        </select>
+                                    </div>
+                                    {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date</label>
+                                                <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} max={new Date().toISOString().split('T')[0]} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            </div>
+                                            <div>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
+                                                    {!isDummy && (
+                                                        <div className="flex gap-1">
+                                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
+                                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <SectionHeader title="Procurement Milestones" icon="⚖️" />
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
+                                    <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Procurement Dates</h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Issuance of Invitation to Bid</label>
+                                            <input type="date" name="issuanceOfInvitationToBid" value={formData.issuanceOfInvitationToBid || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Pre-Bid Conference</label>
+                                            <input type="date" name="preBidConference" value={formData.preBidConference || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Technical Proposal</label>
+                                            <input type="date" name="openingOfTechnicalProposal" value={formData.openingOfTechnicalProposal || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Financial Proposal</label>
+                                            <input type="date" name="openingOfFinancialProposal" value={formData.openingOfFinancialProposal || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Request for Quotation</label>
+                                            <input type="date" name="requestForQuotation" value={formData.requestForQuotation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Negotiation</label>
+                                            <input type="date" name="negotiation" value={formData.negotiation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Opening of Quotation</label>
+                                            <input type="date" name="openingOfQuotation" value={formData.openingOfQuotation || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Notice of Award</label>
+                                            <input type="date" name="dateNoticeOfAward" value={formData.dateNoticeOfAward || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
+                                    <>
+                                        <SectionHeader title="Timelines" icon="📅" />
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed Date</label>
+                                                <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Start of Construction</label>
+                                                <input type="date" name="constructionStartDate" value={formData.constructionStartDate || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion Date</label>
+                                                <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            </div>
+                                            {formData.status === 'Completed' && (
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion Date</label>
+                                                    <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
+                                    <button type="button" onClick={() => setActiveTab(1)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
+                                    <button type="button" onClick={() => setActiveTab(3)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
+                                </div>
+                            </div>
+                        )}
+
+
+                        {/* --- TAB 3: FINANCE & CONTRACTOR --- */}
+                        {activeTab === 3 && (
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
+                                {userRole === 'Local Government Unit' && (
+                                    <div className="space-y-6">
+                                        <SectionHeader title="LGU Project Details" icon="🏛️" />
+                                        <div className="space-y-4">
+                                            {/* Location Details */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province</label>
+                                                    <input name="province" value={formData.province} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality</label>
+                                                    <input name="municipality" value={formData.municipality} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District</label>
+                                                    <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                                </div>
+                                            </div>
+
+                                            {/* Funding & MOA */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fund Source</label>
+                                                    <input name="fund_source" value={formData.fund_source} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Date</label>
+                                                    <input type="date" name="moa_date" value={formData.moa_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                                </div>
+                                            </div>
+
+                                            {/* Tranches */}
+                                            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                                <h4 className="font-bold text-blue-800 text-xs uppercase mb-3">Fund Tranches</h4>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches</label>
+                                                        <input type="number" name="tranches_count" value={formData.tranches_count} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche</label>
+                                                        <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded</label>
+                                                        <input name="funds_downloaded" value={formData.funds_downloaded} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                                                        <input name="funds_utilized" value={formData.funds_utilized} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Scope */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase">Scope of Works</label>
+                                                    <span className={`text-[10px] font-bold ${formData.scope_of_works?.length >= 200 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                        {formData.scope_of_works?.length || 0}/200
+                                                    </span>
+                                                </div>
+                                                <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} maxLength="200" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                        </div>
+
+                                        <SectionHeader title="Procurement Details" icon="⚖️" />
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage</label>
+                                                <select name="procurement_stage" value={formData.procurement_stage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                                                    <option value="">Select Stage...</option>
+                                                    <option value="Pre-Procurement">Pre-Procurement</option>
+                                                    <option value="Advertisement">Advertisement</option>
+                                                    <option value="Pre-Bid Conference">Pre-Bid Conference</option>
+                                                    <option value="Opening of Bids">Opening of Bids</option>
+                                                    <option value="Bid Evaluation">Bid Evaluation</option>
+                                                    <option value="Post Qualification">Post Qualification</option>
+                                                    <option value="Awarded">Awarded</option>
+                                                </select>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
+                                                    <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Construction Start Date</label>
+                                                    <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <SectionHeader title="Funds and Contractor" icon="💰" />
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Approved Budget for Contract (ABC) (PHP)</label>
+                                            <input type="text" name="approved_budget_for_contract" value={formData.approved_budget_for_contract} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 15,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount (PHP)</label>
+                                            <input type="text" name="contract_amount" value={formData.contract_amount} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 14,500,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                                            <input type="text" name="fundsUtilized" value={formData.fundsUtilized || ''} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 5,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch of Funds</label>
+                                            <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} readOnly={isDummy} placeholder="e.g. Batch 1" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funding Year</label>
+                                            <input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 2024" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract ID</label>
+                                            <input name="contractId" value={formData.contractId || ''} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 23B0001" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contractor Name</label>
+                                        <input name="contractorName" value={formData.contractorName} onChange={handleChange} readOnly={isDummy} placeholder="e.g. ABC Builders" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                    </div>
+                                </div>
+
+                                <SectionHeader title="Other Remarks" icon="📝" />
+                                <textarea name="otherRemarks" rows="3" value={formData.otherRemarks} onChange={handleChange} readOnly={isDummy} placeholder="Any specific issues or notes..." className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+
+                                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
+                                    <button type="button" onClick={() => setActiveTab(2)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
+                                    <button type="button" onClick={() => setActiveTab(4)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- TAB 4: MEDIA & DOCUMENTS --- */}
+                        {activeTab === 4 && (
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
                                 <SectionHeader title="Site Photos" icon="📸" />
                                 <div className="space-y-6">
+                                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-3 mb-2">
+                                        <div className="text-amber-500 text-lg">⚠️</div>
+                                        <p className="text-[10px] text-amber-800 leading-tight">
+                                            <strong>Photo Quality:</strong> Ensure photos are clear and show significant progress or site condition. Wide shots are preferred for COA validation.
+                                        </p>
+                                    </div>
 
-                                    {/* EXTERNAL PHOTOS (First) */}
+                                    {/* Photos content moved from Tab 2 */}
+                                    {/* EXTERNAL PHOTOS */}
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                         <div className="flex justify-between items-center mb-1">
                                             <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
@@ -1308,7 +1470,7 @@ const NewProjects = () => {
                                         )}
                                     </div>
 
-                                    {/* INTERNAL PHOTOS (Second) */}
+                                    {/* INTERNAL PHOTOS */}
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                         <div className="flex justify-between items-center mb-1">
                                             <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
@@ -1341,110 +1503,65 @@ const NewProjects = () => {
                                         )}
                                     </div>
                                 </div>
+
+                                <SectionHeader title="Project Documents" icon="📄" />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {Object.entries(DOC_TYPES)
+                                        .filter(([key]) => {
+                                            if (['RTA', 'MOA'].includes(key)) {
+                                                return userRole === 'EFD';
+                                            }
+                                            return true;
+                                        })
+                                        .map(([key, label]) => (
+                                            <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                                        {label}
+                                                    </p>
+                                                    {documents[key] ? (
+                                                        <p className="text-[10px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                            {documents[key].name}
+                                                        </p>
+                                                    ) : (
+                                                        <p className="text-[10px] text-red-400 font-bold mt-0.5">{/* Optional */}</p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    {documents[key] ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeDocument(key)}
+                                                            className="w-8 h-8 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    ) : (
+                                                        <label className="cursor-pointer px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
+                                                            Select PDF
+                                                            <input
+                                                                type="file"
+                                                                accept=".pdf"
+                                                                className="hidden"
+                                                                onChange={(e) => handleDocumentSelect(e, key)}
+                                                            />
+                                                        </label>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
+                                    <button type="button" onClick={() => setActiveTab(3)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
+                                </div>
                             </div>
                         )}
 
-                        <SectionHeader title="Funds and Contractor" icon="💰" />
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Approved Budget for Contract (ABC) (PHP)</label>
-                                <input type="text" name="approved_budget_for_contract" value={formData.approved_budget_for_contract} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 15,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount (PHP)</label>
-                                <input type="text" name="contract_amount" value={formData.contract_amount} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 14,500,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funds Utilized (As of Current Date)</label>
-                                <input type="text" name="fundsUtilized" value={formData.fundsUtilized || ''} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 5,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch of Funds</label>
-                                <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} readOnly={isDummy} placeholder="e.g. Batch 1" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funding Year</label>
-                                <input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 2024" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract ID</label>
-                                <input name="contractId" value={formData.contractId || ''} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 23B0001" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contractor Name</label>
-                                <input name="contractorName" value={formData.contractorName} onChange={handleChange} readOnly={isDummy} placeholder="e.g. ABC Builders" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
-                        </div>
 
-
-                        <SectionHeader title="Other Remarks" icon="📝" />
-                        <div className="mb-4">
-                            <textarea
-                                name="otherRemarks"
-                                rows="3"
-                                value={formData.otherRemarks}
-                                onChange={handleChange}
-                                readOnly={isDummy}
-                                placeholder="Any specific issues or notes..."
-                                className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}
-                            />
-                        </div>
-
-                        {/* --- REQUIRED DOCUMENTS SECTION --- */}
-                        <div className="mt-4 pt-4 border-t border-slate-100">
-                            <div className="flex items-center gap-2 mb-2">
-                                <span className="text-xl">📄</span>
-                                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Project Documents</h3>
-                            </div>
-                            <p className="text-xs text-slate-400 -mt-2 mb-2">Each document must be a PDF file.</p>
-
-                            {Object.entries(DOC_TYPES)
-                                .filter(([key]) => {
-                                    if (['RTA', 'MOA'].includes(key)) {
-                                        return userRole === 'EFD';
-                                    }
-                                    return true;
-                                })
-                                .map(([key, label]) => (
-                                    <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                {label}
-                                            </p>
-                                            {documents[key] ? (
-                                                <p className="text-[10px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                                    {documents[key].name}
-                                                </p>
-                                            ) : (
-                                                <p className="text-[10px] text-red-400 font-bold mt-0.5">{/* Optional */}</p>
-                                            )}
-                                        </div>
-                                        <div>
-                                            {documents[key] ? (
-                                                <button
-                                                    onClick={() => removeDocument(key)}
-                                                    className="w-8 h-8 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
-                                                >
-                                                    ✕
-                                                </button>
-                                            ) : (
-                                                <label className="cursor-pointer px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
-                                                    Select PDF
-                                                    <input
-                                                        type="file"
-                                                        accept=".pdf"
-                                                        className="hidden"
-                                                        onChange={(e) => handleDocumentSelect(e, key)}
-                                                    />
-                                                </label>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
 
 
 

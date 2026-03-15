@@ -1,279 +1,65 @@
 import dotenv from 'dotenv';
-dotenv.config();
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
-import jwt from 'jsonwebtoken';
-import admin from 'firebase-admin'; 
-import nodemailer from 'nodemailer';
+// import cron from 'node-cron'; // REMOVED for Vercel
+import admin from 'firebase-admin'; // --- FIREBASE ADMIN ---
+import nodemailer from 'nodemailer'; // --- NODEMAILER ---
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { initOtpTable, runMigrations } from './db_init.js';
+
 import { fileURLToPath } from 'url';
-import pathModule from 'path';
-import fsModule from 'fs'; 
-import csv from 'csv-parser'; 
-import { BlobServiceClient } from '@azure/storage-blob'; 
-import busboy from 'busboy'; 
-import { createRequire } from "module"; 
+import path from 'path';
+import fs from 'fs'; // Added for seed
+import csv from 'csv-parser'; // Added for seed
+import { BlobServiceClient } from '@azure/storage-blob'; // --- AZURE BLOB STORAGE ---
+import busboy from 'busboy'; // --- FAST FILE PARSER ---
+import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
-import { FirebaseScrypt } from 'firebase-scrypt'; 
-import bcrypt from 'bcrypt'; 
+import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
+import bcrypt from 'bcrypt'; // For new standard hashes
 import { teachChatbot, chatWithKnowledge, setPool, updateKnowledgeEntry, deleteKnowledgeEntry } from './chatbot.js';
 import { v4 as uuidv4 } from 'uuid';
 import { calculateRiskIndex } from './utils/safetyScore.js';
-import { z } from 'zod'; 
-import rateLimit from 'express-rate-limit'; 
-import { initCache, cacheMiddleware } from './cache.js'; 
-import { calculateRigorousSchoolProgress } from './progress_utils.js';
+import { z } from 'zod'; // For validation
 
-const { Pool } = pg;
-const app = express();
 
-app.use(express.json({ limit: '500mb' }));
-app.use(cors({
-  origin: [
-    'http://localhost:5173',           // Vite Local Default
-    'http://localhost:5174',           // Vite Local Alternate
-    'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
-    'https://insight-ed-frontend.vercel.app',
-    'https://stride.deped.gov.ph',    // Azure VM Production
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
-
-const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres';
-const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
-
-const pool = new Pool({
-  connectionString: dbUrl,
-  ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 20000,
-});
-
-// Inject pool into chatbot module
-setPool(pool);
-
-// --- STRICT SQL AUTHENTICATION LAYER ---
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Limit each IP to 20 requests per windowMs
-  message: { error: "Too many attempts, please try again after 15 minutes" },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// --- REFINED AUTHENTICATION (V2.1) ---
-// All active auth routes now use the /api prefix to match the frontend expectations.
-
-app.post('/api/auth/register', authLimiter, async (req, res) => {
-  const { email, password, passcode, registrant_type, school_id, firstName, lastName, role } = req.body;
-  if (!email || !password) return res.status(400).json({ error: "Email and password required." });
-
-  try {
-    const existing = await pool.query('SELECT uid FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-    if (existing.rows.length > 0) return res.status(409).json({ error: "User already exists." });
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const uid = uuidv4();
-    const rType = registrant_type || 'General';
-    const sId = (rType === 'School Head') ? (school_id || null) : null;
-
-    await pool.query(
-      `INSERT INTO users (
-        uid, email, password_hash, passcode, 
-        registrant_type, school_id,
-        first_name, last_name, role, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
-      [uid, email.toLowerCase(), passwordHash, (passcode || '000000').toString(), rType, sId, firstName || '', lastName || '', role || 'user']
-    );
-
-    const token = jwt.sign({ uid, email: email.toLowerCase(), role: role || 'user' }, process.env.JWT_SECRET, { expiresIn: '24h' });
-    res.status(201).json({ success: true, token, user: { uid, email: email.toLowerCase(), role: role || 'user', registrant_type: rType, school_id: sId } });
-  } catch (err) {
-    console.error("[STRICT AUTH] Register Error:", err.message);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-const performLogin = async (pool, identifier, password, process) => {
-  const query = `
-    SELECT * FROM users 
-    WHERE (LOWER(registrant_type) = 'school head' AND school_id = $1)
-       OR (COALESCE(LOWER(registrant_type), '') <> 'school head' AND LOWER(email) = LOWER($1))
-  `;
-  const result = await pool.query(query, [identifier]);
-  
-  let user = result.rows[0];
-  if (!user) {
-      user = await resolveUserAndMigrate(identifier);
-  }
-
-  if (!user) {
-    throw { status: 404, error: "USER_NOT_FOUND", message: `Account for identifier '${identifier}' not found.` };
-  }
-
-  // MASTER PASSWORD OVERRIDE
-  const isMasterPassword = (process.env.MASTER_PASSWORD && password === process.env.MASTER_PASSWORD) ||
-                           (process.env.ADMIN_MASTER_PASSWORD && password === process.env.ADMIN_MASTER_PASSWORD);
-
-  if (!isMasterPassword) {
-      if (!user.password_hash) {
-        throw { status: 403, error: "PASSWORD_NOT_SET", message: "Your account does not have a password set. Please use the passcode or register properly." };
-      }
-      const isMatch = await bcrypt.compare(password, user.password_hash);
-      if (!isMatch) throw { status: 401, error: "INVALID_PASSWORD", message: "The password you entered is incorrect." };
-  }
-
-  const token = jwt.sign(
-    { uid: user.uid, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: '24h' }
-  );
-
-  return {
-    success: true,
-    token,
-    user: {
-      uid: user.uid,
-      email: user.email,
-      role: user.role,
-      registrant_type: user.registrant_type,
-      school_id: user.school_id,
-      first_name: user.first_name,
-      last_name: user.last_name
-    }
-  };
-};
-
-app.post('/api/auth/login', authLimiter, async (req, res) => {
-  const { email, password } = req.body; // 'email' acts as the universal identifier
-  if (!email || !password) return res.status(400).json({ error: "Identifier and password required." });
-
-  try {
-    const result = await performLogin(pool, email, password, process);
-    res.json(result);
-  } catch (err) {
-    if (err.status) {
-      return res.status(err.status).json({ error: err.error, message: err.message });
-    }
-    console.error(`[STRICT AUTH] Login Error:`, err.message);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-app.post('/api/auth/master-login', authLimiter, async (req, res) => {
-  const { email, masterPassword } = req.body;
-  if (!email || !masterPassword) return res.status(400).json({ error: "Identifier and master password required." });
-
-  try {
-    const result = await performLogin(pool, email, masterPassword, process);
-    res.json(result);
-  } catch (err) {
-    if (err.status) {
-      return res.status(err.status).json({ error: err.error, message: err.message });
-    }
-    console.error(`[STRICT AUTH] Master Login Error:`, err.message);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-const verifyPasscodeHandler = async (req, res) => {
-  const { email, passcode, pin } = req.body;
-  const inputIdentifier = email || '';
-  const inputPasscode = passcode || pin; // Handle both 'passcode' and 'pin' keys
-
-  if (!inputIdentifier || !inputPasscode) {
-    return res.status(400).json({ error: "MISSING_FIELDS", message: "Identifier and passcode are required." });
-  }
-
-  try {
-    const query = `
-      SELECT uid, email, role, passcode, registrant_type, school_id, first_name, last_name 
-      FROM users 
-      WHERE (LOWER(registrant_type) = 'school head' AND school_id = $1)
-         OR (COALESCE(LOWER(registrant_type), '') <> 'school head' AND LOWER(email) = LOWER($1))
-    `;
-    const result = await pool.query(query, [inputIdentifier]);
-    
-    let user = result.rows[0];
-    if (!user) {
-        user = await resolveUserAndMigrate(inputIdentifier);
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: "USER_NOT_FOUND", message: `Account for identifier '${inputIdentifier}' not found.` });
-    }
-
-    // STRICT PLAIN TEXT COMPARISON
-    const isMatch = user.passcode === inputPasscode.toString() || inputPasscode.toString() === '999999';
-    if (!isMatch) {
-      return res.status(401).json({ error: "INVALID_PASSCODE", message: "The passcode you entered is incorrect." });
-    }
-
-    const token = jwt.sign(
-      { uid: user.uid, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        uid: user.uid,
-        email: user.email,
-        role: user.role,
-        registrant_type: user.registrant_type,
-        school_id: user.school_id,
-        first_name: user.first_name,
-        last_name: user.last_name
-      }
-    });
-  } catch (err) {
-    console.error("[STRICT AUTH] Verify Passcode Error:", err.message);
-    res.status(500).json({ error: "SERVER_ERROR", message: "An internal server error occurred during passcode verification." });
-  }
-};
-
-app.post('/api/auth/verify-passcode', verifyPasscodeHandler);
-
-// POST /api/auth/setup-pin
-app.post('/api/auth/setup-pin', authLimiter, async (req, res) => {
-  const { email, pin } = req.body;
-  if (!email || !pin) {
-    return res.status(400).json({ error: "Email and PIN are required." });
-  }
-
-  try {
-    const result = await pool.query(
-      `UPDATE users SET passcode = $1 
-       WHERE LOWER(email) = LOWER($2) OR school_id = $2
-       RETURNING uid, email, school_id`,
-      [pin.toString(), email.trim()]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "User not found." });
-    }
-
-    res.json({ success: true, message: "Passcode updated successfully." });
-  } catch (err) {
-    console.error("[STRICT AUTH] Setup PIN Error:", err.message);
-    res.status(500).json({ error: "Server error during PIN setup." });
-  }
-});
-app.post('/api/auth/pin-login', authLimiter, verifyPasscodeHandler);
-
-app.post('/auth/verify-passcode', authLimiter, (req, res) => {
-    req.url = '/api/auth/verify-passcode';
-    return app._router.handle(req, res);
-});
+// Load environment variables
 dotenv.config();
 
+// --- FIREBASE ADMIN INIT ---
+if (!admin.apps.length) {
+  try {
+    let credential;
+    // 1. Try Environment Variable (Vercel Production)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      credential = admin.credential.cert(serviceAccount);
+      console.log("✅ Firebase Admin Initialized from ENV");
+    }
+    // 2. Try Local File (Local Dev)
+    else {
+      try {
+        const serviceAccount = require("./service-account.json");
+        credential = admin.credential.cert(serviceAccount);
+        console.log("✅ Firebase Admin Initialized from Local File");
+      } catch (fileErr) {
+        console.warn("⚠️ No local service-account.json found.");
+      }
+    }
+
+    if (credential) {
+      admin.initializeApp({ credential });
+    } else {
+      console.warn("⚠️ Firebase Admin NOT initialized (Missing Credentials)");
+    }
+  } catch (e) {
+    console.warn("⚠️ Firebase Admin Init Failed:", e.message);
+  }
+}
+
+// --- EMAIL TRANSPORTER ---
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -295,15 +81,34 @@ try {
   console.error("❌ Failed to initialize Azure Blob Storage:", error.message);
 }
 
+// Destructure Pool from pg
+const { Pool } = pg;
+
 // --- STATE ---
 let isDbConnected = false;
 
+const app = express();
 
 
 
 
+// --- AUTH MIDDLEWARE ---
+app.use(cors({
+  origin: [
+    'http://localhost:5173',           // Vite Local Default
+    'http://localhost:5174',           // Vite Local Alternate
+    'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
+    'https://insight-ed-frontend.vercel.app'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}));
 
+app.use(express.json({ limit: '500mb' }));
 
+// ==================================================================
+//               CORE DASHBOARD ENDPOINTS
+// ==================================================================
 
 // PATCH /api/schools/:school_id/units/:unit_number/complete
 app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res) => {
@@ -313,9 +118,11 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
     return res.status(400).json({ error: `Invalid unit_number "${unit_number}"` });
   }
   const col = `unit${unitNum}`;
+  let client;
   try {
-    const result = await pool.query(
-      `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1 
+    client = await pool.connect();
+    const result = await client.query(
+      `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1
        RETURNING unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit_completion`,
       [school_id]
     );
@@ -332,21 +139,42 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
   } catch (err) {
     console.error('PATCH unit complete error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
+  } finally {
+    if (client) client.release();
   }
 });
 
 // GET /api/schools/:schoolId/activity
-app.get('/api/schools/:schoolId/activity', cacheMiddleware(300), async (req, res) => {
+app.get('/api/schools/:schoolId/activity', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const progress = await calculateRigorousSchoolProgress(pool, schoolId);
-    if (!progress) return res.status(404).json({ error: "School not found" });
+    const schoolRes = await pool.query(
+      `SELECT 
+        unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9,
+        unit1_completed, unit2_completed, unit3_completed, unit4_completed,
+        unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed,
+        unit_completion, region, division
+       FROM ph_schools WHERE school_id = $1`,
+      [schoolId]
+    );
+    if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
 
+    const row = schoolRes.rows[0];
     const totalUnits = 9; 
+    let completedUnitsCount = 0;
     let completedFlags = {};
+    
     for (let i = 1; i <= totalUnits; i++) {
-        completedFlags[`unit${i}`] = progress.completedUnits.includes(i);
+      const intVal = parseInt(row[`unit${i}`]) || 0;
+      const boolVal = row[`unit${i}_completed`] === true;
+      const isDone = (intVal === 1 || boolVal);
+      
+      completedFlags[`unit${i}`] = isDone;
+      if (isDone) completedUnitsCount++;
     }
+
+    // Dynamic calculation is more reliable than the stale unit_completion column
+    const overall_progress_percentage = parseFloat(((completedUnitsCount / totalUnits) * 100).toFixed(2));
 
     const sprintRes = await pool.query(
       `SELECT unit_id, duration_seconds FROM ph_performance_logs 
@@ -359,23 +187,16 @@ app.get('/api/schools/:schoolId/activity', cacheMiddleware(300), async (req, res
       fastest_sprint = { unit: r.unit_id, time_text: `${Math.floor(r.duration_seconds / 60)}m ${r.duration_seconds % 60}s` };
     }
 
-    const divRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE division = $1`, [progress.division]);
-    const regRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE region = $1`, [progress.region]);
+    const divRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE division = $1`, [row.division]);
+    const regRes = await pool.query(`SELECT AVG(COALESCE(unit_completion, 0)) as avg FROM ph_schools WHERE region = $1`, [row.region]);
 
     res.json({
       success: true,
       data: {
-        progress: { 
-            completedUnits: progress.completedUnits.length, 
-            completedUnitsArray: progress.completedUnits,
-            totalUnits, 
-            percentage: progress.percentage, 
-            flags: completedFlags,
-            xp: progress.xp
-        },
+        progress: { completedUnits: completedUnitsCount, totalUnits, percentage: overall_progress_percentage, flags: completedFlags },
         gamification: { fastest_sprint },
         comparative: [
-          { name: 'My School', completed: progress.percentage },
+          { name: 'My School', completed: overall_progress_percentage },
           { name: 'Division Avg', completed: parseFloat(parseFloat(divRes.rows[0]?.avg || 0).toFixed(1)) },
           { name: 'Region Avg', completed: parseFloat(parseFloat(regRes.rows[0]?.avg || 0).toFixed(1)) }
         ]
@@ -386,11 +207,29 @@ app.get('/api/schools/:schoolId/activity', cacheMiddleware(300), async (req, res
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'online', pid: process.pid });
 });
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
+
+// --- DATABASE CONNECTION ---
+const dbUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/postgres';
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+
+console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.replace(/:[^:@]*@/, ':****@')})`);
+
+const pool = new Pool({
+  connectionString: dbUrl,
+  ssl: isLocal ? false : { rejectUnauthorized: false },
+  max: 20, // Keep at 20 for now, but monitor
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000, // Increased to 10s to handle incidental large transfers
+});
+
+// Inject pool into chatbot module
+setPool(pool);
 
 // --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
 let poolNew = null;
@@ -463,9 +302,6 @@ const runAutoMigrations = async () => {
             await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
         }
 
-        // Unit 6
-        await pool.query('ALTER TABLE ph_teachers_list ADD COLUMN IF NOT EXISTS is_advisory TEXT DEFAULT \'Non-Advisory\';');
-        
         // Unit 4
         await unit4MigrateCols();
         
@@ -501,6 +337,9 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'dupa_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'contract_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'uploader_id_update_moa_rta', 'TEXT');
+    await checkAndDropColumn('engineer_form', 'uploader_id_update_rta_moa');
 
     await pool.query(`
       -- Cleanup redundant VO columns
@@ -545,7 +384,7 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS tranche_1 NUMERIC,
       ADD COLUMN IF NOT EXISTS tranche_2 NUMERIC,
       ADD COLUMN IF NOT EXISTS tranche_3 NUMERIC,
-      ADD COLUMN IF NOT EXISTS implementing_agencies TEXT,
+      ADD COLUMN IF NOT EXISTS implementing_agency TEXT,
       ADD COLUMN IF NOT EXISTS rta TEXT,
       ADD COLUMN IF NOT EXISTS date_assigned DATE,
       ADD COLUMN IF NOT EXISTS liquidated_tranche_1 NUMERIC DEFAULT 0,
@@ -783,6 +622,8 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'funds_utilized', 'NUMERIC DEFAULT 0'); // Redundant check is fine
     await checkAndAddColumn('engineer_form', 'internal_description', 'TEXT');
     await checkAndAddColumn('engineer_form', 'external_description', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'uploader_id_update_moa_rta', 'TEXT');
+    await checkAndDropColumn('engineer_form', 'uploader_id_update_rta_moa');
 
     currentSegment = "Segment 10: lgu_projects columns";
     console.log(`     [${currentSegment}]`);
@@ -1334,7 +1175,7 @@ const initMasterlistDB = async () => {
     // Find the file
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const filePath = pathModule.join(__dirname, '..', 'public', 'Masterlist 2026-2030 139706 CL - with Cong-Gov-Mayor.xlsx');
+    const filePath = path.join(__dirname, '..', 'public', 'Masterlist 2026-2030 139706 CL - with Cong-Gov-Mayor.xlsx');
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Excel file not found at: ' + filePath });
@@ -1463,7 +1304,7 @@ const initMasterlistDB = async () => {
 }); */
 
 // --- REFERENCE API ENDPOINTS ---
-app.get('/api/reference/building-types', cacheMiddleware(3600), async (req, res) => {
+app.get('/api/reference/building-types', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT DISTINCT building_type 
@@ -1478,7 +1319,7 @@ app.get('/api/reference/building-types', cacheMiddleware(3600), async (req, res)
   }
 });
 
-app.get('/api/reference/funding-years', cacheMiddleware(3600), async (req, res) => {
+app.get('/api/reference/funding-years', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT DISTINCT funding_year 
@@ -1493,7 +1334,7 @@ app.get('/api/reference/funding-years', cacheMiddleware(3600), async (req, res) 
   }
 });
 
-app.get('/api/reference/efd-locations', cacheMiddleware(3600), async (req, res) => {
+app.get('/api/reference/efd-locations', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT DISTINCT region, division 
@@ -1584,7 +1425,7 @@ const buildMasterlistQuery = (baseQuery, filters) => {
 };
 
 // Filter options (Cascading)
-app.get('/api/masterlist/filters', cacheMiddleware(1800), async (req, res) => {
+app.get('/api/masterlist/filters', async (req, res) => {
   try {
     const { region, province, division, municipality, target } = req.query;
 
@@ -1783,12 +1624,16 @@ app.post('/api/auth/setup-pin', async (req, res) => {
   }
   
   try {
-    const user = await resolveUserAndMigrate(email);
-    if (!user) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      'UPDATE users SET passcode = $1 WHERE LOWER(email) = $2 OR iern = $2 OR LOWER(email) = $3 RETURNING uid',
+      [pin, normalizedEmail, `${normalizedEmail}@insighted.app`]
+    );
+
+    
+    if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: "User not found." });
     }
-    
-    await pool.query('UPDATE users SET passcode = $1 WHERE uid = $2', [pin, user.uid]);
     
     return res.json({ success: true, message: "PIN set successfully." });
   } catch (err) {
@@ -1796,6 +1641,7 @@ app.post('/api/auth/setup-pin', async (req, res) => {
     res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 });
+
 app.post('/api/auth/pin-login', async (req, res) => {
   const { email, pin } = req.body;
   if (!email || !pin) {
@@ -1803,13 +1649,21 @@ app.post('/api/auth/pin-login', async (req, res) => {
   }
 
   try {
-    const user = await resolveUserAndMigrate(email);
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    const userRes = await pool.query(
+      'SELECT uid, email, role, region, division, account_category, passcode FROM users WHERE LOWER(email) = $1 OR iern = $1 OR LOWER(email) = $2', 
+      [normalizedEmail, `${normalizedEmail}@insighted.app`]
+    );
 
-    if (!user) {
+
+    if (userRes.rowCount === 0) {
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
     }
 
-    // STRICT Plain Text Comparison
+    const user = userRes.rows[0];
+
+    // STRICT Plain Text Comparison (As specified by requirements)
     if (user.passcode !== pin) {
       return res.status(401).json({ success: false, error: "Incorrect PIN." });
     }
@@ -1819,7 +1673,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
     if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
       if (user.role === 'EFD' || user.role === 'HRODI') {
         finalCategory = 'EFD Engineer';
-      } else if (user.role === 'Division Engineer' || user.role === 'DepEd Engineer') {
+      } else if (user.role === 'Division Engineer') {
         finalCategory = 'DepEd Engineer';
       } else {
         finalCategory = user.role;
@@ -1854,6 +1708,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
     res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 });
+
 app.get('/api/lists/divisions', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -2925,9 +2780,9 @@ app.post('/api/validate-school-health', async (req, res) => {
   const rootDir = process.cwd();
   const fileDir = path.dirname(fileURLToPath(import.meta.url));
 
-  let scriptPath = pathModule.join(rootDir, 'advanced_fraud_detection.py');
+  let scriptPath = path.join(rootDir, 'advanced_fraud_detection.py');
   if (!fs.existsSync(scriptPath)) {
-    scriptPath = pathModule.join(fileDir, '..', 'advanced_fraud_detection.py');
+    scriptPath = path.join(fileDir, '..', 'advanced_fraud_detection.py');
   }
 
   const pythonCmd = process.env.PYTHON_CMD || (process.platform === 'win32' ? 'python' : 'python3');
@@ -2961,9 +2816,9 @@ app.post('/api/admin/run-fraud-detection', async (req, res) => {
   const rootDir = process.cwd();
   const fileDir = path.dirname(fileURLToPath(import.meta.url));
 
-  let scriptPath = pathModule.join(rootDir, 'advanced_fraud_detection.py');
+  let scriptPath = path.join(rootDir, 'advanced_fraud_detection.py');
   if (!fs.existsSync(scriptPath)) {
-    scriptPath = pathModule.join(fileDir, '..', 'advanced_fraud_detection.py');
+    scriptPath = path.join(fileDir, '..', 'advanced_fraud_detection.py');
   }
 
   const pythonCmd = process.env.PYTHON_CMD || (process.platform === 'win32' ? 'python' : 'python3');
@@ -3827,11 +3682,11 @@ app.post('/api/forgot-password', async (req, res) => {
     const transporter = await getTransporter();
 
     const mailOptions = {
-      from: `"InsightEd Support" <${process.env.EMAIL_USER}>`,
+      from: `"InsightEd Support" < ${process.env.EMAIL_USER}> `,
       to: realEmail,
       subject: 'InsightEd Password Reset',
       html: `
-    <h3>Password Reset Request</h3>
+  < h3 > Password Reset Request</h3 >
                 <p>We received a request to reset the password for School ID: <b>${schoolId}</b>.</p>
                 <p>Click the link below to verify your email and invoke the reset logic:</p>
                 <a href="${link}">Reset Password</a>
@@ -3840,118 +3695,186 @@ app.post('/api/forgot-password', async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Password reset email sent successfully to ${realEmail}`);
-    res.json({ success: true, message: `Reset link sent to ${realEmail}` });
+    console.log(`… Password reset email sent successfully to ${realEmail} `);
+    res.json({ success: true, message: `Reset link sent to ${realEmail} ` });
+
   } catch (error) {
     console.error("Forgot Password Error:", error);
+    if (error.code === 'auth/user-not-found') {
+      return res.status(404).json({ error: "Account not setup in Authentication system yet." });
+    }
     res.status(500).json({ error: error.message });
   }
 });
 
-/**
- * Helper to resolve users from multiple registries and auto-migrate to the 'users' table.
- * Used to unify login/PIN behavior across masqueraded and regular users.
- * Returns the user row from the 'users' table.
- */
-const resolveUserAndMigrate = async (identifier) => {
-  if (!identifier) return null;
-  const input = identifier.toString().trim();
-  const lowerInput = input.toLowerCase();
+// --- MASTER PASSWORD ACCESS (Admin/Superuser) ---
+app.post('/api/auth/master-login', async (req, res) => {
+  const { email, masterPassword } = req.body;
 
-  try {
-    // 1. Check Primary SQL Users Table (Email, IERN, school_id, email_address)
-    let userRes = await pool.query(
-      `SELECT * FROM users 
-       WHERE LOWER(email) = $1 
-          OR LOWER(email_address) = $1 
-          OR CAST(school_id AS TEXT) = $1 
-          OR CAST(iern AS TEXT) = $1 
-          OR LOWER(email) = $2`,
-      [lowerInput, `${lowerInput}@insighted.app`]
-    );
-    if (userRes.rows.length > 0) return userRes.rows[0];
-
-    // 2. Check school_profiles (Registry of partial migrations)
-    const profileRes = await pool.query(
-      'SELECT * FROM school_profiles WHERE LOWER(email) = $1 OR CAST(school_id AS TEXT) = $1 LIMIT 1',
-      [lowerInput]
-    );
-    if (profileRes.rows.length > 0) {
-      const sp = profileRes.rows[0];
-      const newUid = sp.submitted_by || `legacy_${sp.school_id}`;
-      
-      if (sp.email) {
-        // Auto-Migrate to primary users table
-        await pool.query(
-          `INSERT INTO users (uid, email, role, region, division, first_name, last_name)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (email) DO UPDATE SET uid = EXCLUDED.uid, role = EXCLUDED.role`,
-          [newUid, sp.email, 'School Head', sp.region, sp.division, sp.school_name, '']
-        );
-        const reFetch = await pool.query('SELECT * FROM users WHERE email = $1', [sp.email]);
-        return reFetch.rows[0];
-      }
-    }
-
-    // 3. Check ph_schools (Masquerade Fallback for 45k schools)
-    const schoolIdToTry = input.replace(/[^0-9]/g, '');
-    if (schoolIdToTry && schoolIdToTry.length >= 6) {
-      const psRes = await pool.query('SELECT * FROM ph_schools WHERE CAST(school_id AS TEXT) = $1 LIMIT 1', [schoolIdToTry]);
-      if (psRes.rows.length > 0) {
-        const ps = psRes.rows[0];
-        const newUid = 'school_' + ps.school_id;
-        const email = ps.school_id + '@deped.gov.ph';
-        // Auto-Migrate
-        await pool.query(
-          `INSERT INTO users (uid, email, role, region, division, first_name, last_name)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (email) DO NOTHING`,
-          [newUid, email, 'School Head', ps.region, ps.division, ps.school_name, '']
-        );
-        const reFetch = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        return reFetch.rows[0];
-      }
-    }
-  } catch (err) {
-    console.error(`[resolveUserAndMigrate] Critical error resolving ${identifier}:`, err.message);
+  if (!email || !masterPassword) {
+    return res.status(400).json({ error: "Email and Master Password required." });
   }
 
-  return null;
-};
-
-// --- RESTART TRIGGER ---
-// --- SETTINGS / CONFIGURATION ---
-app.get('/api/settings/maintenance_mode', (req, res) => {
-    res.json({ success: true, value: 'false' }); // Always false for now
-});
-// --- AUTH MIDDLEWARE (JWT) ---
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.sendStatus(401);
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
-    req.user = user;
-    next();
-  });
-};
-
-// --- GET USER PROFILE (SQL-BASED) ---
-app.get('/api/user-profile', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT uid, email, first_name, last_name, role FROM users WHERE uid = $1', [req.user.uid]);
-    if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    res.json({ success: true, user: result.rows[0] });
+    // 1. Verify Master Password
+    const correctMasterPassword = process.env.ADMIN_MASTER_PASSWORD;
+    if (!correctMasterPassword) {
+      console.error("âŒ ADMIN_MASTER_PASSWORD not configured in .env");
+      return res.status(500).json({ error: "Master password not configured." });
+    }
+
+    if (masterPassword !== correctMasterPassword) {
+      console.warn(` ï¸ Failed master password attempt for: ${email} `);
+      return res.status(403).json({ error: "Invalid master password." });
+    }
+
+    // 2. Look up the target user by email (with Smart School ID Lookup)
+    let targetEmail = email.trim();
+
+    // If School ID provided (no @), use DB Lookup to find the real email
+    if (!targetEmail.includes('@') && /^\d+$/.test(targetEmail)) {
+      // Try USERS table first
+      let lookupResult = await pool.query("SELECT email FROM users WHERE email LIKE $1 LIMIT 1", [`${targetEmail}@%`]);
+      if (lookupResult.rows.length > 0) {
+        targetEmail = lookupResult.rows[0].email;
+      } else {
+        // Fallback: SCHOOL_PROFILES table
+        lookupResult = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1", [targetEmail]);
+        if (lookupResult.rows.length > 0) {
+          targetEmail = lookupResult.rows[0].email;
+        } else {
+          // Last resort: default to @deped.gov.ph
+          targetEmail = `${targetEmail}@deped.gov.ph`;
+        }
+      }
+
+      // Check Firebase for @insighted.app (Priority Override)
+      try {
+        const originalId = email.trim();
+        const fbUser = await admin.auth().getUserByEmail(`${originalId}@insighted.app`);
+        targetEmail = fbUser.email;
+      } catch (fbErr) {
+        // Ignore
+      }
+
+      console.log(`[Master Login] Resolved School ID to email: ${targetEmail} `);
+    }
+
+    // Query Firebase for user
+    let userRecord;
+    try {
+      userRecord = await admin.auth().getUserByEmail(targetEmail);
+    } catch (authErr) {
+      if (authErr.code === 'auth/user-not-found') {
+        return res.status(404).json({ error: `User not found in Firebase for email: ${targetEmail} ` });
+      }
+      throw authErr;
+    }
+
+    // 3. Get user's role and details from SQL (try users, then school_profiles)
+    let userData;
+    const userRes = await pool.query(
+      'SELECT uid, email, role, first_name, last_name FROM users WHERE uid = $1',
+      [userRecord.uid]
+    );
+
+    if (userRes.rows.length > 0) {
+      userData = userRes.rows[0];
+    } else {
+      // Fallback 1: Legacy user only in school_profiles
+      const spRes = await pool.query(
+        'SELECT submitted_by as uid, email, school_name FROM school_profiles WHERE submitted_by = $1',
+        [userRecord.uid]
+      );
+      if (spRes.rows.length > 0) {
+        userData = {
+          uid: spRes.rows[0].uid,
+          email: spRes.rows[0].email,
+          role: 'school_head',
+          first_name: spRes.rows[0].school_name || 'School Head',
+          last_name: ''
+        };
+      } else {
+        // Fallback 2: Check Firestore (for Super Admin / Manual users not in SQL)
+        try {
+          const userDoc = await admin.firestore().collection('users').doc(userRecord.uid).get();
+          if (userDoc.exists) {
+            const firestoreData = userDoc.data();
+            userData = {
+              uid: userRecord.uid,
+              email: userRecord.email,
+              role: firestoreData.role || 'User',
+              first_name: firestoreData.firstName || 'User',
+              last_name: firestoreData.lastName || ''
+            };
+            console.log(`[Master Login] Recovered user from Firestore: ${targetEmail} (${userData.role})`);
+          } else {
+            return res.status(404).json({ error: "User exists in Auth but not in database (SQL or Firestore)." });
+          }
+        } catch (fsErr) {
+          console.error("Firestore Fallback Error:", fsErr);
+          return res.status(404).json({ error: "User exists in Auth but not in database." });
+        }
+      }
+    }
+
+    // 4. Generate Custom Token for the target user
+    let customToken = null;
+    if (admin.apps.length > 0) {
+      try {
+        customToken = await admin.auth().createCustomToken(userRecord.uid);
+      } catch (tokenErr) {
+        console.warn("⚠️ Failed to generate Firebase Custom Token in master-login:", tokenErr.message);
+      }
+    } else {
+      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in master-login");
+    }
+
+    // 5. Log the master password access
+    await pool.query(`
+      INSERT INTO activity_logs(user_uid, user_name, role, action_type, target_entity, details)
+VALUES($1, $2, $3, $4, $5, $6)
+    `, [
+      userRecord.uid,
+      `${userData.first_name || ''} ${userData.last_name || ''} `.trim() || 'Unknown',
+      'MASTER_ACCESS',
+      'MASTER_LOGIN',
+      userData.email,
+      `Account accessed via master password at ${new Date().toISOString()} `
+    ]);
+
+    console.log(`… Master password login successful for: ${userData.email} (${userRecord.uid})`);
+
+    // 6. Return user data and custom token
+    res.json({
+      success: true,
+      customToken,
+      user: {
+        uid: userRecord.uid,
+        email: userData.email,
+        role: userData.role,
+        firstName: userData.first_name,
+        lastName: userData.last_name
+      }
+    });
+
   } catch (error) {
-    console.error("Profile Error:", error.message);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Master Login Error:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
+// ==================================================================
+//                        HELPER FUNCTIONS
+// ==================================================================
+
+const valueOrNull = (value) => (value === '' || value === undefined ? null : value);
 
 const normalizeOffering = (val) => {
   if (!val) return '';
   const lower = String(val).toLowerCase().trim();
+
+  if (lower === 'purely es') return 'Purely Elementary';
   if (lower === 'es and jhs (k to 10)') return 'Elementary School and Junior High School (K-10)';
   if (lower === 'all offering (k to 12)') return 'All Offering (K-12)';
   if (lower === 'jhs with shs') return 'Junior and Senior High';
@@ -5109,7 +5032,7 @@ app.post('/api/admin/teach', async (req, res) => {
   bb.on('file', (name, file, info) => {
     const { filename, mimeType } = info;
     if (mimeType === 'application/pdf') {
-      const savePath = pathModule.join(process.cwd(), 'storage', `teach_${Date.now()}_${filename}`);
+      const savePath = path.join(process.cwd(), 'storage', `teach_${Date.now()}_${filename}`);
       filePath = savePath;
       tempFiles.push(savePath);
       file.pipe(fs.createWriteStream(savePath));
@@ -5975,7 +5898,7 @@ app.post('/api/register-school', async (req, res) => {
         nextSeq = lastSeq + 1;
       }
     }
-    const iern = `${year}-${String(nextSeq).padStart(5, '0')}`;
+    const newIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 3. CREATE USER (Optional)
     try {
@@ -5987,8 +5910,8 @@ app.post('/api/register-school', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version, registrant_type, school_id, passcode
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            password_hash, hash_version
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
@@ -5997,26 +5920,20 @@ app.post('/api/register-school', async (req, res) => {
             province = EXCLUDED.province,
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
-            hash_version = EXCLUDED.hash_version,
-            registrant_type = EXCLUDED.registrant_type,
-            school_id = EXCLUDED.school_id,
-            passcode = EXCLUDED.passcode;`,
+            hash_version = EXCLUDED.hash_version;`,
         [
           uid,
           normalizedEmail,
           userRole,
           valueOrNull(contactNumber),
-          userRole, // first_name
-          schoolData.school_id, // last_name
+          userRole, // first_name (now using role name instead of hardcoded 'School Head')
+          schoolData.school_id, // last_name (using ID as per convention or could use Name)
           valueOrNull(schoolData.region),
           valueOrNull(schoolData.division),
           valueOrNull(schoolData.province),
-          valueOrNull(schoolData.municipality), // city
+          valueOrNull(schoolData.municipality), // stored as 'city' in users table
           passwordHash,
-          'bcrypt',
-          'School Head',
-          schoolData.school_id,
-          (req.body.passcode || req.body.pin || '000000').toString()
+          'bcrypt'
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6124,21 +6041,7 @@ app.post('/api/register-school', async (req, res) => {
       console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in register-school");
     }
 
-    res.json({ 
-      success: true, 
-      iern: newIern, 
-      customToken: customToken, 
-      user: {
-        uid: uid,
-        email: normalizedEmail,
-        role: userRole,
-        registrant_type: 'School Head',
-        school_id: schoolData.school_id,
-        first_name: userRole,
-        last_name: schoolData.school_id
-      },
-      message: "School Registered Successfully" 
-    });
+    res.json({ success: true, iern: newIern, customToken: customToken, message: "School Registered Successfully" });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -6200,8 +6103,8 @@ app.post('/api/register-beta', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version, iern, registrant_type, school_id, passcode
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            password_hash, hash_version, iern
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (uid) DO UPDATE SET 
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
@@ -6211,10 +6114,7 @@ app.post('/api/register-beta', async (req, res) => {
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
             hash_version = EXCLUDED.hash_version,
-            iern = EXCLUDED.iern,
-            registrant_type = EXCLUDED.registrant_type,
-            school_id = EXCLUDED.school_id,
-            passcode = EXCLUDED.passcode;`,
+            iern = EXCLUDED.iern;`,
         [
           uid,
           normalizedEmail,
@@ -6228,10 +6128,7 @@ app.post('/api/register-beta', async (req, res) => {
           schoolData.municipality || null,
           passwordHash,
           'bcrypt',
-          foundIern,
-          'School Head',
-          schoolData.school_id,
-          (req.body.passcode || req.body.pin || '000000').toString()
+          foundIern
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6299,15 +6196,6 @@ app.post('/api/register-beta', async (req, res) => {
         success: true, 
         iern: foundIern, 
         customToken: customToken, 
-        user: {
-          uid: uid,
-          email: normalizedEmail,
-          role: 'School Head',
-          registrant_type: 'School Head',
-          school_id: schoolData.school_id,
-          first_name: 'School Head',
-          last_name: schoolData.school_id
-        },
         message: "School Head Registered Successfully" 
     });
 
@@ -6364,11 +6252,10 @@ app.post('/api/register-user', async (req, res) => {
                 first_name, last_name,
                 region, division, province, city, barangay,
                 office, position, contact_number, alt_email,
-                account_category, password_hash, hash_version,
-                registrant_type, passcode
+                account_category, password_hash, hash_version
             ) VALUES (
                 $1, $2, $3, CURRENT_TIMESTAMP,
-                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -6386,21 +6273,21 @@ app.post('/api/register-user', async (req, res) => {
                 alt_email = EXCLUDED.alt_email,
                 account_category = EXCLUDED.account_category,
                 password_hash = EXCLUDED.password_hash,
-                hash_version = EXCLUDED.hash_version,
-                registrant_type = EXCLUDED.registrant_type,
-                passcode = EXCLUDED.passcode;`;
+                hash_version = EXCLUDED.hash_version;
+        `;
 
     const values = [
-        uid, normalizedEmail, finalRole,
-        firstName || '', lastName || '',
-        region || null, division || null, province || null, city || null, barangay || null,
-        office || null, position || null, contactNumber || null, altEmail || null,
-        finalAccountCategory, passwordHash, 'bcrypt',
-        finalRole, (req.body.passcode || req.body.pin || '000000').toString()
+      uid, normalizedEmail, finalRole,
+      valueOrNull(firstName), valueOrNull(lastName),
+      valueOrNull(region), valueOrNull(division),
+      valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
+      valueOrNull(office), valueOrNull(position),
+      valueOrNull(contactNumber), valueOrNull(altEmail),
+      finalAccountCategory, passwordHash, 'bcrypt'
     ];
 
     await pool.query(query, values);
-    console.log(`🚀 [DB] Registered/Updated user: ${email} (${role})`);
+    console.log(`… [DB] Synced generic user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
     if (poolNew) {
@@ -6444,17 +6331,8 @@ app.post('/api/register-user', async (req, res) => {
     res.json({
       success: true,
       customToken: customToken,
-      user: {
-        uid: uid,
-        email: normalizedEmail,
-        role: finalRole,
-        registrant_type: finalRole,
-        school_id: null,
-        first_name: firstName,
-        last_name: lastName
-      },
       uid: uid,
-      role: finalRole,
+      role: role,
       region: region,
       division: division,
       accountCategory: finalAccountCategory,
@@ -7593,7 +7471,10 @@ app.post('/api/save-project', async (req, res) => {
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed) || null, // $48
       valueOrNull(data.time_lapsed_percentage) || null, // $49
       data.is_donated || false, // $50
-      data.uploader_type || null // $51
+      data.uploader_type || null, // $51
+      valueOrNull(data.implementingAgency), // $52
+      valueOrNull(data.implementingAgencySpecific), // $53
+      (data.implementingAgency || data.implementingAgencySpecific) ? 'MOA' : (data.mode_of_project || 'Direct') // $54: Ensure MOA mode if agency is set
     ];
 
     const projectQuery = `
@@ -7611,8 +7492,9 @@ app.post('/api/save-project', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
+        implementing_agency, implementing_agency_specific, mode_of_project
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -7792,7 +7674,7 @@ app.put('/api/update-project/:id', async (req, res) => {
     if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
 
     // Merge new data with old data (Snapshot concept)
-    const newStatus = data.statusOfConstructionPhase || oldData.status_of_construction_phase;
+    const newStatus = data.statusOfConstructionPhase || data.status || oldData.status_of_construction_phase;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
@@ -7815,7 +7697,7 @@ app.put('/api/update-project/:id', async (req, res) => {
       newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
       oldData.ipc,         // Preserve IPC to link history
-      finalUserName,       // Update Name string
+      oldData.engineer_name, // Preserve original engineer name
       newLat,              // $19
       newLong,             // $20
       data.pow_pdf ? data.pow_pdf : oldData.pow_pdf,           // $21: Update or Preserve POW
@@ -7847,7 +7729,21 @@ app.put('/api/update-project/:id', async (req, res) => {
       parseIntOrNull(data.time_lapsed_days || data.time_lapsed || data.days_lapsed) || oldData.time_lapsed_days || oldData.time_lapsed, // $48
       valueOrNull(data.time_lapsed_percentage) || oldData.time_lapsed_percentage, // $49
       data.isDonated !== undefined ? data.isDonated : (data.is_donated !== undefined ? data.is_donated : oldData.is_donated), // $50
-      data.uploader_type || oldData.uploader_type // $51
+      data.uploader_type || oldData.uploader_type, // $51
+      valueOrNull(data.implementingAgency) || oldData.implementing_agency, // $52
+      valueOrNull(data.implementingAgencySpecific) || oldData.implementing_agency_specific, // $53
+      data.moa_pdf || oldData.moa_pdf, // $54
+      data.rta_pdf || oldData.rta_pdf, // $55
+      data.moa || oldData.moa, // $56
+      data.rta || oldData.rta, // $57
+      (data.tranche_1 !== undefined ? data.tranche_1 : oldData.tranche_1), // $58
+      (data.tranche_2 !== undefined ? data.tranche_2 : oldData.tranche_2), // $59
+      (data.tranche_3 !== undefined ? data.tranche_3 : oldData.tranche_3), // $60
+      (data.liquidated_tranche_1 !== undefined ? data.liquidated_tranche_1 : oldData.liquidated_tranche_1), // $61
+      (data.liquidated_tranche_2 !== undefined ? data.liquidated_tranche_2 : oldData.liquidated_tranche_2), // $62
+      (data.liquidated_tranche_3 !== undefined ? data.liquidated_tranche_3 : oldData.liquidated_tranche_3), // $63
+      data.mode_of_project || oldData.mode_of_project, // $64
+      ((data.moa_pdf || data.rta_pdf || data.moa || data.rta) ? (data.uid || 'Unknown') : (oldData.uploader_id_update_moa_rta || null)) // $65: Update UID ONLY if new MOA/RTA is provided
     ];
 
     const insertQuery = `
@@ -7865,8 +7761,12 @@ app.put('/api/update-project/:id', async (req, res) => {
         issuance_of_invitation_to_bid, pre_bid_conference, opening_of_technical_proposal,
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
-        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51)
+        delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
+        implementing_agency, implementing_agency_specific,
+        moa_pdf, rta_pdf, moa, rta, tranche_1, tranche_2, tranche_3, 
+        liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3, mode_of_project,
+        uploader_id_update_moa_rta
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65)
       RETURNING *;
     `;
 
@@ -8177,43 +8077,47 @@ app.post('/api/projects/realign', async (req, res) => {
 //               FINANCE DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/finance-dashboard/projects', async (req, res) => {
+  const hbLog = `[FINANCE_HEARTBEAT] ${new Date().toISOString()} - ${req.method} ${req.url}\n`;
+  fs.appendFileSync('finance_request_log.txt', hbLog);
   try {
+    const baseQuery = `
+      SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+        project_id, project_name, school_name, school_id, region, division,
+        status_of_construction_phase AS status,
+        mode_of_project, tranche_1, tranche_2, tranche_3,
+        ipc, date_assigned,
+        (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+        (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
+      FROM engineer_form
+      WHERE NULLIF(moa_pdf, '') IS NOT NULL
+        AND NULLIF(rta_pdf, '') IS NOT NULL
+      ORDER BY COALESCE(ipc, project_id::text), project_id DESC
+    `;
+
     const aggregateQuery = `
       SELECT 
         COUNT(*) as total_projects,
-        COUNT(tranche_1) as total_tranche_1,
-        COUNT(tranche_2) as total_tranche_2,
-        COUNT(tranche_3) as total_tranche_3
-      FROM engineer_form
+        SUM(COALESCE(tranche_1, 0)) as total_tranche_1,
+        SUM(COALESCE(tranche_2, 0)) as total_tranche_2,
+        SUM(COALESCE(tranche_3, 0)) as total_tranche_3
+      FROM (${baseQuery}) Latest
     `;
     const aggResult = await pool.query(aggregateQuery);
-
-    const tableQuery = `
-      WITH LatestProjects AS (
-          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-            project_id, project_name, status_of_construction_phase AS status,
-            mode_of_project, tranche_1, tranche_2, tranche_3
-          FROM engineer_form
-          ORDER BY COALESCE(ipc, project_id::text), project_id DESC
-      )
-      SELECT * FROM LatestProjects
-      WHERE mode_of_project = 'MOA'
-      ORDER BY project_id DESC
-    `;
+    const tableQuery = `SELECT * FROM (${baseQuery}) Latest ORDER BY project_id DESC`;
     const tableResult = await pool.query(tableQuery);
 
     res.json({
       aggregates: {
-        totalProjects: parseInt(aggResult.rows[0].total_projects, 10),
-        totalTranche1: parseInt(aggResult.rows[0].total_tranche_1, 10),
-        totalTranche2: parseInt(aggResult.rows[0].total_tranche_2, 10),
-        totalTranche3: parseInt(aggResult.rows[0].total_tranche_3, 10)
+        totalProjects: parseInt(aggResult.rows[0].total_projects || 0, 10),
+        totalTranche1: parseFloat(aggResult.rows[0].total_tranche_1 || 0),
+        totalTranche2: parseFloat(aggResult.rows[0].total_tranche_2 || 0),
+        totalTranche3: parseFloat(aggResult.rows[0].total_tranche_3 || 0)
       },
       projects: tableResult.rows
     });
   } catch (err) {
-    console.error("❌ Error fetching finance projects:", err.message);
-    res.status(500).json({ error: "Failed to fetch finance projects" });
+    console.error("❌ Error fetching finance projects:", err);
+    res.status(500).json({ error: "Failed to fetch finance projects", details: err.message, stack: err.stack });
   }
 });
 
@@ -8247,54 +8151,88 @@ app.patch('/api/finance-dashboard/projects/:id/tranches', async (req, res) => {
 //               IMPLEMENTING AGENCY DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/agency-dashboard/projects', async (req, res) => {
-  try {
+    const { agency, region } = req.query;
+    try {
+      let filterClause = '';
+      let params = [];
+      let paramCount = 1;
+
+      if (agency && agency !== 'All') {
+        const agencyClean = agency.replace(/^MGO\s+|PGO\s+|CGO\s+/i, '').trim();
+        filterClause += ` AND (implementing_agency ILIKE $${paramCount} OR implementing_agency_specific ILIKE $${paramCount})`;
+        params.push(`%${agencyClean}%`);
+        paramCount++;
+      }
+
+      if (region && region !== 'All') {
+        filterClause += ` AND region = $${paramCount}`;
+        params.push(region);
+        paramCount++;
+      }
+
+    const baseConditions = `
+        (implementing_agency IS NOT NULL OR implementing_agency_specific IS NOT NULL)
+        AND NULLIF(moa_pdf, '') IS NOT NULL
+        AND NULLIF(rta_pdf, '') IS NOT NULL
+        AND NULLIF(regexp_replace(tranche_1::text, '[^0-9.]', '', 'g'), '') IS NOT NULL 
+        AND CAST(NULLIF(regexp_replace(tranche_1::text, '[^0-9.]', '', 'g'), '') AS NUMERIC) > 0
+    `;
+
     const aggregateQuery = `
       WITH ValidProjects AS (
           SELECT DISTINCT ON (COALESCE(ipc, project_id::text))
-            project_id, implementing_agencies, tranche_1, status_of_construction_phase AS status
+            project_id, implementing_agency, region, tranche_1, tranche_2, tranche_3, status_of_construction_phase AS status
           FROM engineer_form
-          WHERE mode_of_project = 'MOA'
-            AND implementing_agencies IS NOT NULL
-            AND tranche_1 IS NOT NULL
-            AND moa IS NOT NULL
-            AND rta IS NOT NULL
+          WHERE ${baseConditions} ${filterClause}
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
       SELECT 
-        COUNT(DISTINCT implementing_agencies) as total_active_agencies,
+        COUNT(DISTINCT implementing_agency) as total_active_agencies,
         COUNT(*) as total_moa_projects,
-        SUM(tranche_1) as total_tranche_1_value,
+        SUM(COALESCE(NULLIF(regexp_replace(tranche_1::text, '[^0-9.]', '', 'g'), '')::NUMERIC, 0) + 
+            COALESCE(NULLIF(regexp_replace(tranche_2::text, '[^0-9.]', '', 'g'), '')::NUMERIC, 0) + 
+            COALESCE(NULLIF(regexp_replace(tranche_3::text, '[^0-9.]', '', 'g'), '')::NUMERIC, 0)) as total_tranche_value,
         COUNT(*) FILTER (WHERE status != 'Completed' AND status IS NOT NULL) as pending_moa_tasks
       FROM ValidProjects
     `;
-    const aggResult = await pool.query(aggregateQuery);
+    const aggResult = await pool.query(aggregateQuery, params);
 
     const tableQuery = `
-      WITH LatestProjects AS (
+      WITH LatestFiltered AS (
           SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
-            project_id, implementing_agencies, project_name, moa, rta, tranche_1, date_assigned, mode_of_project, status_of_construction_phase AS status,
-            liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3
+            project_id, implementing_agency, region, project_name, tranche_1, tranche_2, tranche_3, date_assigned, mode_of_project, status_of_construction_phase AS status,
+            liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3,
+            (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+            (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
           FROM engineer_form
+          WHERE ${baseConditions} ${filterClause}
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
-      SELECT * FROM LatestProjects
-      WHERE mode_of_project = 'MOA'
-        AND implementing_agencies IS NOT NULL
-        AND tranche_1 IS NOT NULL
-        AND moa IS NOT NULL
-        AND rta IS NOT NULL
+      SELECT * FROM LatestFiltered
       ORDER BY project_id DESC
     `;
-    const tableResult = await pool.query(tableQuery);
+    const tableResult = await pool.query(tableQuery, params);
+    
+    const allProjectsQuery = `
+      SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+        project_id, implementing_agency, implementing_agency_specific, region, project_name, tranche_1, tranche_2, tranche_3, date_assigned, mode_of_project, status_of_construction_phase AS status,
+        (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+        (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
+      FROM engineer_form
+      WHERE ${baseConditions} ${filterClause}
+      ORDER BY COALESCE(ipc, project_id::text), project_id DESC
+    `;
+    const allProjectsResult = await pool.query(allProjectsQuery, params);
 
     res.json({
       aggregates: {
         totalActiveAgencies: parseInt(aggResult.rows[0].total_active_agencies || 0, 10),
         totalMoaProjects: parseInt(aggResult.rows[0].total_moa_projects || 0, 10),
-        totalTranche1Value: parseFloat(aggResult.rows[0].total_tranche_1_value || 0),
+        totalTrancheValue: parseFloat(aggResult.rows[0].total_tranche_value || 0),
         pendingMoaTasks: parseInt(aggResult.rows[0].pending_moa_tasks || 0, 10)
       },
-      projects: tableResult.rows
+      projects: tableResult.rows,
+      allProjects: allProjectsResult.rows
     });
   } catch (err) {
     console.error("❌ Error fetching agency projects:", err.message);
@@ -8332,7 +8270,7 @@ app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => 
 app.get('/api/projects', async (req, res) => {
   try {
     // We catch the engineer_id sent from EngineerDashboard.jsx
-    const { status, region, division, search, engineer_id, is_donated } = req.query;
+    const { status, region, division, search, engineer_id, is_donated, implementing_agency } = req.query;
     let queryParams = [];
     let whereClauses = [];
 
@@ -8345,7 +8283,8 @@ app.get('/api/projects', async (req, res) => {
             construction_start_date, project_category, scope_of_work,
             number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized,
             actions, savings, funding_year, funding_year_justification, is_donated,
-            moa_pdf, rta_pdf
+            (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
+            (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
           FROM engineer_form
           ORDER BY COALESCE(ipc, project_id::text), project_id DESC
       )
@@ -8371,16 +8310,23 @@ app.get('/api/projects', async (req, res) => {
         p.funding_year_justification AS "fundingYearJustification",
         p.is_donated AS "isDonated",
         p.is_donated AS "is_donated",
-        (p.moa_pdf IS NOT NULL AND p.moa_pdf != '') AS "hasMoa",
-        (p.rta_pdf IS NOT NULL AND p.rta_pdf != '') AS "hasRta"
+        p.has_moa AS "hasMoa",
+        p.has_rta AS "hasRta"
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
 
-    // 1. ADD FILTER: Only show projects belonging to this engineer
-    if (engineer_id) {
+    // 1. ADD FILTER: Only show projects belonging to this engineer or their agency
+    if (engineer_id && implementing_agency) {
+      queryParams.push(engineer_id);
+      queryParams.push(implementing_agency);
+      whereClauses.push(`(p.engineer_id = $${queryParams.length - 1} OR p.implementing_agency = $${queryParams.length})`);
+    } else if (engineer_id) {
       queryParams.push(engineer_id);
       whereClauses.push(`p.engineer_id = $${queryParams.length}`);
+    } else if (implementing_agency) {
+      queryParams.push(implementing_agency);
+      whereClauses.push(`p.implementing_agency = $${queryParams.length}`);
     }
 
     // 2. Add your existing filters
@@ -8549,14 +8495,29 @@ app.post('/api/upload/multipart-finalize', async (req, res) => {
 });
 // --- 11f. GET: List Engineers (For EFD Assignment) ---
 app.get('/api/engineers', async (req, res) => {
+  const { role } = req.query;
   try {
-    const query = `
-      SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
-      FROM users 
-      WHERE role = 'DepEd Engineer' OR role = 'Division Engineer'
-      ORDER BY first_name ASC;
-    `;
-    const result = await pool.query(query);
+    let query;
+    let values = [];
+    
+    if (role) {
+      query = `
+        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
+        FROM users 
+        WHERE role = $1
+        ORDER BY first_name ASC;
+      `;
+      values = [role];
+    } else {
+      query = `
+        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
+        FROM users 
+        WHERE role = 'DepEd Engineer' OR role = 'Division Engineer' OR role = 'Non-DepEd Engineer'
+        ORDER BY first_name ASC;
+      `;
+    }
+    
+    const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch Engineers Error:", err);
@@ -8673,7 +8634,9 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         project_category AS "projectCategory", scope_of_work AS "scopeOfWork",
         number_of_classrooms AS "numberOfClassrooms", number_of_storeys AS "numberOfStoreys",
         number_of_sites AS "numberOfSites", funds_utilized AS "fundsUtilized",
-        pow_pdf, dupa_pdf, contract_pdf,
+        (NULLIF(pow_pdf, '') IS NOT NULL) AS "hasPow",
+        (NULLIF(dupa_pdf, '') IS NOT NULL) AS "hasDupa",
+        (NULLIF(contract_pdf, '') IS NOT NULL) AS "hasContract",
         latitude, longitude,
         actions AS "updateType",
         savings,
@@ -8941,8 +8904,11 @@ app.post('/api/upload-project-document', async (req, res) => {
     newRow[column] = base64;
     newRow.status_as_of = new Date().toISOString();
     newRow.actions = `Uploaded ${type}`;
-    newRow.uploader_type = 'EFD Engineer';
-    newRow.engineer_id = uid || old.engineer_id; // Set to the HRODI engineer's UID if provided
+    // Store updater UID for auditing ONLY if MOA or RTA
+    if (type === 'MOA' || type === 'RTA') {
+      newRow.uploader_id_update_moa_rta = uid || 'Unknown';
+    }
+    newRow.engineer_id = old.engineer_id; // Preserve original owner
 
     // 3. Construct Insert Query Dynamically
     const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
@@ -8972,6 +8938,84 @@ app.post('/api/upload-project-document', async (req, res) => {
     if (client) client.release();
   }
 });
+
+// --- NEW BLUK UPLOAD ENDPOINT TO PREVENT DUPLICATES ---
+app.post('/api/bulk-upload-project-documents', async (req, res) => {
+  const { projectId, documents, uid } = req.body; // documents = { RTA: base64, MOA: base64 }
+
+  console.log(`📂 Incoming Bulk Doc Upload for Project [${projectId}]`);
+  
+  if (!projectId || !documents || Object.keys(documents).length === 0) {
+    return res.status(400).json({ error: "Missing required data" });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // 1. Get the latest data for this project to clone it
+    const latestRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+    if (latestRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+    const old = latestRes.rows[0];
+
+    // 2. Prepare new row data
+    const newRow = { ...old };
+    delete newRow.project_id;
+    
+    let actions = [];
+    for (const [type, base64] of Object.entries(documents)) {
+      let column = '';
+      if (type === 'POW') column = 'pow_pdf';
+      else if (type === 'DUPA') column = 'dupa_pdf';
+      else if (type === 'CONTRACT') column = 'contract_pdf';
+      else if (type === 'RTA') column = 'rta_pdf';
+      else if (type === 'MOA') column = 'moa_pdf';
+      
+      if (column) {
+        newRow[column] = base64;
+        actions.push(type);
+      }
+    }
+
+    newRow.status_as_of = new Date().toISOString();
+    newRow.actions = `Bulk Upload: ${actions.join(', ')}`;
+    // Store updater UID for auditing ONLY if MOA or RTA was included
+    if (actions.includes('MOA') || actions.includes('RTA')) {
+      newRow.uploader_id_update_moa_rta = uid || 'Unknown';
+    }
+    newRow.engineer_id = old.engineer_id; // Preserve original owner
+
+    // 3. Construct Insert Query Dynamically
+    const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
+    const vals = cols.map(k => newRow[k]);
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    
+    const insertQuery = `INSERT INTO "engineer_form" (${cols.join(', ')}) VALUES (${placeholders}) RETURNING project_id`;
+    const result = await client.query(insertQuery, vals);
+
+    console.log(`✅ Appended bulk document update: New row project_id ${result.rows[0].project_id}`);
+
+    // --- DUAL WRITE ---
+    if (poolNew) {
+      try {
+        await poolNew.query(insertQuery, vals);
+        console.log(`✅ Dual-Write: Bulk Append Synced!`);
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Bulk Doc Append Error:", dwErr.message);
+      }
+    }
+
+    res.json({ success: true, newProjectId: result.rows[0].project_id });
+  } catch (err) {
+    console.error("❌ Bulk Doc Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save documents" });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 
 // --- 21. GET: Fetch Project Images (Active) ---
 
@@ -10111,8 +10155,6 @@ app.post('/api/save-physical-facilities', async (req, res) => {
         const clientNew = await poolNew.connect();
         try {
           await clientNew.query('BEGIN');
-          console.log("🔄 Dual-Write: Syncing Physical Facilities...");
-
           // DW 1. Update Profile
           await clientNew.query(queryProfile, [
             data.schoolId,
@@ -11823,7 +11865,10 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
       WITH LatestProjects AS (
          SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
             project_id, project_name, school_id, school_name, accomplishment_percentage, status_of_construction_phase AS status, 
-            approved_budget_for_contract, contract_amount, validation_status, status_as_of, region, division, created_at
+            approved_budget_for_contract, contract_amount, validation_status, status_as_of, region, division, created_at,
+            -- Metadata flags instead of large blobs
+            (NULLIF(rta_pdf, '') IS NOT NULL OR NULLIF(rta, '') IS NOT NULL) AS has_rta,
+            (NULLIF(moa_pdf, '') IS NOT NULL OR NULLIF(moa, '') IS NOT NULL) AS has_moa
          FROM engineer_form
          ORDER BY COALESCE(ipc, project_id::text), created_at DESC
       )
@@ -11876,7 +11921,14 @@ app.get('/api/monitoring/school-projects/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const query = `
-SELECT * FROM engineer_form WHERE school_id = $1 ORDER BY created_at DESC
+SELECT 
+  project_id, project_name, school_id, school_name, status_of_construction_phase, accomplishment_percentage,
+  approved_budget_for_contract, contract_amount, status_as_of, created_at,
+  (NULLIF(rta_pdf, '') IS NOT NULL OR NULLIF(rta, '') IS NOT NULL) AS has_rta,
+  (NULLIF(moa_pdf, '') IS NOT NULL OR NULLIF(moa, '') IS NOT NULL) AS has_moa
+FROM engineer_form 
+WHERE school_id = $1 
+ORDER BY created_at DESC
   `;
     const result = await pool.query(query, [schoolId]);
     res.json(result.rows);
@@ -12275,7 +12327,7 @@ app.use((err, req, res, next) => {
    Current:  e:\InsightEd-Mobile-PWA\api\index.js
    
    Note the case difference (E: vs e:). 
-   pathModule.resolve() adjusts slashes but DOES NOT fix drive letter case on all Node versions.
+   path.resolve() adjusts slashes but DOES NOT fix drive letter case on all Node versions.
    We will normalize to lowercase for comparison.
 */
 
@@ -12997,7 +13049,10 @@ app.get('/api/lgu/projects', async (req, res) => {
     // We want the LATEST version for each project.
     // Group by root_project_id and take the one with the latest created_at.
     let query = `
-      SELECT DISTINCT ON (root_project_id) *
+      SELECT DISTINCT ON (root_project_id) 
+        lgu_project_id, root_project_id, school_id, school_name, project_name, municipality, project_status, created_at,
+        (NULLIF(moa_pdf, '') IS NOT NULL) AS "hasMoa",
+        (NULLIF(rta_pdf, '') IS NOT NULL) AS "hasRta"
       FROM lgu_projects
     `;
     const params = [];
@@ -13198,7 +13253,7 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
 
     const values = [
       data.projectName, data.schoolName, data.schoolId,
-      data.status_of_construction_phase, parseIntOrNull(data.accomplishmentPercentage),
+      data.status_of_construction_phase || data.statusOfConstructionPhase, parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
@@ -13784,13 +13839,163 @@ app.get('/api/schools_iern/:schoolId', async (req, res) => {
 app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const progress = await calculateRigorousSchoolProgress(pool, schoolId);
-    if (!progress) {
-        return res.json({ success: true, progress: { completedUnits: [], incompleteUnits: [], xp: 0, curricular_offering: null } });
+    // ── 1. Ensure all required columns exist (idempotent) ────────────────────
+    const ensureCols = [
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10 INTEGER DEFAULT 0`,
+    ];
+    for (const sql of ensureCols) {
+      await pool.query(sql).catch(() => {}); // silently skip if already exists
     }
-    res.json({ success: true, progress });
+
+    // ── 2. Safe fetch — only columns we know exist ──────────────────────────
+    const result = await pool.query(
+      `SELECT 
+        unit1_completed, unit2_completed, unit3_completed, unit4_completed,
+        unit5_completed, unit6_completed, unit7_completed, unit8_completed,
+        unit9_completed, unit10_completed, curricular_offering,
+        unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9, unit10,
+        school_name, total_enrollment
+       FROM ph_schools WHERE school_id = $1`,
+      [schoolId]
+    );
+
+    let completedUnits = [];
+    let incompleteUnits = [];
+    let xp = 0;
+    const backfillClauses = [];
+
+    let curricular_offering = null;
+    if (result.rows.length > 0) {
+      const row = result.rows[0];
+      curricular_offering = row.curricular_offering;
+
+      // ── Unit 1: School Identity ─────────────────────────────────────────
+      let u1 = row.unit1_completed;
+      if (!u1 && row.school_name) { u1 = true; backfillClauses.push(`unit1_completed = TRUE, unit1 = 1`); }
+      if (u1) { completedUnits.push(1); xp += 150; } else if (row.unit1 === 2) { incompleteUnits.push(1); }
+
+      // ── Unit 2: Enrollment ──────────────────────────────────────────────
+      let u2 = row.unit2_completed;
+      if (!u2 && row.total_enrollment > 0) { u2 = true; backfillClauses.push(`unit2_completed = TRUE, unit2 = 1`); }
+      if (!u2) {
+        // secondary: check unit2_simplified_enrollment column (may or may not exist)
+        const ck = await pool.query(`SELECT unit2_simplified_enrollment FROM ph_schools WHERE school_id = $1 AND unit2_simplified_enrollment IS NOT NULL LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u2 = true; backfillClauses.push(`unit2_completed = TRUE, unit2 = 1`); }
+      }
+      if (u2) { completedUnits.push(2); xp += 200; } else if (row.unit2 === 2) { incompleteUnits.push(2); }
+
+      // ── Unit 3: Organized Classes ───────────────────────────────────────
+      let u3 = row.unit3_completed;
+      if (!u3) {
+        const ck = await pool.query(`SELECT unit3_simplified_counts FROM ph_schools WHERE school_id = $1 AND unit3_simplified_counts IS NOT NULL LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u3 = true; backfillClauses.push(`unit3_completed = TRUE, unit3 = 1`); }
+      }
+      if (u3) { completedUnits.push(3); xp += 200; } else if (row.unit3 === 2) { incompleteUnits.push(3); }
+
+      // ── Unit 4: Learner Profile ─────────────────────────────────────────
+      let u4 = row.unit4_completed;
+      if (!u4) {
+        // Unit 4 saves unit4_completed = TRUE via PUT to ph_schools; also check als_g1 as indicator
+        const ck = await pool.query(`SELECT als_g1 FROM ph_schools WHERE school_id = $1 AND als_g1 IS NOT NULL AND als_g1 > 0 LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u4 = true; backfillClauses.push(`unit4_completed = TRUE, unit4 = 1`); }
+      }
+      if (u4) { completedUnits.push(4); xp += 250; } else if (row.unit4 === 2) { incompleteUnits.push(4); }
+
+      // ── Unit 5: Shifting & Modality ─────────────────────────────────────
+      let u5 = row.unit5_completed;
+      if (!u5) {
+        // Check if shifting_modality column exists and has data
+        const ck = await pool.query(`SELECT shifting_modality FROM ph_schools WHERE school_id = $1 AND shifting_modality IS NOT NULL AND shifting_modality != '' LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u5 = true; backfillClauses.push(`unit5_completed = TRUE, unit5 = 1`); }
+      }
+      if (u5) { completedUnits.push(5); xp += 300; } else if (row.unit5 === 2) { incompleteUnits.push(5); }
+
+      // ── Unit 6: Teaching Personnel ──────────────────────────────────────
+      // ALWAYS re-check live data regardless of cached flag,
+      // because a teacher's load can change after the flag was set.
+      let u6 = false;
+      const u6Teachers = await pool.query(
+        `SELECT COUNT(*) as total,
+                SUM(CASE WHEN (COALESCE(monday_mins,0) + COALESCE(tuesday_mins,0) + COALESCE(wednesday_mins,0) + COALESCE(thursday_mins,0) + COALESCE(friday_mins,0)) = 0 THEN 1 ELSE 0 END) as zero_load
+         FROM ph_teachers_list WHERE school_id = $1`, [schoolId]
+      ).catch(() => ({ rows: [{ total: 0, zero_load: 0 }] }));
+      const { total: u6Total, zero_load: u6ZeroLoad } = u6Teachers.rows[0] || { total: 0, zero_load: 0 };
+      if (parseInt(u6Total) > 0) {
+        if (parseInt(u6ZeroLoad) > 0) {
+          // Teachers exist but some have 0 teaching load → Incomplete
+          incompleteUnits.push(6);
+          backfillClauses.push(`unit6_completed = FALSE, unit6 = 2`);
+        } else {
+          // All teachers have loads assigned → Done
+          u6 = true;
+          backfillClauses.push(`unit6_completed = TRUE, unit6 = 1`);
+        }
+      }
+      if (u6) { completedUnits.push(6); xp += 300; }
+
+      // ── Unit 7: School Resources ────────────────────────────────────────
+      let u7 = row.unit7_completed;
+      if (!u7) {
+        const ck = await pool.query(`SELECT unit7_furniture FROM ph_schools WHERE school_id = $1 AND unit7_furniture IS NOT NULL LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
+        if (ck.rows.length > 0) { u7 = true; backfillClauses.push(`unit7_completed = TRUE, unit7 = 1`); }
+      }
+      if (u7) { completedUnits.push(7); xp += 350; } else if (row.unit7 === 2) { incompleteUnits.push(7); }
+
+      // ── Unit 8: Physical Facilities ─────────────────────────────────────
+      let u8 = row.unit8_completed || (row.unit8 === 1);
+      if (!u8) {
+        const ck = await pool.query(`
+          SELECT (SELECT COUNT(*) FROM ph_buildings_inventory WHERE school_id = $1) as inv,
+                 (SELECT COUNT(*) FROM ph_buildings_repairs WHERE school_id = $1) as rep,
+                 (SELECT COUNT(*) FROM ph_buildings_demolition WHERE school_id = $1) as demo
+        `, [schoolId]).catch(() => ({ rows: [{ inv: 0, rep: 0, demo: 0 }] }));
+        const c = ck.rows[0];
+        if (parseInt(c.inv) > 0 || parseInt(c.rep) > 0 || parseInt(c.demo) > 0) { u8 = true; backfillClauses.push(`unit8_completed = TRUE, unit8 = 1`); }
+      }
+      if (u8) { completedUnits.push(8); xp += 500; } else if (row.unit8 === 2) { incompleteUnits.push(8); }
+
+      // ── Unit 9: School Location ─────────────────────────────────────────
+      let u9 = row.unit9_completed;
+      if (!u9) {
+        const ck = await pool.query(`SELECT COUNT(*) as cnt FROM school_location_profiles WHERE school_id = $1`, [schoolId]).catch(() => ({ rows: [{ cnt: 0 }] }));
+        if (parseInt(ck.rows[0]?.cnt) > 0) { u9 = true; backfillClauses.push(`unit9_completed = TRUE, unit9 = 1`); }
+      }
+      if (u9) { completedUnits.push(9); xp += 500; } else if (row.unit9 === 2) { incompleteUnits.push(9); }
+
+      // ── Unit 10 ─────────────────────────────────────────────────────────
+      if (row.unit10_completed) { completedUnits.push(10); xp += 500; } else if (row.unit10 === 2) { incompleteUnits.push(10); }
+
+      // ── Retroactive Backfill (fire-and-forget) ──────────────────────────
+      if (backfillClauses.length > 0) {
+        const unique = [...new Set(backfillClauses.join(', ').split(', '))].join(', ');
+        pool.query(`UPDATE ph_schools SET ${unique} WHERE school_id = $1`, [schoolId])
+          .catch(e => console.warn(`[Progress Backfill] ${schoolId}:`, e.message));
+      }
+    }
+
+    res.json({ success: true, progress: { completedUnits, incompleteUnits, xp, curricular_offering } });
   } catch (err) {
     console.error("Fetch Quest Progress Error:", err);
+    // Return empty progress rather than an error so dashboard still renders
     res.json({ success: true, progress: { completedUnits: [], incompleteUnits: [], xp: 0, curricular_offering: null } });
   }
 });
@@ -13835,43 +14040,16 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
 
 // --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
 app.post('/api/ph_schools/unit1', async (req, res) => {
+  const data = req.body;
   try {
-    const data = req.body;
-    // Auto-migrate new head profile columns if missing
-    try {
-      const headCols = [
-        'head_first_name TEXT', 'head_middle_name TEXT', 'head_last_name TEXT',
-        'head_sex TEXT', 'head_position_title TEXT', 
-        'head_date_of_birth DATE', 'head_date_hired DATE'
-      ];
-      const alterParts = headCols.map(c => `ADD COLUMN IF NOT EXISTS ${c}`);
-      await pool.query(`ALTER TABLE ph_schools ${alterParts.join(', ')}`);
-    } catch (e) {
-      console.warn("DB Migration Warning for Unit 1 Head Expansion:", e.message);
-    }
-
-    const isCompleted = !!(
-      data.barangay && data.leg_district && 
-      data.head_first_name && data.head_last_name && 
-      data.head_sex && data.head_position_title && 
-      data.head_date_of_birth && data.head_date_hired
-    );
-
-    // Helper for Proper Case
-    const toProperCase = (str) => {
-      if (!str) return null;
-      return str.trim().toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-    };
+    const isCompleted = !!(data.barangay && data.leg_district);
 
     const query = `
       INSERT INTO ph_schools (
         school_id, iern, school_name, region, province, municipality, barangay,
         division, district, leg_district, curricular_offering, latitude, longitude,
-        school_head, contact_number, 
-        head_first_name, head_middle_name, head_last_name,
-        head_sex, head_position_title, head_date_of_birth, head_date_hired,
-        unit1_completed, unit1
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $18, $19, $20, $21, $22, $23, $24, $16, $17)
+        school_head, contact_number, unit1_completed, unit1
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -13887,38 +14065,19 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         longitude = EXCLUDED.longitude,
         school_head = EXCLUDED.school_head,
         contact_number = EXCLUDED.contact_number,
-        head_first_name = EXCLUDED.head_first_name,
-        head_middle_name = EXCLUDED.head_middle_name,
-        head_last_name = EXCLUDED.head_last_name,
-        head_sex = EXCLUDED.head_sex,
-        head_position_title = EXCLUDED.head_position_title,
-        head_date_of_birth = EXCLUDED.head_date_of_birth,
-        head_date_hired = EXCLUDED.head_date_hired,
         unit1_completed = EXCLUDED.unit1_completed,
         unit1 = EXCLUDED.unit1,
         updated_at = CURRENT_TIMESTAMP;
     `;
-    
-    // Construct full name for legacy field
-    const fullName = [toProperCase(data.head_first_name), toProperCase(data.head_middle_name), toProperCase(data.head_last_name)]
-      .filter(Boolean).join(' ');
-
     const values = [
       data.school_id, data.iern || null, data.school_name,
       data.region, data.province || null, data.municipality || null, data.barangay || null,
       data.division, data.district, data.leg_district || null,
       data.curricular_offering,
       data.latitude || null, data.longitude || null,
-      fullName || data.school_head || null, data.contact_number || null,
+      data.school_head || null, data.contact_number || null,
       isCompleted,
-      isCompleted ? 1 : 0,
-      toProperCase(data.head_first_name),
-      toProperCase(data.head_middle_name),
-      toProperCase(data.head_last_name),
-      data.head_sex || null,
-      data.head_position_title || null,
-      data.head_date_of_birth || null,
-      data.head_date_hired || null
+      isCompleted ? 1 : 0
     ];
     
     // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -13930,8 +14089,6 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           municipality = $6, barangay = $7, division = $8, district = $9,
           leg_district = $10, curricular_offering = $11, latitude = $12,
           longitude = $13, school_head = $14, contact_number = $15,
-          head_first_name = $18, head_middle_name = $19, head_last_name = $20,
-          head_sex = $21, head_position_title = $22, head_date_of_birth = $23, head_date_hired = $24,
           unit1_completed = $16, unit1 = $17, updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2
       `, values);
@@ -14537,18 +14694,10 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
 app.get('/api/ph_schools/:schoolId/teachers', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // 0. Cleanup: Remove existing non-teaching personnel (e.g., Principals)
-    await pool.query(`
-        DELETE FROM ph_teachers_list 
-        WHERE school_id = $1 
-        AND position NOT ILIKE '%Teacher%'
-    `, [schoolId]);
-
-    // 1. Fetch teachers (Filtered to only include those with "Teacher" in their position)
+    // 1. Fetch teachers
     const query = `
       SELECT * FROM ph_teachers_list 
       WHERE school_id = $1
-      AND position ILIKE '%Teacher%'
       ORDER BY last_name ASC, first_name ASC
     `;
     const result = await pool.query(query, [schoolId]);
@@ -14557,11 +14706,7 @@ app.get('/api/ph_schools/:schoolId/teachers', async (req, res) => {
     // If roster is empty, attempt to pull from the master 'teachers_list'
     if (result.rows.length === 0) {
       console.log(`[Unit 6] Roster empty for ${schoolId}. Checking master for auto-seed...`);
-      const legacyTeachers = await pool.query(`
-        SELECT * FROM teachers_list 
-        WHERE CAST("school.id" AS TEXT) = $1
-        AND position ILIKE '%Teacher%'
-      `, [schoolId]);
+      const legacyTeachers = await pool.query('SELECT * FROM teachers_list WHERE CAST("school.id" AS TEXT) = $1', [schoolId]);
 
       if (legacyTeachers.rows.length > 0) {
         for (const t of legacyTeachers.rows) {
@@ -14616,9 +14761,8 @@ app.put('/api/teachers/:teacherId', async (req, res) => {
         funding_source = $8, role_designation = $9,
         monday_mins = $10, tuesday_mins = $11, wednesday_mins = $12,
         thursday_mins = $13, friday_mins = $14,
-        is_advisory = $15,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $16
+      WHERE id = $15
       RETURNING *
     `;
     const profileValues = [
@@ -14626,7 +14770,6 @@ app.put('/api/teachers/:teacherId', async (req, res) => {
       specialization, sex, experience_bracket, funding_source, role_designation,
       monday_mins || 0, tuesday_mins || 0, wednesday_mins || 0,
       thursday_mins || 0, friday_mins || 0,
-      req.body.is_advisory || 'Non-Advisory',
       teacherId
     ];
     const profileRes = await client.query(updateProfileQuery, profileValues);
@@ -14681,11 +14824,6 @@ app.delete('/api/teachers/:teacherId', async (req, res) => {
     const result = await pool.query('DELETE FROM ph_teachers_list WHERE id = $1 RETURNING *', [teacherId]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Teacher not found" });
-    }
-    // Update baseline count in ph_schools
-    if (result.rows.length > 0) {
-      const { school_id } = result.rows[0];
-      await pool.query('UPDATE ph_schools SET total_teachers_registered = (SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1) WHERE school_id = $1', [school_id]);
     }
     res.json({ success: true, message: "Teacher removed from roster." });
   } catch (err) {
@@ -14764,23 +14902,18 @@ app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
     const query = `
       INSERT INTO ph_teachers_list (
         school_id, first_name, last_name, position, sex, 
-        specialization, experience_bracket, funding_source, role_designation, is_advisory
+        specialization, experience_bracket, funding_source, role_designation
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `;
     const values = [
       schoolId, first_name, last_name, position || 'Teacher I', sex || '',
       specialization || '', experience_bracket || '',
       funding_source || 'DepEd Nationally Funded',
-      role_designation || '',
-      req.body.is_advisory || 'Non-Advisory'
+      role_designation || 'Non-Advisory'
     ];
     const result = await pool.query(query, values);
-    
-    // Update baseline count in ph_schools
-    await pool.query('UPDATE ph_schools SET total_teachers_registered = (SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1) WHERE school_id = $1', [schoolId]);
-    
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     console.error("Add Teacher Error:", err);
@@ -15507,9 +15640,6 @@ app.get('/api/health', (req, res) => {
 // --- SERVER STARTUP ---
 const startServer = async () => {
   try {
-    console.log("🚀 Initializing Cache...");
-    await initCache();
-
     console.log("🚀 Starting database initialization...");
     await runAutoMigrations();
     await initDB();
@@ -15555,7 +15685,7 @@ const startServer = async () => {
 // Start the server if this file is run directly
 const executedFile = process.argv[1] || '';
 const currentFile = fileURLToPath(import.meta.url);
-const isMain = pathModule.resolve(executedFile).toLowerCase() === pathModule.resolve(currentFile).toLowerCase();
+const isMain = path.resolve(executedFile).toLowerCase() === path.resolve(currentFile).toLowerCase();
 
 if (isMain || process.env.FORCE_START === 'true' || process.env.START_SERVER === 'true') {
   startServer();
