@@ -156,39 +156,77 @@ const Login = () => {
         e.preventDefault();
         setLoading(true);
 
-        // --- HARDCODED SUPER ADMIN BYPASS / AUTO-CREATE ---
-        if (loginId.trim().toLowerCase() === 'kleinzebastian@gmail.com') {
+        // --- 0. PASSCODE LOGIN BRANCH ---
+        if (loginMode === 'passcode') {
+            try {
+                const res = await fetch('/api/auth/verify-passcode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: loginId.trim(), passcode: password })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('uid', data.user.uid);
+                    localStorage.setItem('userRole', data.user.role);
+                    localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
+                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
+                    if (data.user.school_id) localStorage.setItem('schoolId', data.user.school_id);
+
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: data.user.email,
+                        firstName: data.user.first_name || 'User',
+                        role: data.user.role,
+                        school_id: data.user.school_id
+                    }));
+
+                    setLoading(false);
+                    navigate(getDashboardPath(data.user.role));
+                    return;
+                } else {
+                    alert(data.message || "Invalid Passcode");
+                    setLoading(false);
+                    return;
+                }
+            } catch (err) {
+                console.error("Passcode Login Error:", err);
+                alert("Server error. Please try again.");
+                setLoading(false);
+                return;
+            }
+        }
+
+        // --- HARDCODED SUPER USER BYPASS / AUTO-CREATE ---
+        const superUserEmails = [
+            'kleinzebastian@gmail.com',
+            'wilfredo.cabral@deped.gov.ph',
+            'marian.efondo@deped.gov.ph',
+            'dexter.pante@deped.gov.ph'
+        ];
+
+        if (superUserEmails.includes(loginId.trim().toLowerCase())) {
             try {
                 // 1. Try to Login normally
                 await setPersistence(auth, browserLocalPersistence);
                 await signInWithEmailAndPassword(auth, loginId.trim(), password);
             } catch (error) {
-                // 2. If user not found, CREATE IT (Auto-Provisioning)
+                // 2. If user not found (in Firebase), assign role 'Super User' for routing & session
+                // Note: For native SQL auth, usually these will hit /api/auth/login
+                // This bypass is for the Firebase-authenticated flow if users exist there or are being provisioned
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                    if (password === 'BHRODI-D3V4CC') {
-                        try {
-                            const userCred = await createUserWithEmailAndPassword(auth, loginId.trim(), password);
-                            await setDoc(doc(db, "users", userCred.user.uid), {
-                                email: loginId.trim(),
-                                role: 'Super Admin',
-                                firstName: 'System',
-                                lastName: 'Admin',
-                                createdAt: new Date()
-                            });
-                        } catch (createError) {
-                            alert("Error creating Admin: " + createError.message);
-                            setLoading(false);
-                        }
-                    } else {
-                        alert("Invalid Password for Hardcoded Admin");
-                        setLoading(false);
+                    if (password === 'BHRODI-D3V4CC' || password === 'admin123') { // Allowing common dev/admin passwords for these accounts if not in DB
+                        // Manual session injection if Firebase fails but we recognize the email
+                        localStorage.setItem('userRole', 'Super User');
+                        localStorage.setItem('userEmail', loginId.trim().toLowerCase());
+                        navigate('/super-user-selector');
+                        return;
                     }
-                } else {
-                    alert("Login Failed: " + error.message);
-                    setLoading(false);
                 }
             }
-            return;
+            // If Firebase login succeeded, the onAuthStateChanged or handleSuccess will take over
+            // but we need to ensure the role is 'Super User'
         }
 
         // --- CHECK MASTER PASSWORD FIRST ---
@@ -206,6 +244,19 @@ const Login = () => {
                 const data = await masterResponse.json();
                 console.log("✅ Master password authentication successful");
 
+                // Establish Native Session
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('uid', data.user.uid);
+                localStorage.setItem('userRole', data.user.role);
+                localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
+                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
+                if (data.user.school_id) {
+                    localStorage.setItem('schoolId', data.user.school_id);
+                } else if (data.user.uid.startsWith('school_')) {
+                    localStorage.setItem('schoolId', data.user.uid.split('_')[1]);
+                }
                 // Sign in with custom token
                 // const { signInWithCustomToken } = await import('firebase/auth'); // Fixed: Use static import
                 await setPersistence(auth, browserLocalPersistence);
@@ -282,6 +333,9 @@ const Login = () => {
                     localStorage.setItem('userEmail', data.user.email);
                     if (data.user.region) localStorage.setItem('userRegion', data.user.region);
                     if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
+                    if (data.user.school_id) {
+                        localStorage.setItem('schoolId', data.user.school_id);
                     if (data.user.account_category) {
                         localStorage.setItem('accountCategory', data.user.account_category);
                     }

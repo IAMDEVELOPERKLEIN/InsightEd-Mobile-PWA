@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -1320,7 +1320,7 @@ const MonitoringDashboard = () => {
                                 <div>
                                     <h1 className="text-4xl font-black tracking-tighter">{userData.bureau || 'Central Office'}</h1>
                                     <p className="text-blue-200 text-lg font-medium mt-1">
-                                        {activeTab === 'infra' ? 'Infrastructure Project Monitoring' : 'National Accomplishment Overview'}
+                                        {activeTab === 'infra' ? 'Infrastructure Project Monitoring' : 'National Registration Overview'}
                                     </p>
                                 </div>
                                 <div className="hidden md:block text-right">
@@ -1336,7 +1336,7 @@ const MonitoringDashboard = () => {
                                 {activeTab === 'accomplishment' && (
                                     <>
                                         <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 col-span-2">
-                                            <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">National Accomplishment Rate</p>
+                                            <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Account Registration Rate</p>
                                             {/* Show Percentage */}
                                             {(() => {
                                                 const dbSum = regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0);
@@ -1348,7 +1348,7 @@ const MonitoringDashboard = () => {
                                                 return (
                                                     <div className="flex items-end gap-3">
                                                         <p className="text-4xl font-black mt-1">{pct}%</p>
-                                                        <p className="text-sm opacity-70 mb-1 font-medium">{completed.toLocaleString()} of {totalSchools.toLocaleString()} Schools Complete</p>
+                                                        <p className="text-sm opacity-70 mb-1 font-medium">{completed.toLocaleString()} of {totalSchools.toLocaleString()} Registered Schools</p>
                                                     </div>
                                                 );
                                             })()}
@@ -1397,7 +1397,7 @@ const MonitoringDashboard = () => {
                                 {activeTab === 'accomplishment' && (
                                     <div>
                                         <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                                            <FiCheckCircle className="text-blue-500" /> Regional Compliance Performance
+                                            <FiCheckCircle className="text-blue-500" /> Regional Registration Performance
                                         </h2>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {regionalStats.map((reg, idx) => {
@@ -1832,15 +1832,10 @@ const MonitoringDashboard = () => {
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl col-span-1">
+                                        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl col-span-1 border border-blue-100 dark:border-blue-800/50">
                                             {(() => {
-                                                // Use Memoized Jurisdiction Total
                                                 const displayTotal = jurisdictionTotal;
-
-                                                // Get Completed Schools Count (from API Update)
                                                 const completedCount = parseInt(stats?.completed_schools_count || 0);
-
-                                                // Calculate Percentage
                                                 const percentage = displayTotal > 0 ? ((completedCount / displayTotal) * 100).toFixed(1) : 0;
 
                                                 return (
@@ -1850,20 +1845,46 @@ const MonitoringDashboard = () => {
                                                                 {percentage}%
                                                             </span>
                                                             <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
-                                                                Completed Forms <br />
+                                                                100% Data Completion <br />
                                                                 <span className="text-[#004A99] dark:text-blue-300">({completedCount} / {displayTotal})</span>
                                                             </p>
                                                         </div>
-                                                        {(activeTab === 'accomplishment' || activeTab === 'all' || activeTab === 'home') && <TbTrophy size={40} className="text-blue-200" />}
+                                                        <FiCheckCircle size={32} className="text-blue-200" />
                                                     </div>
                                                 );
                                             })()}
                                         </div>
                                     )}
 
-                                    {/* NEW: System Validated % (Next to Accomplishment) */}
+                                    {/* Account Registration Card (from users table) */}
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl col-span-1">
+                                        <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl col-span-1 border border-emerald-100 dark:border-emerald-800/50">
+                                            {(() => {
+                                                const displayTotal = jurisdictionTotal;
+                                                const accountsCount = parseInt(stats?.accounts_count || 0);
+                                                const percentage = displayTotal > 0 ? ((accountsCount / displayTotal) * 100).toFixed(1) : 0;
+
+                                                return (
+                                                    <div className="flex items-center justify-between h-full">
+                                                        <div>
+                                                            <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
+                                                                {percentage}%
+                                                            </span>
+                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
+                                                                Account Registration <br />
+                                                                <span className="text-emerald-600 dark:text-emerald-300">({accountsCount} / {displayTotal})</span>
+                                                            </p>
+                                                        </div>
+                                                        <TbSchool size={32} className="text-emerald-200" />
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+
+                                    {/* System Validated Card */}
+                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
+                                        <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl col-span-1 border border-purple-100 dark:border-purple-800/50">
                                             {(() => {
                                                 const displayTotal = jurisdictionTotal;
                                                 const validatedCount = parseInt(stats?.validated_schools_count || 0);
@@ -1880,33 +1901,7 @@ const MonitoringDashboard = () => {
                                                                 <span className="text-purple-600 dark:text-purple-300">({validatedCount} / {displayTotal})</span>
                                                             </p>
                                                         </div>
-                                                        <FiCheckCircle size={40} className="text-purple-200" />
-                                                    </div>
-                                                );
-                                            })()}
-                                        </div>
-                                    )}
-
-                                    {/* NEW: Registered Schools Count */}
-                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl col-span-1">
-                                            {(() => {
-                                                const displayTotal = jurisdictionTotal;
-                                                const registeredCount = parseInt(stats?.registered_schools_count || 0);
-                                                const percentage = displayTotal > 0 ? ((registeredCount / displayTotal) * 100).toFixed(1) : 0;
-
-                                                return (
-                                                    <div className="flex items-center justify-between h-full">
-                                                        <div>
-                                                            <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
-                                                                {percentage}%
-                                                            </span>
-                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
-                                                                Registered Schools <br />
-                                                                <span className="text-emerald-600 dark:text-emerald-300">({registeredCount} / {displayTotal})</span>
-                                                            </p>
-                                                        </div>
-                                                        <TbSchool size={40} className="text-emerald-200" />
+                                                        <FiTrendingUp size={32} className="text-purple-200" />
                                                     </div>
                                                 );
                                             })()}
@@ -1953,7 +1948,7 @@ const MonitoringDashboard = () => {
                                 !coDivision &&
                                 (effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && coRegion)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
-                                        <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
+                                        <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Account Registration per School Division</h2>
                                         {(() => {
                                             // 1. Get List of Divisions from API (schools_IERN backed)
                                             const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
@@ -2015,7 +2010,7 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{divName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} / {totalSchools} Completed
+                                                                            {completedCount} / {totalSchools} Registered
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">
@@ -2054,7 +2049,7 @@ const MonitoringDashboard = () => {
                                 (effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && coDivision) || (effectiveRole === 'Regional Office' && coDivision)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                                            {(coDistrict || (effectiveRole === 'Regional Office' && coDivision) || (effectiveRole === 'Central Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
+                                            {(coDistrict || (effectiveRole === 'Regional Office' && coDivision) || (effectiveRole === 'Central Office' && coDivision)) ? 'Account Registration per School' : 'Account Registration per District'}
                                         </h2>
                                         {(() => {
                                             // Determine Target Region:
@@ -2468,7 +2463,7 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{distName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} / {totalSchools} Completed
+                                                                            {completedCount} / {totalSchools} Registered
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">

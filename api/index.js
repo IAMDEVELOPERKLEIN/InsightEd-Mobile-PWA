@@ -10533,6 +10533,27 @@ app.get('/api/monitoring/stats', async (req, res) => {
   }
 });
 
+// --- DEBUG: Temp endpoint to check ph_schools iern data ---
+app.get('/api/debug/iern-check', async (req, res) => {
+  const { region = 'Region V' } = req.query;
+  try {
+    const r1 = await pool.query(`
+      SELECT division, COUNT(*) as total, COUNT(iern) as with_iern,
+             ARRAY_AGG(iern) FILTER (WHERE iern IS NOT NULL) as iern_values
+      FROM ph_schools
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
+      GROUP BY division ORDER BY division
+    `, [region]);
+    const r2 = await pool.query(`
+      SELECT school_id, school_name, division, iern
+      FROM ph_schools
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) AND iern IS NOT NULL
+      ORDER BY division, school_name
+    `, [region]);
+    res.json({ byDivision: r1.rows, schools_with_iern: r2.rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- 25b. GET: Monitoring Stats per Division (RO View) ---
 // --- 26. GET: Division Stats (Within Region) ---
 app.get('/api/monitoring/division-stats', async (req, res) => {
@@ -10542,10 +10563,10 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
     // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        s.division, 
+        UPPER(TRIM(s.division)) as division, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(s.iern) as completed_schools,
+        COUNT(CASE WHEN s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
         COUNT(CASE WHEN ps.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
         ROUND(COALESCE(AVG(ps.unit_completion), 0), 1) as avg_completion,
         
@@ -11073,22 +11094,18 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM (
-        SELECT 
-          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-          COALESCE(p_in.school_name, s_in."School_Name") as school_name
-        FROM "schools_IERN" s_in
-        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-      ) s
+      FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE s.region = UPPER(TRIM($1))
-      GROUP BY s.division
-      ORDER BY s.division
+      LEFT JOIN (
+        SELECT CAST(school_id AS TEXT) as school_id
+        FROM users 
+        WHERE school_id IS NOT NULL 
+        GROUP BY school_id
+      ) ua ON s.school_id = ua.school_id
+      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1))
+      GROUP BY UPPER(TRIM(s.division))
+      ORDER BY UPPER(TRIM(s.division))
     `;
     console.log("DEBUG: Running Division Stats for Region:", region);
 
@@ -11116,12 +11133,12 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
     // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        ${groupCol} as district, 
+        UPPER(TRIM(${groupCol})) as district, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN ps.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(ps.unit_completion), 0), 1) as avg_completion,
+        COUNT(s.iern) as completed_schools,
+        COUNT(CASE WHEN s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(s.unit_completion), 0), 1) as avg_completion,
 
         -- Map modular units to legacy names for frontend bars
         COALESCE(SUM(ps.unit1), 0) as profile,
@@ -11647,23 +11664,13 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM (
-        SELECT 
-          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-          COALESCE(p_in.school_name, s_in."School_Name") as school_name
-        FROM "schools_IERN" s_in
-        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-      ) s
+      FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE s.region = UPPER(TRIM($1)) AND
-            s.division = UPPER(TRIM($2))
-      GROUP BY ${groupCol}
-      ORDER BY ${groupCol} ASC
+      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1)) AND
+            UPPER(TRIM(s.division)) = UPPER(TRIM($2))
+      GROUP BY UPPER(TRIM(${groupCol}))
+      ORDER BY UPPER(TRIM(${groupCol})) ASC
     `;
 
     const result = await pool.query(query, [region, division]);
