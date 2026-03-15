@@ -10,8 +10,6 @@ import {
 } from 'react-icons/fi';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import LoadingScreen from '../components/LoadingScreen';
-import { safeJsonParse, safeJsonStringify } from '../utils/safeJson';
 import { DASHBOARD_METADATA } from '../config/dashboardMetadata';
 
 // --- Circular Progress Ring ---
@@ -81,12 +79,10 @@ const getLevelFromXP = (xp, maxXP) => {
 const MyActivityDashboard = () => {
     const navigate = useNavigate();
     const [data, setData] = useState(() => {
-        return safeJsonParse(localStorage.getItem('activity_data'));
-    });
-    const [loading, setLoading] = useState(() => {
         const cached = localStorage.getItem('activity_data');
-        return !cached || cached === 'undefined';
+        return cached ? JSON.parse(cached) : null;
     });
+    const [loading, setLoading] = useState(!localStorage.getItem('activity_data'));
     const schoolId = localStorage.getItem('schoolId');
 
     const unitMap = useMemo(() => DASHBOARD_METADATA.units.map(u => ({
@@ -106,7 +102,7 @@ const MyActivityDashboard = () => {
                 if (response.ok) {
                     const json = await response.json();
                     setData(json.data);
-                    localStorage.setItem('activity_data', safeJsonStringify(json.data));
+                    localStorage.setItem('activity_data', JSON.stringify(json.data));
                 }
             } catch (err) {
                 console.error('Fetch Error:', err);

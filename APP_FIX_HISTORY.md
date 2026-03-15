@@ -2,15 +2,6 @@
 
 This document tracks technical improvements, bug fixes, and feature implementations made during development.
 
-## 2026-03-13
-### Robust Authentication & Descriptive Error Messaging
-- **Issue**: Standard password and passcode logins were failing for School Heads (notably user `112461`), resulting in "JSON error" (password) or "Network error" (passcode/PIN).
-- **Fixes**:
-  - **Route Alignment**: Aliased `/api/auth/pin-login` to `/api/auth/verify-passcode` on the backend to match the frontend expectation and handle both `passcode` and `pin` keys in the request body.
-  - **Standardized Lookup**: Refined identity resolution to consistently search by `school_id` for School Heads and `email_address`/`email` for others across all auth-related endpoints.
-  - **Descriptive Errors**: Updated backend methods to return specific error codes (e.g., `INVALID_PASSWORD`, `USER_NOT_FOUND`) and human-readable messages. Updated frontend (`Login.jsx`, `PinLogin.jsx`) to display these specific alerts.
-  - **Bcrypt/JWT Safety**: Wrapped sensitive auth operations in try-catch blocks to ensure server errors always return valid JSON instead of HTML crash pages.
-
 ## 2026-03-12
 ### Unit 6 Routing and Backend Alignment
 - **Issue**: Mismatch between frontend unit numbering and backend API routes leading to data saving errors and navigation confusion.

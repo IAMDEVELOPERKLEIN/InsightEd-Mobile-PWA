@@ -16,13 +16,6 @@ echo "User: $USER"
 echo "Pass: $PASS"
 echo "------------------------------------------------"
 
-echo "------------------------------------------------"
-echo "⚠️  IMPORTANT: .env is NOT synced automatically."
-echo "   Verify the VM has the correct .env file at:"
-echo "   $SERVER_DIR/.env"
-echo "   Required: DATABASE_URL, JWT_SECRET, etc."
-echo "------------------------------------------------"
-
 echo "📤 1. Syncing local files to VM..."
 if command -v rsync >/dev/null 2>&1; then
     rsync -avz --delete \

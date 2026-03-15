@@ -39,64 +39,63 @@ const BottomNav = ({ userRole }) => {
         'Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'DepEd Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Non-DepEd Engineer': [
             { label: 'Home', path: '/non-deped-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Local Government Unit': [
             { label: 'Projects', path: '/lgu-dashboard', icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: TbHomeEdit },
             { label: 'Modules', path: '/modular-dashboard', icon: LuCompass },
-            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
             { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
             { label: 'Home', path: '/hr-dashboard', icon: TbHomeEdit },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
             { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
             { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office Finance': [
             { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Finance': [
@@ -106,7 +105,7 @@ const BottomNav = ({ userRole }) => {
         'Masterlist': [
             { label: 'Home', path: '/psip', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Data', path: '/psip', state: { activeTab: 'data' }, icon: TbChartBar },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/psip', state: { activeTab: 'settings' }, icon: FiSettings },
         ],
         'EFD': [
@@ -163,11 +162,13 @@ const BottomNav = ({ userRole }) => {
                             key={item.label}
                             style={styles.navButton}
                         onClick={() => {
+                            if (item.id === 'chatbot-toggle') {
+                                window.dispatchEvent(new CustomEvent('toggle-chatbot'));
+                                return;
+                            }
                             if (item.logout) {
-                                const persistence = localStorage.getItem('remembered_user');
                                 localStorage.clear();
                                 sessionStorage.clear();
-                                if (persistence) localStorage.setItem('remembered_user', persistence);
                                 navigate('/');
                                 return;
                             }
