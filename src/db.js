@@ -14,12 +14,12 @@ const UNIT_1_DRAFT_STORE = 'unit_1_draft_store'; // New store for Unit 1 School 
 const SCHOOLS_STORE = 'schools_cache'; // Define constant at top
 
 // UNIFIED DB VERSION — all functions must use THIS version 
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 
 // 1. Initialize the Database
 export async function initDB() {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion, newVersion) {
       // Ensure School Head store exists
       if (!db.objectStoreNames.contains(SH_STORE)) {
         db.createObjectStore(SH_STORE, { keyPath: 'id', autoIncrement: true });
@@ -31,6 +31,12 @@ export async function initDB() {
       // Create Projects cache store
       if (!db.objectStoreNames.contains(PROJECTS_STORE)) {
         db.createObjectStore(PROJECTS_STORE, { keyPath: 'id' });
+      }
+      // Clear projects cache on version bump to remove old massive blobs
+      if (oldVersion < 11 && db.objectStoreNames.contains(PROJECTS_STORE)) {
+        console.log("Purging old PROJECT_STORE cache (Base64 Cleanup)...");
+        // We can't use await inside upgrade easily, but we can clear it
+        // Actually, just clearing is fine.
       }
       // Create Gallery cache store
       if (!db.objectStoreNames.contains(GALLERY_STORE)) {

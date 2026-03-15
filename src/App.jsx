@@ -39,6 +39,7 @@ import SuperUserSelector from './modules/SuperUserSelector';
 import FinanceDashboard from './modules/FinanceDashboard';
 import AgencyDashboard from './modules/AgencyDashboard';
 import LguDashboard from './modules/LguDashboard';
+import NonDepEdDashboard from './modules/NonDepEdDashboard'; // Dedicated Dashboard
 import LguForms from './modules/LguForms'; // Import newly created LguForms
 import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
 import PSIP from './modules/PSIP'; // Import PSIP
@@ -139,7 +140,7 @@ const AnimatedRoutes = () => {
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
-        <Route path="/non-deped-dashboard" element={<EngineerDashboard />} />{/* TODO: Create dedicated NonDepEdDashboard */}
+        <Route path="/non-deped-dashboard" element={<NonDepEdDashboard />} />
         {/* <Route path="/lgu" element={<LguDashboard />} /> */}
         {/* <Route path="/lgu-form" element={<LguForm />} /> */}
         {/* <Route path="/lgu-projects" element={<LguProjects />} /> */}

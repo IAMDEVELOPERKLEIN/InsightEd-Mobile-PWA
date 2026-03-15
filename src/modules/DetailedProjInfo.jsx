@@ -434,6 +434,7 @@ const DetailedProjInfo = () => {
     const [selectedZoomImage, setSelectedZoomImage] = useState(null);
     const [activeCategory, setActiveCategory] = useState('Internal');
     const [userRole, setUserRole] = useState(null);
+    const [accountCategory, setAccountCategory] = useState(null);
 
 
     // Helper to extract image source correctly
@@ -634,6 +635,7 @@ const DetailedProjInfo = () => {
                     if (res.ok) {
                         const data = await res.json();
                         setUserRole(data.role);
+                        setAccountCategory(data.account_category);
                     }
                 } catch (err) {
                     console.error("Failed to fetch user role:", err);
@@ -789,10 +791,10 @@ const DetailedProjInfo = () => {
         try {
             // 1. Update Project Details
             // Determine uploader_type from the logged-in user's role
-            let uploaderType = updatedProject.uploader_type; // Default: preserve existing
-            if (userRole === 'HRODI Engineer') uploaderType = 'EFD Engineer';
-            else if (userRole === 'DepEd Engineer') uploaderType = 'DepEd Engineer';
-            else if (userRole === 'Non-DepEd Engineer') uploaderType = 'Non-DepEd Engineer';
+            let uploaderType = 'DepEd Engineer'; // Default
+            if (userRole === 'EFD' || userRole === 'HRODI Engineer') uploaderType = 'EFD Engineer';
+            else if (userRole === 'Non-DepEd Engineer' || (userRole === 'DepEd Engineer' && accountCategory === 'Non-DepEd Engineer')) uploaderType = 'Non-DepEd Engineer';
+            else uploaderType = 'DepEd Engineer';
 
             const body = { ...updatedProject, uid: uid, modifiedBy: userRole || "Engineer", uploader_type: uploaderType };
 

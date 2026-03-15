@@ -22,6 +22,11 @@ const EFDHome = () => {
     const [fundingYears, setFundingYears] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [efdLocations, setEfdLocations] = useState([]);
+    const [userRole, setUserRole] = useState(() => {
+        const saved = localStorage.getItem('userRole');
+        if (saved === 'hrodi_engineer') return 'HRODI Engineer';
+        return saved || '';
+    });
 
     const handleClearFilters = () => {
         setSelectedRegion('');
@@ -523,7 +528,7 @@ const EFDHome = () => {
                     )}
                 </div>
 
-                <BottomNav userRole="EFD" />
+                <BottomNav userRole={userRole} />
             </div>
         </PageTransition>
     );
