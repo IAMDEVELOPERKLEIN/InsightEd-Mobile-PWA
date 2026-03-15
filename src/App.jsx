@@ -47,7 +47,6 @@ import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRou
 import EFDHome from './modules/EFDHome';
 import EFDMonitoring from './modules/EFDMonitoring';
 import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
-import ChatPage from './modules/ChatPage'; // Import ChatPage
 
 
 
@@ -100,19 +99,13 @@ const AnimatedRoutes = () => {
   // Check Maintenance Status on Route Change
   useEffect(() => {
     const checkMaintenance = async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s safety timeout
-
       try {
-        const res = await fetch('/api/settings/maintenance_mode', { signal: controller.signal });
-        if (!res.ok) throw new Error("Maintenance check failed");
+        const res = await fetch('/api/settings/maintenance_mode');
         const data = await res.json();
         setMaintenanceMode(data.value === 'true');
       } catch (err) {
-        console.warn("Maintenance Check Skipped (Timeout/Error):", err.name === 'AbortError' ? 'Timeout' : err.message);
-        // Fallback: stay in current state (default false)
+        console.error("Maintenance Check Failed:", err);
       } finally {
-        clearTimeout(timeoutId);
         setCheckingMaintenance(false);
       }
     };
@@ -282,7 +275,6 @@ const AnimatedRoutes = () => {
 
       {/* Utilities */}
       <Route path="/profile" element={<UserProfile />} />
-      <Route path="/chat" element={<ChatPage />} />
       <Route path="/activities" element={<Activity />} />
       <Route path="/outbox" element={<Outbox />} />
       <Route path="/engineer-outbox" element={<EngineerOutbox />} />

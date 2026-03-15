@@ -9,12 +9,10 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { useTheme } from '../context/ThemeContext'; // Import Hook
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import SW Hook
-import ChatWidget from '../components/ChatWidget';
 
 // Icons
-import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool, FiSettings, FiArrowLeft, FiCamera, FiEdit, FiTrash, FiShield, FiSmartphone, FiCreditCard, FiLock } from "react-icons/fi"; // Added FiTool, and other icons
+import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool } from "react-icons/fi"; // Added FiTool
 import { TbAlertTriangle } from "react-icons/tb";
-import { safeJsonParse } from '../utils/safeJson';
 
 const FAQ_DATA = [
     {
@@ -63,9 +61,6 @@ const UserProfile = () => {
     // Update Check State
     const [checkingForUpdate, setCheckingForUpdate] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
-    const [isVerifyingPin, setIsVerifyingPin] = useState(false);
-    const [pinEntry, setPinEntry] = useState('');
-    const [pinError, setPinError] = useState('');
 
     // FAQ Accordion State
     const [openFaqIndex, setOpenFaqIndex] = useState(null);
@@ -108,12 +103,16 @@ const UserProfile = () => {
             let fallbackLastName = "Profile";
             let fallbackEmail = cachedEmail || "";
 
-            const remStr = localStorage.getItem('remembered_user');
-            const parsed = safeJsonParse(remStr);
-            if (parsed) {
-                if (parsed.firstName) fallbackFirstName = parsed.firstName;
-                if (parsed.lastName) fallbackLastName = parsed.lastName; 
-                if (parsed.email && !fallbackEmail) fallbackEmail = parsed.email;
+            try {
+                const remStr = localStorage.getItem('remembered_user');
+                if (remStr) {
+                    const parsed = JSON.parse(remStr);
+                    if (parsed.firstName) fallbackFirstName = parsed.firstName;
+                    if (parsed.lastName) fallbackLastName = parsed.lastName; // (Might not exist, but let's try)
+                    if (parsed.email && !fallbackEmail) fallbackEmail = parsed.email;
+                }
+            } catch (e) {
+                // Ignore parse errors
             }
 
             // 1. Instantly populate fallback so UI doesn't hang/crash
@@ -196,108 +195,57 @@ const UserProfile = () => {
     };
 
     // --- HANDLERS ---
-    const executeLogout = async () => {
-        // 1. Log safely without blocking user (Fire & Forget)
-        try {
-            fetch('/api/log-activity', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userUid: localStorage.getItem('uid') || 'unknown',
-                    userName: userData?.firstName || 'User',
-                    role: userData?.role || 'User',
-                    actionType: 'LOGOUT',
-                    targetEntity: 'System',
-                    details: 'User logged out'
-                })
-            });
-        } catch (e) { console.warn("Logout Log Failed", e); }
-
-        // SOFT LOGOUT
-        try {
-            // 1. CAPTURE PERSISTENCE DATA BEFORE CLEAR
-            const persistenceData = {
-                email: userData?.email || localStorage.getItem('userEmail'),
-                firstName: userData?.firstName || 'User',
-                role: userData?.role || localStorage.getItem('userRole'),
-                school_id: userData?.school_id || userData?.schoolId || localStorage.getItem('schoolId')
-            };
-
-            await auth.signOut();
-            
-            localStorage.clear(); // Clear session data
-            
-            // 2. RESTORE PERSISTENCE DATA
-            if (persistenceData.email) {
-                localStorage.setItem('remembered_user', JSON.stringify(persistenceData));
-            }
-            
-            navigate('/');
-        } catch (error) {
-            console.error("Logout Error:", error);
-            
-            // FALLBACK PROTECTION
-            const persistenceData = {
-                email: userData?.email || localStorage.getItem('userEmail'),
-                firstName: userData?.firstName || 'User',
-                role: userData?.role || localStorage.getItem('userRole'),
-                school_id: userData?.school_id || userData?.schoolId || localStorage.getItem('schoolId')
-            };
-            
-            localStorage.clear();
-            if (persistenceData.email) {
-                localStorage.setItem('remembered_user', JSON.stringify(persistenceData));
-            }
-            window.location.href = '/';
-        }
-    };
-
     const handleLogout = async () => {
-        const role = userData?.role?.toLowerCase() || localStorage.getItem('userRole')?.toLowerCase();
-        const isSchoolHead = role === 'school head' || role === 'school_head';
+        if (window.confirm("Are you sure you want to log out?")) {
+            // 1. Log safely without blocking user (Fire & Forget)
+            try {
+                fetch('/api/log-activity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userUid: localStorage.getItem('uid') || 'unknown',
+                        userName: userData?.firstName || 'User',
+                        role: userData?.role || 'User',
+                        actionType: 'LOGOUT',
+                        targetEntity: 'System',
+                        details: 'User logged out'
+                    })
+                });
+            } catch (e) { console.warn("Logout Log Failed", e); }
 
-        if (isSchoolHead) {
-            setIsVerifyingPin(true);
-            setPinEntry('');
-            setPinError('');
-        } else {
-            if (window.confirm("Are you sure you want to log out?")) {
-                executeLogout();
+            // SOFT LOGOUT
+            try {
+                await auth.signOut();
+                
+                // Preserve remembered user identity
+                const userEmail = userData?.email || localStorage.getItem('userEmail');
+                const userFirstName = userData?.firstName || 'User';
+                
+                localStorage.clear(); // Clear all session data
+                
+                if (userEmail) {
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: userEmail,
+                        firstName: userFirstName
+                    }));
+                }
+                
+                navigate('/');
+            } catch (error) {
+                console.error("Logout Error:", error);
+                
+                const userEmail = userData?.email || localStorage.getItem('userEmail');
+                const userFirstName = userData?.firstName || 'User';
+                
+                localStorage.clear();
+                if (userEmail) {
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: userEmail,
+                        firstName: userFirstName
+                    }));
+                }
+                window.location.href = '/';
             }
-        }
-    };
-
-    const handleVerifyPinAndLogout = async () => {
-        if (pinEntry.length !== 6) {
-            setPinError("Please enter your 6-digit passcode.");
-            return;
-        }
-
-        try {
-            setPinError('');
-            const identifier = userData?.school_id || userData?.schoolId || localStorage.getItem('schoolId') || userData?.email || localStorage.getItem('userEmail');
-            
-            const response = await fetch('/api/auth/verify-passcode', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    email: identifier, // Backend expects 'email' key
-                    passcode: pinEntry 
-                })
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                setIsVerifyingPin(false);
-                executeLogout();
-            } else {
-                setPinError(data.error || "Incorrect passcode. Please try again.");
-                setPinEntry('');
-            }
-        } catch (error) {
-            console.error("PIN Verification Error:", error);
-            setPinError("Service unavailable. Please try again later.");
         }
     };
 
@@ -964,20 +912,6 @@ const UserProfile = () => {
                     )}
                 </button>
 
-                {/* Chat with Assistant */}
-                <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => navigate('/chat')}>
-                    <div className="flex items-center gap-4">
-                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-blue-50 dark:bg-blue-900/40 text-[#004A99] dark:text-blue-300">
-                            <FiMessageSquare size={20} />
-                        </div>
-                        <div className="text-left">
-                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">Chat Assistant</span>
-                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold uppercase tracking-wide">Ask, Suggest or Report</span>
-                        </div>
-                    </div>
-                    <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
-                </button>
-
                 {/* FAQ Menu Item */}
                 <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => setActiveTab('faq')}>
                     <div className="flex items-center gap-4">
@@ -1043,9 +977,7 @@ const UserProfile = () => {
                     <h2 className="m-0 text-lg font-semibold flex-1 text-center">
                         {activeTab === 'settings' ? 'Settings' :
                             activeTab === 'profile' ? 'Edit Profile' :
-                                activeTab === 'faq' ? 'FAQ Help' : 
-                                        activeTab === 'feedback' ? 'App Feedback' :
-                                            'About'}
+                                activeTab === 'faq' ? 'FAQ' : 'About'}
                     </h2>
                     {/* Spacer to balance header if back button exists */}
                     {activeTab !== 'settings' && <div className="w-6"></div>}
@@ -1065,67 +997,6 @@ const UserProfile = () => {
 
                 <BottomNav homeRoute={homeRoute} userRole={userData?.role || localStorage.getItem('userRole')} />
             </div>
-
-            {/* Logout PIN Verification Modal */}
-            {isVerifyingPin && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/60 transition-all duration-300">
-                    <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-700 animate-in zoom-in-95 duration-200">
-                        <div className="text-center mb-8">
-                            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600 dark:text-blue-400 border border-blue-100/50 dark:border-blue-500/20">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
-                            </div>
-                            <h3 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">Security Verification</h3>
-                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 font-medium">
-                                School Heads are required to enter their 6-digit passcode to log out.
-                            </p>
-                        </div>
-
-                        <div className="space-y-6">
-                            <div className="relative group">
-                                <input
-                                    type="password"
-                                    inputMode="numeric"
-                                    maxLength={6}
-                                    placeholder="••••••"
-                                    value={pinEntry}
-                                    onChange={(e) => {
-                                        const val = e.target.value.replace(/\D/g, '');
-                                        if (val.length <= 6) setPinEntry(val);
-                                    }}
-                                    autoFocus
-                                    className={`w-full bg-slate-50 dark:bg-slate-900/50 border-2 rounded-2xl px-6 py-4 text-center text-3xl tracking-[1em] font-black text-slate-800 dark:text-white transition-all duration-300 focus:outline-none ${pinError ? 'border-red-500 ring-4 ring-red-500/10' : 'border-slate-100 dark:border-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10'}`}
-                                />
-                                {pinError && (
-                                    <div className="flex items-center gap-2 mt-3 justify-center text-red-500 animate-in slide-in-from-top-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-xs font-bold">{pinError}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex flex-col gap-3 pt-2">
-                                <button
-                                    onClick={handleVerifyPinAndLogout}
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50"
-                                    disabled={pinEntry.length !== 6}
-                                >
-                                    Verify & Log Out
-                                </button>
-                                <button
-                                    onClick={() => setIsVerifyingPin(false)}
-                                    className="w-full py-4 text-slate-400 dark:text-slate-500 font-bold hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </PageTransition>
     );
 };
