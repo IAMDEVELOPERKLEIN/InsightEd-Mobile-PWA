@@ -161,6 +161,7 @@ const Outbox = () => {
                                         statusMap[item.id] === 'error' ? 'bg-red-100 text-red-600' :
                                             'bg-slate-50 text-blue-600 group-hover:bg-blue-50'}
                                 `}>
+                                    {item.type === 'UNIT_1_IDENTITY' && '🏫'}
                                     {item.type === 'SCHOOL_PROFILE' && '🏫'}
                                     {item.type === 'ENROLMENT' && '📊'}
                                     {item.type === 'LEARNER_STATISTICS' && '📉'}

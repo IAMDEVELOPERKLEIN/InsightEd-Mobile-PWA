@@ -28,19 +28,19 @@ const getClassSizeOptions = (className) => {
     const name = (className || "").toLowerCase().trim();
     
     if (name.includes("&") || name.includes("joined") || name.includes("multigrade")) {
-        return ["< 25", "25", "> 25"];
+        return ["Less than 25 learners", "Exactly 25 learners", "More than 25 learners"];
     }
     if (name.includes("kinder")) {
-        return ["< 25", "25-30", "> 30"];
+        return ["Less than 25 learners", "25-30 learners", "More than 30 learners"];
     }
     if (name === "grade 1" || name === "grade 2" || name === "grade 3") {
-        return ["< 30", "30-35", "> 35"];
+        return ["Less than 30 learners", "30-35 learners", "More than 35 learners"];
     }
     if (name === "grade 11" || name === "grade 12") {
-        return ["< 45", "45", "> 45"];
+        return ["Less than 45 learners", "Exactly 45 learners", "More than 45 learners"];
     }
     // Default for Grades 4-10
-    return ["< 40", "40-45", "> 45"];
+    return ["Less than 40 learners", "40-45 learners", "More than 45 learners"];
 };
 
 const Unit3OrganizedClasses = () => {

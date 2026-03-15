@@ -21,6 +21,22 @@ const GRADE_LEVELS = [
   "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "Multigrade"
 ];
 
+const TEACHER_POSITIONS = [
+  "Teacher I", "Teacher II", "Teacher III", "Master Teacher I", "Master Teacher II",
+  "Master Teacher III", "Master Teacher IV", "SPED Teacher I", "SPED Teacher II",
+  "SPED Teacher III", "SPED Teacher IV", "SPED Teacher V", "Special Science Teacher I",
+  "Special Science Teacher II", "Head Teacher I", "Head Teacher II", "Head Teacher III",
+  "Head Teacher IV", "Head Teacher V", "Head Teacher VI", "Others"
+];
+
+const DESIGNATION_OPTIONS = [
+    "School Coordinator", 
+    "Trainer/Adviser", 
+    "Chairmanship", 
+    "Assistant School Head Designate", 
+    "Department Head"
+];
+
 const MATATAG_SUBJECTS = {
   "Kindergarten": [
     { name: "Kindergarten Block", code: "K-BLOCK" }
@@ -119,6 +135,14 @@ const getSubjectsForGrade = (grade) => {
 const cardBase = "bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-all";
 const labelStyle = "text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2 block";
 const inputStyle = "w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-slate-700 font-bold focus:outline-none focus:border-blue-500 transition-all";
+
+const chunkySelect = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:24px] bg-[right_1rem_center] bg-no-repeat disabled:opacity-50 disabled:bg-gray-50";
+
+// --- HELPERS ---
+const toProperCase = (str) => {
+  if (!str) return "";
+  return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
+};
 
 // ── Main Component ───────────────────────────────────────────────────────────
 
@@ -318,7 +342,8 @@ const TeachingPersonnelUnit = () => {
             sex: "Male",
             experience_bracket: "0-1",
             funding_source: "DepEd Nationally Funded",
-            role_designation: "Non-Advisory",
+            role_designation: "",
+            is_advisory: "Non-Advisory",
             monday_hrs: 0, monday_mins_remain: 0,
             tuesday_hrs: 0, tuesday_mins_remain: 0,
             wednesday_hrs: 0, wednesday_mins_remain: 0,
@@ -364,6 +389,8 @@ const TeachingPersonnelUnit = () => {
         setActiveTeacher({
             ...teacher,
             ...capacityFields,
+            role_designation: teacher.role_designation || "",
+            is_advisory: teacher.is_advisory || "Non-Advisory",
             workloads: teacher.workloads || []
         });
         setIsEditOpen(true);
@@ -380,6 +407,19 @@ const TeachingPersonnelUnit = () => {
     const handleSaveTeacher = async () => {
         if (!activeTeacher) return;
         const tid = activeTeacher.id;
+
+        if (!activeTeacher.sex || activeTeacher.sex === "" || activeTeacher.sex === "Select Sex") {
+            alert("Please select Sex.");
+            return;
+        }
+        if (!activeTeacher.experience_bracket || activeTeacher.experience_bracket === "" || activeTeacher.experience_bracket === "Select Experience") {
+            alert("Please select Experience.");
+            return;
+        }
+        if (!activeTeacher.specialization || activeTeacher.specialization === "" || activeTeacher.specialization === "Select Specialization") {
+            alert("Please select Specialization.");
+            return;
+        }
 
         // Convert UI hrs/mins back to raw minutes for the DB
         const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
@@ -411,6 +451,16 @@ const TeachingPersonnelUnit = () => {
                 setActiveTeacher(null);
             }
         } catch (err) { alert("Save failed."); }
+    };
+
+    const toggleRole = (role) => {
+        setActiveTeacher(prev => {
+            const currentRoles = prev.role_designation ? prev.role_designation.split(',').map(r => r.trim()).filter(Boolean) : [];
+            const newRoles = currentRoles.includes(role) 
+                ? currentRoles.filter(r => r !== role)
+                : [...currentRoles, role];
+            return { ...prev, role_designation: newRoles.join(',') };
+        });
     };
 
     // ── Workload Helpers ─────────────────────────────────────────────────────
@@ -611,7 +661,7 @@ const TeachingPersonnelUnit = () => {
                             <p className="text-xs font-bold text-slate-600 italic">Total Registered Teachers</p>
                         </div>
                     </div>
-                    <div className="text-2xl font-black text-indigo-600">{baselineTeachers}</div>
+                    <div className="text-2xl font-black text-indigo-600">{teachers.length}</div>
                 </div>
 
                 {loading ? (
@@ -723,7 +773,7 @@ const TeachingPersonnelUnit = () => {
                                         type="text" 
                                         placeholder="Enter first name" 
                                         value={newTeacherFirst}
-                                        onChange={(e) => setNewTeacherFirst(e.target.value)}
+                                        onChange={(e) => setNewTeacherFirst(toProperCase(e.target.value))}
                                         className={inputStyle}
                                         autoFocus
                                     />
@@ -734,7 +784,7 @@ const TeachingPersonnelUnit = () => {
                                         type="text" 
                                         placeholder="Enter last name" 
                                         value={newTeacherLast}
-                                        onChange={(e) => setNewTeacherLast(e.target.value)}
+                                        onChange={(e) => setNewTeacherLast(toProperCase(e.target.value))}
                                         className={inputStyle}
                                     />
                                 </div>
@@ -743,17 +793,12 @@ const TeachingPersonnelUnit = () => {
                                     <select 
                                         value={newTeacherPosition}
                                         onChange={(e) => setNewTeacherPosition(e.target.value)}
-                                        className={inputStyle}
+                                        className={chunkySelect}
                                     >
-                                        <option value="Teacher I">Teacher I</option>
-                                        <option value="Teacher II">Teacher II</option>
-                                        <option value="Teacher III">Teacher III</option>
-                                        <option value="Master Teacher I">Master Teacher I</option>
-                                        <option value="Master Teacher II">Master Teacher II</option>
-                                        <option value="SPET I">SPET I</option>
-                                        <option value="Head Teacher I">Head Teacher I</option>
-                                        <option value="Administrative Assistant">Administrative Assistant</option>
-                                        <option value="Others">Others</option>
+                                        <option value="">Select Position</option>
+                                        {TEACHER_POSITIONS.map(p => (
+                                          <option key={p} value={p}>{p}</option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -795,11 +840,11 @@ const TeachingPersonnelUnit = () => {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className={labelStyle}>First Name</label>
-                                                <input type="text" value={activeTeacher.first_name || ""} onChange={(e) => setActiveTeacher(p => ({ ...p, first_name: e.target.value }))} className={inputStyle} />
+                                                <input type="text" value={activeTeacher.first_name || ""} onChange={(e) => setActiveTeacher(p => ({ ...p, first_name: toProperCase(e.target.value) }))} className={inputStyle} />
                                             </div>
                                             <div>
                                                 <label className={labelStyle}>Last Name</label>
-                                                <input type="text" value={activeTeacher.last_name || ""} onChange={(e) => setActiveTeacher(p => ({ ...p, last_name: e.target.value }))} className={inputStyle} />
+                                                <input type="text" value={activeTeacher.last_name || ""} onChange={(e) => setActiveTeacher(p => ({ ...p, last_name: toProperCase(e.target.value) }))} className={inputStyle} />
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
@@ -838,13 +883,32 @@ const TeachingPersonnelUnit = () => {
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className={labelStyle}>Role Designation</label>
-                                                <select value={activeTeacher.role_designation || ""} onChange={(e) => setActiveTeacher(p => ({ ...p, role_designation: e.target.value }))} className={inputStyle}>
+                                                <label className={labelStyle}>Advisory Status</label>
+                                                <select value={activeTeacher.is_advisory || "Non-Advisory"} onChange={(e) => setActiveTeacher(p => ({ ...p, is_advisory: e.target.value }))} className={inputStyle}>
                                                     <option value="Non-Advisory">Non-Advisory</option>
                                                     <option value="Advisory">Advisory</option>
-                                                    <option value="SNED/Special">SNED/Special</option>
-                                                    <option value="Head/Coordinator">Head/Coordinator</option>
                                                 </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className={labelStyle}>Role Designations (Select Multiple)</label>
+                                            <div className="flex flex-wrap gap-2 mb-2">
+                                                {DESIGNATION_OPTIONS.map(role => {
+                                                    const isSelected = activeTeacher.role_designation?.split(',').map(r => r.trim()).includes(role);
+                                                    return (
+                                                        <button 
+                                                            key={role}
+                                                            onClick={() => toggleRole(role)}
+                                                            className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${
+                                                                isSelected 
+                                                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' 
+                                                                : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200'
+                                                            }`}
+                                                        >
+                                                            {role}
+                                                        </button>
+                                                    )
+                                                })}
                                             </div>
                                         </div>
                                         <div>
@@ -908,6 +972,7 @@ const TeachingPersonnelUnit = () => {
                                                                 min="0" 
                                                                 placeholder="Hrs" 
                                                                 value={activeTeacher[`${day}_hrs`] ?? ""}
+                                                                onFocus={(e) => e.target.select()}
                                                                 onChange={(e) => setActiveTeacher(p => ({ ...p, [`${day}_hrs`]: e.target.value }))}
                                                                 className="w-full pl-3 pr-8 py-2 bg-white rounded-xl border-2 border-slate-100 focus:border-blue-500 transition-all text-sm font-bold" 
                                                             />
@@ -920,6 +985,7 @@ const TeachingPersonnelUnit = () => {
                                                                 max="59"
                                                                 placeholder="Min" 
                                                                 value={activeTeacher[`${day}_mins_remain`] ?? ""}
+                                                                onFocus={(e) => e.target.select()}
                                                                 onChange={(e) => setActiveTeacher(p => ({ ...p, [`${day}_mins_remain`]: e.target.value }))}
                                                                 className="w-full pl-3 pr-8 py-2 bg-white rounded-xl border-2 border-slate-100 focus:border-blue-500 transition-all text-sm font-bold" 
                                                             />

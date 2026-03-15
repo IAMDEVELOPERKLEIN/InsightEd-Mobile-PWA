@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const ChatWidget = ({ showFloatingButton = true }) => {
-    const [isOpen, setIsOpen] = useState(false);
+const ChatWidget = ({ showFloatingButton = true, embedded = false }) => {
+    const [isOpen, setIsOpen] = useState(embedded);
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState([
         { role: 'assistant', text: "Hello! I'm your InsightED Assistant. How can I help you today?" }
@@ -155,72 +155,93 @@ const ChatWidget = ({ showFloatingButton = true }) => {
 
     const isLoginScreen = window.location.hash === '#/' || window.location.pathname === '/';
 
+    const renderModeSelector = () => (
+        <div className="flex bg-slate-100 dark:bg-slate-700 p-1.5 rounded-2xl mx-4 my-2 shadow-inner border border-slate-200 dark:border-slate-600">
+            <button 
+                onClick={() => setMode('chat')}
+                className={`flex-1 flex flex-col items-center gap-1.5 py-2.5 rounded-xl transition-all duration-300 ${
+                    mode === 'chat' 
+                    ? 'bg-white dark:bg-slate-900 text-[#004A99] dark:text-blue-400 shadow-xl scale-100' 
+                    : 'text-slate-500 dark:text-slate-400 opacity-60 hover:opacity-100'
+                }`}
+            >
+                <div className={`p-1.5 rounded-lg ${mode === 'chat' ? 'bg-blue-50 dark:bg-blue-900/40' : 'bg-transparent'}`}>
+                    <TbRobot size={18} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest">Chat</span>
+            </button>
+            <button 
+                onClick={() => setMode('suggestion')}
+                className={`flex-1 flex flex-col items-center gap-1.5 py-2.5 rounded-xl transition-all duration-300 ${
+                    mode === 'suggestion' 
+                    ? 'bg-white dark:bg-slate-900 text-yellow-600 dark:text-yellow-400 shadow-xl scale-100' 
+                    : 'text-slate-500 dark:text-slate-400 opacity-60 hover:opacity-100'
+                }`}
+            >
+                <div className={`p-1.5 rounded-lg ${mode === 'suggestion' ? 'bg-yellow-50 dark:bg-yellow-900/40' : 'bg-transparent'}`}>
+                    <FiMessageSquare size={18} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest">Suggest</span>
+            </button>
+            <button 
+                onClick={() => setMode('bug')}
+                className={`flex-1 flex flex-col items-center gap-1.5 py-2.5 rounded-xl transition-all duration-300 ${
+                    mode === 'bug' 
+                    ? 'bg-white dark:bg-slate-900 text-red-600 dark:text-red-400 shadow-xl scale-100' 
+                    : 'text-slate-500 dark:text-slate-400 opacity-60 hover:opacity-100'
+                }`}
+            >
+                <div className={`p-1.5 rounded-lg ${mode === 'bug' ? 'bg-red-50 dark:bg-red-900/40' : 'bg-transparent'}`}>
+                    <FiAlertCircle size={18} />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-widest">Bug</span>
+            </button>
+        </div>
+    );
+
     return (
-        <div className={`fixed ${isLoginScreen ? 'top-6 right-6' : 'bottom-6 right-6'} z-[9999] flex flex-col items-end gap-4 pointer-events-none`}>
+        <div className={`${embedded ? 'w-full h-full' : `fixed ${isLoginScreen ? 'top-6 right-6' : 'bottom-6 right-6'} z-[9999] flex flex-col items-end gap-4 pointer-events-none`}`}>
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                        initial={embedded ? false : { opacity: 0, y: 20, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                        className="w-80 sm:w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden pointer-events-auto"
+                        exit={embedded ? false : { opacity: 0, y: 20, scale: 0.95 }}
+                        className={`${embedded ? 'w-full h-full min-h-[500px]' : 'w-80 sm:w-96 h-[500px] shadow-2xl border border-gray-100 rounded-2xl'} bg-white dark:bg-slate-800 flex flex-col overflow-hidden pointer-events-auto transition-colors duration-300`}
                     >
-                        {/* Header */}
-                        <div className="bg-[#004A99] p-4 text-white flex items-center justify-between shadow-lg">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                                    <TbRobot size={20} />
+                        {/* Header (Only for popup mode) */}
+                        {!embedded && (
+                            <div className="bg-[#004A99] p-4 text-white flex items-center justify-between shadow-lg">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                                        <TbRobot size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold m-0">Assistant</h4>
+                                        <p className="text-[10px] text-blue-200 m-0">Always here to help</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h4 className="text-sm font-bold m-0">InsightED Assistant</h4>
-                                    <p className="text-[10px] text-blue-200 m-0">Ask anything about the app</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={() => {
-                                        setMode(mode === 'suggestion' ? 'chat' : 'suggestion');
-                                        setFeedbackStatus(null);
-                                    }}
-                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
-                                        mode === 'suggestion' 
-                                        ? 'bg-yellow-400 text-blue-900 shadow-inner' 
-                                        : 'bg-white/10 hover:bg-white/20 text-white'
-                                    }`}
-                                >
-                                    {mode === 'suggestion' ? 'Chat' : 'Suggest'}
-                                </button>
-                                <button 
-                                    onClick={() => {
-                                        setMode(mode === 'bug' ? 'chat' : 'bug');
-                                        setFeedbackStatus(null);
-                                    }}
-                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
-                                        mode === 'bug' 
-                                        ? 'bg-red-500 text-white shadow-inner' 
-                                        : 'bg-white/10 hover:bg-white/20 text-white'
-                                    }`}
-                                >
-                                    {mode === 'bug' ? 'Chat' : 'Report Bug'}
-                                </button>
                                 <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
                                     <FiMinus size={18} />
                                 </button>
                             </div>
-                        </div>
+                        )}
+
+                        {/* Better Mode Selector */}
+                        {renderModeSelector()}
 
                         {/* Messages / Suggestion Area */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50 dark:bg-slate-900/20">
                             {mode === 'chat' ? (
                                 <>
                                     {messages.map((msg, idx) => (
                                         <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[80%] p-3 rounded-2xl text-[11px] leading-relaxed ${msg.role === 'user'
-                                                    ? 'bg-[#004A99] text-white rounded-tr-none shadow-md'
-                                                    : 'bg-white text-gray-700 border border-gray-100 rounded-tl-none shadow-sm'
+                                            <div className={`max-w-[85%] p-4 rounded-3xl text-[12px] leading-relaxed shadow-sm transition-all animate-in fade-in slide-in-from-bottom-2 duration-300 ${msg.role === 'user'
+                                                    ? 'bg-[#004A99] text-white rounded-tr-none shadow-blue-900/10'
+                                                    : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-100 border border-gray-100 dark:border-slate-600 rounded-tl-none'
                                                 }`}>
                                                 {msg.role === 'assistant' ? (
-                                                    <div className="prose prose-sm max-w-none">
+                                                    <div className="prose prose-sm dark:prose-invert max-w-none">
                                                         <ReactMarkdown 
                                                             remarkPlugins={[remarkGfm]}
                                                             components={{
@@ -228,9 +249,8 @@ const ChatWidget = ({ showFloatingButton = true }) => {
                                                                 ol: ({node, ...props}) => <ol className="list-decimal ml-5 mb-3 mt-1 space-y-1" {...props} />,
                                                                 li: ({node, ...props}) => <li className="mb-1" {...props} />,
                                                                 p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
-                                                                a: ({node, ...props}) => <a className="text-blue-600 underline font-medium" {...props} />,
-                                                                strong: ({node, ...props}) => <strong className="font-extrabold text-gray-900" {...props} />,
-                                                                b: ({node, ...props}) => <b className="font-extrabold text-gray-900" {...props} />
+                                                                a: ({node, ...props}) => <a className="text-blue-600 dark:text-blue-400 underline font-medium" {...props} />,
+                                                                strong: ({node, ...props}) => <strong className="font-extrabold text-gray-900 dark:text-white" {...props} />,
                                                             }}
                                                         >
                                                             {msg.text}
@@ -244,17 +264,17 @@ const ChatWidget = ({ showFloatingButton = true }) => {
                                     ))}
                                     {loading && (
                                         <div className="flex justify-start">
-                                            <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 flex flex-col gap-2">
+                                            <div className="bg-white dark:bg-slate-700 p-4 rounded-3xl rounded-tl-none shadow-sm border border-gray-100 dark:border-slate-600 flex flex-col gap-2">
                                                 <div className="flex gap-1">
-                                                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce"></div>
-                                                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                                                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                                                    <div className="w-1.5 h-1.5 bg-[#004A99] dark:bg-blue-400 rounded-full animate-bounce"></div>
+                                                    <div className="w-1.5 h-1.5 bg-[#004A99] dark:bg-blue-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                                                    <div className="w-1.5 h-1.5 bg-[#004A99] dark:bg-blue-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
                                                 </div>
                                                 <motion.p 
                                                     key={loadingStatus}
-                                                    initial={{ opacity: 0, x: -5 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    className="text-[9px] font-bold text-blue-600 animate-pulse"
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    className="text-[10px] font-bold text-blue-600 dark:text-blue-400 animate-pulse uppercase tracking-wider"
                                                 >
                                                     {loadingStatus}
                                                 </motion.p>
@@ -264,76 +284,76 @@ const ChatWidget = ({ showFloatingButton = true }) => {
                                     <div ref={messagesEndRef} />
                                 </>
                             ) : mode === 'suggestion' ? (
-                                <div className="h-full flex flex-col justify-center items-center text-center p-4">
-                                    <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4">
-                                        <FiMessageSquare size={32} />
+                                <div className="h-full flex flex-col justify-center items-center text-center p-6 animate-in fade-in duration-300">
+                                    <div className="w-20 h-20 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-yellow-500/10">
+                                        <FiMessageSquare size={36} />
                                     </div>
-                                    <h5 className="text-sm font-bold text-gray-800 mb-2">Help us improve!</h5>
-                                    <p className="text-[10px] text-gray-500 mb-6">Type your suggestions for the InsightED Mobile App below.</p>
+                                    <h5 className="text-lg font-bold text-gray-800 dark:text-white mb-2 tracking-tight">Help us improve!</h5>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-8 max-w-[200px]">Your feedback directly impacts our development roadmap.</p>
                                     
-                                    <form onSubmit={handleFeedbackSubmit} className="w-full space-y-4">
+                                    <form onSubmit={handleFeedbackSubmit} className="w-full space-y-6">
                                         <div className="relative">
                                             <textarea
-                                                className="w-full h-32 bg-white border border-gray-200 rounded-xl p-3 text-xs outline-none focus:ring-2 focus:ring-yellow-400 transition-all resize-none"
-                                                placeholder="What can we do better?"
+                                                className="w-full h-40 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl p-4 text-sm outline-none focus:border-yellow-400 dark:focus:border-yellow-500 transition-all resize-none shadow-sm dark:text-white"
+                                                placeholder="Tell us what's on your mind..."
                                                 maxLength={200}
                                                 value={suggestion}
                                                 onChange={(e) => setSuggestion(e.target.value)}
                                             />
-                                            <div className={`absolute bottom-2 right-3 text-[9px] font-bold ${suggestion.length >= 200 ? 'text-red-500' : 'text-gray-400'}`}>
+                                            <div className={`absolute bottom-3 right-4 text-[10px] font-black ${suggestion.length >= 200 ? 'text-red-500' : 'text-slate-300'}`}>
                                                 {suggestion.length}/200
                                             </div>
                                         </div>
                                         <button
                                             type="submit"
                                             disabled={!suggestion.trim() || loading}
-                                            className="w-full py-2.5 bg-[#004A99] text-white rounded-xl text-xs font-bold hover:bg-blue-800 disabled:opacity-50 transition-all shadow-lg shadow-blue-900/10"
+                                            className="w-full py-4 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 text-white rounded-2xl text-sm font-black transition-all shadow-xl shadow-yellow-500/20 active:scale-95 disabled:opacity-50"
                                         >
-                                            {loading ? 'Submitting...' : 'Submit Suggestion'}
+                                            {loading ? 'Submitting...' : 'Send Feedback'}
                                         </button>
                                         
                                         {feedbackStatus === 'success' && (
-                                            <p className="text-[10px] text-green-600 font-bold animate-bounce">Thank you! Your feedback has been saved.</p>
+                                            <p className="text-xs text-green-600 dark:text-green-400 font-bold animate-bounce mt-4">✓ We've received your suggestion!</p>
                                         )}
                                         {feedbackStatus === 'error' && (
-                                            <p className="text-[10px] text-red-500 font-bold">Failed to submit. Please try again later.</p>
+                                            <p className="text-xs text-red-500 font-bold mt-4">Error sending feedback. Please try again.</p>
                                         )}
                                     </form>
                                 </div>
                             ) : (
-                                <div className="h-full flex flex-col justify-center items-center text-center p-4">
-                                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
-                                        <FiAlertCircle size={32} />
+                                <div className="h-full flex flex-col justify-center items-center text-center p-6 animate-in fade-in duration-300">
+                                    <div className="w-20 h-20 bg-red-50 dark:bg-red-900/30 text-red-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-red-500/10">
+                                        <FiAlertCircle size={36} />
                                     </div>
-                                    <h5 className="text-sm font-bold text-gray-800 mb-2">Report a Bug</h5>
-                                    <p className="text-[10px] text-gray-500 mb-6">Found an error? Describe it below and our team will check it.</p>
+                                    <h5 className="text-lg font-bold text-gray-800 dark:text-white mb-2 tracking-tight">Report an Issue</h5>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-8 max-w-[200px]">Let us know if something isn't working correctly.</p>
                                     
-                                    <form onSubmit={handleBugSubmit} className="w-full space-y-4">
+                                    <form onSubmit={handleBugSubmit} className="w-full space-y-6">
                                         <div className="relative">
                                             <textarea
-                                                className="w-full h-32 bg-white border border-gray-200 rounded-xl p-3 text-xs outline-none focus:ring-2 focus:ring-red-400 transition-all resize-none"
-                                                placeholder="Describe the bug or error..."
+                                                className="w-full h-40 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl p-4 text-sm outline-none focus:border-red-400 dark:focus:border-red-500 transition-all resize-none shadow-sm dark:text-white"
+                                                placeholder="Describe the problem in detail..."
                                                 maxLength={500}
                                                 value={bugReport}
                                                 onChange={(e) => setBugReport(e.target.value)}
                                             />
-                                            <div className={`absolute bottom-2 right-3 text-[9px] font-bold ${bugReport.length >= 500 ? 'text-red-500' : 'text-gray-400'}`}>
+                                            <div className={`absolute bottom-3 right-4 text-[10px] font-black ${bugReport.length >= 500 ? 'text-red-500' : 'text-slate-300'}`}>
                                                 {bugReport.length}/500
                                             </div>
                                         </div>
                                         <button
                                             type="submit"
                                             disabled={!bugReport.trim() || loading}
-                                            className="w-full py-2.5 bg-red-600 text-white rounded-xl text-xs font-bold hover:bg-red-700 disabled:opacity-50 transition-all shadow-lg shadow-red-900/10"
+                                            className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-sm font-black transition-all shadow-xl shadow-red-600/20 active:scale-95 disabled:opacity-50"
                                         >
-                                            {loading ? 'Reporting...' : 'Report Bug'}
+                                            {loading ? 'Reporting...' : 'Submit Bug Report'}
                                         </button>
                                         
                                         {feedbackStatus === 'success' && (
-                                            <p className="text-[10px] text-green-600 font-bold animate-pulse">Developers are on their way to fix this!</p>
+                                            <p className="text-xs text-green-600 font-bold animate-pulse mt-4">✓ Developers notified! Fixing now.</p>
                                         )}
                                         {feedbackStatus === 'error' && (
-                                            <p className="text-[10px] text-red-500 font-bold">Failed to report. Please try again later.</p>
+                                            <p className="text-xs text-red-500 font-bold mt-4">Failed to report. Please check connection.</p>
                                         )}
                                     </form>
                                 </div>
@@ -342,21 +362,23 @@ const ChatWidget = ({ showFloatingButton = true }) => {
 
                         {/* Input Area (Only in Chat Mode) */}
                         {mode === 'chat' && (
-                            <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex items-center gap-2">
-                                <input
-                                    autoFocus
-                                    type="text"
-                                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                                    placeholder="Type your question..."
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                />
+                            <form onSubmit={handleSend} className="p-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex items-center gap-3 transition-colors duration-300">
+                                <div className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 flex items-center transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500/50">
+                                    <input
+                                        autoFocus={!embedded}
+                                        type="text"
+                                        className="w-full bg-transparent text-sm dark:text-white outline-none placeholder-slate-400"
+                                        placeholder="Ask a question..."
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                    />
+                                </div>
                                 <button
                                     type="submit"
                                     disabled={!input.trim() || loading}
-                                    className="w-8 h-8 bg-[#004A99] text-white rounded-lg flex items-center justify-center hover:bg-blue-800 disabled:opacity-50 transition-all shadow-md shadow-blue-900/10"
+                                    className="w-12 h-12 bg-[#004A99] hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-2xl flex items-center justify-center transition-all shadow-lg shadow-blue-900/10 active:scale-90 disabled:opacity-50"
                                 >
-                                    <FiSend size={14} />
+                                    <FiSend size={18} />
                                 </button>
                             </form>
                         )}
@@ -365,7 +387,7 @@ const ChatWidget = ({ showFloatingButton = true }) => {
             </AnimatePresence>
 
             {/* Toggle Button */}
-            {showFloatingButton && (
+            {(!embedded && showFloatingButton) && (
                 <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}

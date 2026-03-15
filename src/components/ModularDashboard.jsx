@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
 import BarongMascot from "./BarongMascot";
 import BottomNav from "../modules/BottomNav";
+import { safeJsonParse, safeJsonStringify } from "../utils/safeJson";
 import { DASHBOARD_METADATA } from "../config/dashboardMetadata";
 
 const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, isLocked }) => {
@@ -55,8 +56,7 @@ const ModularDashboard = () => {
     const navigate = useNavigate();
     const [hasDraft, setHasDraft] = useState(false);
     const [questProgress, setQuestProgress] = useState(() => {
-        const stored = localStorage.getItem('quest_progress');
-        return stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+        return safeJsonParse(localStorage.getItem('quest_progress'), { completedUnits: [], xp: 0 });
     });
     const [curricularOffering, setCurricularOffering] = useState('');
     const [isLoading, setIsLoading] = useState(!localStorage.getItem('quest_progress'));
@@ -75,7 +75,7 @@ const ModularDashboard = () => {
                             }
                             // Sync if server has more/different data
                             setQuestProgress(data.progress);
-                            localStorage.setItem('quest_progress', JSON.stringify(data.progress));
+                            localStorage.setItem('quest_progress', safeJsonStringify(data.progress));
                         }
                     }
                 } catch (err) {

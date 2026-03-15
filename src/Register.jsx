@@ -606,6 +606,14 @@ const Register = () => {
                         localStorage.setItem('accountCategory', regData.accountCategory);
                     }
 
+                    // Sync remembered_user for PIN login
+                    localStorage.setItem('remembered_user', JSON.stringify({
+                        email: authEmail,
+                        firstName: formData.firstName || 'User',
+                        role: regData.role,
+                        school_id: null
+                    }));
+
                     // For specialized redirects, we need to pass these directly
                     const destPath = getDashboardPath(regData.role, regData.accountCategory);
                     console.log("Intended Dashboard:", destPath);
@@ -657,6 +665,14 @@ const Register = () => {
                 if (auth.currentUser?.uid || regData?.uid) {
                     localStorage.setItem('uid', auth.currentUser?.uid || regData?.uid);
                 }
+
+                // Sync remembered_user for PIN login
+                localStorage.setItem('remembered_user', JSON.stringify({
+                    email: contactEmail,
+                    firstName: formData.role, // "School Head"
+                    role: formData.role,
+                    school_id: selectedSchool?.school_id
+                }));
 
                 // NEW: Mark for PIN setup since they are newly registered
                 localStorage.setItem('needs_pin_setup', 'true');

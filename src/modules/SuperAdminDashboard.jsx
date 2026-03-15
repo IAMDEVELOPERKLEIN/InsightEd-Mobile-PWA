@@ -75,7 +75,9 @@ const SuperAdminDashboard = () => {
                         </div>
                         <button 
                             onClick={() => {
+                                const persistence = localStorage.getItem('remembered_user');
                                 localStorage.clear();
+                                if (persistence) localStorage.setItem('remembered_user', persistence);
                                 navigate('/');
                             }} 
                             className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 p-3 rounded-xl transition-all shadow-lg active:scale-95 text-white"

@@ -198,7 +198,8 @@ export default function Unit8PhysicalFacilities() {
                                     room_length: r.room_length,
                                     room_width: r.room_width,
                                     dimension: r.dimension || '',
-                                    condition: r.condition || 'Good Condition'
+                                    condition: r.condition || 'Good Condition',
+                                    seats_accommodated: r.seats_accommodated || 0
                                 });
                             });
                         }
@@ -410,6 +411,7 @@ export default function Unit8PhysicalFacilities() {
                     grade_level: "",
                     teacher_id: "",
                     condition: "Good Condition", 
+                    seats_accommodated: 0
                 });
             }
         }
@@ -458,6 +460,11 @@ export default function Unit8PhysicalFacilities() {
         if (!window.confirm("Delete this building and all its rooms?")) return;
         setBuildings(prev => prev.filter(b => b.id !== bId));
         setRoomsData(prev => prev.filter(r => r.building_local_id !== bId));
+    };
+
+    const handleDeleteRoom = (roomId) => {
+        if (!window.confirm("Are you sure you want to remove this classroom? This action cannot be undone.")) return;
+        setRoomsData(prev => prev.filter(r => r.id !== roomId));
     };
 
     const handleToggleRepairItem = (category) => {
@@ -1055,12 +1062,16 @@ export default function Unit8PhysicalFacilities() {
                                         <div className="flex gap-4">
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Length (meters)</label>
-                                                <input type="number" value={newSpace.length_m} onChange={(e) => setNewSpace({ ...newSpace, length_m: parseFloat(e.target.value) || 0 })}
+                                                <input type="number" value={newSpace.length_m} 
+                                                    onFocus={(e) => e.target.select()}
+                                                    onChange={(e) => setNewSpace({ ...newSpace, length_m: parseFloat(e.target.value) || 0 })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
                                             </div>
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Width (meters)</label>
-                                                <input type="number" value={newSpace.width_m} onChange={(e) => setNewSpace({ ...newSpace, width_m: parseFloat(e.target.value) || 0 })}
+                                                <input type="number" value={newSpace.width_m} 
+                                                    onFocus={(e) => e.target.select()}
+                                                    onChange={(e) => setNewSpace({ ...newSpace, width_m: parseFloat(e.target.value) || 0 })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
                                             </div>
                                         </div>
@@ -1255,6 +1266,7 @@ export default function Unit8PhysicalFacilities() {
                                                     type="text" 
                                                     inputMode="numeric"
                                                     value={buildingFormData.storey} 
+                                                    onFocus={(e) => e.target.select()}
                                                     onChange={(e) => {
                                                         const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
                                                         setBuildingFormData({ ...buildingFormData, storey: (val === '' || val === '0') ? 1 : parseInt(val) });
@@ -1268,6 +1280,7 @@ export default function Unit8PhysicalFacilities() {
                                                     type="text" 
                                                     inputMode="numeric"
                                                     value={buildingFormData.classroom} 
+                                                    onFocus={(e) => e.target.select()}
                                                     onChange={(e) => {
                                                         const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
                                                         setBuildingFormData({ ...buildingFormData, classroom: (val === '' || val === '0') ? 1 : parseInt(val) });
@@ -1388,9 +1401,17 @@ export default function Unit8PhysicalFacilities() {
                                                 />
                                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || 'N/A'}</p>
                                             </div>
-                                            <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                {room.condition}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {room.condition}
+                                                </span>
+                                                <button 
+                                                    onClick={() => handleDeleteRoom(room.id)}
+                                                    className="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 transition-colors"
+                                                >
+                                                    <FiTrash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1432,6 +1453,21 @@ export default function Unit8PhysicalFacilities() {
                                                     {[1,2,3,4,5,6,7,8,9,10,11,12].map(g => <option key={g} value={`Grade ${g}`}>Grade {g}</option>)}
                                                     <option value="Non-Instructional">Non-Instructional</option>
                                                 </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Seats Accommodated</label>
+                                                <input 
+                                                    type="number"
+                                                    value={room.seats_accommodated || 0}
+                                                    onFocus={(e) => e.target.select()}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value) || 0;
+                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats_accommodated: val } : r));
+                                                    }}
+                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500 text-center"
+                                                    placeholder="0"
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -1658,6 +1694,12 @@ export default function Unit8PhysicalFacilities() {
                                     const missingGradeLevel = roomsData.some(r => !r.grade_level);
                                     if (missingGradeLevel) {
                                         alert("Please select a Granular Grade Level for all classrooms before proceeding.");
+                                        return;
+                                    }
+
+                                    const missingSeats = roomsData.some(r => !r.seats_accommodated || parseInt(r.seats_accommodated) <= 0);
+                                    if (missingSeats) {
+                                        alert("Please ensure all classrooms have a valid number of seats (greater than 0) before proceeding.");
                                         return;
                                     }
                                 }

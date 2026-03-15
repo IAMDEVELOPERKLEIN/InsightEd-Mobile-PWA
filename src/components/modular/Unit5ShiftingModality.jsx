@@ -121,7 +121,8 @@ const Unit5ShiftingModality = () => {
                     // Fallback to local quest progress for curricular offering if missing from DB fetch
                     if (!d.curricular_offering) {
                         try {
-                            const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
+                            const storedProgress = localStorage.getItem('quest_progress');
+                            const qp = (storedProgress && storedProgress !== 'undefined') ? JSON.parse(storedProgress) : {};
                             d.curricular_offering = qp.curricular_offering || "";
                         } catch (e) {}
                     }

@@ -145,11 +145,49 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS alt_email TEXT,
             ADD COLUMN IF NOT EXISTS account_category TEXT, -- DepEd vs Non-DepEd
             ADD COLUMN IF NOT EXISTS iern TEXT,
+            ADD COLUMN IF NOT EXISTS registrar_type TEXT, -- Legacy
+            ADD COLUMN IF NOT EXISTS registrant_type TEXT, -- School Head, RO Personnel, etc.
+            ADD COLUMN IF NOT EXISTS school_id TEXT,
+            ADD COLUMN IF NOT EXISTS email_address TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
         console.log(`✅ [${dbLabel}] Users Table Schema Updated`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate users table:`, migErr.message);
+    }
+
+    // --- 5.1. USER DATA MIGRATION ---
+    try {
+        console.log(`🚀 [${dbLabel}] Starting User Data Migration (V2)...`);
+        
+        // 1. Migrate 6-digit numeric last_name to school_id and set registrant_type = 'School Head'
+        const migrationRes = await client.query(`
+            UPDATE users 
+            SET 
+                school_id = last_name,
+                registrant_type = 'School Head',
+                last_name = NULL -- Clear the placeholder
+            WHERE 
+                last_name ~ '^\\d{6}$' 
+                AND (school_id IS NULL OR school_id = '');
+        `);
+        if (migrationRes.rowCount > 0) {
+            console.log(`✅ [${dbLabel}] Migrated ${migrationRes.rowCount} School Head records from last_name to school_id`);
+        }
+
+        // 2. Populate email_address from email if missing
+        const emailPopRes = await client.query(`
+            UPDATE users 
+            SET email_address = email 
+            WHERE email_address IS NULL AND email IS NOT NULL;
+        `);
+        if (emailPopRes.rowCount > 0) {
+            console.log(`✅ [${dbLabel}] Populated email_address for ${emailPopRes.rowCount} users`);
+        }
+
+        console.log(`✅ [${dbLabel}] User Data Migration Completed`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed User Data Migration:`, migErr.message);
     }
 
     // --- 6. COMPREHENSIVE SCHOOL PROFILE COLUMNS (Detailed) ---

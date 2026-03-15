@@ -239,7 +239,9 @@ const Unit2Learners = () => {
 
     // --- Handlers ---
     const handleGradeChange = (gradeId, val) => {
-        let limitedVal = val;
+        let numVal = parseInt(val);
+        if (isNaN(numVal)) numVal = 0;
+        let limitedVal = Math.max(0, numVal).toString();
         if (limitedVal.length > 4) limitedVal = limitedVal.slice(0, 4);
         setGradeTotals(prev => ({ ...prev, [gradeId]: limitedVal }));
     };
@@ -260,7 +262,9 @@ const Unit2Learners = () => {
     };
 
     const handleAralChange = (subject, gradeId, val) => {
-        let limitedVal = val;
+        let numVal = parseInt(val);
+        if (isNaN(numVal)) numVal = 0;
+        let limitedVal = Math.max(0, numVal).toString();
         if (limitedVal.length > 4) limitedVal = limitedVal.slice(0, 4);
         if (subject === 'math') setAralMath(prev => ({ ...prev, [gradeId]: limitedVal }));
         if (subject === 'reading') setAralReading(prev => ({ ...prev, [gradeId]: limitedVal }));
@@ -772,10 +776,14 @@ const Unit2Learners = () => {
                                                 type="number" 
                                                 value={kinderEnrollment}
                                                 disabled={!isAvailable}
+                                                onFocus={(e) => e.target.select()}
                                                 onChange={(e) => {
                                                     let val = e.target.value;
-                                                    if (val.length > 4) val = val.slice(0, 4);
-                                                    setKinderEnrollment(val);
+                                                    let numVal = parseInt(val);
+                                                    if (isNaN(numVal)) numVal = 0;
+                                                    let clampedVal = Math.max(0, numVal).toString();
+                                                    if (clampedVal.length > 4) clampedVal = clampedVal.slice(0, 4);
+                                                    setKinderEnrollment(clampedVal);
                                                 }}
                                                 placeholder="0"
                                                 className={`${chunkyInput} ${!isAvailable ? 'bg-slate-50 border-slate-100 text-slate-300' : ''}`}
@@ -927,6 +935,7 @@ const Unit2Learners = () => {
                                                                             type="number"
                                                                             placeholder="0"
                                                                             value={gradeTotals[lvl] || ""}
+                                                                            onFocus={(e) => e.target.select()}
                                                                             onChange={(e) => handleGradeChange(lvl, e.target.value)}
                                                                             className={`${chunkyInput} !h-16 !text-3xl`}
                                                                         />
@@ -1013,6 +1022,7 @@ const Unit2Learners = () => {
                                                                 placeholder="0"
                                                                 disabled={!isAvailable}
                                                                 value={gradeTotals[g.id] || ""}
+                                                                onFocus={(e) => e.target.select()}
                                                                 onChange={(e) => handleGradeChange(g.id, e.target.value)}
                                                                 className={`w-64 h-32 text-7xl font-black text-center rounded-[2rem] transition-all duration-300 ${isAvailable ? 'bg-indigo-50 border-4 border-indigo-200 text-indigo-700 focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/50' : 'bg-slate-50 border-2 border-slate-100 text-slate-300'}`}
                                                             />
@@ -1118,6 +1128,7 @@ const Unit2Learners = () => {
                                                 min="0" 
                                                 placeholder="0" 
                                                 value={sned_self_contained_count} 
+                                                onFocus={(e) => e.target.select()}
                                                 onChange={(e) => {
                                                     let val = e.target.value;
                                                     if (val.length > 4) val = val.slice(0, 4);
@@ -1183,6 +1194,7 @@ const Unit2Learners = () => {
                                                             placeholder="0" 
                                                             disabled={!isAvailable}
                                                             value={aralMath[lvl] || ""} 
+                                                            onFocus={(e) => e.target.select()}
                                                             onChange={(e) => handleAralChange('math', lvl, e.target.value)} 
                                                             className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
                                                         />
@@ -1225,6 +1237,7 @@ const Unit2Learners = () => {
                                                             placeholder="0" 
                                                             disabled={!isAvailable}
                                                             value={aralReading[lvl] || ""} 
+                                                            onFocus={(e) => e.target.select()}
                                                             onChange={(e) => handleAralChange('reading', lvl, e.target.value)} 
                                                             className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
                                                         />
@@ -1267,6 +1280,7 @@ const Unit2Learners = () => {
                                                             placeholder="0" 
                                                             disabled={!isAvailable}
                                                             value={aralScience[lvl] || ""} 
+                                                            onFocus={(e) => e.target.select()}
                                                             onChange={(e) => handleAralChange('science', lvl, e.target.value)} 
                                                             className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
                                                         />
@@ -1323,6 +1337,7 @@ const Unit2Learners = () => {
                                         <input 
                                             type="number" 
                                             value={genderTotals.male} 
+                                            onFocus={(e) => e.target.select()}
                                             onChange={(e) => handleGenderChange('male', e.target.value)}
                                             placeholder="0"
                                             className={chunkyInput}
@@ -1337,6 +1352,7 @@ const Unit2Learners = () => {
                                         <input 
                                             type="number" 
                                             value={genderTotals.female} 
+                                            onFocus={(e) => e.target.select()}
                                             onChange={(e) => handleGenderChange('female', e.target.value)}
                                             placeholder="0"
                                             className={chunkyInput}
