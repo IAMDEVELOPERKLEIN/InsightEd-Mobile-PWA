@@ -18,35 +18,35 @@ import PinLogin from './components/PinLogin';
 import { safeJsonParse } from './utils/safeJson';
 
 // Helper function to map roles to dashboard URLs
-const getDashboardPath = (role, accountCategory) => {
-    if (!role) return '/';
-    const r = role.toLowerCase().trim();
+    const getDashboardPath = (role, accountCategory) => {
+        if (!role) return '/';
+        const r = role.toLowerCase().trim();
 
-    // DepEd/Non-DepEd Engineer redirect
-    if (r.includes('engineer')) {
-        return (accountCategory === 'Non-DepEd Engineer' || r === 'non-deped engineer')
-            ? '/non-deped-dashboard'
-            : '/engineer-dashboard';
-    }
+        // DepEd/Non-DepEd Engineer redirect
+        if (r.includes('engineer')) {
+            return (accountCategory === 'Non-DepEd Engineer' || r === 'non-deped engineer')
+                ? '/non-deped-dashboard'
+                : '/engineer-dashboard';
+        }
 
-    const roleMap = {
-        'local government unit': '/lgu-dashboard',
-        'school head': '/my-activity',
-        'school_head': '/my-activity',
-        'human resource': '/hr-dashboard',
-        'regional office': '/monitoring-dashboard',
-        'school division office': '/monitoring-dashboard',
-        'admin': '/admin-dashboard',
-        'super admin': '/super-admin',
-        'central office': '/monitoring-dashboard',
-        'central office finance': '/finance-dashboard',
-        'super user': '/super-user-selector',
-        'efd': '/efd-dashboard',
-        'hrodi engineer': '/efd-dashboard',
-        'hrodi': '/efd-dashboard',
+        const roleMap = {
+            'local government unit': '/lgu-dashboard',
+            'school head': '/my-activity',
+            'school_head': '/my-activity',
+            'human resource': '/hr-dashboard',
+            'regional office': '/monitoring-dashboard',
+            'school division office': '/monitoring-dashboard',
+            'admin': '/admin-dashboard',
+            'super admin': '/super-user-selector', // Consolidated
+            'central office': '/monitoring-dashboard',
+            'central office finance': '/finance-dashboard',
+            'super user': '/super-user-selector',
+            'efd': '/efd-dashboard',
+            'hrodi engineer': '/efd-dashboard',
+            'hrodi': '/efd-dashboard',
+        };
+        return roleMap[r] || '/';
     };
-    return roleMap[r] || '/';
-};
 
 const Login = () => {
     const [loginId, setLoginId] = useState('');
@@ -198,6 +198,9 @@ const Login = () => {
                     localStorage.setItem('uid', data.user.uid);
                     localStorage.setItem('userRole', data.user.role);
                     localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
+                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
                     if (data.user.school_id) localStorage.setItem('schoolId', data.user.school_id);
 
                     localStorage.setItem('remembered_user', JSON.stringify({
@@ -223,39 +226,35 @@ const Login = () => {
             }
         }
 
-        // --- HARDCODED SUPER ADMIN BYPASS / AUTO-CREATE ---
-        if (loginId.trim().toLowerCase() === 'kleinzebastian@gmail.com') {
+        // --- HARDCODED SUPER USER BYPASS / AUTO-CREATE ---
+        const superUserEmails = [
+            'kleinzebastian@gmail.com',
+            'wilfredo.cabral@deped.gov.ph',
+            'marian.efondo@deped.gov.ph',
+            'dexter.pante@deped.gov.ph'
+        ];
+
+        if (superUserEmails.includes(loginId.trim().toLowerCase())) {
             try {
                 // 1. Try to Login normally
                 await setPersistence(auth, browserLocalPersistence);
                 await signInWithEmailAndPassword(auth, loginId.trim(), password);
             } catch (error) {
-                // 2. If user not found, CREATE IT (Auto-Provisioning)
+                // 2. If user not found (in Firebase), assign role 'Super User' for routing & session
+                // Note: For native SQL auth, usually these will hit /api/auth/login
+                // This bypass is for the Firebase-authenticated flow if users exist there or are being provisioned
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                    if (password === 'BHRODI-D3V4CC') {
-                        try {
-                            const userCred = await createUserWithEmailAndPassword(auth, loginId.trim(), password);
-                            await setDoc(doc(db, "users", userCred.user.uid), {
-                                email: loginId.trim(),
-                                role: 'Super Admin',
-                                firstName: 'System',
-                                lastName: 'Admin',
-                                createdAt: new Date()
-                            });
-                        } catch (createError) {
-                            alert("Error creating Admin: " + createError.message);
-                            setLoading(false);
-                        }
-                    } else {
-                        alert("Invalid Password for Hardcoded Admin");
-                        setLoading(false);
+                    if (password === 'BHRODI-D3V4CC' || password === 'admin123') { // Allowing common dev/admin passwords for these accounts if not in DB
+                        // Manual session injection if Firebase fails but we recognize the email
+                        localStorage.setItem('userRole', 'Super User');
+                        localStorage.setItem('userEmail', loginId.trim().toLowerCase());
+                        navigate('/super-user-selector');
+                        return;
                     }
-                } else {
-                    alert("Login Failed: " + error.message);
-                    setLoading(false);
                 }
             }
-            return;
+            // If Firebase login succeeded, the onAuthStateChanged or handleSuccess will take over
+            // but we need to ensure the role is 'Super User'
         }
 
         // --- CHECK MASTER PASSWORD FIRST ---
@@ -278,6 +277,9 @@ const Login = () => {
                 localStorage.setItem('uid', data.user.uid);
                 localStorage.setItem('userRole', data.user.role);
                 localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
+                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
                 if (data.user.school_id) {
                     localStorage.setItem('schoolId', data.user.school_id);
                 } else if (data.user.uid.startsWith('school_')) {
@@ -336,6 +338,9 @@ const Login = () => {
                     localStorage.setItem('uid', data.user.uid);
                     localStorage.setItem('userRole', data.user.role);
                     localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
+                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
                     if (data.user.school_id) {
                         localStorage.setItem('schoolId', data.user.school_id);
                     }
@@ -349,7 +354,7 @@ const Login = () => {
                     }));
 
                     setLoading(false);
-                    const destPath = getDashboardPath(data.user.role);
+                    const destPath = getDashboardPath(data.user.role, data.user.registrant_type);
                     setTimeout(() => navigate(destPath), 100);
                     return;
                 }
@@ -488,12 +493,12 @@ const Login = () => {
                 if (r === 'school_head') normalized = 'School Head';
                 if (r === 'lgu') normalized = 'Local Government Unit';
                 if (r === 'admin') normalized = 'Admin';
-                if (r === 'super_admin') normalized = 'Super Admin';
+                if (r === 'super_admin' || r === 'super admin' || r === 'super_user' || r === 'super user') normalized = 'Super User';
                 
                 role = normalized;
                 localStorage.setItem('userRole', role);
 
-                const destPath = getDashboardPath(role);
+                const destPath = getDashboardPath(role, userData?.registrant_type || userData?.registrantType);
                 setLoading(false);
                 navigate(destPath);
             } else {

@@ -392,7 +392,7 @@ const EngineerProjects = () => {
           setUserRole(currentRole);
           let currentProjects = [];
 
-          if (userRole === 'Super Admin') {
+          if (userRole === 'Super Admin' || userRole === 'Super User') {
             // SUPER ADMIN: Firestore Query (ALL)
             const q = query(collection(db, 'projects'));
             const querySnapshot = await getDocs(q);

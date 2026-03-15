@@ -182,10 +182,10 @@ const UserProfile = () => {
             'Regional Office': '/monitoring-dashboard',
             'School Division Office': '/monitoring-dashboard',
             'Admin': '/admin-dashboard',
-            'Super Admin': '/super-admin',
+            'Super Admin': '/super-user-selector',
+            'Super User': '/super-user-selector',
             'Central Office': '/monitoring-dashboard',
             'Central Office Finance': '/finance-dashboard',
-            'Super User': '/super-user-selector',
             'EFD': '/efd-dashboard',
         };
         return roleMap[role] || '/';

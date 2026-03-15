@@ -28,24 +28,27 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
   
   // Need wrapper mapping logic for dashboards
   const getDashboardPath = (role, accountCategory) => {
-    if (role === 'Division Engineer' || role === 'Engineer') {
+    if (!role) return '/';
+    const r = role.toLowerCase().trim();
+
+    if (r.includes('engineer')) {
         return accountCategory === 'Non-DepEd Engineer' ? '/non-deped-dashboard' : '/engineer-dashboard';
     }
     const roleMap = {
-        'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/my-activity',
-        'Human Resource': '/hr-dashboard',
-        'Regional Office': '/monitoring-dashboard',
-        'School Division Office': '/monitoring-dashboard',
-        'Admin': '/admin-dashboard',
-        'Super Admin': '/super-admin',
-        'Central Office': '/monitoring-dashboard',
-        'Central Office Finance': '/finance-dashboard',
-        'Super User': '/super-user-selector',
-        'EFD': '/efd-dashboard',
-        'HRODI': '/efd-dashboard',
+        'local government unit': '/lgu-dashboard',
+        'school head': '/my-activity',
+        'human resource': '/hr-dashboard',
+        'regional office': '/monitoring-dashboard',
+        'school division office': '/monitoring-dashboard',
+        'admin': '/admin-dashboard',
+        'super admin': '/super-user-selector',
+        'central office': '/monitoring-dashboard',
+        'central office finance': '/finance-dashboard',
+        'super user': '/super-user-selector',
+        'efd': '/efd-dashboard',
+        'hrodi': '/efd-dashboard',
     };
-    return roleMap[role] || '/';
+    return roleMap[r] || '/';
   };
 
   const verifyPin = async (completedPin) => {
@@ -118,7 +121,7 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
               (rememberedUser?.role?.toLowerCase() === 'school head' || 
                rememberedUser?.role?.toLowerCase() === 'school_head')
                 ? (rememberedUser?.school_id?.charAt(0) || rememberedUser?.schoolId?.charAt(0) || rememberedUser?.firstName?.charAt(0) || rememberedUser?.first_name?.charAt(0) || 'S')
-                : (rememberedUser?.email?.charAt(0) || rememberedUser?.firstName?.charAt(0) || rememberedUser?.first_name?.charAt(0) || 'U')
+                : (rememberedUser?.firstName?.charAt(0) || rememberedUser?.first_name?.charAt(0) || rememberedUser?.email?.charAt(0) || 'U')
             }
         </span>
       </div>
@@ -128,7 +131,7 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
           (rememberedUser?.role?.toLowerCase() === 'school head' || 
            rememberedUser?.role?.toLowerCase() === 'school_head')
             ? (rememberedUser?.school_id || rememberedUser?.schoolId || 'School Head')
-            : (rememberedUser?.email || rememberedUser?.firstName || 'User')
+            : (rememberedUser?.firstName || rememberedUser?.first_name || rememberedUser?.email || 'User')
         }!
       </h2>
       <p className="text-slate-500 mb-6 text-sm">

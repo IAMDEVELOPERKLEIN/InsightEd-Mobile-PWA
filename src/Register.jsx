@@ -57,7 +57,7 @@ const getDashboardPath = (role, accountCategory) => {
         'Local Government Unit': '/lgu-dashboard',
         'School Head': '/my-activity',
         'Human Resource': '/hr-dashboard',
-        'Admin': '/admin-dashboard',
+        'Admin': '/super-user-selector',
         'Central Office': '/monitoring-dashboard',
         'Regional Office': '/monitoring-dashboard',
         'School Division Office': '/monitoring-dashboard',
