@@ -158,7 +158,6 @@ const AnimatedRoutes = () => {
       <Route path="/admin-dashboard" element={<AdminDashboard />} />
       <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
       <Route path="/efd-dashboard" element={<EFDHome />} />
-      <Route path="/finance-dashboard" element={<FinanceDashboard />} />
       <Route path="/agency-dashboard" element={<AgencyDashboard />} />
       <Route path="/efd-monitoring" element={<EFDMonitoring />} />
       <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />

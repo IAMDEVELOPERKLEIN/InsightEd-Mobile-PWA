@@ -497,81 +497,82 @@ const DetailedProjInfo = () => {
 
     useEffect(() => {
         const fetchProjectDetails = async () => {
-            // Stale-While-Revalidate Strategy
-
-            // 1. Immediate Cache Load
-            try {
-                const cachedProjects = await getCachedProjects();
-                const foundProject = cachedProjects.find(p => String(p.id) === String(id));
-                if (foundProject) {
-                    setProject(foundProject);
-                    setIsLoading(false); // Render fast
-                }
-            } catch (err) {
-                console.warn("Cache read failed", err);
+            console.log("DEBUG: fetchProjectDetails started with ID:", id);
+            if (!id || id === 'undefined' || id === 'null') {
+                console.error("DEBUG: Invalid project ID detected:", id);
+                setIsLoading(false);
+                return;
             }
 
-            // 2. Network Request (Background Sync)
+            // Stale-While-Revalidate Strategy
             try {
-                const response = await fetch(`/api/projects/${id}?_t=${Date.now()}`);
-                if (!response.ok) throw new Error("Project not found");
-                const data = await response.json();
-                setProject(data);
+                // 1. Immediate Cache Load
+                console.log("DEBUG: Attempting cache load...");
+                try {
+                    const cachedProjects = await getCachedProjects();
+                    console.log("DEBUG: Cached projects retrieved, count:", cachedProjects?.length);
+                    const foundProject = cachedProjects.find(p => String(p.id) === String(id));
+                    if (foundProject) {
+                        console.log("DEBUG: Project found in cache:", foundProject.schoolName);
+                        setProject(foundProject);
+                    } else {
+                        console.log("DEBUG: Project not found in cache for ID:", id);
+                    }
+                } catch (err) {
+                    console.warn("DEBUG: Cache read failed", err);
+                }
 
-                // TODO: Update cache with new details if needed (currently we only cache list)
-                // For a robust app, we might want to update the single item in the `projects_cache` array here.
-
-            } catch (err) {
-                if (type === 'LGU') {
-                    // LGU Fetch
-                    try {
+                // 2. Network Request (Background Sync)
+                console.log("DEBUG: Starting network fetch for ID:", id);
+                try {
+                    const response = await fetch(`/api/projects/${id}?_t=${Date.now()}`);
+                    console.log("DEBUG: Network response status:", response.status);
+                    if (!response.ok) throw new Error("Project not found");
+                    const data = await response.json();
+                    console.log("DEBUG: Network data received for:", data.schoolName);
+                    setProject(data);
+                } catch (err) {
+                    console.warn("DEBUG: Network fetch failed, attempting LGU fallback:", err);
+                    if (type === 'LGU') {
+                        console.log("DEBUG: Fetching LGU project...");
+                        // LGU Fetch
                         const response = await fetch(`/api/lgu/project/${id}`);
+                        console.log("DEBUG: LGU response status:", response.status);
                         if (!response.ok) throw new Error("LGU Project not found");
                         const data = await response.json();
-
-                        // MAP LGU Data to Component State Format
+                        console.log("DEBUG: LGU data received");
+                        
+                        // MAP LGU Data ... (logic remains same)
                         const mappedProject = {
                             id: data.project_id,
                             schoolId: data.school_id,
                             schoolName: data.school_name,
                             projectName: data.project_name,
-                            projectCategory: 'LGU Project', // Or derive
+                            projectCategory: 'LGU Project',
                             ipc: data.ipc,
                             status: data.status,
                             accomplishmentPercentage: data.accomplishment_percentage,
                             otherRemarks: data.other_remarks,
-
-                            // Dates (API already formatted these in the specific endpoint)
                             noticeToProceed: data.noticeToProceed,
                             constructionStartDate: data.construction_start_date,
                             targetCompletionDate: data.targetCompletionDate,
                             actualCompletionDate: data.actualCompletionDate,
                             statusAsOfDate: data.statusAsOfDate,
-
-                            // Financial
                             contractorName: data.contractor_name,
-                            scopeOfWork: data.scope_of_works || data.scope_of_work, // LGU uses plural in some places?
-                            projectAllocation: data.project_allocation, // or contract_amount?
-                            batchOfFunds: data.batch_of_funds || data.fund_source, // Map fund source here or separate?
+                            scopeOfWork: data.scope_of_works || data.scope_of_work,
+                            projectAllocation: data.project_allocation,
+                            batchOfFunds: data.batch_of_funds || data.fund_source,
                             fundsUtilized: data.funds_utilized,
-
-                            // Specs
-                            numberOfClassrooms: null, // LGU might not have this
+                            numberOfClassrooms: null,
                             numberOfStoreys: null,
                             numberOfSites: null,
-
                             region: data.region,
                             division: data.division,
-
-                            // Docs
                             pow_pdf: data.pow_pdf,
                             dupa_pdf: data.dupa_pdf,
                             contract_pdf: data.contract_pdf,
-
-                            // Loc
                             latitude: data.latitude,
                             longitude: data.longitude,
-                            // Extra LGU Fields
                             lguData: {
                                 sourceAgency: data.source_agency,
                                 lsbResolutionNo: data.lsb_resolution_no,
@@ -585,44 +586,37 @@ const DetailedProjInfo = () => {
                                 bidAmount: data.bid_amount,
                                 natureOfDelay: data.nature_of_delay
                             },
-                            // Donated status
                             isDonated: data.is_donated || false,
-                            // IMAGES (LGU endpoint returns them included)
                             images: data.images || []
                         };
 
                         setProject(mappedProject);
 
-                        // Perform direct image set since LGU endpoint returns them
                         if (data.images) {
                             setProjectImages(data.images);
                             setImageLoading(false);
                         }
-
-                    } catch (lguErr) {
-                        console.error("LGU Fetch Failed:", lguErr);
-                        // Logic: If NO project in state (cache failed/empty) AND network failed -> Show Error
-                        // ... (existing error logic)
-                        alert("Could not load LGU project details.");
-                        navigate('/lgu-projects');
+                    } else {
+                        console.log("DEBUG: Not LGU mode, evaluating offline fallback");
+                        if (!project) {
+                            const cachedProjects = await getCachedProjects();
+                            const foundProject = cachedProjects.find(p => String(p.id) === String(id));
+                            if (!foundProject) {
+                                console.log("DEBUG: Final fallback - project not found anywhere");
+                                alert("Could not load project details (Offline & Not Cached).");
+                                navigate('/engineer-dashboard');
+                            }
+                        }
                     }
-                    return; // Exit main try/catch flow
                 }
-
-                console.warn("Network fetch failed:", err);
-                // If we have cached data, we are fine.
-                // If we didn't have cache, we might want to show error or navigate away
+            } catch (finalErr) {
+                console.error("DEBUG: Critical Fetch Error:", finalErr);
                 if (!project) {
-                    // Logic: If NO project in state (cache failed/empty) AND network failed -> Show Error
-                    const cachedProjects = await getCachedProjects();
-                    const foundProject = cachedProjects.find(p => String(p.id) === String(id));
-                    if (!foundProject) {
-                        alert("Could not load project details (Offline & Not Cached).");
-                        navigate('/engineer-dashboard');
-                    }
+                    alert("Unable to load project details.");
+                    navigate(-1);
                 }
             } finally {
-                // Ensure loading state is off eventually
+                console.log("DEBUG: Setting isLoading to false");
                 setIsLoading(false);
             }
         };
