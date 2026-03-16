@@ -60,6 +60,7 @@ const Login = () => {
     const [resetEmail, setResetEmail] = useState('');
     const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
+    const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
@@ -844,7 +845,7 @@ const Login = () => {
                                         </span>
                                         <input
                                             type={showPassword ? 'text' : 'password'}
-                                            placeholder="Password"
+                                            placeholder={loginMode === 'passcode' ? 'Passcode (6-digit PIN)' : 'Password'}
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             onFocus={() => setFocusedInput('password')}
@@ -893,6 +894,32 @@ const Login = () => {
                                         <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
                                     </svg>
                                 </button>
+
+                                {/* LOGIN MODE TOGGLE BUTTONS */}
+                                <div className="flex flex-col gap-2 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLoginMode(loginMode === 'passcode' ? 'password' : 'passcode')}
+                                        className="w-full text-center text-sm font-bold text-indigo-600 hover:text-indigo-800 py-2 rounded-xl border border-indigo-100 bg-indigo-50/50 hover:bg-indigo-100 transition-all"
+                                    >
+                                        {loginMode === 'passcode' ? '🔑 Switch to Password Login' : '🔢 Switch to Passcode Login'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const id = loginId.trim();
+                                            if (/^\d+$/.test(id) || id === '') {
+                                                // already looks like a school ID, just set mode
+                                                setLoginMode('passcode');
+                                            } else {
+                                                alert('Please enter your School ID (numeric) in the field above first.');
+                                            }
+                                        }}
+                                        className="w-full text-center text-xs font-bold text-slate-500 hover:text-blue-700 py-2 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-blue-50 transition-all"
+                                    >
+                                        🏫 Are you a School Head? Login with School ID
+                                    </button>
+                                </div>
                             </form>
                         )}
 
