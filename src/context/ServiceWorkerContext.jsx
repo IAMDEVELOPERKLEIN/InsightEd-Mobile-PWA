@@ -64,7 +64,8 @@ export const ServiceWorkerProvider = ({ children }) => {
 
 
                     // 4. Check for updates on Window Focus / Visibility Change
-                    // This ensures if the user comes back to the app, we check for updates immediately
+                    // DEACTIVATED: Overly aggressive in dev mode, hourly check is enough.
+                    /*
                     document.addEventListener('visibilitychange', () => {
                         if (document.visibilityState === 'visible') {
                             console.log('App visible, checking for SW updates...');
@@ -76,6 +77,7 @@ export const ServiceWorkerProvider = ({ children }) => {
                         console.log('Window focused, checking for SW updates...');
                         reg.update();
                     });
+                    */
                 } catch (err) {
                     console.error('PWA Registration Failed:', err);
                 }
@@ -99,6 +101,9 @@ export const ServiceWorkerProvider = ({ children }) => {
     const updateApp = async () => {
         if (registration && registration.waiting) {
             try {
+                // HIDE MODAL IMMEDIATELY
+                setIsUpdateAvailable(false);
+
                 // HARD RESET: Clear all caches before updating
                 console.log('Clearing all caches for hard reset...');
                 const cacheKeys = await caches.keys();
@@ -108,14 +113,23 @@ export const ServiceWorkerProvider = ({ children }) => {
                 console.log('All caches cleared.');
 
                 // Send message to SW to skip waiting
+                console.log('Sending SKIP_WAITING to waiting worker:', registration.waiting.scriptURL);
                 registration.waiting.postMessage({ type: 'SKIP_WAITING' });
 
-                // Note: The 'controllerchange' listener above will handle the actual reload
+                // FALLBACK: Force reload if controllerchange doesn't fire in 1s
+                setTimeout(() => {
+                    console.warn('Fallback reload: controllerchange failed to fire.');
+                    window.location.reload();
+                }, 1000);
+
             } catch (error) {
                 console.error('Error during hard reset update:', error);
-                // Fallback: try to update anyway even if cache clear fails
                 registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                setTimeout(() => window.location.reload(), 1000);
             }
+        } else {
+            // If waiting worker went away, just reload
+            window.location.reload();
         }
     };
 

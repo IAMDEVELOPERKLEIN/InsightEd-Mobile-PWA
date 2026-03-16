@@ -6,7 +6,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiPieChart } from 'react-icons/fi';
 import { TbTrophy, TbSchool, TbChartBar, TbFileDownload } from 'react-icons/tb';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -86,32 +86,12 @@ const MonitoringDashboard = () => {
         };
     }, [isIssuesModalOpen]);
 
-
-    const [insightsMetric, setInsightsMetric] = useState('enrolment'); // Default to Enrolment for Insights Tab
-    const [insightsSubMetric, setInsightsSubMetric] = useState('total'); // NEW: Sub-metric for Enrolment
-    const [insightsAralGrade, setInsightsAralGrade] = useState('g1'); // NEW: Grade for ARAL
-    const [insightsAralSubject, setInsightsAralSubject] = useState('read'); // NEW: Subject for ARAL
-    const [insightsClassesGrade, setInsightsClassesGrade] = useState('classes_kinder'); // NEW: Grade for Organized Classes
-    const [insightsClassSizeCategory, setInsightsClassSizeCategory] = useState('less'); // NEW: Category for Class Size
-    const [insightsClassSizeGrade, setInsightsClassSizeGrade] = useState('kinder'); // NEW: Grade for Class Size
-    const [insightsDemographicCategory, setInsightsDemographicCategory] = useState('sned'); // NEW: Demographic Category
-    const [insightsDemographicGrade, setInsightsDemographicGrade] = useState('total'); // NEW: Demographic Grade - Default to Total
-    const [insightsShiftingGrade, setInsightsShiftingGrade] = useState('k'); // NEW: Shifting Grade
-    const [insightsShiftingCategory, setInsightsShiftingCategory] = useState('single'); // NEW: Shifting Category
-    const [insightsDeliveryGrade, setInsightsDeliveryGrade] = useState('k'); // NEW: Delivery Grade
-    const [insightsDeliveryCategory, setInsightsDeliveryCategory] = useState('inperson'); // NEW: Delivery Category
-    const [insightsAdmType, setInsightsAdmType] = useState('mdl'); // NEW: ADM Type (mdl, odl, tvi, blended)
-    const [insightsTeacherGrade, setInsightsTeacherGrade] = useState('total'); // NEW: Teacher Grade
-    const [insightsMultigradeCategory, setInsightsMultigradeCategory] = useState('1_2'); // NEW: Multigrade Category
-    const [insightsExperienceCategory, setInsightsExperienceCategory] = useState('0_1'); // NEW: Experience Category
-    const [insightsSpecializationSubject, setInsightsSpecializationSubject] = useState('math'); // NEW: Specialization Subject
-    const [insightsInventoryItem, setInsightsInventoryItem] = useState('ecart'); // NEW: Inventory Item
-    const [insightsRoomType, setInsightsRoomType] = useState('sci'); // NEW: Room Type
-    const [insightsClassroomCondition, setInsightsClassroomCondition] = useState('good'); // NEW: Classroom Condition
-    const [insightsSiteCategory, setInsightsSiteCategory] = useState('elec'); // NEW: Site Category
-    const [insightsSiteSubOption, setInsightsSiteSubOption] = useState('grid'); // NEW: Site Option
-    const [insightsSeatsGrade, setInsightsSeatsGrade] = useState('k'); // NEW: Seats Grade
-    const [insightsToiletType, setInsightsToiletType] = useState('common'); // NEW: Toilet Type
+    const [insightsGradeLevel, setInsightsGradeLevel] = useState('total');
+    const [insightsSubMetric, setInsightsSubMetric] = useState('within');
+    const [insightsSector, setInsightsSector] = useState('division');
+    const [insightsMetric, setInsightsMetric] = useState('registration'); // Default to Registration Rate for Simplified Insights
+    const [insightsData, setInsightsData] = useState([]);
+    const [isFetchingInsights, setIsFetchingInsights] = useState(false);
 
     const [projectListModal, setProjectListModal] = useState({ isOpen: false, title: '', projects: [], isLoading: false });
     const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
@@ -970,12 +950,63 @@ const MonitoringDashboard = () => {
             if (projectsRes.ok) setJurisdictionProjects(await projectsRes.json());
             if (divStatsRes && divStatsRes.ok) setDivisionStats(await divStatsRes.json());
             if (distStatsRes && distStatsRes.ok) setDistrictStats(await distStatsRes.json());
+
+            // FETCH SIMPLIFIED INSIGHTS (Aggregated Bar Graph Data)
+            // This is secondary and non-blocking for major stats
+            if (activeTab === 'insights') {
+                setIsFetchingInsights(true);
+                try {
+                    const iRes = await fetch(`/api/reports/insights?${params.toString()}`);
+                    if (iRes.ok) {
+                        const iData = await iRes.json();
+                        setInsightsData(iData.data || []);
+                    }
+                } catch (iErr) {
+                    console.error("Insights Fetch Error:", iErr);
+                } finally {
+                    setIsFetchingInsights(false);
+                }
+            }
         } catch (err) {
             console.error("Dashboard Fetch Error:", err);
         } finally {
             setLoading(false);
         }
     };
+
+    const fetchInsightsData = async () => {
+        setIsFetchingInsights(true);
+        try {
+            const params = new URLSearchParams();
+            const activeRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
+            const activeDivision = effectiveRole === 'School Division Office' ? (effectiveDivision || userData?.division) : (coDivision || '');
+            const activeDistrict = coDistrict;
+
+            if (activeRegion && activeRegion !== 'All') params.append('region', activeRegion);
+            if (activeDivision && activeDivision !== 'All Divisions') params.append('division', activeDivision);
+            if (activeDistrict && activeDistrict !== 'All') params.append('district', activeDistrict);
+            
+            params.append('item', insightsMetric);
+            params.append('grade', insightsGradeLevel);
+            params.append('subMetric', insightsSubMetric);
+
+            const res = await fetch(`/api/reports/insights?${params.toString()}`);
+            const result = await res.json();
+            if (result.success) {
+                setInsightsData(result.data);
+            }
+        } catch (err) {
+            console.error("Fetch Insights Error:", err);
+        } finally {
+            setIsFetchingInsights(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'insights' && userData) {
+            fetchInsightsData();
+        }
+    }, [activeTab, coRegion, coDivision, coDistrict, insightsMetric, insightsGradeLevel, insightsSubMetric, userData, effectiveRole, effectiveRegion, effectiveDivision]);
 
     useEffect(() => {
         fetchData();
@@ -1007,6 +1038,24 @@ const MonitoringDashboard = () => {
             }
         }
     }, [location.state]);
+
+    // Fetch Insights data when switching to the insights tab
+    useEffect(() => {
+        if (activeTab === 'insights' && userData) {
+            setIsFetchingInsights(true);
+            const params = new URLSearchParams();
+            const r = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
+            const d = effectiveRole === 'School Division Office' ? (effectiveDivision || userData?.division) : (coDivision || '');
+            if (r) params.append('region', r);
+            if (d) params.append('division', d);
+            if (coDistrict) params.append('district', coDistrict);
+            fetch(`/api/reports/insights?${params.toString()}`)
+                .then(res => res.json())
+                .then(data => setInsightsData(data.data || []))
+                .catch(err => console.error('Insights fetch error:', err))
+                .finally(() => setIsFetchingInsights(false));
+        }
+    }, [activeTab]);
 
     // Effect for Central Office: Update divisions when Region changes (uses schools_IERN API)
     useEffect(() => {
@@ -1082,7 +1131,7 @@ const MonitoringDashboard = () => {
                 const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
 
                 // Fetch ALL schools in this division (API Data)
-                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(targetRegion)}&division=${encodeURIComponent(division)}&limit=1000`);
+                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(targetRegion)}&division=${encodeURIComponent(division)}&limit=1000&role=${encodeURIComponent(effectiveRole)}`);
                 let apiSchools = [];
                 if (res.ok) {
                     const data = await res.json();
@@ -1156,7 +1205,7 @@ const MonitoringDashboard = () => {
                     division = userData.division;
                 }
 
-                const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}&limit=1000`);
+                const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}&limit=1000&role=${encodeURIComponent(effectiveRole)}`);
                 let apiSchools = [];
                 if (res.ok) {
                     const data = await res.json();
@@ -1830,35 +1879,10 @@ const MonitoringDashboard = () => {
                         <>
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl col-span-1 border border-blue-100 dark:border-blue-800/50">
-                                            {(() => {
-                                                const displayTotal = jurisdictionTotal;
-                                                const completedCount = parseInt(stats?.completed_schools_count || 0);
-                                                const percentage = displayTotal > 0 ? ((completedCount / displayTotal) * 100).toFixed(1) : 0;
-
-                                                return (
-                                                    <div className="flex items-center justify-between">
-                                                        <div>
-                                                            <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">
-                                                                {percentage}%
-                                                            </span>
-                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
-                                                                100% Data Completion <br />
-                                                                <span className="text-[#004A99] dark:text-blue-300">({completedCount} / {displayTotal})</span>
-                                                            </p>
-                                                        </div>
-                                                        <FiCheckCircle size={32} className="text-blue-200" />
-                                                    </div>
-                                                );
-                                            })()}
-                                        </div>
-                                    )}
-
+                                <div className={`grid grid-cols-1 md:grid-cols-2 ${effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4`}>
                                     {/* Account Registration Card (from users table) */}
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl col-span-1 border border-emerald-100 dark:border-emerald-800/50">
+                                        <div className={`p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50 ${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? 'col-span-1 lg:col-span-1 md:col-span-2' : 'col-span-1'}`}>
                                             {(() => {
                                                 const displayTotal = jurisdictionTotal;
                                                 const accountsCount = parseInt(stats?.accounts_count || 0);
@@ -1882,8 +1906,34 @@ const MonitoringDashboard = () => {
                                         </div>
                                     )}
 
-                                    {/* System Validated Card */}
+                                    {/* Completion Card */}
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
+                                        <div className={`p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/50 ${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? 'col-span-1 lg:col-span-1 md:col-span-2' : 'col-span-1'}`}>
+                                            {(() => {
+                                                const displayTotal = jurisdictionTotal;
+                                                const completedCount = parseInt(stats?.completed_schools_count || 0);
+                                                const percentage = displayTotal > 0 ? ((completedCount / displayTotal) * 100).toFixed(1) : 0;
+
+                                                return (
+                                                    <div className="flex items-center justify-between h-full">
+                                                        <div>
+                                                            <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">
+                                                                {percentage}%
+                                                            </span>
+                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
+                                                                100% Data Completion <br />
+                                                                <span className="text-[#004A99] dark:text-blue-300">({completedCount} / {displayTotal})</span>
+                                                            </p>
+                                                        </div>
+                                                        <FiCheckCircle size={32} className="text-blue-200" />
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+
+                                    {/* System Validated Card - ONLY FOR CO */}
+                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
                                         <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl col-span-1 border border-purple-100 dark:border-purple-800/50">
                                             {(() => {
                                                 const displayTotal = jurisdictionTotal;
@@ -2015,25 +2065,31 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                     <div className="text-right">
                                                                         <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
-                                                                        <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                        {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
+                                                                            <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                                 {/* Stacked Progress Bar */}
                                                                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
-                                                                        style={{ width: `${validatedPct}%` }}
+                                                                        style={{ width: `${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? percentage : validatedPct}%` }}
                                                                         title={`System Validated: ${validatedCount}`}
                                                                     ></div>
-                                                                    <div
-                                                                        className={`h-full bg-rose-400/80 transition-all duration-1000`}
-                                                                        style={{ width: `${forValidationPct}%` }}
-                                                                        title={`Critical Issues: ${forValidationCount}`}
-                                                                    ></div>
+                                                                    {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
+                                                                        <div
+                                                                            className={`h-full bg-rose-400/80 transition-all duration-1000`}
+                                                                            style={{ width: `${forValidationPct}%` }}
+                                                                            title={`Critical Issues: ${forValidationCount}`}
+                                                                        ></div>
+                                                                    )}
                                                                 </div>
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase">
-                                                                    <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
-                                                                </p>
+                                                                {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
+                                                                    <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                                                        <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         );
                                                     })}
@@ -2232,7 +2288,7 @@ const MonitoringDashboard = () => {
 
                                                                         <div className="space-y-1">
                                                                             {/* DATA HEALTH SCORE DISPLAY - MOVED BELOW BAR */}
-                                                                            {(() => {
+                                                                            {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (() => {
                                                                                 // Default to 0 if undefined
                                                                                 const score = s.data_health_score !== undefined ? s.data_health_score : 0;
 
@@ -2265,7 +2321,7 @@ const MonitoringDashboard = () => {
                                                                             })()}
 
                                                                             {/* Data Quality Issues Badge */}
-                                                                            {s.data_quality_issues && s.data_quality_issues !== 'None' && s.data_quality_issues.trim() !== '' ? (
+                                                                            {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (s.data_quality_issues && s.data_quality_issues !== 'None' && s.data_quality_issues.trim() !== '') ? (
                                                                                 <button
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
@@ -2277,7 +2333,7 @@ const MonitoringDashboard = () => {
                                                                                     <FiAlertCircle size={12} />
                                                                                     {s.data_quality_issues.split(';').filter(i => i.trim() !== '').length} Issues
                                                                                 </button>
-                                                                            ) : (
+                                                                            ) : effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
                                                                                 <div className="mt-1 flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-full text-[10px] font-black uppercase w-max">
                                                                                     <FiCheckCircle size={12} />
                                                                                     Clean
@@ -2468,25 +2524,31 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                     <div className="text-right">
                                                                         <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
-                                                                        <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                        {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
+                                                                            <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                                 {/* Stacked Progress Bar */}
                                                                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
-                                                                        style={{ width: `${validatedPct}%` }}
+                                                                        style={{ width: `${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? percentage : validatedPct}%` }}
                                                                         title={`System Validated: ${validatedCount}`}
                                                                     ></div>
-                                                                    <div
-                                                                        className={`h-full bg-slate-400 transition-all duration-1000`}
-                                                                        style={{ width: `${forValidationPct}%` }}
-                                                                        title={`For Validation: ${forValidationCount}`}
-                                                                    ></div>
+                                                                    {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
+                                                                        <div
+                                                                            className={`h-full bg-slate-400 transition-all duration-1000`}
+                                                                            style={{ width: `${forValidationPct}%` }}
+                                                                            title={`For Validation: ${forValidationCount}`}
+                                                                        ></div>
+                                                                    )}
                                                                 </div>
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase">
-                                                                    <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
-                                                                </p>
+                                                                {effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
+                                                                    <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                                                        <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         );
                                                     })}
@@ -2503,1729 +2565,465 @@ const MonitoringDashboard = () => {
                     {(activeTab === 'insights') && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                <div className="flex flex-wrap items-center gap-4">
+                                <div className="flex wrap items-center gap-4">
                                     <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                                        <TbChartBar className="text-purple-500" size={18} /> Regional Insights
+                                        <TbChartBar className="text-purple-500" size={18} /> Regional Insights (PH Schools)
                                     </h2>
 
-                                    {/* EXPORT BUTTONS FOR INSIGHTS (Header Level - currently only PDF) */}
-                                    <div className="flex items-center gap-2 ml-4">
-                                        <button
-                                            onClick={handleGenerateInsightsPDF}
-                                            disabled={isGeneratingReport !== null}
-                                            className="p-1.5 bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 dark:bg-slate-800 dark:hover:bg-rose-900/30 rounded-lg transition-colors shadow-sm"
-                                            title="Generate Contextual Report (PDF)"
-                                        >
-                                            {isGeneratingReport === 'insights_pdf' ? <FiRefreshCw className="animate-spin" size={14} /> : <TbFileDownload size={14} />}
-                                        </button>
-                                    </div>
-
                                     <div className="flex items-center gap-2">
-                                        {/* Drilldown Type Selector */}
-                                        {isDistrictView && (
-                                            <select
-                                                value={drilldownType}
-                                                onChange={(e) => setDrilldownType(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-bold uppercase tracking-wide rounded-lg py-1.5 pl-2 pr-6 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.3rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.2em 1.2em` }}
-                                            >
-                                                <option value="school_district">School District</option>
-                                                <option value="legislative">Legislative District</option>
-                                                <option value="municipality">Municipality</option>
-                                            </select>
-                                        )}
-
                                         {/* Back Button for Drilldown */}
-                                        {isDistrictView && effectiveRole !== 'School Division Office' && (
+                                        {(isDistrictView || coDistrict) && effectiveRole !== 'School Division Office' && (
                                             <button
-                                                onClick={() => handleDivisionChange('')}
+                                                onClick={() => {
+                                                    if (coDistrict) {
+                                                        setCoDistrict('');
+                                                        // Keep division if we were in district view
+                                                    } else {
+                                                        handleDivisionChange('');
+                                                    }
+                                                }}
                                                 className="px-3 py-1.5 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all shadow-sm group"
                                             >
                                                 <FiArrowLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" />
-                                                Back to Division View
+                                                {coDistrict ? 'Back to District View' : 'Back to Division View'}
                                             </button>
                                         )}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Selector for Metric - Designated Area */}
-                            <div className="relative z-50 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 flex-wrap">
-                                <div className="flex items-center gap-2 pl-2">
-                                        <div className="bg-slate-200 dark:bg-slate-700 p-1.5 rounded-full">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 dark:text-slate-400"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                                        </div>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:inline">Filters:</span>
-                                    </div>
-                                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Metric:</span>
+                            {/* Expanded Metric Selectors */}
+                            <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm w-full">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest hidden lg:inline">Primary Metric:</span>
+                                    <select
+                                        value={insightsMetric}
+                                        onChange={(e) => {
+                                            setInsightsMetric(e.target.value);
+                                            // Reset sub-metric contextually
+                                            if (e.target.value === 'class_size') setInsightsSubMetric('within');
+                                            else if (e.target.value.startsWith('aral_')) setInsightsSubMetric(e.target.value.split('_')[1]);
+                                            else if (e.target.value === 'shifting') setInsightsSubMetric('Double');
+                                            else if (e.target.value === 'mode') setInsightsSubMetric('Distance');
+                                            else if (e.target.value === 'teachers') setInsightsSubMetric('total');
+                                            else if (e.target.value === 'specialization') setInsightsSubMetric('Science');
+                                            else if (e.target.value === 'building_condition') setInsightsSubMetric('Good');
+                                            else if (e.target.value === 'it_equipment') setInsightsSubMetric('laptop');
+                                        }}
+                                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-xl py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none min-w-[200px]"
+                                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
+                                    >
+                                        <optgroup label="Monitoring Status">
+                                            <option value="registration">Registration Rate %</option>
+                                            <option value="completion">Process Completion %</option>
+                                        </optgroup>
+                                        <optgroup label="Learner Enrollment">
+                                            <option value="enrolment">Total Enrollment</option>
+                                            <option value="muslim">Muslim Learners</option>
+                                            <option value="ip">IP Learners</option>
+                                            <option value="lwd">LWD Learners</option>
+                                            <option value="sned">SNED Learners</option>
+                                        </optgroup>
+                                        <optgroup label="Student Status">
+                                            <option value="displaced">Displaced Learners</option>
+                                            <option value="overage">Overage Learners</option>
+                                            <option value="dropout">Dropouts</option>
+                                            <option value="repeater">Repeaters</option>
+                                        </optgroup>
+                                        <optgroup label="Aral (Academic Support)">
+                                            <option value="aral_math">Aral Math</option>
+                                            <option value="aral_science">Aral Science</option>
+                                            <option value="aral_reading">Aral Reading</option>
+                                        </optgroup>
+                                        <optgroup label="Classes & Shifting">
+                                            <option value="class_size">Class Size Status</option>
+                                            <option value="shifting">Shifting Type</option>
+                                            <option value="mode">Delivery Mode</option>
+                                        </optgroup>
+                                        <optgroup label="Personnel">
+                                            <option value="teachers">Teacher Headcount</option>
+                                            <option value="specialization">Specialization Mix</option>
+                                        </optgroup>
+                                        <optgroup label="Infrastructure">
+                                            <option value="building_condition">Building Condition</option>
+                                        </optgroup>
+                                        <optgroup label="Resources">
+                                            <option value="it_equipment">IT Equipment Count</option>
+                                        </optgroup>
+                                        <optgroup label="Safety & Risk">
+                                            <option value="risk_index">Hazard Risk Score</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+
+                                {/* Contextual Sub-Metric Selector */}
+                                {['class_size', 'shifting', 'mode', 'teachers', 'specialization', 'building_condition', 'it_equipment'].includes(insightsMetric) && (
+                                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest hidden lg:inline">Status/Type:</span>
                                         <select
-                                            value={insightsMetric}
-                                            onChange={(e) => setInsightsMetric(e.target.value)}
-                                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
+                                            value={insightsSubMetric}
+                                            onChange={(e) => setInsightsSubMetric(e.target.value)}
+                                            className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-xl py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
                                             style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
                                         >
-                                            <option value="enrolment">Enrolment</option>
-                                            <option value="aral">ARAL Program</option>
-                                            <option value="organized_classes">Organized Classes</option>
-                                            <option value="class_size">Class Size Standard</option>
-                                            <option value="demographic">Learner Demographic</option>
-                                            <option value="shifting">Shifting</option>
-                                            <option value="delivery">Learning Delivery</option>
-                                            <option value="adm">Emergency ADM</option>
-                                            <option value="teachers">Teacher Count</option>
-                                            <option value="multigrade">Multigrade Teachers</option>
-                                            <option value="experience">Teaching Experience</option>
-                                            <option value="specialization">Specialization</option>
-                                            <option value="inventory">Equipment & Inventory</option>
-                                            <option value="rooms">Specialized Rooms</option>
-                                            <option value="classrooms">Classrooms</option>
-                                            <option value="site">Site & Utilities</option>
-                                        </select>
-                                    </div>
-
-                                    {/* Sub-Metric: Enrolment Grade Level */}
-                                    {insightsMetric === 'enrolment' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Data:</span>
-                                            <select
-                                                value={insightsSubMetric}
-                                                onChange={(e) => setInsightsSubMetric(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="total">All Levels</option>
-                                                <option value="grade_kinder">Kindergarten</option>
-                                                <option value="grade_1">Grade 1</option>
-                                                <option value="grade_2">Grade 2</option>
-                                                <option value="grade_3">Grade 3</option>
-                                                <option value="grade_4">Grade 4</option>
-                                                <option value="grade_5">Grade 5</option>
-                                                <option value="grade_6">Grade 6</option>
-                                                <option value="grade_7">Grade 7</option>
-                                                <option value="grade_8">Grade 8</option>
-                                                <option value="grade_9">Grade 9</option>
-                                                <option value="grade_10">Grade 10</option>
-                                                <option value="grade_11">Grade 11</option>
-                                                <option value="grade_12">Grade 12</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Organize Classes Grade Level */}
-                                    {insightsMetric === 'organized_classes' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                            <select
-                                                value={insightsClassesGrade}
-                                                onChange={(e) => setInsightsClassesGrade(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="classes_kinder">Kindergarten</option>
-                                                <option value="classes_grade_1">Grade 1</option>
-                                                <option value="classes_grade_2">Grade 2</option>
-                                                <option value="classes_grade_3">Grade 3</option>
-                                                <option value="classes_grade_4">Grade 4</option>
-                                                <option value="classes_grade_5">Grade 5</option>
-                                                <option value="classes_grade_6">Grade 6</option>
-                                                <option value="classes_grade_7">Grade 7</option>
-                                                <option value="classes_grade_8">Grade 8</option>
-                                                <option value="classes_grade_9">Grade 9</option>
-                                                <option value="classes_grade_10">Grade 10</option>
-                                                <option value="classes_grade_11">Grade 11</option>
-                                                <option value="classes_grade_12">Grade 12</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Class Size Standard */}
-                                    {insightsMetric === 'class_size' && (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Standard:</span>
-                                                <select
-                                                    value={insightsClassSizeCategory}
-                                                    onChange={(e) => setInsightsClassSizeCategory(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
+                                            {insightsMetric === 'class_size' && (
+                                                <>
                                                     <option value="less">Less than Standard</option>
                                                     <option value="within">Within Standard</option>
-                                                    <option value="above">More than Standard</option>
-                                                </select>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                                <select
-                                                    value={insightsClassSizeGrade}
-                                                    onChange={(e) => setInsightsClassSizeGrade(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
+                                                    <option value="above">Above Standard</option>
+                                                </>
+                                            )}
+                                            {insightsMetric === 'shifting' && (
+                                                <>
+                                                    <option value="Double">Double Shift</option>
+                                                    <option value="Triple">Triple Shift</option>
+                                                </>
+                                            )}
+                                            {insightsMetric === 'mode' && (
+                                                <>
+                                                    <option value="Distance">Distance Learning</option>
+                                                    <option value="Blended">Blended Learning</option>
+                                                </>
+                                            )}
+                                            {insightsMetric === 'teachers' && (
+                                                <>
+                                                    <option value="total">All Levels</option>
                                                     <option value="kinder">Kindergarten</option>
-                                                    <option value="g1">Grade 1</option>
-                                                    <option value="g2">Grade 2</option>
-                                                    <option value="g3">Grade 3</option>
-                                                    <option value="g4">Grade 4</option>
-                                                    <option value="g5">Grade 5</option>
-                                                    <option value="g6">Grade 6</option>
-                                                    <option value="g7">Grade 7</option>
-                                                    <option value="g8">Grade 8</option>
-                                                    <option value="g9">Grade 9</option>
-                                                    <option value="g10">Grade 10</option>
-                                                    <option value="g11">Grade 11</option>
-                                                    <option value="g12">Grade 12</option>
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Sub-Metric: Learner Demographic */}
-                                    {insightsMetric === 'demographic' && (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Category:</span>
-                                                <select
-                                                    value={insightsDemographicCategory}
-                                                    onChange={(e) => setInsightsDemographicCategory(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="sned">SNED</option>
-                                                    <option value="disability">Learners with Disability</option>
-                                                    <option value="als">ALS</option>
-                                                    <option value="muslim">Muslim</option>
-                                                    <option value="ip">Indigenous People (IP)</option>
-                                                    <option value="displaced">Displaced</option>
-                                                    <option value="repetition">Repetition</option>
-                                                    <option value="overage">Overage</option>
-                                                    <option value="dropout">Dropouts</option>
-                                                </select>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                                <select
-                                                    value={insightsDemographicGrade}
-                                                    onChange={(e) => setInsightsDemographicGrade(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="total">Total</option>
-                                                    <option value="es">Elementary</option>
-                                                    <option value="jhs">Junior High</option>
-                                                    <option value="shs">Senior High</option>
-                                                    <option disabled>──────────</option>
-                                                    <option value="k">Kindergarten</option>
-                                                    <option value="g1">Grade 1</option>
-                                                    <option value="g2">Grade 2</option>
-                                                    <option value="g3">Grade 3</option>
-                                                    <option value="g4">Grade 4</option>
-                                                    <option value="g5">Grade 5</option>
-                                                    <option value="g6">Grade 6</option>
-                                                    <option value="g7">Grade 7</option>
-                                                    <option value="g8">Grade 8</option>
-                                                    <option value="g9">Grade 9</option>
-                                                    <option value="g10">Grade 10</option>
-                                                    <option value="g11">Grade 11</option>
-                                                    <option value="g12">Grade 12</option>
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Sub-Metric: Shifting */}
-                                    {insightsMetric === 'shifting' && (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Category:</span>
-                                                <select
-                                                    value={insightsShiftingCategory}
-                                                    onChange={(e) => setInsightsShiftingCategory(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="single">Single Shift</option>
-                                                    <option value="double">Double Shift</option>
-                                                    <option value="triple">Triple Shift</option>
-                                                </select>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                                <select
-                                                    value={insightsShiftingGrade}
-                                                    onChange={(e) => setInsightsShiftingGrade(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="k">Kindergarten</option>
-                                                    <option value="g1">Grade 1</option>
-                                                    <option value="g2">Grade 2</option>
-                                                    <option value="g3">Grade 3</option>
-                                                    <option value="g4">Grade 4</option>
-                                                    <option value="g5">Grade 5</option>
-                                                    <option value="g6">Grade 6</option>
-                                                    <option value="g7">Grade 7</option>
-                                                    <option value="g8">Grade 8</option>
-                                                    <option value="g9">Grade 9</option>
-                                                    <option value="g10">Grade 10</option>
-                                                    <option value="g11">Grade 11</option>
-                                                    <option value="g12">Grade 12</option>
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Sub-Metric: Learning Delivery */}
-                                    {insightsMetric === 'delivery' && (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Category:</span>
-                                                <select
-                                                    value={insightsDeliveryCategory}
-                                                    onChange={(e) => setInsightsDeliveryCategory(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="inperson">In-Person</option>
-                                                    <option value="blended">Blended Learning</option>
-                                                    <option value="distance">Distance Learning</option>
-                                                </select>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                                <select
-                                                    value={insightsDeliveryGrade}
-                                                    onChange={(e) => setInsightsDeliveryGrade(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="k">Kindergarten</option>
-                                                    <option value="g1">Grade 1</option>
-                                                    <option value="g2">Grade 2</option>
-                                                    <option value="g3">Grade 3</option>
-                                                    <option value="g4">Grade 4</option>
-                                                    <option value="g5">Grade 5</option>
-                                                    <option value="g6">Grade 6</option>
-                                                    <option value="g7">Grade 7</option>
-                                                    <option value="g8">Grade 8</option>
-                                                    <option value="g9">Grade 9</option>
-                                                    <option value="g10">Grade 10</option>
-                                                    <option value="g11">Grade 11</option>
-                                                    <option value="g12">Grade 12</option>
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Sub-Metric: Emergency ADM */}
-                                    {insightsMetric === 'adm' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Type:</span>
-                                            <select
-                                                value={insightsAdmType}
-                                                onChange={(e) => setInsightsAdmType(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="mdl">MDL (Modular Distance)</option>
-                                                <option value="odl">ODL (Online Distance)</option>
-                                                <option value="tvi">TVI/RBI (TV/Radio)</option>
-                                                <option value="blended">Blended Learning</option>
-                                            </select>
-                                        </div>
-                                    )}
-                                    {insightsMetric === 'aral' && (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                                <select
-                                                    value={insightsAralGrade}
-                                                    onChange={(e) => setInsightsAralGrade(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="g1">Grade 1</option>
-                                                    <option value="g2">Grade 2</option>
-                                                    <option value="g3">Grade 3</option>
-                                                    <option value="g4">Grade 4</option>
-                                                    <option value="g5">Grade 5</option>
-                                                    <option value="g6">Grade 6</option>
-                                                </select>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Subject:</span>
-                                                <select
-                                                    value={insightsAralSubject}
-                                                    onChange={(e) => setInsightsAralSubject(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="read">Reading</option>
-                                                    <option value="math">Mathematics</option>
-                                                    <option value="sci">Science</option>
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Sub-Metric: Teacher Count */}
-                                    {insightsMetric === 'teachers' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                            <select
-                                                value={insightsTeacherGrade}
-                                                onChange={(e) => setInsightsTeacherGrade(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="total">All Grades</option>
-                                                <option value="k">Kindergarten</option>
-                                                <option value="g1">Grade 1</option>
-                                                <option value="g2">Grade 2</option>
-                                                <option value="g3">Grade 3</option>
-                                                <option value="g4">Grade 4</option>
-                                                <option value="g5">Grade 5</option>
-                                                <option value="g6">Grade 6</option>
-                                                <option value="g7">Grade 7</option>
-                                                <option value="g8">Grade 8</option>
-                                                <option value="g9">Grade 9</option>
-                                                <option value="g10">Grade 10</option>
-                                                <option value="g11">Grade 11</option>
-                                                <option value="g12">Grade 12</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Multigrade */}
-                                    {insightsMetric === 'multigrade' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Combination:</span>
-                                            <select
-                                                value={insightsMultigradeCategory}
-                                                onChange={(e) => setInsightsMultigradeCategory(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="1_2">Grades 1 & 2</option>
-                                                <option value="3_4">Grades 3 & 4</option>
-                                                <option value="5_6">Grades 5 & 6</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Experience */}
-                                    {insightsMetric === 'experience' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Years:</span>
-                                            <select
-                                                value={insightsExperienceCategory}
-                                                onChange={(e) => setInsightsExperienceCategory(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="0_1">0-1 Years</option>
-                                                <option value="2_5">2-5 Years</option>
-                                                <option value="6_10">6-10 Years</option>
-                                                <option value="11_15">11-15 Years</option>
-                                                <option value="16_20">16-20 Years</option>
-                                                <option value="21_25">21-25 Years</option>
-                                                <option value="26_30">26-30 Years</option>
-                                                <option value="31_35">31-35 Years</option>
-                                                <option value="36_40">36-40 Years</option>
-                                                <option value="40_45">40-45 Years</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Specialization */}
-                                    {insightsMetric === 'specialization' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Subject:</span>
-                                            <select
-                                                value={insightsSpecializationSubject}
-                                                onChange={(e) => setInsightsSpecializationSubject(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="math">Mathematics</option>
-                                                <option value="sci">Science</option>
-                                                <option value="eng">English</option>
-                                                <option value="fil">Filipino</option>
-                                                <option value="ap">Araling Panlipunan</option>
-                                                <option value="mapeh">MAPEH</option>
-                                                <option value="esp">Edukasyon sa Pagpapakatao</option>
-                                                <option value="tle">TLE</option>
-                                                <option value="gen">General Education</option>
-                                                <option value="ece">Early Childhood</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Equipment & Inventory */}
-                                    {insightsMetric === 'inventory' && (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Item:</span>
-                                                <select
-                                                    value={insightsInventoryItem}
-                                                    onChange={(e) => setInsightsInventoryItem(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="ecart">E-Classroom Cart</option>
+                                                    <option value="elementary">Elementary</option>
+                                                    <option value="jhs">JHS</option>
+                                                    <option value="shs">SHS</option>
+                                                </>
+                                            )}
+                                            {insightsMetric === 'specialization' && (
+                                                <>
+                                                    <option value="Science">Science</option>
+                                                    <option value="Math">Math</option>
+                                                    <option value="English">English</option>
+                                                    <option value="TVL">TVL</option>
+                                                </>
+                                            )}
+                                            {insightsMetric === 'building_condition' && (
+                                                <>
+                                                    <option value="Good">Good Condition</option>
+                                                    <option value="Minor">Minor Repair</option>
+                                                    <option value="Major">Major Repair</option>
+                                                </>
+                                            )}
+                                            {insightsMetric === 'it_equipment' && (
+                                                <>
                                                     <option value="laptop">Laptops</option>
+                                                    <option value="tablet">Tablets</option>
                                                     <option value="printer">Printers</option>
-                                                    <option value="tv">Smart TVs</option>
-                                                    <option value="seats">Seats</option>
-                                                    <option value="toilets">Comfort Rooms</option>
-                                                </select>
-                                            </div>
-
-                                            {/* Sub-Metric 2: Seats Grade */}
-                                            {insightsInventoryItem === 'seats' && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Grade:</span>
-                                                    <select
-                                                        value={insightsSeatsGrade}
-                                                        onChange={(e) => setInsightsSeatsGrade(e.target.value)}
-                                                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                    >
-                                                        <option value="k">Kindergarten</option>
-                                                        <option value="g1">Grade 1</option>
-                                                        <option value="g2">Grade 2</option>
-                                                        <option value="g3">Grade 3</option>
-                                                        <option value="g4">Grade 4</option>
-                                                        <option value="g5">Grade 5</option>
-                                                        <option value="g6">Grade 6</option>
-                                                        <option value="g7">Grade 7</option>
-                                                        <option value="g8">Grade 8</option>
-                                                        <option value="g9">Grade 9</option>
-                                                        <option value="g10">Grade 10</option>
-                                                        <option value="g11">Grade 11</option>
-                                                        <option value="g12">Grade 12</option>
-                                                    </select>
-                                                </div>
+                                                    <option value="ecart">E-Carts</option>
+                                                </>
                                             )}
-
-                                            {/* Sub-Metric 2: Toilet Type */}
-                                            {insightsInventoryItem === 'toilets' && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Type:</span>
-                                                    <select
-                                                        value={insightsToiletType}
-                                                        onChange={(e) => setInsightsToiletType(e.target.value)}
-                                                        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                    >
-                                                        <option value="common">Common/Shared</option>
-                                                        <option value="male">Male</option>
-                                                        <option value="female">Female</option>
-                                                        <option value="pwd">PWD</option>
-                                                    </select>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-
-                                    {/* Sub-Metric: Specialized Rooms */}
-                                    {insightsMetric === 'rooms' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Type:</span>
-                                            <select
-                                                value={insightsRoomType}
-                                                onChange={(e) => setInsightsRoomType(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="sci">Science Lab</option>
-                                                <option value="com">Computer Lab</option>
-                                                <option value="tvl">TVL Workshop</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Classrooms */}
-                                    {insightsMetric === 'classrooms' && (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Condition:</span>
-                                            <select
-                                                value={insightsClassroomCondition}
-                                                onChange={(e) => setInsightsClassroomCondition(e.target.value)}
-                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                            >
-                                                <option value="good">Good Condition</option>
-                                                <option value="new">Newly Built</option>
-                                                <option value="repair">Needs Major Repairs</option>
-                                                <option value="demolish">Condemned/Demolition</option>
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    {/* Sub-Metric: Site & Utilities */}
-                                    {insightsMetric === 'site' && (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Category:</span>
-                                                <select
-                                                    value={insightsSiteCategory}
-                                                    onChange={(e) => {
-                                                        const newVal = e.target.value;
-                                                        setInsightsSiteCategory(newVal);
-                                                        // Reset Option when category changes
-                                                        if (newVal === 'elec') setInsightsSiteSubOption('grid');
-                                                        else if (newVal === 'water') setInsightsSiteSubOption('piped');
-                                                        else if (newVal === 'build') setInsightsSiteSubOption('yes');
-                                                        else if (newVal === 'sha') setInsightsSiteSubOption('hardship');
-                                                    }}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    <option value="elec">Electricity Supply</option>
-                                                    <option value="water">Water Source</option>
-                                                    <option value="build">Buildable Space</option>
-                                                    <option value="sha">SHA / Hardship</option>
-                                                </select>
-                                            </div>
-
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Option:</span>
-                                                <select
-                                                    value={insightsSiteSubOption}
-                                                    onChange={(e) => setInsightsSiteSubOption(e.target.value)}
-                                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-lg py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
-                                                >
-                                                    {insightsSiteCategory === 'elec' && (
-                                                        <>
-                                                            <option value="grid">Grid Supply</option>
-                                                            <option value="offgrid">Off-Grid</option>
-                                                            <option value="none">No Electricity</option>
-                                                        </>
-                                                    )}
-                                                    {insightsSiteCategory === 'water' && (
-                                                        <>
-                                                            <option value="piped">Piped Water</option>
-                                                            <option value="natural">Natural Resources</option>
-                                                            <option value="none">No Water Source</option>
-                                                        </>
-                                                    )}
-                                                    {insightsSiteCategory === 'build' && (
-                                                        <>
-                                                            <option value="yes">With Buildable Space</option>
-                                                            <option value="no">No Buildable Space</option>
-                                                        </>
-                                                    )}
-                                                    {insightsSiteCategory === 'sha' && (
-                                                        <>
-                                                            <option value="hardship">Hardship Post</option>
-                                                            <option value="multi">Pure Multigrade</option>
-                                                        </>
-                                                    )}
-                                                </select>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* EXPORT BUTTONS (Filters Level) */}
-                                    <div className="ml-auto flex items-center gap-2">
-                                        <button
-                                            onClick={handleExportInsightsCSV}
-                                            disabled={isGeneratingReport !== null}
-                                            className="p-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 rounded-lg transition-colors shadow-sm flex items-center gap-2 border border-emerald-100 dark:border-emerald-800"
-                                            title="Export Current Filtered Data (CSV)"
-                                        >
-                                            {isGeneratingReport === 'insights_csv' ? <FiRefreshCw className="animate-spin text-emerald-500" size={14} /> : <>
-                                                <FiFileText size={14} />
-                                                <span className="text-[10px] uppercase font-bold tracking-widest hidden sm:inline">Filtered CSV</span>
-                                            </>}
-                                        </button>
-                                        
-                                        <button
-                                            onClick={handleExportMasterCSV}
-                                            disabled={isGeneratingReport !== null}
-                                            className="p-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-400 rounded-lg transition-colors shadow-sm flex items-center gap-2 border border-indigo-100 dark:border-indigo-800"
-                                            title="Download Complete Master Dataset (CSV) - Unfiltered"
-                                        >
-                                            {isGeneratingReport === 'master_csv' ? <FiRefreshCw className="animate-spin text-indigo-500" size={14} /> : <>
-                                                <TbFileDownload size={14} /> 
-                                                <span className="text-[10px] uppercase font-bold tracking-widest hidden sm:inline">Master Dataset</span>
-                                            </>}
-                                        </button>
+                                        </select>
                                     </div>
+                                )}
+
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest hidden lg:inline">Grade Level:</span>
+                                    <select
+                                        value={insightsGradeLevel}
+                                        onChange={(e) => setInsightsGradeLevel(e.target.value)}
+                                        className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold uppercase tracking-wide rounded-xl py-2 pl-3 pr-8 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
+                                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.5rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.5em 1.5em` }}
+                                    >
+                                        <option value="total">All Grades (Total)</option>
+                                        <option value="kinder">Kindergarten</option>
+                                        <option value="g1">Grade 1</option>
+                                        <option value="g2">Grade 2</option>
+                                        <option value="g3">Grade 3</option>
+                                        <option value="g4">Grade 4</option>
+                                        <option value="g5">Grade 5</option>
+                                        <option value="g6">Grade 6</option>
+                                        <option value="g7">Grade 7</option>
+                                        <option value="g8">Grade 8</option>
+                                        <option value="g9">Grade 9</option>
+                                        <option value="g10">Grade 10</option>
+                                        <option value="g11">Grade 11</option>
+                                        <option value="g12">Grade 12</option>
+                                    </select>
                                 </div>
+
+                                {/* Export Master Dataset Button */}
+                                <div className="ml-auto flex items-center gap-2">
+                                    <button
+                                        onClick={handleExportMasterCSV}
+                                        disabled={isGeneratingReport !== null}
+                                        className="p-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-400 rounded-lg transition-colors shadow-sm flex items-center gap-2 border border-indigo-100 dark:border-indigo-800"
+                                        title="Download Complete Master Dataset (CSV)"
+                                    >
+                                        {isGeneratingReport === 'master_csv' ? <FiRefreshCw className="animate-spin text-indigo-500" size={14} /> : <>
+                                            <TbFileDownload size={14} /> 
+                                            <span className="text-[10px] uppercase font-bold tracking-widest hidden sm:inline">Export Master Dataset</span>
+                                        </>}
+                                    </button>
+                                </div>
+                            </div>
 
                             {/* Chart Container */}
                             <div id="insight-charts-container" key={drilldownType + (coDistrict ? '-list' : '-chart')} className={`bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden ${isMobile ? 'h-[500px] overflow-y-auto' : ''}`}>
-                                <div className="animate-in fade-in slide-in-from-left-4 duration-300">
-                                    {insightsMetric === 'enrolment' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
-                                                    <FiPieChart />
+                                
+                                {isFetchingInsights && (
+                                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm animate-in fade-in duration-300">
+                                        <div className="flex flex-col items-center gap-4">
+                                            <div className="w-12 h-12 border-4 border-purple-100 dark:border-purple-900 border-t-purple-600 rounded-full animate-spin"></div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading Insights Data...</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(() => {
+                                    // IF we are at the final level (District View -> Select District -> List Schools)
+                                    // OR CoDistrict (SDO View)
+                                    if (coDistrict) {
+                                        // RENDER SCHOOL LIST WITH PERCENTAGES
+                                        const schoolsData = insightsData || [];
+                                        
+                                        if (schoolsData.length === 0) {
+                                            return (
+                                                <div className="h-[400px] flex flex-col items-center justify-center text-slate-400">
+                                                    <TbSchool size={48} className="opacity-20 mb-4" />
+                                                    <p className="text-sm font-bold uppercase tracking-widest italic opacity-50">No schools found for this district.</p>
                                                 </div>
-                                                Enrolment: {insightsSubMetric === 'total' ? 'All Levels' : insightsSubMetric.replace('grade_', 'Grade ').replace('_', ' ')}
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => {
-                                                            const key = insightsSubMetric === 'total' ? 'total_enrollment' : insightsSubMetric;
-                                                            return {
-                                                                name: formatInsightLabel(d),
-                                                                fullName: d[insightLabelKey],
-                                                                value: parseInt(d[key] || 0)
-                                                            };
-                                                        })}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} tickFormatter={(value) => value.toLocaleString()} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} content={({ active, payload }) => {
-                                                            if (active && payload && payload.length) {
-                                                                return (
-                                                                    <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                        <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                        <p className="font-mono text-blue-300">{payload[0].value.toLocaleString()} Learners</p>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                        <TbSchool className="text-purple-500" size={16} /> District Schools: {coDistrict}
+                                                    </h3>
+                                                    <span className="text-[10px] font-bold text-slate-400">{schoolsData.length} Schools</span>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {schoolsData.map((school, idx) => {
+                                                        const metricValue = insightsMetric === 'registration' 
+                                                            ? (school.registration_rate || 0) 
+                                                            : (school.avg_completion || 0);
+                                                        
+                                                        const isCompleted = school.completed_schools > 0;
+                                                        const isRegistered = school.registered_schools > 0;
+
+                                                        return (
+                                                            <div key={school.school_id || idx} className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-100 dark:border-slate-800 relative overflow-hidden group hover:border-purple-200 dark:hover:border-purple-900/50 transition-all shadow-sm">
+                                                                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                                                                    <TbSchool size={40} />
+                                                                </div>
+                                                                
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase truncate pr-8">{school.school_name}</p>
+                                                                <p className="text-[9px] font-medium text-slate-300 dark:text-slate-500 uppercase tracking-tighter mb-3">{school.school_id}</p>
+                                                                
+                                                                <div className="flex items-end justify-between gap-4">
+                                                                    <div className="flex-1">
+                                                                        <div className="flex justify-between items-center mb-1.5">
+                                                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                                {insightsMetric === 'registration' ? 'Registration' : 'Completion'}
+                                                                            </span>
+                                                                            <span className={`text-sm font-black ${metricValue >= 100 ? 'text-emerald-500' : 'text-purple-600'}`}>
+                                                                                {metricValue.toFixed(1)}%
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                            <div 
+                                                                                className={`h-full rounded-full transition-all duration-1000 ${metricValue >= 100 ? 'bg-emerald-500' : 'bg-purple-500'}`}
+                                                                                style={{ width: `${Math.min(metricValue, 100)}%` }}
+                                                                            ></div>
+                                                                        </div>
                                                                     </div>
-                                                                );
-                                                            }
-                                                            return null;
-                                                        }} />
-                                                        <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" fill="#3b82f6" radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]} animationDuration={1500} label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} barSize={isMobile ? 20 : undefined}>
-                                                            {divisionStats.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
-                                                            ))}
-                                                        </Bar>
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
+                                                                </div>
 
-                                    {insightsMetric === 'organized_classes' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Organized Classes: {insightsClassesGrade.replace('classes_grade_', 'Grade ').replace('classes_kinder', 'Kindergarten')}
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => {
-                                                            const key = insightsClassesGrade;
-                                                            return {
-                                                                name: formatInsightLabel(d),
-                                                                fullName: d[insightLabelKey],
-                                                                value: parseInt(d[key] || 0)
-                                                            };
-                                                        })}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis dataKey="name" type="category" width={100} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} tickFormatter={(value) => value.toLocaleString()} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} content={({ active, payload }) => {
-                                                            if (active && payload && payload.length) {
-                                                                return (
-                                                                    <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                        <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                        <p className="font-mono text-purple-300">{payload[0].value.toLocaleString()} Classes</p>
+                                                                <div className="mt-3 flex gap-2">
+                                                                    <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${isRegistered ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30' : 'bg-slate-100 text-slate-400 dark:bg-slate-800'}`}>
+                                                                        {isRegistered ? 'Registered' : 'Pending'}
                                                                     </div>
-                                                                );
-                                                            }
-                                                            return null;
-                                                        }} />
-                                                        <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" fill="#8b5cf6" radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]} animationDuration={1500} label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} barSize={isMobile ? 20 : undefined}>
-                                                            {divisionStats.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#8b5cf6', '#a78bfa', '#7c3aed', '#c4b5fd', '#5b21b6'][index % 5]} />
-                                                            ))}
-                                                        </Bar>
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {insightsMetric === 'aral' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-600 dark:text-orange-400">
-                                                    <FiPieChart />
+                                                                    <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${isCompleted ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30' : 'bg-slate-100 text-slate-400 dark:bg-slate-800'}`}>
+                                                                        {isCompleted ? '100% Completed' : 'In Progress'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
-                                                ARAL Program: Grade {insightsAralGrade.replace('g', '')} {
-                                                    insightsAralSubject === 'math' ? 'Mathematics' :
-                                                        insightsAralSubject === 'sci' ? 'Science' : 'Reading'
-                                                }
-                                            </h3>
+                                            </div>
+                                        );
+                                    }
 
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => {
-                                                            // Construct dynamic key: aral_math_g1, aral_read_g2, etc.
-                                                            const key = `aral_${insightsAralSubject}_${insightsAralGrade}`;
-                                                            return {
-                                                                name: formatInsightLabel(d),
-                                                                fullName: d[insightLabelKey],
-                                                                value: parseInt(d[key] || 0)
-                                                            };
-                                                        })}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="name"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis
-                                                                    dataKey="name"
-                                                                    axisLine={false}
-                                                                    tickLine={false}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                    dy={10}
-                                                                    interval={0}
-                                                                    angle={-45}
-                                                                    textAnchor="end"
-                                                                />
-                                                                <YAxis
-                                                                    axisLine={false}
-                                                                    tickLine={false}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                    tickFormatter={(value) => value.toLocaleString()}
-                                                                />
-                                                            </>
-                                                        )}
-                                                        <Tooltip
-                                                            cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                            content={({ active, payload }) => {
-                                                                if (active && payload && payload.length) {
-                                                                    return (
-                                                                        <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                            <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                            <p className="font-mono text-orange-300">
-                                                                                {payload[0].value.toLocaleString()} Learners
-                                                                            </p>
-                                                                        </div>
-                                                                    );
+                                    // RENDER BAR CHART (Divisions or Districts)
+                                    const isRate = ['registration', 'completion'].includes(insightsMetric);
+                                    const chartData = (insightsData || []).map(d => ({
+                                        name: d.label || 'Unknown',
+                                        value: parseFloat(d.value || 0),
+                                        fullValue: parseFloat(d.value || 0),
+                                        raw: d
+                                    })).sort((a, b) => b.value - a.value);
+
+                                    if (chartData.length === 0 && !isFetchingInsights) {
+                                        return (
+                                            <div className="h-[400px] flex flex-col items-center justify-center text-slate-400">
+                                                <TbChartBar size={48} className="opacity-20 mb-4" />
+                                                <p className="text-sm font-bold uppercase tracking-widest italic opacity-50">No data available for the selected filters.</p>
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className="h-full min-h-[450px] flex flex-col pt-4">
+                                            <div className="flex justify-between items-center mb-8">
+                                                <div>
+                                                    <h3 className="text-xl font-black text-slate-700 dark:text-slate-100 tracking-tight">
+                                                        {insightsMetric === 'registration' ? 'Account Registration Rate' : 
+                                                         insightsMetric === 'completion' ? 'Data Completion Percentage' :
+                                                         insightsMetric === 'enrolment' ? 'Learner Enrollment' :
+                                                         insightsMetric === 'class_size' ? `Class Size: ${insightsSubMetric.toUpperCase()} Standard` :
+                                                         insightsMetric === 'shifting' ? `${insightsSubMetric} Shifting Schools` :
+                                                         insightsMetric === 'mode' ? `${insightsSubMetric} Learning Schools` :
+                                                         insightsMetric === 'teachers' ? `Teacher Headcount: ${insightsSubMetric.toUpperCase()}` :
+                                                         insightsMetric === 'specialization' ? `Specialists: ${insightsSubMetric}` :
+                                                         insightsMetric === 'building_condition' ? `Buildings in ${insightsSubMetric} Condition` :
+                                                         insightsMetric === 'it_equipment' ? `IT Equipment: ${insightsSubMetric.charAt(0).toUpperCase() + insightsSubMetric.slice(1)}s` :
+                                                         insightsMetric === 'risk_index' ? 'Hazard Risk Score' :
+                                                         `${insightsMetric.charAt(0).toUpperCase() + insightsMetric.slice(1)} Learners`}
+                                                    </h3>
+                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
+                                                        {insightsGradeLevel === 'total' ? 'All Grade Levels' : `Grade Level: ${insightsGradeLevel.toUpperCase()}`} • Summarized by {coDistrict ? 'School' : ((coDivision || effectiveRole === 'School Division Office') ? 'District' : 'Division')}
+                                                    </p>
+                                                </div>
+                                                <div className="hidden lg:flex items-center gap-6">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-3 h-3 rounded bg-purple-500"></div>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Count</span>
+                                                    </div>
+                                                    {isRate && (
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-3 h-3 rounded bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"></div>
+                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">100% Milestone</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex-1 min-h-[500px] w-full overflow-y-auto overflow-x-hidden custom-scrollbar pr-4" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+                                                <div style={{ height: Math.max(500, chartData.length * 35), width: '100%' }}>
+                                                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                                                        <BarChart
+                                                            data={chartData}
+                                                            layout="vertical"
+                                                            margin={{ top: 5, right: 100, left: 140, bottom: 5 }}
+                                                            onClick={(data) => {
+                                                                if (data && data.activePayload) {
+                                                                    const selected = data.activePayload[0].payload.raw;
+                                                                    if (effectiveRole !== 'School Division Office' && !coDivision) {
+                                                                        handleDivisionChange(selected.label);
+                                                                    } else if (!coDistrict) {
+                                                                        setCoDistrict(selected.label);
+                                                                    }
                                                                 }
-                                                                return null;
                                                             }}
-                                                        />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            fill="#f97316"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            animationDuration={1500}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
                                                         >
-                                                            {divisionStats.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#f97316', '#ea580c', '#c2410c', '#fb923c', '#fdba74'][index % 5]} />
-                                                            ))}
-                                                        </Bar>
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'class_size' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-emerald-600 dark:text-emerald-400">
-                                                    <FiPieChart />
+                                                            <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" opacity={0.5} />
+                                                            <XAxis 
+                                                                type="number" 
+                                                                hide={true}
+                                                                domain={isRate ? [0, 100] : [0, 'auto']} 
+                                                            />
+                                                            <YAxis 
+                                                                dataKey="name" 
+                                                                type="category" 
+                                                                width={130}
+                                                                axisLine={false}
+                                                                tickLine={false}
+                                                                interval={0}
+                                                                tick={({ x, y, payload }) => (
+                                                                    <g transform={`translate(${x},${y})`}>
+                                                                        <text 
+                                                                            x={-10} 
+                                                                            y={0} 
+                                                                            dy={4} 
+                                                                            textAnchor="end" 
+                                                                            fill="#64748b" 
+                                                                            className="text-[10px] font-black uppercase tracking-tight"
+                                                                        >
+                                                                            {payload.value.length > 20 ? payload.value.substring(0, 17) + '...' : payload.value}
+                                                                        </text>
+                                                                    </g>
+                                                                )}
+                                                            />
+                                                            <Tooltip 
+                                                                cursor={{ fill: 'rgba(241, 245, 249, 0.4)' }}
+                                                                content={({ active, payload, label }) => {
+                                                                    if (active && payload && payload.length) {
+                                                                        const val = payload[0].value;
+                                                                        return (
+                                                                            <div className="bg-white dark:bg-slate-800 p-4 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200">
+                                                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+                                                                                <p className="text-xl font-black text-purple-600 dark:text-purple-400">
+                                                                                    {isRate ? `${val.toFixed(1)}%` : val.toLocaleString()}
+                                                                                </p>
+                                                                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight mt-1">
+                                                                                    {isRate ? (val >= 100 ? 'Target Met' : 'In Progress') : 'Total Accumulated'}
+                                                                                </p>
+                                                                                {!coDistrict && (
+                                                                                    <div className="mt-3 pt-3 border-t border-slate-50 dark:border-slate-700">
+                                                                                        <p className="text-[9px] font-black text-purple-500 uppercase flex items-center gap-1.5 animate-pulse">
+                                                                                            <TbChartBar size={12} /> Click bar to drill down
+                                                                                        </p>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    return null;
+                                                                }}
+                                                            />
+                                                            <Bar 
+                                                                dataKey="value" 
+                                                                radius={[0, 12, 12, 0]}
+                                                                barSize={20}
+                                                            >
+                                                                {chartData.map((entry, index) => (
+                                                                    <Cell 
+                                                                        key={`cell-${index}`} 
+                                                                        fill={isRate && entry.value >= 100 ? '#10b981' : '#8b5cf6'} 
+                                                                        className="transition-all duration-500 hover:opacity-80 cursor-pointer"
+                                                                    />
+                                                                ))}
+                                                                <LabelList 
+                                                                    dataKey="value" 
+                                                                    position="right" 
+                                                                    offset={15}
+                                                                    content={(props) => {
+                                                                        const { x, y, width, height, value } = props;
+                                                                        return (
+                                                                            <text 
+                                                                                x={x + width + 10} 
+                                                                                y={y + height / 2} 
+                                                                                fill="#64748b" 
+                                                                                fontSize={11} 
+                                                                                fontWeight="900" 
+                                                                                textAnchor="start" 
+                                                                                dominantBaseline="middle"
+                                                                            >
+                                                                                {isRate ? `${value.toFixed(1)}%` : value.toLocaleString()}
+                                                                            </text>
+                                                                        );
+                                                                    }}
+                                                                />
+                                                            </Bar>
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
                                                 </div>
-                                                Class Size: {
-                                                    insightsClassSizeCategory === 'less' ? 'Less than Standard' :
-                                                        insightsClassSizeCategory === 'within' ? 'Within Standard' : 'More than Standard'
-                                                } ({
-                                                    insightsClassSizeGrade === 'kinder' ? 'Kindergarten' :
-                                                        `Grade ${insightsClassSizeGrade.replace('g', '')}`
-                                                })
-                                            </h3>
-
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => {
-                                                            const key = `cnt_${insightsClassSizeCategory === 'less' ? 'less' : insightsClassSizeCategory}_${insightsClassSizeGrade}`;
-                                                            return {
-                                                                name: formatInsightLabel(d),
-                                                                fullName: d[insightLabelKey],
-                                                                value: parseInt(d[key] || 0)
-                                                            };
-                                                        })}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="name"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis
-                                                                    dataKey="name"
-                                                                    axisLine={false}
-                                                                    tickLine={false}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                    dy={10}
-                                                                    interval={0}
-                                                                    angle={-45}
-                                                                    textAnchor="end"
-                                                                />
-                                                                <YAxis
-                                                                    axisLine={false}
-                                                                    tickLine={false}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                    tickFormatter={(value) => value.toLocaleString()}
-                                                                />
-                                                            </>
-                                                        )}
-                                                        <Tooltip
-                                                            cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                            content={({ active, payload }) => {
-                                                                if (active && payload && payload.length) {
-                                                                    return (
-                                                                        <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                            <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                            <p className="font-mono text-emerald-300">
-                                                                                {payload[0].value.toLocaleString()} Classes
-                                                                            </p>
-                                                                        </div>
-                                                                    );
-                                                                }
-                                                                return null;
-                                                            }}
-                                                        />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            fill="#10b981"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            animationDuration={1500}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        >
-                                                            {divisionStats.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#10b981', '#34d399', '#059669', '#6ee7b7', '#047857'][index % 5]} />
-                                                            ))}
-                                                        </Bar>
-                                                    </BarChart>
-                                                </ResponsiveContainer>
                                             </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'shifting' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Shifting: {
-                                                    insightsShiftingGrade === 'k' ? 'Kindergarten' : `Grade ${insightsShiftingGrade.replace('g', '')}`
-                                                }
-                                                {insightsShiftingCategory !== 'total' && ` (${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift)`}
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_shift_${insightsShiftingCategory}_${insightsShiftingGrade}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name={`${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift`}
-                                                            fill={insightsShiftingCategory === 'single' ? '#3b82f6' : insightsShiftingCategory === 'double' ? '#f59e0b' : '#ef4444'}
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'delivery' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg text-teal-600 dark:text-teal-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Learning Delivery: {
-                                                    insightsDeliveryGrade === 'k' ? 'Kindergarten' : `Grade ${insightsDeliveryGrade.replace('g', '')}`
-                                                }
-                                                {insightsDeliveryCategory !== 'total' && ` (${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning)`}
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_mode_${insightsDeliveryCategory}_${insightsDeliveryGrade}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name={`${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning`}
-                                                            fill={insightsDeliveryCategory === 'inperson' ? '#10b981' : insightsDeliveryCategory === 'blended' ? '#6366f1' : '#f43f5e'}
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'adm' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Emergency ADM: {
-                                                    insightsAdmType === 'mdl' ? 'Modular Distance (MDL)' :
-                                                        insightsAdmType === 'odl' ? 'Online Distance (ODL)' :
-                                                            insightsAdmType === 'tvi' ? 'TV/Radio (TVI/RBI)' : 'Blended Learning'
-                                                }
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_adm_${insightsAdmType}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Schools"
-                                                            fill="#ef4444"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'teachers' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Teacher Count: {insightsTeacherGrade === 'total' ? 'All Grades' : insightsTeacherGrade === 'k' ? 'Kindergarten' : `Grade ${insightsTeacherGrade.replace('g', '')}`}
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: insightsTeacherGrade === 'total'
-                                                                ? ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'].reduce((acc, g) => acc + parseInt(d[`cnt_teach_${g}`] || 0), 0)
-                                                                : parseInt(d[`cnt_teach_${insightsTeacherGrade}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Teachers"
-                                                            fill="#3b82f6"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'multigrade' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Multigrade Teachers: {insightsMultigradeCategory === '1_2' ? 'Grades 1 & 2' : insightsMultigradeCategory === '3_4' ? 'Grades 3 & 4' : 'Grades 5 & 6'}
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_multi_${insightsMultigradeCategory}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Teachers"
-                                                            fill="#f59e0b"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'experience' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Teaching Experience: {insightsExperienceCategory.replace('_', '-')} Years
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_exp_${insightsExperienceCategory}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Teachers"
-                                                            fill="#8b5cf6"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {insightsMetric === 'specialization' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-pink-50 dark:bg-pink-900/20 rounded-lg text-pink-600 dark:text-pink-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Specialization: {
-                                                    insightsSpecializationSubject === 'math' ? 'Mathematics' :
-                                                        insightsSpecializationSubject === 'sci' ? 'Science' :
-                                                            insightsSpecializationSubject === 'eng' ? 'English' :
-                                                                insightsSpecializationSubject === 'fil' ? 'Filipino' :
-                                                                    insightsSpecializationSubject === 'ap' ? 'Araling Panlipunan' :
-                                                                        insightsSpecializationSubject === 'mapeh' ? 'MAPEH' :
-                                                                            insightsSpecializationSubject === 'esp' ? 'Edukasyon sa Pagpapakatao' :
-                                                                                insightsSpecializationSubject === 'tle' ? 'TLE' :
-                                                                                    insightsSpecializationSubject === 'gen' ? 'General Education' : 'Early Childhood'
-                                                }
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_spec_${insightsSpecializationSubject}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Teachers"
-                                                            fill="#ec4899"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {insightsMetric === 'inventory' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg text-cyan-600 dark:text-cyan-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Inventory: {
-                                                    insightsInventoryItem === 'seats' ? `Seats (Grade ${insightsSeatsGrade.replace('g', '').replace('k', 'Kindergarten')})` :
-                                                        insightsInventoryItem === 'toilets' ? `Comfort Rooms (${insightsToiletType === 'common' ? 'Common/Shared' :
-                                                            insightsToiletType === 'male' ? 'Male' :
-                                                                insightsToiletType === 'female' ? 'Female' : 'PWD'
-                                                            })` :
-                                                            insightsInventoryItem === 'ecart' ? 'E-Classroom Cart' :
-                                                                insightsInventoryItem === 'laptop' ? 'Laptops' :
-                                                                    insightsInventoryItem === 'printer' ? 'Printers' : 'Smart TVs'
-                                                } {insightsInventoryItem !== 'seats' && insightsInventoryItem !== 'toilets' && '(Functional)'}
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => {
-                                                            let val = 0;
-                                                            if (insightsInventoryItem === 'seats') {
-                                                                val = parseInt(d[`cnt_seats_${insightsSeatsGrade}`] || 0);
-                                                            } else if (insightsInventoryItem === 'toilets') {
-                                                                val = parseInt(d[`cnt_toilet_${insightsToiletType}`] || 0);
-                                                            } else {
-                                                                val = parseInt(d[`cnt_equip_${insightsInventoryItem}_func`] || 0);
-                                                            }
-                                                            return {
-                                                                ...d,
-                                                                value: val,
-                                                                displayDivision: formatInsightLabel(d)
-                                                            };
-                                                        })}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Units"
-                                                            fill="#06b6d4"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'classrooms' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Classrooms: {
-                                                    insightsClassroomCondition === 'good' ? 'Good Condition' :
-                                                        insightsClassroomCondition === 'new' ? 'Newly Built' :
-                                                            insightsClassroomCondition === 'repair' ? 'Needs Major Repairs' : 'For Demolition/Condemned'
-                                                }
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_class_${insightsClassroomCondition}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Classrooms"
-                                                            fill="#f59e0b"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'rooms' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg text-violet-600 dark:text-violet-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Specialized Rooms: {
-                                                    insightsRoomType === 'sci' ? 'Science Lab' :
-                                                        insightsRoomType === 'com' ? 'Computer Lab' : 'TVL Workshop'
-                                                }
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_room_${insightsRoomType}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Rooms"
-                                                            fill="#8b5cf6"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'site' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg text-teal-600 dark:text-teal-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Site & Utilities: {
-                                                    (insightsSiteCategory === 'elec' ? 'Electricity' :
-                                                        insightsSiteCategory === 'water' ? 'Water' :
-                                                            insightsSiteCategory === 'build' ? 'Buildable Space' : 'SHA / Hardship') + ' - ' +
-                                                    (insightsSiteSubOption === 'grid' ? 'Grid Supply' :
-                                                        insightsSiteSubOption === 'offgrid' ? 'Off-Grid' :
-                                                            insightsSiteSubOption === 'piped' ? 'Piped Water' :
-                                                                insightsSiteSubOption === 'natural' ? 'Natural Resources' :
-                                                                    insightsSiteSubOption === 'yes' ? 'Yes' :
-                                                                        insightsSiteSubOption === 'no' ? 'No' :
-                                                                            insightsSiteSubOption === 'hardship' ? 'Hardship Post' :
-                                                                                insightsSiteSubOption === 'multi' ? 'Pure Multigrade' : 'None/No Source')
-                                                }
-                                            </h3>
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => ({
-                                                            ...d,
-                                                            value: parseInt(d[`cnt_site_${insightsSiteCategory}_${insightsSiteSubOption}`] || 0),
-                                                            displayDivision: formatInsightLabel(d)
-                                                        }))}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="displayDivision"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                            </>
-                                                        )}
-                                                        <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            name="Schools"
-                                                            fill="#14b8a6"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        />
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-
-
-                                    {insightsMetric === 'demographic' && (
-                                        <>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-pink-50 dark:bg-pink-900/20 rounded-lg text-pink-600 dark:text-pink-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Learner Demographic: {
-                                                    insightsDemographicCategory === 'sned' ? 'SNED' :
-                                                        insightsDemographicCategory === 'disability' ? 'Learners with Disability' :
-                                                            insightsDemographicCategory === 'als' ? 'ALS' :
-                                                                insightsDemographicCategory === 'muslim' ? 'Muslim' :
-                                                                    insightsDemographicCategory === 'ip' ? 'Indigenous People' :
-                                                                        insightsDemographicCategory === 'displaced' ? 'Displaced' :
-                                                                            insightsDemographicCategory === 'repetition' ? 'Repetition' :
-                                                                                insightsDemographicCategory === 'overage' ? 'Overage' : 'Dropouts'
-                                                } ({
-                                                    insightsDemographicGrade === 'total' ? 'Total' :
-                                                        insightsDemographicGrade === 'es' ? 'Elementary' :
-                                                            insightsDemographicGrade === 'jhs' ? 'Junior High' :
-                                                                insightsDemographicGrade === 'shs' ? 'Senior High' :
-                                                                    insightsDemographicGrade === 'k' ? 'Kindergarten' :
-                                                                        `Grade ${insightsDemographicGrade.replace('g', '')}`
-                                                })
-                                            </h3>
-
-                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart
-                                                        layout={isMobile ? 'vertical' : 'horizontal'}
-                                                        data={insightChartData.map(d => {
-                                                            const key = `stat_${insightsDemographicCategory}_${insightsDemographicGrade}`;
-                                                            return {
-                                                                name: formatInsightLabel(d),
-                                                                fullName: d[insightLabelKey],
-                                                                value: parseInt(d[key] || 0)
-                                                            };
-                                                        })}
-                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                                                    >
-                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                        {isMobile ? (
-                                                            <>
-                                                                <XAxis type="number" hide />
-                                                                <YAxis
-                                                                    dataKey="name"
-                                                                    type="category"
-                                                                    width={100}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                />
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <XAxis
-                                                                    dataKey="name"
-                                                                    axisLine={false}
-                                                                    tickLine={false}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                    dy={10}
-                                                                    interval={0}
-                                                                    angle={-45}
-                                                                    textAnchor="end"
-                                                                />
-                                                                <YAxis
-                                                                    axisLine={false}
-                                                                    tickLine={false}
-                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                    tickFormatter={(value) => value.toLocaleString()}
-                                                                />
-                                                            </>
-                                                        )}
-                                                        <Tooltip
-                                                            cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                            content={({ active, payload }) => {
-                                                                if (active && payload && payload.length) {
-                                                                    return (
-                                                                        <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                            <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                            <p className="font-mono text-pink-300">
-                                                                                {payload[0].value.toLocaleString()} Learners
-                                                                            </p>
-                                                                        </div>
-                                                                    );
-                                                                }
-                                                                return null;
-                                                            }}
-                                                        />
-                                                        <Bar
-                                                            onClick={handleInsightBarClick}
-                                                            cursor="pointer"
-                                                            dataKey="value"
-                                                            fill="#ec4899"
-                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                            animationDuration={1500}
-                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                            barSize={isMobile ? 20 : undefined}
-                                                        >
-                                                            {divisionStats.map((entry, index) => (
-                                                                <Cell key={`cell-${index}`} fill={['#ec4899', '#db2777', '#be185d', '#9d174d', '#831843'][index % 5]} />
-                                                            ))}
-                                                        </Bar>
-                                                    </BarChart>
-                                                </ResponsiveContainer>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}
+
 
                     {/* SCHOOL TAB */}
                     {
@@ -4347,7 +3145,7 @@ const MonitoringDashboard = () => {
 
                     {/* VALIDATION TAB (For SDO) */}
                     {
-                        activeTab === 'validation' && (
+                        activeTab === 'validation' && effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' && (
                             <div className="space-y-6">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Data Validation</h2>
 
