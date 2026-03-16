@@ -29,6 +29,14 @@ const ProjectValidation = () => {
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
+        const checkAccess = () => {
+            const role = localStorage.getItem('userRole');
+            if (role === 'Regional Office' || role === 'School Division Office') {
+                navigate('/monitoring-dashboard');
+            }
+        };
+        checkAccess();
+
         const fetchData = async () => {
             const currentUser = auth.currentUser;
             if (!currentUser) return;

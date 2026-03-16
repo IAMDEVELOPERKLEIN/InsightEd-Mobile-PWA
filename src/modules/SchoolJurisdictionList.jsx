@@ -239,46 +239,48 @@ const SchoolJurisdictionList = () => {
                                     </div>
                                 </div>
 
-                                {/* --- DATA HEALTH SCORE --- */}
-                                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
-                                    <div className="flex items-center gap-3">
-                                        {/* Score Badge */}
-                                        <div className={`flex items-center justify-center w-12 h-12 rounded-xl font-black text-lg text-white shadow-sm ${
-                                            school.data_health_score === 100
-                                                ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
-                                                : school.data_health_score >= 80
-                                                    ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                                                    : school.data_health_score >= 50
-                                                        ? 'bg-gradient-to-br from-amber-500 to-amber-600'
-                                                        : school.data_health_score > 0
-                                                            ? 'bg-gradient-to-br from-red-500 to-red-600'
-                                                            : 'bg-gradient-to-br from-slate-300 to-slate-400'
-                                        }`}>
-                                            {school.data_health_score ?? '--'}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Health</p>
-                                            <p className={`text-sm font-bold ${
-                                                school.data_health_description === 'Excellent' ? 'text-emerald-600' :
-                                                school.data_health_description === 'Good' ? 'text-blue-600' :
-                                                school.data_health_description === 'Fair' ? 'text-amber-600' :
-                                                school.data_health_description === 'Critical' ? 'text-red-600' :
-                                                'text-slate-400'
+                                {/* --- DATA HEALTH SCORE --- (Hidden for RO/SDO) */}
+                                {userData?.role !== 'Regional Office' && userData?.role !== 'School Division Office' && (
+                                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+                                        <div className="flex items-center gap-3">
+                                            {/* Score Badge */}
+                                            <div className={`flex items-center justify-center w-12 h-12 rounded-xl font-black text-lg text-white shadow-sm ${
+                                                school.data_health_score === 100
+                                                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-600'
+                                                    : school.data_health_score >= 80
+                                                        ? 'bg-gradient-to-br from-blue-500 to-blue-600'
+                                                        : school.data_health_score >= 50
+                                                            ? 'bg-gradient-to-br from-amber-500 to-amber-600'
+                                                            : school.data_health_score > 0
+                                                                ? 'bg-gradient-to-br from-red-500 to-red-600'
+                                                                : 'bg-gradient-to-br from-slate-300 to-slate-400'
                                             }`}>
-                                                {school.data_health_description || 'Pending Validation'}
-                                            </p>
+                                                {school.data_health_score ?? '--'}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Health</p>
+                                                <p className={`text-sm font-bold ${
+                                                    school.data_health_description === 'Excellent' ? 'text-emerald-600' :
+                                                    school.data_health_description === 'Good' ? 'text-blue-600' :
+                                                    school.data_health_description === 'Fair' ? 'text-amber-600' :
+                                                    school.data_health_description === 'Critical' ? 'text-red-600' :
+                                                    'text-slate-400'
+                                                }`}>
+                                                    {school.data_health_description || 'Pending Validation'}
+                                                </p>
+                                            </div>
                                         </div>
+                                        {/* Issues */}
+                                        {school.data_quality_issues && school.data_quality_issues !== 'None' && school.data_quality_issues.trim() !== '' && (
+                                            <div className="mt-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl p-3">
+                                                <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Issues Detected</p>
+                                                <p className="text-xs text-red-700 dark:text-red-300 font-semibold leading-relaxed whitespace-pre-wrap">
+                                                    {school.data_quality_issues}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                    {/* Issues */}
-                                    {school.data_quality_issues && school.data_quality_issues !== 'None' && school.data_quality_issues.trim() !== '' && (
-                                        <div className="mt-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-xl p-3">
-                                            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Issues Detected</p>
-                                            <p className="text-xs text-red-700 dark:text-red-300 font-semibold leading-relaxed whitespace-pre-wrap">
-                                                {school.data_quality_issues}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
+                                )}
 
                                 <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700/50">
                                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">View Selection</p>
@@ -347,12 +349,14 @@ const SchoolJurisdictionList = () => {
                                             <FiClock className="text-amber-600 dark:text-amber-400" size={16} />
                                             <span className="text-[8px] font-bold mt-1 text-amber-900/60 dark:text-amber-200/60">Res</span>
                                         </button>
-                                        <button
-                                            onClick={() => navigate(`/project-validation?schoolId=${school.school_id}`)}
-                                            className="col-span-4 mt-2 flex items-center justify-center gap-2 py-3 bg-[#CC0000] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20"
-                                        >
-                                            <FiHardDrive /> Infrastructure Monitoring
-                                        </button>
+                                        {userData?.role !== 'Regional Office' && userData?.role !== 'School Division Office' && (
+                                            <button
+                                                onClick={() => navigate(`/project-validation?schoolId=${school.school_id}`)}
+                                                className="col-span-4 mt-2 flex items-center justify-center gap-2 py-3 bg-[#CC0000] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20"
+                                            >
+                                                <FiHardDrive /> Infrastructure Monitoring
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
