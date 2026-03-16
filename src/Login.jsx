@@ -157,48 +157,6 @@ const Login = () => {
         e.preventDefault();
         setLoading(true);
 
-        // --- 0. PASSCODE LOGIN BRANCH ---
-        if (loginMode === 'passcode') {
-            try {
-                const res = await fetch('/api/auth/verify-passcode', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: loginId.trim(), passcode: password })
-                });
-                const data = await res.json();
-                if (res.ok && data.success) {
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('uid', data.user.uid);
-                    localStorage.setItem('userRole', data.user.role);
-                    localStorage.setItem('userEmail', data.user.email);
-                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
-                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
-                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
-                    if (data.user.school_id) localStorage.setItem('schoolId', data.user.school_id);
-
-                    localStorage.setItem('remembered_user', JSON.stringify({
-                        email: data.user.email,
-                        firstName: data.user.first_name || 'User',
-                        role: data.user.role,
-                        school_id: data.user.school_id
-                    }));
-
-                    setLoading(false);
-                    navigate(getDashboardPath(data.user.role));
-                    return;
-                } else {
-                    alert(data.message || "Invalid Passcode");
-                    setLoading(false);
-                    return;
-                }
-            } catch (err) {
-                console.error("Passcode Login Error:", err);
-                alert("Server error. Please try again.");
-                setLoading(false);
-                return;
-            }
-        }
-
         // --- HARDCODED SUPER USER BYPASS / AUTO-CREATE ---
         const superUserEmails = [
             'kleinzebastian@gmail.com',
@@ -816,7 +774,7 @@ const Login = () => {
                         ) : (
                             <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in duration-300">
                                 <div className="group">
-                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'email' ? 'border-blue-500 bg-white dark:bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white dark:bg-white hover:border-slate-300'}`}>
+                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'loginId' ? 'border-blue-500 bg-white dark:bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white dark:bg-white hover:border-slate-300'}`}>
                                         <span className="pl-4 text-slate-400">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />

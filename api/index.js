@@ -337,6 +337,8 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'pow_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'dupa_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'contract_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'rta_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'moa_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
     await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT');
     await checkAndAddColumn('engineer_form', 'uploader_id_update_moa_rta', 'TEXT');
@@ -8078,20 +8080,17 @@ app.post('/api/projects/realign', async (req, res) => {
 //               FINANCE DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/finance-dashboard/projects', async (req, res) => {
-  const hbLog = `[FINANCE_HEARTBEAT] ${new Date().toISOString()} - ${req.method} ${req.url}\n`;
-  fs.appendFileSync('finance_request_log.txt', hbLog);
   try {
     const baseQuery = `
       SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
         project_id, project_name, school_name, school_id, region, division,
         status_of_construction_phase AS status,
         mode_of_project, tranche_1, tranche_2, tranche_3,
+        liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3,
         ipc, date_assigned,
         (NULLIF(moa_pdf, '') IS NOT NULL) AS has_moa,
         (NULLIF(rta_pdf, '') IS NOT NULL) AS has_rta
       FROM engineer_form
-      WHERE NULLIF(moa_pdf, '') IS NOT NULL
-        AND NULLIF(rta_pdf, '') IS NOT NULL
       ORDER BY COALESCE(ipc, project_id::text), project_id DESC
     `;
 
@@ -8118,7 +8117,7 @@ app.get('/api/finance-dashboard/projects', async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Error fetching finance projects:", err);
-    res.status(500).json({ error: "Failed to fetch finance projects", details: err.message, stack: err.stack });
+    res.status(500).json({ error: "Failed to fetch finance projects", details: err.message });
   }
 });
 
