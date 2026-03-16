@@ -336,6 +336,7 @@ const Login = () => {
                     if (data.user.province) localStorage.setItem('userProvince', data.user.province);
                     if (data.user.school_id) {
                         localStorage.setItem('schoolId', data.user.school_id);
+                    }
                     if (data.user.account_category) {
                         localStorage.setItem('accountCategory', data.user.account_category);
                     }
