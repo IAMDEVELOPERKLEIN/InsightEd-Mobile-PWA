@@ -198,6 +198,7 @@ const NewProjects = () => {
 
         // Remarks
         otherRemarks: '',
+        numberOfUnits: 0,
 
         // Location (New)
         latitude: '',
@@ -661,7 +662,7 @@ const NewProjects = () => {
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString(),
-                uploader_type: (userRole === 'EFD' || userRole === 'HRODI Engineer') ? 'EFD Engineer' :
+                uploader_type: (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'HRODI') ? 'EFD Engineer' :
                                ((userRole === 'Non-DepEd Engineer' || accountCategory === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'DepEd Engineer'),
                 implementingAgency: (userRole === 'DepEd Engineer' || userRole === 'Engineer') ? 'DepEd' : (formData.implementingAgency || null),
                 implementingAgencySpecific: formData.implementingAgencySpecific || null
@@ -755,8 +756,9 @@ const NewProjects = () => {
             if (documents.POW) await uploadDoc('POW', documents.POW);
             if (documents.DUPA) await uploadDoc('DUPA', documents.DUPA);
             if (documents.CONTRACT) await uploadDoc('CONTRACT', documents.CONTRACT);
-            if (documents.RTA && userRole === 'EFD') await uploadDoc('RTA', documents.RTA);
-            if (documents.MOA && userRole === 'EFD') await uploadDoc('MOA', documents.MOA);
+            const isEFDOrHRODI = (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'HRODI' || accountCategory === 'HRODI Engineer' || accountCategory === 'EFD');
+            if (documents.RTA && isEFDOrHRODI) await uploadDoc('RTA', documents.RTA);
+            if (documents.MOA && isEFDOrHRODI) await uploadDoc('MOA', documents.MOA);
             const ipc = projectData.ipc;
 
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
@@ -947,6 +949,26 @@ const NewProjects = () => {
                                 />
                             </div>
 
+                            {/* 1.75 NO. OF UNITS (New Field) */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                    No. of units <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="number"
+                                    name="numberOfUnits"
+                                    value={formData.numberOfUnits || ''}
+                                    onChange={(e) => {
+                                        if (e.target.value.length > 4) return;
+                                        handleChange(e);
+                                    }}
+                                    min="0"
+                                    required
+                                    placeholder="e.g. 1"
+                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                                />
+                            </div>
+
                             {/* 1.8 NUMBER OF SITES */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
@@ -1030,7 +1052,7 @@ const NewProjects = () => {
                         </div>
 
                         {/* --- IMPLEMENTING AGENCY SECTION (HRODI Engineer only) --- */}
-                        {(userRole === 'HRODI Engineer' || userRole === 'HRODI') && (
+                        {(userRole === 'HRODI Engineer' || userRole === 'HRODI' || userRole === 'EFD' || accountCategory === 'HRODI Engineer' || accountCategory === 'EFD') && (
                             <>
                                 <SectionHeader title="Implementing Agency" icon="🏛️" />
                                 <div className="space-y-4">

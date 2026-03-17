@@ -100,14 +100,14 @@ const AgencyDashboard = () => {
                 setMessage({ text: `Project assigned to ${engineerName} successfully!`, type: 'success' });
                 // Update local state
                 setAllProjects(prev => prev.map(p => 
-                    p.project_id === selectedProjectForAssignment.project_id ? { ...p, engineer_name: engineerName } : p
+                    p.project_id === selectedProjectForAssignment.project_id ? { ...p, assigned_engineer_name: engineerName } : p
                 ));
                 setSelectedProjectForAssignment(null);
                 setSelectedEngineer('');
                 
                 // Also update filtered projects if applicable
                 setProjects(prev => prev.map(p => 
-                    p.project_id === selectedProjectForAssignment.project_id ? { ...p, engineer_name: engineerName } : p
+                    p.project_id === selectedProjectForAssignment.project_id ? { ...p, assigned_engineer_name: engineerName } : p
                 ));
             } else {
                 const err = await response.json();

@@ -279,6 +279,11 @@ const EngineerDashboard = () => {
               statusAsOfDate: item.statusAsOfDate,
               otherRemarks: item.otherRemarks,
               contractorName: item.contractorName,
+              hasPow: item.hasPow,
+              hasDupa: item.hasDupa,
+              hasContract: item.hasContract,
+              hasMoa: item.hasMoa,
+              hasRta: item.hasRta
             }));
 
             // Cache data if we are an Engineer

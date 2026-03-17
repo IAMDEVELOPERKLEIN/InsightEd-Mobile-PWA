@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus } from 'react-icons/fi';
-import { auth } from '../firebase';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
+import { uploadFileInChunks } from '../utils/chunkedUploader';
+import EditProjectModal from '../components/EditProjectModal';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2 } from 'react-icons/fi';
+import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 
 const EFDMonitoring = () => {
     const navigate = useNavigate();
@@ -20,6 +22,10 @@ const EFDMonitoring = () => {
     const [selectedDonated, setSelectedDonated] = useState('All'); // 'All', 'Donated', 'Non-Donated'
     const [selectedDocStatus, setSelectedDocStatus] = useState('All'); // 'All', 'Complete', 'Missing RTA', 'Missing MOA', 'Missing Both'
     const [fundingYears, setFundingYears] = useState([]);
+    
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage] = useState(10);
 
     const categories = [
         "New Construction",
@@ -49,6 +55,22 @@ const EFDMonitoring = () => {
     const [selectedProjectForDocs, setSelectedProjectForDocs] = useState(null);
     const [uploadDocs, setUploadDocs] = useState({ RTA: null, MOA: null });
     const [isUploadingDocs, setIsUploadingDocs] = useState(false);
+
+    // Edit Modal State
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [selectedProjectForEdit, setSelectedProjectForEdit] = useState(null);
+
+    // Edit Modal Photo State
+    const [internalFiles, setInternalFiles] = useState([]);
+    const [internalPreviews, setInternalPreviews] = useState([]);
+    const [externalFiles, setExternalFiles] = useState([]);
+    const [externalPreviews, setExternalPreviews] = useState([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const [activeCategory, setActiveCategory] = useState('Internal');
+
+    // Refs for hidden file inputs
+    const fileInputRef = React.useRef(null);
+    const cameraInputRef = React.useRef(null);
 
     const handleClearFilters = () => {
         setSelectedRegion('');
@@ -153,6 +175,18 @@ const EFDMonitoring = () => {
         });
     }, [projects, searchTerm, showUnassignedOnly, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, selectedDonated, selectedDocStatus]);
 
+    // Pagination Logic
+    const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
+    const paginatedProjects = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredProjects.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredProjects, currentPage, itemsPerPage]);
+
+    // Reset page on filter change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, selectedDonated, selectedDocStatus, showUnassignedOnly]);
+
     const handleAssign = async () => {
         if (!selectedProject || !selectedEngineer) return;
 
@@ -213,15 +247,15 @@ const EFDMonitoring = () => {
             const documents = {};
             
             if (uploadDocs.RTA) {
-                console.log(`   - Converting RTA to base64...`);
-                documents.RTA = await convertFullFileToBase64(uploadDocs.RTA);
+                console.log(`   - Uploading RTA via chunks...`);
+                documents.RTA = await uploadFileInChunks(uploadDocs.RTA);
             }
             if (uploadDocs.MOA) {
-                console.log(`   - Converting MOA to base64...`);
-                documents.MOA = await convertFullFileToBase64(uploadDocs.MOA);
+                console.log(`   - Uploading MOA via chunks...`);
+                documents.MOA = await uploadFileInChunks(uploadDocs.MOA);
             }
 
-            console.log(`   - Sending bulk documents to API...`);
+            console.log(`   - Sending document URLs to API...`);
             const response = await fetch('/api/bulk-upload-project-documents', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -260,6 +294,131 @@ const EFDMonitoring = () => {
         } finally {
             setIsUploadingDocs(false);
         }
+    };
+
+    const handleCameraClick = (category) => {
+        setActiveCategory(category);
+        cameraInputRef.current?.click();
+    };
+
+    const handleGalleryClick = (category) => {
+        setActiveCategory(category);
+        fileInputRef.current?.click();
+    };
+
+    const handleFileUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        // Limit to 100MB
+        const validFiles = files.filter(file => file.size <= 100 * 1024 * 1024);
+        const newPreviews = validFiles.map(file => URL.createObjectURL(file));
+
+        if (activeCategory === 'Internal') {
+            setInternalFiles(prev => [...prev, ...validFiles]);
+            setInternalPreviews(prev => [...prev, ...newPreviews]);
+        } else {
+            setExternalFiles(prev => [...prev, ...validFiles]);
+            setExternalPreviews(prev => [...prev, ...newPreviews]);
+        }
+
+        e.target.value = null;
+    };
+
+    const removeFile = (index, category) => {
+        if (category === 'Internal') {
+            setInternalFiles(prev => prev.filter((_, i) => i !== index));
+            setInternalPreviews(prev => prev.filter((_, i) => i !== index));
+        } else {
+            setExternalFiles(prev => prev.filter((_, i) => i !== index));
+            setExternalPreviews(prev => prev.filter((_, i) => i !== index));
+        }
+    };
+
+    const handleEditProject = (project) => {
+        setSelectedProjectForEdit(project);
+        setEditModalOpen(true);
+    };
+
+    const handleSaveProject = async (updatedProject) => {
+        const uid = localStorage.getItem('uid');
+        if (!uid) return;
+
+        setIsUploading(true);
+        try {
+            // 1. Update Project Details
+            const response = await fetch(`/api/update-project/${updatedProject.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...updatedProject,
+                    uid: uid,
+                    modifiedBy: userRole || 'EFD Engineer'
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to update project');
+
+            // 2. Upload Images if any
+            const { compressImage } = await import('../utils/imageCompression');
+            const allFiles = [
+                ...internalFiles.map(f => ({ file: f, category: 'Internal' })),
+                ...externalFiles.map(f => ({ file: f, category: 'External' }))
+            ];
+
+            if (allFiles.length > 0) {
+                for (const item of allFiles) {
+                    try {
+                        const base64Image = await compressImage(item.file);
+                        await fetch('/api/upload-image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                projectId: updatedProject.id,
+                                imageData: base64Image,
+                                uploadedBy: uid,
+                                category: item.category
+                            }),
+                        });
+                    } catch (err) {
+                        console.error("Compression/Upload failed for file:", item.file.name, err);
+                    }
+                }
+            }
+
+            // 3. Cleanup & Success
+            setMessage({ text: 'Project updated successfully!', type: 'success' });
+            setEditModalOpen(false);
+            setInternalFiles([]);
+            setInternalPreviews([]);
+            setExternalFiles([]);
+            setExternalPreviews([]);
+            
+            // Refresh projects list
+            const projRes = await fetch('/api/projects');
+            if (projRes.ok) setProjects(await projRes.json());
+
+        } catch (error) {
+            console.error('Save Error:', error);
+            setMessage({ text: error.message || 'Failed to update project', type: 'error' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const formatAllocation = (value) => {
+        const num = Number(value) || 0;
+        return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    const formatDateShort = (dateString) => {
+        if (!dateString) return "TBD";
+        const date = new Date(dateString);
+        return date.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "2-digit",
+        });
     };
 
     if (loading) {
@@ -426,71 +585,203 @@ const EFDMonitoring = () => {
                     </div>
                 </div>
 
-                {/* Projects List */}
-                <div className="px-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24 max-w-7xl mx-auto w-full">
-                    {filteredProjects.map((p) => {
-                        const isUnassigned = !p.engineerName;
-                        return (
-                            <div 
-                                key={p.id}
-                                onClick={() => navigate(`/project-details/${p.id}`)}
-                                className={`bg-white p-5 rounded-3xl border transition-all cursor-pointer hover:shadow-xl hover:border-blue-300 flex flex-col h-full ${selectedProject?.id === p.id ? 'border-blue-500 ring-4 ring-blue-500/10' : isUnassigned ? 'border-orange-200 bg-orange-50/30' : 'border-slate-100'}`}
-                            >
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex-1 min-w-0 pr-2">
-                                    <h4 className="text-sm font-black text-slate-800 tracking-tight truncate overflow-hidden" title={p.projectName}>{p.projectName}</h4>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{p.schoolName}</p>
-                                    <div className="flex gap-1 mt-1.5 flex-wrap">
-                                        {!p.hasMoa && !p.hasRta ? (
-                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">Missing MOA & RTA</span>
-                                        ) : p.hasMoa && p.hasRta ? (
-                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200">Docs Complete</span>
-                                        ) : !p.hasMoa ? (
-                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">Missing MOA</span>
-                                        ) : (
-                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 border border-orange-200">Missing RTA</span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 shrink-0">
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedProjectForDocs(p);
-                                        }}
-                                        className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
-                                        title="Upload Documents (RTA/MOA)"
-                                    >
-                                        <FiFileText size={18} />
-                                    </button>
-                                    <button 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedProject(p);
-                                        }}
-                                        className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                                        title="Assign Engineer"
-                                    >
-                                        <FiUserPlus size={18} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="mt-auto flex items-center justify-between border-t border-slate-50 pt-4">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                    <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-[10px] font-black text-slate-500 shrink-0">
-                                        {p.engineerName?.[0] || '?'}
-                                    </div>
-                                    <span className={`text-[10px] font-bold truncate ${isUnassigned ? 'text-orange-600' : 'text-slate-600 italic'}`}>
-                                        {isUnassigned ? 'Unassigned' : `Engr. ${p.engineerName}`}
-                                    </span>
-                                </div>
-                                <span className="text-[8px] font-black text-slate-400 uppercase bg-slate-50 px-2 py-1 rounded-md shrink-0 ml-2">
-                                    ID: {p.id}
-                                </span>
-                            </div>
+                {/* Projects List - Table Format */}
+                <div className="px-5 max-w-7xl mx-auto w-full pb-24">
+                    <div className="bg-white rounded-[2.5rem] shadow-xl shadow-blue-900/5 border border-slate-100 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[1000px]">
+                                <thead>
+                                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] pl-8">Project Details</th>
+                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Status & Progress</th>
+                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Financials</th>
+                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Assignment</th>
+                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] text-center pr-8">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {paginatedProjects.map((p) => {
+                                        const isUnassigned = !p.engineerName;
+                                        const progress = parseInt(p.accomplishmentPercentage || 0);
+                                        
+                                        return (
+                                            <tr 
+                                                key={p.id}
+                                                className={`group hover:bg-blue-50/30 transition-all duration-300 ${selectedProject?.id === p.id ? 'bg-blue-50/50' : ''}`}
+                                            >
+                                                <td className="p-6 pl-8">
+                                                    <div className="flex flex-col gap-1">
+                                                        <h4 className="text-sm font-black text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors">
+                                                            {p.projectName}
+                                                        </h4>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                                            {p.schoolName}
+                                                        </p>
+                                                        <div className="flex gap-2 mt-2">
+                                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                                                ID: {p.id}
+                                                            </span>
+                                                            {p.projectCategory && (
+                                                                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                                                                    {p.projectCategory}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-6">
+                                                    <div className="flex flex-col gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`w-2 h-2 rounded-full animate-pulse ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
+                                                            <span className="text-[10px] font-black text-slate-700 uppercase">{p.status || 'Ongoing'}</span>
+                                                        </div>
+                                                        <div className="w-48 space-y-1.5">
+                                                            <div className="flex justify-between items-center text-[9px] font-bold text-slate-400">
+                                                                <span>PROGRESS</span>
+                                                                <span className={progress === 100 ? "text-emerald-500" : "text-blue-600"}>{progress}%</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-50">
+                                                                <div 
+                                                                    className={`h-full rounded-full transition-all duration-1000 ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                                                                    style={{ width: `${progress}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-6">
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Allocation</span>
+                                                            <span className="text-[11px] font-mono font-bold text-slate-700">{formatAllocation(p.projectAllocation)}</span>
+                                                        </div>
+                                                        <div className="flex flex-col mt-1">
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tranches Total</span>
+                                                            <span className="text-[11px] font-mono font-bold text-emerald-600">
+                                                                {formatAllocation((Number(p.tranche_1)||0) + (Number(p.tranche_2)||0) + (Number(p.tranche_3)||0))}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-6">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-sm ${isUnassigned ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                            {p.engineerName?.[0] || '?'}
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className={`text-[10px] font-black ${isUnassigned ? 'text-orange-600 italic' : 'text-slate-700'}`}>
+                                                                {isUnassigned ? 'Unassigned' : `Engr. ${p.engineerName}`}
+                                                            </span>
+                                                            <span className="text-[9px] text-slate-400 font-bold uppercase">{p.division || 'Unknown Division'}</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-6 pr-8">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); navigate(`/project-details/${p.id}`); }}
+                                                            className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-white hover:text-blue-600 hover:shadow-lg transition-all border border-transparent hover:border-blue-100"
+                                                            title="View Details"
+                                                        >
+                                                            <FiChevronRight size={18} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
+                                                            className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white hover:shadow-lg transition-all"
+                                                            title="Update Project"
+                                                        >
+                                                            <FiEdit2 size={18} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedProjectForDocs(p);
+                                                                try {
+                                                                    const res = await fetch(`/api/projects/${p.id}`);
+                                                                    if (res.ok) {
+                                                                        const fullData = await res.json();
+                                                                        setSelectedProjectForDocs(prev => prev && prev.id === p.id ? { ...prev, ...fullData } : prev);
+                                                                    }
+                                                                } catch (err) { console.warn("Background fetch failed:", err); }
+                                                            }}
+                                                            className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white hover:shadow-lg transition-all"
+                                                            title="Upload RTA/MOA"
+                                                        >
+                                                            <FiFileText size={18} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
+                                                            className="p-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white hover:shadow-lg transition-all"
+                                                            title="Assign Engineer"
+                                                        >
+                                                            <FiUserPlus size={18} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
-                    );})}
+
+                        {/* Pagination Controls */}
+                        {totalPages > 1 && (
+                            <div className="bg-slate-50/30 border-t border-slate-100 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center sm:text-left">
+                                    Showing <span className="text-slate-700">{Math.min(filteredProjects.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-700">{Math.min(filteredProjects.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-700">{filteredProjects.length}</span> projects
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                        disabled={currentPage === 1}
+                                        className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 disabled:opacity-30 transition-all shadow-sm"
+                                    >
+                                        <FiChevronDown size={18} className="rotate-90" />
+                                    </button>
+                                    
+                                    <div className="flex items-center gap-1">
+                                        {[...Array(totalPages)].map((_, i) => {
+                                            const page = i + 1;
+                                            if (totalPages > 5) {
+                                                if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
+                                                    return (
+                                                        <button 
+                                                            key={page}
+                                                            onClick={() => setCurrentPage(page)}
+                                                            className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-400'}`}
+                                                        >
+                                                            {page}
+                                                        </button>
+                                                    );
+                                                } else if (page === currentPage - 2 || page === currentPage + 2) {
+                                                    return <span key={page} className="text-slate-400 text-[10px]">...</span>;
+                                                }
+                                                return null;
+                                            }
+                                            return (
+                                                <button 
+                                                    key={page}
+                                                    onClick={() => setCurrentPage(page)}
+                                                    className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-400'}`}
+                                                >
+                                                    {page}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <button
+                                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                        disabled={currentPage === totalPages}
+                                        className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 disabled:opacity-30 transition-all shadow-sm"
+                                    >
+                                        <FiChevronRight size={18} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Assignment Modal/Overlay */}
@@ -650,6 +941,29 @@ const EFDMonitoring = () => {
                             </div>
                         </div>
                     </div>,
+                    document.body
+                )}
+
+                {/* Edit Modal */}
+                {/* Hidden Inputs for Photos */}
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
+                <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
+
+                {editModalOpen && createPortal(
+                    <EditProjectModal 
+                        isOpen={editModalOpen}
+                        onClose={() => setEditModalOpen(false)}
+                        project={selectedProjectForEdit}
+                        onSave={handleSaveProject}
+                        userRole={userRole}
+                        mode="full"
+                        onCameraClick={handleCameraClick}
+                        onGalleryClick={handleGalleryClick}
+                        internalPreviews={internalPreviews}
+                        externalPreviews={externalPreviews}
+                        onRemoveFile={removeFile}
+                        isUploading={isUploading}
+                    />,
                     document.body
                 )}
 

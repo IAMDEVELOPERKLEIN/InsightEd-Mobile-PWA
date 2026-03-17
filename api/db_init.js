@@ -335,8 +335,6 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS funding_year INTEGER,
             ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
             ADD COLUMN IF NOT EXISTS uploader_type TEXT, -- EFD, Division Engineer, Non-DepEd Engineer
-            ADD COLUMN IF NOT EXISTS rta_pdf TEXT,
-            ADD COLUMN IF NOT EXISTS moa_pdf TEXT,
             ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE;
         `);
 

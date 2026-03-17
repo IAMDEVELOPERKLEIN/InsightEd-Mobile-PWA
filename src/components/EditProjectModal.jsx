@@ -113,76 +113,94 @@ const EditProjectModal = ({
     const [isSubmittingRealignment, setIsSubmittingRealignment] = useState(false);
 
     useEffect(() => {
-        if (project) {
-            setFormData({
-                ...project,
-                // Ensure fields exist to control inputs
-                latitude: project.latitude || '',
-                longitude: project.longitude || '',
-                // Populate all fields
-                projectCategory: project.projectCategory || '',
-                projectName: project.projectName || '',
-                scopeOfWork: project.scopeOfWork || '',
-                numberOfStoreys: project.numberOfStoreys || '',
-                numberOfClassrooms: project.numberOfClassrooms || '',
-                numberOfSites: project.numberOfSites || '',
-                schoolId: project.schoolId || '',
-                schoolName: project.schoolName || '',
-                region: project.region || '',
-                division: project.division || '',
-                targetCompletionDate: project.targetCompletionDate || '',
-                noticeToProceed: project.noticeToProceed || '',
-                constructionStartDate: project.constructionStartDate || '',
-                contractorName: project.contractorName || '',
-                approved_budget_for_contract: project.approved_budget_for_contract || project.projectAllocation || '',
-                batchOfFunds: project.batchOfFunds || '',
-                contract_amount: project.contract_amount || '',
-                fundsUtilized: project.fundsUtilized || '',
-                // NEW FIELDS
-                statusDesignPhase: project.status_design_phase || project.statusDesignPhase || '',
-                contractId: project.contract_id || project.contractId || '',
-                dateNoticeOfAward: project.date_notice_of_award || project.dateNoticeOfAward || '',
-                issuanceOfInvitationToBid: project.issuance_of_invitation_to_bid || project.issuanceOfInvitationToBid || '',
-                preBidConference: project.pre_bid_conference || project.preBidConference || '',
-                openingOfTechnicalProposal: project.opening_of_technical_proposal || project.openingOfTechnicalProposal || '',
-                openingOfFinancialProposal: project.opening_of_financial_proposal || project.openingOfFinancialProposal || '',
-                requestForQuotation: project.request_for_quotation || project.requestForQuotation || '',
-                negotiation: project.negotiation || project.negotiation || '',
-                openingOfQuotation: project.opening_of_quotation || project.openingOfQuotation || '',
-                statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0], // Default to today if missing
-                accomplishmentPercentage: project.accomplishmentPercentage || 0,
-                status: project.status_of_construction_phase || project.status || ProjectStatus.NotYetStarted,
-                otherRemarks: project.otherRemarks || '',
-                // Tab Modes
-                hasVariationOrder: project.hasVariationOrder || project.has_variation_order || false,
-                isRealignment: false,
-                variationOrderPdf: project.variationOrderPdf || project.variation_order_pdf || null,
-                // New VO Fields
-                vo_number: project.vo_number || '',
-                vo_requested_date: (project.vo_requested_date || project.vo_approval_date) ? (project.vo_requested_date || project.vo_approval_date).split('T')[0] : '',
-                vo_requested_by: project.vo_requested_by || project.vo_approved_by || '',
-                // Enhanced VO Fields
-                vo_type: project.vo_type || 'Combined',
-                vo_sequence_no: project.vo_sequence_no || '',
-                additive_amount: project.additive_amount || '',
-                deductive_amount: project.deductive_amount || '',
-                net_vo_amount: project.net_vo_amount || '',
-                time_extension_days: project.time_extension_days || '',
-                revised_expiry_date: project.revised_expiry_date ? project.revised_expiry_date.split('T')[0] : '',
-                caf_reference: project.caf_reference || '',
-                // Tab State
-                isProjectDetailsUpdate: false,
-                fundingYear: project.funding_year || project.fundingYear || '',
-                fundingYearJustification: '',
-                // Donated Status
-                isDonated: project.isDonated || project.is_donated || false,
-                // Justification Hierarchy
-                justification_category: project.justification_category || 'Site Condition',
-                justification_details: project.justification_details || ''
+        if (project && isOpen) {
+            setFormData(prev => {
+                // If it's a different project or we're just opening the modal, do a full reset
+                if (!prev || prev.id !== project.id) {
+                    return {
+                        ...project,
+                        // Ensure fields exist to control inputs
+                        latitude: project.latitude || '',
+                        longitude: project.longitude || '',
+                        // Populate all fields
+                        projectCategory: project.projectCategory || '',
+                        projectName: project.projectName || '',
+                        scopeOfWork: project.scopeOfWork || '',
+                        numberOfStoreys: project.numberOfStoreys || '',
+                        numberOfClassrooms: project.numberOfClassrooms || '',
+                        numberOfSites: project.numberOfSites || '',
+                        schoolId: project.schoolId || '',
+                        schoolName: project.schoolName || '',
+                        region: project.region || '',
+                        division: project.division || '',
+                        targetCompletionDate: project.targetCompletionDate || '',
+                        noticeToProceed: project.noticeToProceed || '',
+                        constructionStartDate: project.constructionStartDate || '',
+                        contractorName: project.contractorName || '',
+                        approved_budget_for_contract: project.approved_budget_for_contract || project.projectAllocation || '',
+                        batchOfFunds: project.batchOfFunds || '',
+                        contract_amount: project.contract_amount || '',
+                        fundsUtilized: project.fundsUtilized || '',
+                        statusDesignPhase: project.status_design_phase || project.statusDesignPhase || '',
+                        contractId: project.contract_id || project.contractId || '',
+                        dateNoticeOfAward: project.date_notice_of_award || project.dateNoticeOfAward || '',
+                        issuanceOfInvitationToBid: project.issuance_of_invitation_to_bid || project.issuanceOfInvitationToBid || '',
+                        preBidConference: project.pre_bid_conference || project.preBidConference || '',
+                        openingOfTechnicalProposal: project.opening_of_technical_proposal || project.openingOfTechnicalProposal || '',
+                        openingOfFinancialProposal: project.opening_of_financial_proposal || project.openingOfFinancialProposal || '',
+                        requestForQuotation: project.request_for_quotation || project.requestForQuotation || '',
+                        negotiation: project.negotiation || project.negotiation || '',
+                        openingOfQuotation: project.opening_of_quotation || project.openingOfQuotation || '',
+                        statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0],
+                        accomplishmentPercentage: project.accomplishmentPercentage || 0,
+                        status: project.status_of_construction_phase || project.status || ProjectStatus.NotYetStarted,
+                        otherRemarks: project.otherRemarks || '',
+                        hasVariationOrder: project.hasVariationOrder || project.has_variation_order || false,
+                        isRealignment: false,
+                        variationOrderPdf: project.variationOrderPdf || project.variation_order_pdf || null,
+                        vo_number: project.vo_number || '',
+                        vo_requested_date: (project.vo_requested_date || project.vo_approval_date) ? (project.vo_requested_date || project.vo_approval_date).split('T')[0] : '',
+                        vo_requested_by: project.vo_requested_by || project.vo_approved_by || '',
+                        vo_type: project.vo_type || 'Combined',
+                        vo_sequence_no: project.vo_sequence_no || '',
+                        additive_amount: project.additive_amount || '',
+                        deductive_amount: project.deductive_amount || '',
+                        net_vo_amount: project.net_vo_amount || '',
+                        time_extension_days: project.time_extension_days || '',
+                        revised_expiry_date: project.revised_expiry_date ? project.revised_expiry_date.split('T')[0] : '',
+                        caf_reference: project.caf_reference || '',
+                        isProjectDetailsUpdate: false,
+                        fundingYear: project.funding_year || project.fundingYear || '',
+                        fundingYearJustification: '',
+                        isDonated: project.isDonated || project.is_donated || false,
+                        justification_category: project.justification_category || 'Site Condition',
+                        justification_details: project.justification_details || ''
+                    };
+                }
+                
+                // If it's the same project updating (likely the background fetch),
+                // merge in missing PDFs and existence flags without overwriting dirty fields
+                const updatedData = { ...prev };
+                const pdfFields = ['pow_pdf', 'dupa_pdf', 'contract_pdf', 'moa_pdf', 'rta_pdf', 'variation_order_pdf', 'variationOrderPdf'];
+                const flagFields = ['hasPow', 'hasDupa', 'hasContract', 'hasMoa', 'hasRta', 'hasVariationOrder'];
+                
+                [...pdfFields, ...flagFields].forEach(field => {
+                    if (project[field] !== undefined && (prev[field] === undefined || prev[field] === null)) {
+                        updatedData[field] = project[field];
+                    }
+                });
+
+                return updatedData;
             });
             setIsFundingYearLocked(true);
             setShowJustificationPrompt(false);
-            setDocuments({ POW: null, DUPA: null, CONTRACT: null });
+            setDocuments(prev => {
+                // Only reset documents if the project changed
+                if (project.id !== formData?.id) {
+                    return { POW: null, DUPA: null, CONTRACT: null };
+                }
+                return prev;
+            });
         }
     }, [project, isOpen]);
 
