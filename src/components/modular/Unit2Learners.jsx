@@ -82,9 +82,9 @@ const Unit2Learners = () => {
 
     const activeMonogrades = useMemo(() => {
         if (!schoolOffering) return [];
-        // Filters only ELEM grades. Kinder is Step 1.
-        return ALL_GRADES.filter(g => ELEM_GRADES.includes(g.id) && !lockedGrades.has(g.id));
-    }, [schoolOffering, lockedGrades]);
+        // Filters based on available grades. Kinder is Step 1.
+        return availableGrades.filter(g => g.id !== 'kinder' && !lockedGrades.has(g.id));
+    }, [availableGrades, schoolOffering, lockedGrades]);
 
     const grandTotal = useMemo(() => {
         let sum = (parseInt(kinderEnrollment) || 0);
@@ -363,7 +363,13 @@ const Unit2Learners = () => {
             if (currentGradeIndex > 0) {
                 setCurrentGradeIndex(prev => prev - 1);
             } else {
-                setCurrentStep(orgType === 'mixed' ? 3 : 2);
+                if (hasElementary) {
+                    setCurrentStep(orgType === 'mixed' ? 3 : 2);
+                } else if (hasKinder) {
+                    setCurrentStep(1);
+                } else {
+                    navigate("/modular-dashboard");
+                }
             }
             return;
         }
@@ -374,7 +380,13 @@ const Unit2Learners = () => {
                 setCurrentGradeIndex(activeMonogrades.length - 1);
                 setCurrentStep(4);
             } else {
-                setCurrentStep(orgType === 'pure_mg' ? 3 : 2);
+                if (hasElementary) {
+                    setCurrentStep(orgType === 'pure_mg' ? 3 : 2);
+                } else if (hasKinder) {
+                    setCurrentStep(1);
+                } else {
+                    navigate("/modular-dashboard");
+                }
             }
             return;
         }

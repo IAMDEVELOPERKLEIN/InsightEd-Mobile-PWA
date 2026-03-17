@@ -77,12 +77,14 @@ const BottomNav = ({ userRole }) => {
         ],
         'Regional Office': [
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
+            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
             { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
+            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },

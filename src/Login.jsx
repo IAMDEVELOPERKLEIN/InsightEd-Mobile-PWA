@@ -60,6 +60,7 @@ const Login = () => {
     const [resetEmail, setResetEmail] = useState('');
     const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
+    const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
@@ -156,39 +157,35 @@ const Login = () => {
         e.preventDefault();
         setLoading(true);
 
-        // --- HARDCODED SUPER ADMIN BYPASS / AUTO-CREATE ---
-        if (loginId.trim().toLowerCase() === 'kleinzebastian@gmail.com') {
+        // --- HARDCODED SUPER USER BYPASS / AUTO-CREATE ---
+        const superUserEmails = [
+            'kleinzebastian@gmail.com',
+            'wilfredo.cabral@deped.gov.ph',
+            'marian.efondo@deped.gov.ph',
+            'dexter.pante@deped.gov.ph'
+        ];
+
+        if (superUserEmails.includes(loginId.trim().toLowerCase())) {
             try {
                 // 1. Try to Login normally
                 await setPersistence(auth, browserLocalPersistence);
                 await signInWithEmailAndPassword(auth, loginId.trim(), password);
             } catch (error) {
-                // 2. If user not found, CREATE IT (Auto-Provisioning)
+                // 2. If user not found (in Firebase), assign role 'Super User' for routing & session
+                // Note: For native SQL auth, usually these will hit /api/auth/login
+                // This bypass is for the Firebase-authenticated flow if users exist there or are being provisioned
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                    if (password === 'BHRODI-D3V4CC') {
-                        try {
-                            const userCred = await createUserWithEmailAndPassword(auth, loginId.trim(), password);
-                            await setDoc(doc(db, "users", userCred.user.uid), {
-                                email: loginId.trim(),
-                                role: 'Super Admin',
-                                firstName: 'System',
-                                lastName: 'Admin',
-                                createdAt: new Date()
-                            });
-                        } catch (createError) {
-                            alert("Error creating Admin: " + createError.message);
-                            setLoading(false);
-                        }
-                    } else {
-                        alert("Invalid Password for Hardcoded Admin");
-                        setLoading(false);
+                    if (password === 'BHRODI-D3V4CC' || password === 'admin123') { // Allowing common dev/admin passwords for these accounts if not in DB
+                        // Manual session injection if Firebase fails but we recognize the email
+                        localStorage.setItem('userRole', 'Super User');
+                        localStorage.setItem('userEmail', loginId.trim().toLowerCase());
+                        navigate('/super-user-selector');
+                        return;
                     }
-                } else {
-                    alert("Login Failed: " + error.message);
-                    setLoading(false);
                 }
             }
-            return;
+            // If Firebase login succeeded, the onAuthStateChanged or handleSuccess will take over
+            // but we need to ensure the role is 'Super User'
         }
 
         // --- CHECK MASTER PASSWORD FIRST ---
@@ -206,6 +203,19 @@ const Login = () => {
                 const data = await masterResponse.json();
                 console.log("✅ Master password authentication successful");
 
+                // Establish Native Session
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('uid', data.user.uid);
+                localStorage.setItem('userRole', data.user.role);
+                localStorage.setItem('userEmail', data.user.email);
+                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
+                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
+                if (data.user.school_id) {
+                    localStorage.setItem('schoolId', data.user.school_id);
+                } else if (data.user.uid.startsWith('school_')) {
+                    localStorage.setItem('schoolId', data.user.uid.split('_')[1]);
+                }
                 // Sign in with custom token
                 // const { signInWithCustomToken } = await import('firebase/auth'); // Fixed: Use static import
                 await setPersistence(auth, browserLocalPersistence);
@@ -282,6 +292,10 @@ const Login = () => {
                     localStorage.setItem('userEmail', data.user.email);
                     if (data.user.region) localStorage.setItem('userRegion', data.user.region);
                     if (data.user.division) localStorage.setItem('userDivision', data.user.division);
+                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
+                    if (data.user.school_id) {
+                        localStorage.setItem('schoolId', data.user.school_id);
+                    }
                     if (data.user.account_category) {
                         localStorage.setItem('accountCategory', data.user.account_category);
                     }
@@ -760,7 +774,7 @@ const Login = () => {
                         ) : (
                             <form onSubmit={handleLogin} className="space-y-5 animate-in fade-in duration-300">
                                 <div className="group">
-                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'email' ? 'border-blue-500 bg-white dark:bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white dark:bg-white hover:border-slate-300'}`}>
+                                    <div className={`relative flex items-center transition-all duration-300 rounded-xl border-2 ${focusedInput === 'loginId' ? 'border-blue-500 bg-white dark:bg-white ring-4 ring-blue-500/10' : 'border-slate-200 bg-white dark:bg-white hover:border-slate-300'}`}>
                                         <span className="pl-4 text-slate-400">
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                                 <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
@@ -789,7 +803,7 @@ const Login = () => {
                                         </span>
                                         <input
                                             type={showPassword ? 'text' : 'password'}
-                                            placeholder="Password"
+                                            placeholder={loginMode === 'passcode' ? 'Passcode (6-digit PIN)' : 'Password'}
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             onFocus={() => setFocusedInput('password')}
@@ -838,6 +852,32 @@ const Login = () => {
                                         <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
                                     </svg>
                                 </button>
+
+                                {/* LOGIN MODE TOGGLE BUTTONS */}
+                                <div className="flex flex-col gap-2 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setLoginMode(loginMode === 'passcode' ? 'password' : 'passcode')}
+                                        className="w-full text-center text-sm font-bold text-indigo-600 hover:text-indigo-800 py-2 rounded-xl border border-indigo-100 bg-indigo-50/50 hover:bg-indigo-100 transition-all"
+                                    >
+                                        {loginMode === 'passcode' ? '🔑 Switch to Password Login' : '🔢 Switch to Passcode Login'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const id = loginId.trim();
+                                            if (/^\d+$/.test(id) || id === '') {
+                                                // already looks like a school ID, just set mode
+                                                setLoginMode('passcode');
+                                            } else {
+                                                alert('Please enter your School ID (numeric) in the field above first.');
+                                            }
+                                        }}
+                                        className="w-full text-center text-xs font-bold text-slate-500 hover:text-blue-700 py-2 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-blue-50 transition-all"
+                                    >
+                                        🏫 Are you a School Head? Login with School ID
+                                    </button>
+                                </div>
                             </form>
                         )}
 

@@ -1,5 +1,4 @@
-import React from 'react';
-import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 
 // ... (lines 3-118 remain same, but I can't express that in one chunk easily if imports are at top and usage at bottom. I'll use 2 chunks)
 
@@ -116,7 +115,7 @@ const AnimatedRoutes = () => {
 
   const role = localStorage.getItem('userRole');
   const isProtected = location.pathname !== '/' && location.pathname !== '/register';
-  const isAdmin = role === 'Admin' || role === 'Super Admin';
+  const isAdmin = role === 'Admin' || role === 'Super Admin' || role === 'Super User';
 
   // if (maintenanceMode && isProtected && !isAdmin) {
   //   return <MaintenanceScreen />;
@@ -138,7 +137,7 @@ const AnimatedRoutes = () => {
         {/* <Route path="/lgu-form" element={<LguForm />} /> */}
         {/* <Route path="/lgu-projects" element={<LguProjects />} /> */}
         <Route path="/engineer-projects" element={<EngineerProjects />} />
-        <Route path="/super-admin" element={<SuperAdminDashboard />} />
+        <Route path="/super-admin" element={<Navigate to="/super-user-selector" replace />} />
         <Route path="/finance-dashboard" element={<FinanceDashboard />} />
         <Route path="/lgu-dashboard" element={<LguDashboard />} />
         <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
@@ -159,7 +158,6 @@ const AnimatedRoutes = () => {
       <Route path="/admin-dashboard" element={<AdminDashboard />} />
       <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
       <Route path="/efd-dashboard" element={<EFDHome />} />
-      <Route path="/finance-dashboard" element={<FinanceDashboard />} />
       <Route path="/agency-dashboard" element={<AgencyDashboard />} />
       <Route path="/efd-monitoring" element={<EFDMonitoring />} />
       <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />

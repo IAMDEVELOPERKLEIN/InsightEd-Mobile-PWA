@@ -26,6 +26,7 @@ import { z } from 'zod'; // For validation
 
 
 // Load environment variables
+
 dotenv.config();
 
 // --- FIREBASE ADMIN INIT ---
@@ -379,6 +380,12 @@ const initDB = async () => {
 
     // Base columns remain, but PDFs are now in engineer_documents. 
     // We keep checkAndAddColumn for transition then eventually drop.
+    await checkAndAddColumn('engineer_form', 'pow_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'dupa_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'contract_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'rta_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'moa_pdf', 'TEXT');
+    await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
     await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT');
     await checkAndAddColumn('engineer_form', 'implementing_agency_specific', 'TEXT');
     await checkAndAddColumn('engineer_form', 'uploader_id_moa_rta', 'TEXT');
@@ -1122,6 +1129,27 @@ const initFinanceDB = async () => {
         SET root_project_id = lgu_project_id 
         WHERE root_project_id IS NULL;
     `);
+
+    // --- LGU MIGRATIONS: Add missing columns for custom forms ---
+    await checkAndAddColumn('lgu_projects', 'ipc', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'lgu_id', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'lgu_name', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'batch_of_funds', 'TEXT');
+    await checkAndAddColumn('lgu_projects', 'target_completion_date', 'DATE');
+    await checkAndAddColumn('lgu_projects', 'actual_completion_date', 'DATE');
+    await checkAndAddColumn('lgu_projects', 'notice_to_proceed', 'DATE');
+
+    // --- LGU IMAGES TABLE ---
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS lgu_image (
+            id SERIAL PRIMARY KEY,
+            project_id INT REFERENCES lgu_projects(lgu_project_id) ON DELETE CASCADE,
+            image_data TEXT,
+            uploaded_by TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+
     console.log("✅ Finance DB Init: lgu_projects schema verified.");
 
   } catch (err) {
@@ -8111,8 +8139,6 @@ app.post('/api/projects/realign', async (req, res) => {
 //               FINANCE DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/finance-dashboard/projects', async (req, res) => {
-  const hbLog = `[FINANCE_HEARTBEAT] ${new Date().toISOString()} - ${req.method} ${req.url}\n`;
-  fs.appendFileSync('finance_request_log.txt', hbLog);
   try {
     const baseQuery = `
       SELECT DISTINCT ON (COALESCE(e.ipc, e.project_id::text)) 
@@ -8152,7 +8178,7 @@ app.get('/api/finance-dashboard/projects', async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Error fetching finance projects:", err);
-    res.status(500).json({ error: "Failed to fetch finance projects", details: err.message, stack: err.stack });
+    res.status(500).json({ error: "Failed to fetch finance projects", details: err.message });
   }
 });
 
@@ -10568,39 +10594,29 @@ app.get('/api/monitoring/stats', async (req, res) => {
       SELECT 
         COUNT(s.school_id) as total_schools,
         -- Sum up the modular unit flags from ph_schools (Mapping to legacy aliases)
-        COALESCE(SUM(CASE WHEN ps.unit1 > 0 THEN 1 ELSE 0 END), 0) as profile,
-        COALESCE(SUM(CASE WHEN ps.unit1 > 0 THEN 1 ELSE 0 END), 0) as head, -- Unit 1 also contains Head info
-        COALESCE(SUM(CASE WHEN ps.unit2 > 0 THEN 1 ELSE 0 END), 0) as enrollment,
-        COALESCE(SUM(CASE WHEN ps.unit3 > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
-        COALESCE(SUM(CASE WHEN ps.unit5 > 0 THEN 1 ELSE 0 END), 0) as shifting,
-        COALESCE(SUM(CASE WHEN ps.unit6 > 0 THEN 1 ELSE 0 END), 0) as personnel,
-        COALESCE(SUM(CASE WHEN ps.unit6 > 0 THEN 1 ELSE 0 END), 0) as specialization,
-        COALESCE(SUM(CASE WHEN ps.unit7 > 0 THEN 1 ELSE 0 END), 0) as resources,
-        COALESCE(SUM(CASE WHEN ps.unit4 > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
-        COALESCE(SUM(CASE WHEN ps.unit8 > 0 THEN 1 ELSE 0 END), 0) as facilities,
+        COALESCE(SUM(CASE WHEN s.unit1 > 0 THEN 1 ELSE 0 END), 0) as profile,
+        COALESCE(SUM(CASE WHEN s.unit1 > 0 THEN 1 ELSE 0 END), 0) as head, 
+        COALESCE(SUM(CASE WHEN s.unit2 > 0 THEN 1 ELSE 0 END), 0) as enrollment,
+        COALESCE(SUM(CASE WHEN s.unit3 > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
+        COALESCE(SUM(CASE WHEN s.unit5 > 0 THEN 1 ELSE 0 END), 0) as shifting,
+        COALESCE(SUM(CASE WHEN s.unit6 > 0 THEN 1 ELSE 0 END), 0) as personnel,
+        COALESCE(SUM(CASE WHEN s.unit6 > 0 THEN 1 ELSE 0 END), 0) as specialization,
+        COALESCE(SUM(CASE WHEN s.unit7 > 0 THEN 1 ELSE 0 END), 0) as resources,
+        COALESCE(SUM(CASE WHEN s.unit4 > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
+        COALESCE(SUM(CASE WHEN s.unit8 > 0 THEN 1 ELSE 0 END), 0) as facilities,
         
         -- Overall Completion (100%) - Using ph_schools unit_completion
-        COALESCE(COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END), 0) as completed_schools_count,
+        COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 THEN 1 END), 0) as completed_schools_count,
         
-        -- Validated Count (Use legacy if needed, or stick to completion for now)
-        COALESCE(COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
+        -- Validated Count
+        COALESCE(COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
         
-        -- Registered Count (Has anything in ph_schools?)
-        COUNT(ps.school_id) as registered_schools_count
-      FROM (
-        SELECT 
-          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-          COALESCE(p_in.school_name, s_in."School_Name") as school_name
-        FROM "schools_IERN" s_in
-        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-      ) s
+        -- Registered Count (Schools that have an IERN assigned)
+        COUNT(s.iern) as registered_schools_count
+      FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE s.region = UPPER(TRIM($1))
+      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1))
     `;
     console.log("DEBUG: Running Monitoring Stats for Region:", region, "Division:", division);
     let params = [region];
@@ -10635,7 +10651,8 @@ app.get('/api/monitoring/stats', async (req, res) => {
       learner_stats: parseInt(row.learner_stats || 0),
       completed_schools_count: parseInt(row.completed_schools_count || 0),
       validated_schools_count: parseInt(row.validated_schools_count || 0),
-      registered_schools_count: parseInt(row.registered_schools_count || 0)
+      registered_schools_count: parseInt(row.registered_schools_count || 0),
+      accounts_count: parseInt(row.registered_schools_count || 0)
     };
 
     res.json(safeRow);
@@ -10643,6 +10660,27 @@ app.get('/api/monitoring/stats', async (req, res) => {
     console.error("Monitoring Stats Error:", err);
     res.status(500).json({ error: "Failed to fetch stats", details: err.message });
   }
+});
+
+// --- DEBUG: Temp endpoint to check ph_schools iern data ---
+app.get('/api/debug/iern-check', async (req, res) => {
+  const { region = 'Region V' } = req.query;
+  try {
+    const r1 = await pool.query(`
+      SELECT division, COUNT(*) as total, COUNT(iern) as with_iern,
+             ARRAY_AGG(iern) FILTER (WHERE iern IS NOT NULL) as iern_values
+      FROM ph_schools
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
+      GROUP BY division ORDER BY division
+    `, [region]);
+    const r2 = await pool.query(`
+      SELECT school_id, school_name, division, iern
+      FROM ph_schools
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) AND iern IS NOT NULL
+      ORDER BY division, school_name
+    `, [region]);
+    res.json({ byDivision: r1.rows, schools_with_iern: r2.rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- 25b. GET: Monitoring Stats per Division (RO View) ---
@@ -10654,23 +10692,23 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
     // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        s.division, 
+        UPPER(TRIM(s.division)) as division, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN ps.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(ps.unit_completion), 0), 1) as avg_completion,
+        COUNT(s.iern) as completed_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
         
         -- Map modular units to legacy names for frontend bars
-        COALESCE(SUM(ps.unit1), 0) as profile,
-        COALESCE(SUM(ps.unit1), 0) as head,
-        COALESCE(SUM(ps.unit2), 0) as enrollment,
-        COALESCE(SUM(ps.unit3), 0) as organizedclasses,
-        COALESCE(SUM(ps.unit4), 0) as learner_stats,
-        COALESCE(SUM(ps.unit5), 0) as shifting,
-        COALESCE(SUM(ps.unit6), 0) as personnel,
-        COALESCE(SUM(ps.unit7), 0) as resources,
-        COALESCE(SUM(ps.unit8), 0) as facilities,
+        COALESCE(SUM(s.unit1), 0) as profile,
+        COALESCE(SUM(s.unit1), 0) as head,
+        COALESCE(SUM(s.unit2), 0) as enrollment,
+        COALESCE(SUM(s.unit3), 0) as organizedclasses,
+        COALESCE(SUM(s.unit4), 0) as learner_stats,
+        COALESCE(SUM(s.unit5), 0) as shifting,
+        COALESCE(SUM(s.unit6), 0) as personnel,
+        COALESCE(SUM(s.unit7), 0) as resources,
+        COALESCE(SUM(s.unit8), 0) as facilities,
 
         SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
         SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
@@ -11185,26 +11223,28 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM (
-        SELECT 
-          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-          COALESCE(p_in.school_name, s_in."School_Name") as school_name
-        FROM "schools_IERN" s_in
-        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-      ) s
+      FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE s.region = UPPER(TRIM($1))
-      GROUP BY s.division
-      ORDER BY s.division
+      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1))
+      GROUP BY UPPER(TRIM(s.division))
+      ORDER BY UPPER(TRIM(s.division))
     `;
     console.log("DEBUG: Running Division Stats for Region:", region);
 
     const result = await pool.query(query, [region]);
+    
+    // ADDED: Strip validation stats if role is RO/SDO
+    const requestRole = req.query.role;
+    if (requestRole === 'Regional Office' || requestRole === 'School Division Office') {
+      const sanitized = result.rows.map(r => ({
+        ...r,
+        validated_schools: 0,
+        for_validation_schools: 0
+      }));
+      return res.json(sanitized);
+    }
+
     res.json(result.rows);
   } catch (err) {
     console.error("Division Stats Error:", err);
@@ -11215,36 +11255,31 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
 // --- 27. GET: District Stats (Within Division) ---
 app.get('/api/monitoring/district-stats', async (req, res) => {
   const { region, division, groupBy } = req.query;
-  // console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division, groupBy); // Original line
-  // console.log("District Stats Query:", { region, division, groupBy }); // DEBUG LOG
 
   let groupCol = 's.district';
   if (groupBy === 'legislative') groupCol = 's.legislative_district';
   if (groupBy === 'municipality') groupCol = 's.municipality';
 
-  // console.log("Grouping By:", groupCol); // DEBUG LOG
-
   try {
-    // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        ${groupCol} as district, 
+        UPPER(TRIM(${groupCol})) as district, 
         COUNT(s.school_id) as total_schools, 
-        COUNT(CASE WHEN ps.unit_completion >= 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN ps.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN ps.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(ps.unit_completion), 0), 1) as avg_completion,
+        COUNT(s.iern) as completed_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN s.iern IS NOT NULL AND s.unit_completion >= 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(CASE WHEN s.iern IS NOT NULL THEN s.unit_completion ELSE NULL END), 0), 1) as avg_completion,
 
         -- Map modular units to legacy names for frontend bars
-        COALESCE(SUM(ps.unit1), 0) as profile,
-        COALESCE(SUM(ps.unit1), 0) as head,
-        COALESCE(SUM(ps.unit2), 0) as enrollment,
-        COALESCE(SUM(ps.unit3), 0) as organizedclasses,
-        COALESCE(SUM(ps.unit4), 0) as learner_stats,
-        COALESCE(SUM(ps.unit5), 0) as shifting,
-        COALESCE(SUM(ps.unit6), 0) as personnel,
-        COALESCE(SUM(ps.unit7), 0) as resources,
-        COALESCE(SUM(ps.unit8), 0) as facilities,
+        COALESCE(SUM(s.unit1), 0) as profile,
+        COALESCE(SUM(s.unit1), 0) as head,
+        COALESCE(SUM(s.unit2), 0) as enrollment,
+        COALESCE(SUM(s.unit3), 0) as organizedclasses,
+        COALESCE(SUM(s.unit4), 0) as learner_stats,
+        COALESCE(SUM(s.unit5), 0) as shifting,
+        COALESCE(SUM(s.unit6), 0) as personnel,
+        COALESCE(SUM(s.unit7), 0) as resources,
+        COALESCE(SUM(s.unit8), 0) as facilities,
 
         SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
         SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
@@ -11759,26 +11794,28 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
         SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
         SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
-      FROM (
-        SELECT 
-          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-          COALESCE(p_in.school_name, s_in."School_Name") as school_name
-        FROM "schools_IERN" s_in
-        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-      ) s
+      FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE s.region = UPPER(TRIM($1)) AND
-            s.division = UPPER(TRIM($2))
-      GROUP BY ${groupCol}
-      ORDER BY ${groupCol} ASC
+      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1)) AND
+            UPPER(TRIM(s.division)) = UPPER(TRIM($2))
+      GROUP BY UPPER(TRIM(${groupCol}))
+      ORDER BY UPPER(TRIM(${groupCol})) ASC
     `;
 
     const result = await pool.query(query, [region, division]);
+    
+    // ADDED: Strip validation stats if role is RO/SDO
+    const requestRole = req.query.role;
+    if (requestRole === 'Regional Office' || requestRole === 'School Division Office') {
+      const sanitized = result.rows.map(r => ({
+        ...r,
+        validated_schools: 0,
+        for_validation_schools: 0
+      }));
+      return res.json(sanitized);
+    }
+
     res.json(result.rows);
   } catch (err) {
     console.error("District Stats Error:", err);
@@ -11797,19 +11834,19 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // Base WHERE using schools table (source of truth)
     let whereClauses = [];
     let params = [];
-
+    // removed: whereClauses.push(`s.iern IS NOT NULL`);
     if (region) {
-      whereClauses.push(`s.region = UPPER(TRIM($${params.length + 1}))`);
+      whereClauses.push(`UPPER(TRIM(s.region)) = UPPER(TRIM($${params.length + 1}))`);
       params.push(region);
     }
 
     if (division) {
-      whereClauses.push(`s.division = UPPER(TRIM($${params.length + 1}))`);
+      whereClauses.push(`UPPER(TRIM(s.division)) = UPPER(TRIM($${params.length + 1}))`);
       params.push(division);
     }
 
     if (req.query.district) {
-      whereClauses.push(`s.district = UPPER(TRIM($${params.length + 1}))`);
+      whereClauses.push(`UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`);
       params.push(req.query.district);
     }
 
@@ -11826,21 +11863,21 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // We use schools table (s) for identity
     // We use school_profiles (sp) for status_of_construction_phase, handling NULLs with COALESCE
     const selectFields = `
-      ps.unit_completion as completion_percentage,
+      s.unit_completion as completion_percentage,
       s.school_name,
       s.school_id,
       COALESCE(sp.total_enrollment, 0) as total_enrollment,
       
-      (COALESCE(ps.unit1, 0) > 0) as profile_status,
-      (COALESCE(ps.unit1, 0) > 0) as head_status,
-      (COALESCE(ps.unit2, 0) > 0) as enrollment_status,
-      (COALESCE(ps.unit3, 0) > 0) as classes_status,
-      (COALESCE(ps.unit5, 0) > 0) as shifting_status,
-      (COALESCE(ps.unit6, 0) > 0) as personnel_status,
-      (COALESCE(ps.unit6, 0) > 0) as specialization_status,
-      (COALESCE(ps.unit7, 0) > 0) as resources_status,
-      (COALESCE(ps.unit4, 0) > 0) as learner_stats_status,
-      (COALESCE(ps.unit8, 0) > 0) as facilities_status,
+      (COALESCE(s.unit1, 0) > 0) as profile_status,
+      (COALESCE(s.unit1, 0) > 0) as head_status,
+      (COALESCE(s.unit2, 0) > 0) as enrollment_status,
+      (COALESCE(s.unit3, 0) > 0) as classes_status,
+      (COALESCE(s.unit5, 0) > 0) as shifting_status,
+      (COALESCE(s.unit6, 0) > 0) as personnel_status,
+      (COALESCE(s.unit6, 0) > 0) as specialization_status,
+      (COALESCE(s.unit7, 0) > 0) as resources_status,
+      (COALESCE(s.unit4, 0) > 0) as learner_stats_status,
+      (COALESCE(s.unit8, 0) > 0) as facilities_status,
       
       sp.submitted_by,
       sp.school_head_validation,
@@ -11849,23 +11886,17 @@ app.get('/api/monitoring/schools', async (req, res) => {
       ss.issues as data_quality_issues
     `;
 
+    // ADDED: Strip validation fields if role is RO/SDO (Optional param for now to avoid breaking existing users)
+    const requestRole = req.query.role;
+    const isRestricted = requestRole === 'Regional Office' || requestRole === 'School Division Office';
+
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     // COUNT Query (Count from schools table)
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM (
-        SELECT 
-          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-          COALESCE(p_in.school_name, s_in."School_Name") as school_name
-        FROM "schools_IERN" s_in
-        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-      ) s
+      FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       ${whereSql}
     `;
@@ -11876,21 +11907,11 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // DATA Query
     const dataQuery = `
       SELECT ${selectFields}
-      FROM (
-        SELECT 
-          COALESCE(p_in.school_id, s_in."SchoolID") as school_id,
-          UPPER(TRIM(COALESCE(p_in.region, s_in."Region"))) as region,
-          UPPER(TRIM(COALESCE(p_in.division, s_in."Division"))) as division,
-          UPPER(TRIM(COALESCE(p_in.district, s_in."District"))) as district,
-          COALESCE(p_in.school_name, s_in."School_Name") as school_name
-        FROM "schools_IERN" s_in
-        FULL OUTER JOIN ph_schools p_in ON s_in."SchoolID" = p_in.school_id
-      ) s
+      FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
-      LEFT JOIN ph_schools ps ON s.school_id = ps.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       ${whereSql}
-      ORDER BY ps.unit_completion DESC NULLS LAST, s.school_name ASC
+      ORDER BY s.unit_completion DESC NULLS LAST, s.school_name ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
@@ -11900,8 +11921,16 @@ app.get('/api/monitoring/schools', async (req, res) => {
     const result = await pool.query(dataQuery, queryParams);
 
     // Return structured response
+    let finalData = result.rows;
+    if (isRestricted) {
+      finalData = result.rows.map(r => {
+        const { school_head_validation, data_health_description, data_health_score, data_quality_issues, ...rest } = r;
+        return rest;
+      });
+    }
+
     res.json({
-      data: result.rows,
+      data: finalData,
       total: totalItems,
       page: pageNum,
       limit: limitNum,
@@ -13745,22 +13774,23 @@ app.get('/api/reports/insights/master', async (req, res) => {
 
       params.push(formattedRegion);
       params.push(shortRegion);
-      whereClause += ` AND (s.region = $${params.length - 1} OR s.region = $${params.length})`;
+      whereClause += ` AND (UPPER(TRIM(p.region)) = UPPER(TRIM($${params.length - 1})) OR UPPER(TRIM(p.region)) = UPPER(TRIM($${params.length})))`;
     }
     if (division && division !== 'All Divisions' && division !== 'null' && division !== 'undefined' && division !== 'All') {
       params.push(division);
-      whereClause += ` AND s.division = $${params.length}`;
+      whereClause += ` AND UPPER(TRIM(p.division)) = UPPER(TRIM($${params.length}))`;
     }
 
-    // Select all columns from school_profiles and the classification columns from ph_schools
+    // Select all columns from ph_schools and joined columns from school_profiles
     const query = `
       SELECT 
-        s.*, 
-        p.district
-      FROM school_profiles s
-      LEFT JOIN ph_schools p ON s.school_id = p.school_id
+        p.*, 
+        s.*,
+        p.school_id
+      FROM ph_schools p
+      LEFT JOIN school_profiles s ON p.school_id = s.school_id
       WHERE ${whereClause}
-      ORDER BY s.school_name ASC
+      ORDER BY p.school_name ASC
     `;
 
     const result = await pool.query(query, params);
@@ -13776,13 +13806,14 @@ app.get('/api/reports/insights/master', async (req, res) => {
   }
 });
 
-// --- GET: Insights Contextual Report ---
+// --- GET: Insights Summary Stats (Bar Graph Data) ---
 app.get('/api/reports/insights', async (req, res) => {
-  const { region, division, district } = req.query;
+  const { region, division, district, item, grade = 'total', subMetric } = req.query;
 
   try {
-    let whereClause = "1=1";
+    let whereClauses = ["1=1"];
     let params = [];
+    let groupCol = 'p.division';
 
     if (region && region !== 'null' && region !== 'undefined' && region !== 'All') {
       const formattedRegion = region.toLowerCase().includes('region') || ['NCR', 'CAR', 'BARMM'].includes(region)
@@ -13792,23 +13823,113 @@ app.get('/api/reports/insights', async (req, res) => {
 
       params.push(formattedRegion);
       params.push(shortRegion);
-      whereClause += ` AND (s.region = $${params.length - 1} OR s.region = $${params.length})`;
+      whereClauses.push(`(UPPER(TRIM(p.region)) = UPPER(TRIM($${params.length - 1})) OR UPPER(TRIM(p.region)) = UPPER(TRIM($${params.length})))`);
     }
+
     if (division && division !== 'All Divisions' && division !== 'null' && division !== 'undefined' && division !== 'All') {
       params.push(division);
-      whereClause += ` AND s.division = $${params.length}`;
+      whereClauses.push(`UPPER(TRIM(p.division)) = UPPER(TRIM($${params.length}))`);
+      groupCol = 'p.district';
     }
+
     if (district && district !== 'null' && district !== 'undefined' && district !== 'All') {
       params.push(district);
-      whereClause += ` AND p.district = $${params.length}`;
+      whereClauses.push(`UPPER(TRIM(p.district)) = UPPER(TRIM($${params.length}))`);
+      groupCol = 'p.school_name';
+    }
+
+    let metricSelect = '';
+    const grades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+
+    if (item === 'enrolment') {
+      const col = grade === 'total' ? 'total_enrollment' : `enroll_${grade}`;
+      metricSelect = `SUM(COALESCE(p.${col}, 0)) as value`;
+    } else if (['muslim', 'ip', 'lwd', 'displaced', 'overage', 'sned', 'dropout', 'repeater'].includes(item)) {
+      if (grade === 'total') {
+        const sumCols = grades.map(g => `COALESCE(p.${item}_${g}, 0)`).join(' + ');
+        metricSelect = `SUM(${sumCols}) as value`;
+      } else {
+        metricSelect = `SUM(COALESCE(p.${item}_${grade}, 0)) as value`;
+      }
+    } else if (item.startsWith('aral_')) {
+      const subject = item.replace('aral_', '');
+      const dbSubject = subject === 'science' ? 'sci' : (subject === 'reading' ? 'read' : 'math');
+      if (grade === 'total') {
+        const sumCols = grades.map(g => `COALESCE(p.aral_${dbSubject}_${g}, 0)`).join(' + ');
+        metricSelect = `SUM(${sumCols}) as value`;
+      } else {
+        metricSelect = `SUM(COALESCE(p.aral_${dbSubject}_${grade}, 0)) as value`;
+      }
+    } else if (item === 'class_size') {
+      const status = subMetric || 'within'; // less, within, above
+      // Map standards: Kinder (25), Elem (35), JHS/SHS (40). Using average 35 as baseline for comparison.
+      if (grade === 'total') {
+        const conds = grades.map(g => {
+          const limit = (g === 'kinder') ? 25 : (['g1','g2','g3','g4','g5','g6'].includes(g) ? 35 : 40);
+          if (status === 'less') return `CASE WHEN CAST(COALESCE(NULLIF(p.grade_${g}_size, ''), '0') AS INTEGER) < ${limit} THEN 1 ELSE 0 END`;
+          if (status === 'above') return `CASE WHEN CAST(COALESCE(NULLIF(p.grade_${g}_size, ''), '0') AS INTEGER) > ${limit} THEN 1 ELSE 0 END`;
+          return `CASE WHEN CAST(COALESCE(NULLIF(p.grade_${g}_size, ''), '0') AS INTEGER) BETWEEN ${limit - 5} AND ${limit + 5} THEN 1 ELSE 0 END`;
+        }).join(' + ');
+        metricSelect = `SUM(${conds}) as value`;
+      } else {
+        const limit = (grade === 'kinder') ? 25 : (['g1','g2','g3','g4','g5','g6'].includes(grade) ? 35 : 40);
+        let cond = '';
+        if (status === 'less') cond = `CAST(COALESCE(NULLIF(p.grade_${grade}_size, ''), '0') AS INTEGER) < ${limit}`;
+        else if (status === 'above') cond = `CAST(COALESCE(NULLIF(p.grade_${grade}_size, ''), '0') AS INTEGER) > ${limit}`;
+        else cond = `CAST(COALESCE(NULLIF(p.grade_${grade}_size, ''), '0') AS INTEGER) BETWEEN ${limit - 5} AND ${limit + 5}`;
+        metricSelect = `COUNT(CASE WHEN ${cond} THEN 1 END) as value`;
+      }
+    } else if (item === 'shifting') {
+      const status = subMetric || 'Double';
+      if (grade === 'total') {
+        const conds = grades.map(g => `CASE WHEN p.shift_${g} ILIKE '%${status}%' THEN 1 ELSE 0 END`).join(' + ');
+        metricSelect = `SUM(${conds}) as value`;
+      } else {
+        metricSelect = `COUNT(CASE WHEN p.shift_${grade} ILIKE '%${status}%' THEN 1 END) as value`;
+      }
+    } else if (item === 'mode') {
+      const status = subMetric || 'Distance';
+      if (grade === 'total') {
+        const conds = grades.map(g => `CASE WHEN p.mode_${g} ILIKE '%${status}%' THEN 1 ELSE 0 END`).join(' + ');
+        metricSelect = `SUM(${conds}) as value`;
+      } else {
+        metricSelect = `COUNT(CASE WHEN p.mode_${grade} ILIKE '%${status}%' THEN 1 END) as value`;
+      }
+    } else if (item === 'teachers') {
+      const level = subMetric || 'total'; // kinder, elementary, jhs, shs, total
+      const col = level === 'total' ? 'total_teachers_registered' : `total_teachers_${level}`;
+      metricSelect = `SUM(COALESCE(p.${col}, 0)) as value`;
+    } else if (item === 'specialization') {
+      const subject = subMetric || 'Science';
+      metricSelect = `COUNT(CASE WHEN p.teacher_specialization_mix ILIKE '%${subject}%' THEN 1 END) as value`;
+    } else if (item === 'building_condition') {
+      const condition = subMetric || 'Good';
+      const col = `bldg_count_${condition.toLowerCase().replace(' ', '_')}`;
+      metricSelect = `SUM(COALESCE(p.${col}, 0)) as value`;
+    } else if (item === 'it_equipment') {
+      const type = subMetric || 'laptop'; // laptop, tablet, pc, printer, ecart
+      metricSelect = `SUM(COALESCE(p.it_${type}_total, 0)) as value`;
+    } else if (item === 'risk_index') {
+      metricSelect = `ROUND(AVG(COALESCE(p.hazard_risk_score, 0)), 1) as value`;
+    } else {
+      metricSelect = `
+        COUNT(p.school_id) as total_schools,
+        COUNT(CASE WHEN sp.school_id IS NOT NULL THEN 1 END) as registered_schools,
+        COUNT(CASE WHEN p.unit_completion >= 100 THEN 1 END) as completed_schools,
+        ROUND(COALESCE(AVG(LEAST(COALESCE(p.unit_completion, 0), 100)), 0), 1) as avg_completion,
+        ROUND(COALESCE(AVG(CASE WHEN p.school_id IS NOT NULL THEN 100.0 * (CASE WHEN sp.school_id IS NOT NULL THEN 1 ELSE 0 END) ELSE 0 END), 0), 1) as value
+      `;
     }
 
     const query = `
-      SELECT s.*, p.district as derived_district, p.division as derived_division, p.region as derived_region
-      FROM school_profiles s
-      LEFT JOIN ph_schools p ON s.school_id = p.school_id
-      WHERE ${whereClause}
-      ORDER BY s.school_name ASC
+      SELECT 
+        UPPER(TRIM(${groupCol})) as label,
+        ${metricSelect}
+      FROM ph_schools p
+      LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
+      WHERE ${whereClauses.join(' AND ')}
+      GROUP BY UPPER(TRIM(${groupCol}))
+      ORDER BY label ASC
     `;
 
     const result = await pool.query(query, params);
@@ -13816,9 +13937,7 @@ app.get('/api/reports/insights', async (req, res) => {
     res.json({
       success: true,
       jurisdiction: region ? (division ? `${region} - ${division}` : `Region ${region}`) : 'National',
-      datasets: {
-        insights: result.rows
-      }
+      data: result.rows
     });
   } catch (err) {
     console.error("❌ Insights Report Error:", err);
@@ -14512,7 +14631,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
   try {
     // Auto-ensure columns exist before writing (Batch optimized)
     const allGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-    const allCats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
+    const allCats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater', 'lwd', 'sned'];
     const alterParts = [];
     for (const cat of allCats) {
       for (const g of allGrades) {
@@ -14543,7 +14662,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
 
     // Dynamic Category x Grade columns (K-12)
     const grades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-    const categories = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
+    const categories = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater', 'lwd', 'sned'];
 
     for (const cat of categories) {
       for (const grade of grades) {
@@ -14594,6 +14713,17 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
 app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   const data = req.body;
+
+  try {
+    // Audit & Auto-migrate Insights columns
+    const insightsCols = [
+      'total_teachers_kinder', 'total_teachers_elementary', 'total_teachers_jhs', 'total_teachers_shs',
+      'bldg_count_good', 'bldg_count_minor_repair', 'bldg_count_major_repair',
+      'it_laptop_total', 'it_tablet_total', 'it_pc_total', 'it_printer_total', 'it_ecart_total'
+    ];
+    const insightsAlter = insightsCols.map(c => `ADD COLUMN IF NOT EXISTS ${c} INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE ph_schools ${insightsAlter.join(', ')}`);
+  } catch (e) {}
 
   try {
     // Base dynamic fields for K-12
@@ -15745,6 +15875,233 @@ app.get('/api/health', (req, res) => {
 });
 
 // --- SERVER STARTUP ---
+// ==================================================================
+//                      LGU FORMS ROUTES
+// ==================================================================
+
+// --- LGU 1. POST: Save New Project (LGU) ---
+app.post('/api/lgu/save-project', async (req, res) => {
+    const data = req.body;
+
+    if (!data.schoolName || !data.projectName || !data.schoolId) {
+        return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    let client;
+    let clientNew;
+
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        // Dual Write Setup
+        if (poolNew) {
+            try {
+                clientNew = await poolNew.connect();
+                await clientNew.query('BEGIN');
+            } catch (connErr) {
+                console.error("⚠️ Dual-Write LGU: Failed to start transaction:", connErr.message);
+                clientNew = null;
+            }
+        }
+
+        // 1. Generate IPC (LGU-YYYY-XXXXX)
+        const year = new Date().getFullYear();
+        const ipcResult = await client.query(
+            "SELECT ipc FROM lgu_projects WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+            [`LGU-${year}-%`]
+        );
+
+        let nextSeq = 1;
+        if (ipcResult.rows.length > 0) {
+            const lastIpc = ipcResult.rows[0].ipc;
+            const parts = lastIpc.split('-');
+            if (parts.length === 3 && !isNaN(parts[2])) {
+                nextSeq = parseInt(parts[2]) + 1;
+            }
+        }
+        const newIpc = `LGU-${year}-${String(nextSeq).padStart(5, '0')}`;
+
+        // 2. Prepare Data
+        const lguName = await getUserFullName(data.uid);
+        const resolvedLguName = lguName || data.submittedBy || 'LGU User';
+
+        const docs = data.documents || [];
+        const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
+        const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
+        const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
+
+        const projectValues = [
+            data.projectName, data.schoolName, data.schoolId,
+            valueOrNull(data.region), valueOrNull(data.division),
+            data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+            valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+            valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+            valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+            valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+            data.uid,           // lgu_id
+            newIpc,
+            resolvedLguName,    // lgu_name
+            valueOrNull(data.latitude),
+            valueOrNull(data.longitude),
+            powDoc,
+            dupaDoc,
+            contractDoc
+        ];
+
+        const projectQuery = `
+      INSERT INTO "lgu_projects" (
+        project_name, school_name, school_id, region, division,
+        project_status, accomplishment_percentage, status_as_of_date,
+        target_completion_date, actual_completion_date, notice_to_proceed,
+        contractor_name, total_funds, batch_of_funds, nature_of_delay,
+        lgu_id, ipc, lgu_name, latitude, longitude,
+        pow_pdf, dupa_pdf, contract_pdf
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      RETURNING lgu_project_id as project_id, project_name, ipc;
+    `;
+
+        // 3. Insert Project
+        const projectResult = await client.query(projectQuery, projectValues);
+        const newProject = projectResult.rows[0];
+        const newProjectId = newProject.project_id;
+
+        // 4. Insert Images
+        if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+            const imageQuery = `
+        INSERT INTO "lgu_image" (project_id, image_data, uploaded_by)
+        VALUES ($1, $2, $3)
+      `;
+            for (const imgBase64 of data.images) {
+                await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+            }
+        }
+
+        await client.query('COMMIT');
+
+        // Dual Write Replay
+        if (clientNew) {
+            try {
+                await clientNew.query(projectQuery, projectValues);
+                const newProjRes = await clientNew.query("SELECT lgu_project_id as project_id FROM lgu_projects WHERE ipc = $1", [newIpc]);
+                if (newProjRes.rows.length > 0) {
+                    const secProjId = newProjRes.rows[0].project_id;
+                    if (data.images && Array.isArray(data.images)) {
+                        const imageQuery = `INSERT INTO "lgu_image" (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+                        for (const imgBase64 of data.images) {
+                            await clientNew.query(imageQuery, [secProjId, imgBase64, data.uid]);
+                        }
+                    }
+                }
+                await clientNew.query('COMMIT');
+                console.log("✅ Dual-Write: LGU Project Synced!");
+            } catch (dwErr) {
+                console.error("❌ Dual-Write LGU Error:", dwErr.message);
+                await clientNew.query('ROLLBACK').catch(() => { });
+            }
+        }
+
+        // 5. Log Activity
+        const logDetails = {
+            action: "LGU Project Created",
+            ipc: newIpc,
+            status: data.status,
+            timestamp: new Date().toISOString()
+        };
+
+        await logActivity(
+            data.uid, resolvedLguName, 'LGU', 'CREATE',
+            `LGU Project: ${newProject.project_name} (${newIpc})`,
+            JSON.stringify(logDetails)
+        );
+
+        res.status(200).json({ message: "LGU Project saved!", project: newProject, ipc: newIpc });
+
+    } catch (err) {
+        if (client) await client.query('ROLLBACK');
+        if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
+        console.error("❌ LGU Save Error:", err.message);
+        res.status(500).json({ message: "Database error", error: err.message });
+    } finally {
+        if (client) client.release();
+        if (clientNew) clientNew.release();
+    }
+});
+
+// --- LGU 2. POST: Upload Image (LGU) ---
+app.post('/api/lgu/upload-image', async (req, res) => {
+    const { projectId, imageData, uploadedBy } = req.body;
+    if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
+
+    try {
+        const query = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
+        const result = await pool.query(query, [projectId, imageData, uploadedBy]);
+
+        await logActivity(uploadedBy, 'LGU User', 'LGU', 'UPLOAD', `LGU Project ID: ${projectId}`, `Uploaded image`);
+
+        res.status(201).json({ success: true, imageId: result.rows[0].id });
+
+        // Dual Write
+        if (poolNew) {
+            try {
+                const ipcRes = await pool.query("SELECT ipc FROM lgu_projects WHERE lgu_project_id = $1", [projectId]);
+                if (ipcRes.rows.length > 0) {
+                    const ipc = ipcRes.rows[0].ipc;
+                    await poolNew.query(`
+                    INSERT INTO lgu_image (project_id, image_data, uploaded_by)
+                    VALUES ((SELECT lgu_project_id FROM lgu_projects WHERE ipc = $1), $2, $3)
+                `, [ipc, imageData, uploadedBy]);
+                    console.log("✅ Dual-Write: LGU Image Synced!");
+                }
+            } catch (dwErr) {
+                console.error("❌ Dual-Write LGU Image Error:", dwErr.message);
+            }
+        }
+
+    } catch (err) {
+        console.error("❌ LGU Image Upload Error:", err.message);
+        res.status(500).json({ error: "Failed to save image" });
+    }
+});
+
+// --- LGU 3. GET: Fetch LGU Projects ---
+app.get('/api/lgu/projects', async (req, res) => {
+    const { uid } = req.query;
+    try {
+        let query = 'SELECT * FROM lgu_projects';
+        let params = [];
+        if (uid) {
+            query += ' WHERE lgu_id = $1';
+            params.push(uid);
+        }
+        query += ' ORDER BY created_at DESC';
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("❌ Fetch LGU Projects Error:", err.message);
+        res.status(500).json({ error: "Failed to fetch projects" });
+    }
+});
+
+// --- LGU 4. GET: Fetch LGU Project Details ---
+app.get('/api/lgu/project/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const projectRes = await pool.query('SELECT * FROM lgu_projects WHERE lgu_project_id = $1', [id]);
+        if (projectRes.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+
+        const imagesRes = await pool.query('SELECT id, image_data, created_at FROM lgu_image WHERE project_id = $1', [id]);
+        
+        res.json({
+            ...projectRes.rows[0],
+            images: imagesRes.rows
+        });
+    } catch (err) {
+        console.error("❌ Fetch LGU Project Details Error:", err.message);
+        res.status(500).json({ error: "Failed to fetch project details" });
+    }
+});
+
 const startServer = async () => {
   try {
     console.log("🚀 Starting database initialization...");
@@ -15799,5 +16156,3 @@ if (isMain || process.env.FORCE_START === 'true' || process.env.START_SERVER ===
 }
 
 export default app;
-
-// Trigger backend restart
