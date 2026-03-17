@@ -477,12 +477,16 @@ const EngineerProjects = () => {
                 constructionStartDate: item.constructionStartDate,
                 noticeToProceed: item.noticeToProceed,
                 batchOfFunds: item.batchOfFunds,
-                pow_pdf: item.pow_pdf,
-                dupa_pdf: item.dupa_pdf,
-                contract_pdf: item.contract_pdf,
+                hasPow: item.hasPow,
+                hasDupa: item.hasDupa,
+                hasContract: item.hasContract,
+                hasMoa: item.hasMoa,
+                hasRta: item.hasRta,
                 hasVariationOrder: item.hasVariationOrder,
                 variationOrderPdf: item.variationOrderPdf,
-                contractAmount: item.contractAmount
+                contractAmount: item.contractAmount,
+                statusDesignPhase: item.statusDesignPhase,
+                fundingYear: item.fundingYear
               }));
 
               // Update Cache on success
@@ -544,7 +548,7 @@ const EngineerProjects = () => {
     }
   };
 
-  const handleEditProject = (project, mode = 'quick') => {
+  const handleEditProject = async (project, mode = 'quick') => {
     setSelectedProject(project);
     setModalMode(mode);
     setInternalFiles([]);
@@ -552,6 +556,18 @@ const EngineerProjects = () => {
     setExternalFiles([]);
     setExternalPreviews([]); // Clear old previews
     setEditModalOpen(true);
+
+    // BACKGROUND SYNC: Fetch full project details (including PDFs) while modal is open
+    try {
+      const response = await fetch(`${API_BASE}/api/projects/${project.id}`);
+      if (response.ok) {
+        const fullData = await response.json();
+        // Merge full data into selected project (preserving local changes if any, though unlikely here)
+        setSelectedProject(prev => prev && prev.id === project.id ? { ...prev, ...fullData } : prev);
+      }
+    } catch (err) {
+      console.warn("Background project fetch failed:", err);
+    }
   };
 
   const handlePdfUpload = async (projectId, type, file, item) => {
@@ -643,19 +659,6 @@ const EngineerProjects = () => {
       else if (userRole === 'Non-DepEd Engineer' || (userRole === 'DepEd Engineer' && accountCategory === 'Non-DepEd Engineer')) uploaderType = 'Non-DepEd Engineer';
 
       const payload = { ...updatedProject, uid: uid, modifiedBy: userName, uploader_type: uploaderType };
-
-      // OPTIMIZATION: Remove large existing docs if they haven't changed
-      // This prevents 413 Payload Too Large errors on servers with low limits
-      // Using Cloud URLs, these fields are small anyway compared to base64, but we strip them if identical to save bytes.
-      const original = projects.find(p => p.id === updatedProject.id);
-      if (original) {
-        // PDF fields are now handled asynchronously via handlePdfUpload, so they should not be part of the main project update payload.
-        // If they are present, it means they were updated via the separate PDF upload mechanism.
-        // We can safely remove them from the main payload to avoid sending large base64 strings.
-        delete payload.pow_pdf;
-        delete payload.dupa_pdf;
-        delete payload.contract_pdf;
-      }
 
       const body = payload;
       if (!navigator.onLine) {
