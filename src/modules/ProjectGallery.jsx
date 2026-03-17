@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import BottomNav from './BottomNav';
-import { auth } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import { cacheGallery, getCachedGallery } from '../db';
 
 // --- LAZY IMAGE COMPONENT ---
@@ -81,6 +81,7 @@ const LazyImage = ({ imageId, meta, onClick }) => {
 };
 
 const ProjectGallery = () => {
+    const { user, token } = useAuth();
     const { projectId } = useParams();
     const navigate = useNavigate();
     const [images, setImages] = useState([]); // Now this will hold METADATA only
@@ -91,7 +92,6 @@ const ProjectGallery = () => {
 
     useEffect(() => {
         const fetchImages = async () => {
-            const user = auth.currentUser;
             if (!user) {
                 setLoading(false);
                 return;
@@ -121,7 +121,7 @@ const ProjectGallery = () => {
             }
         };
         fetchImages();
-    }, [projectId]);
+    }, [projectId, user]);
 
     return (
         <PageTransition>
@@ -211,7 +211,7 @@ const ProjectGallery = () => {
                     </div>
                 )}
 
-                <BottomNav userRole="Engineer" />
+                <BottomNav userRole={user?.role || "Engineer"} />
             </div>
         </PageTransition>
     );

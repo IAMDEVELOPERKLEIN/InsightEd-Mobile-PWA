@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import express from 'express';
+// Force restart to pick up .env changes - Robust Login Fix v1
 import pg from 'pg';
 import cors from 'cors';
 // import cron from 'node-cron'; // REMOVED for Vercel
@@ -23,11 +24,16 @@ import { teachChatbot, chatWithKnowledge, setPool, updateKnowledgeEntry, deleteK
 import { v4 as uuidv4 } from 'uuid';
 import { calculateRiskIndex } from './utils/safetyScore.js';
 import { z } from 'zod'; // For validation
+import jwt from 'jsonwebtoken';
+import authMiddleware from './middleware/authMiddleware.js';
 
 
 // Load environment variables
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
-dotenv.config();
+console.log('✅ [Env] DATABASE_URL loaded:', process.env.DATABASE_URL ? 'YES' : 'NO');
 
 // --- FIREBASE ADMIN INIT ---
 if (!admin.apps.length) {
@@ -227,6 +233,11 @@ const pool = new Pool({
   max: 20, // Keep at 20 for now, but monitor
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000, // Increased to 10s to handle incidental large transfers
+  statement_timeout: 15000, 
+});
+
+pool.on('error', (err) => {
+  console.error('💥 Unexpected error on idle database client:', err.message);
 });
 
 // Inject pool into chatbot module
@@ -238,7 +249,15 @@ if (process.env.NEW_DATABASE_URL) {
   console.log('”Œ Initializing Secondary Database Connection...');
   poolNew = new Pool({
     connectionString: process.env.NEW_DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    statement_timeout: 15000,
+  });
+
+  poolNew.on('error', (err) => {
+    console.error('💥 Unexpected error on idle Secondary DB client:', err.message);
   });
 
   // Test Connection
@@ -1572,22 +1591,34 @@ app.get('/api/lists/municipalities', async (req, res) => {
 
 // --- NEW LAZY MIGRATION LOGIN ENDPOINT ---
 app.post('/api/auth/migrate-login', async (req, res) => {
-  const { email, password } = req.body;
+  if (!req.body) {
+    console.error("[AUTH DEBUG] req.body is UNDEFINED at migrate-login. Content-Type:", req.headers['content-type']);
+    return res.status(400).json({ success: false, error: "Missing request body." });
+  }
 
-  if (!email || !password) {
-    return res.status(400).json({ success: false, error: "Email and password are required." });
+  const { email, school_id, password } = req.body;
+  const identifier = (school_id || email || '').trim();
+
+  if (!identifier || !password) {
+    return res.status(400).json({ success: false, error: "Identifier and password are required. Got: " + JSON.stringify({identifier, hasPassword: !!password}) });
   }
 
   try {
-    const normalizedEmail = email.trim().toLowerCase();
-    console.log(`[MIGRATE LOGIN] Starting lookup for: ${normalizedEmail}`);
+    const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
+    console.log(`[AUTH DEBUG] Migrate-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
     
-    // 1. Fetch user from PostgreSQL - use ILIKE for extra safety or just equals on normalized
+    // 1. Fetch user from PostgreSQL
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
-    const userRes = await pool.query('SELECT uid, email, role, region, division, account_category, passcode, password_hash, password_salt, hash_version FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+    const SELECT_COLS = `uid, email, role, region, division, account_category, passcode, password_hash, password_salt, hash_version, first_name, last_name, school_id`;
+    
+    const query = isSchoolId 
+      ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
+      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+    
+    const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
     if (userRes.rowCount === 0) {
-      console.warn(`[MIGRATE LOGIN] User not found: ${normalizedEmail}`);
+      console.warn(`[MIGRATE LOGIN] User not found: ${identifier}`);
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
     }
 
@@ -1599,6 +1630,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     if (user.hash_version === 'bcrypt') {
       // User has already bumped to standard bcrypt
       isValid = await bcrypt.compare(password, user.password_hash);
+      console.log(`[AUTH DEBUG] Bcrypt match for ${identifier}: ${isValid}`);
     }
     else if (user.hash_version === 'firebase') {
       // Check if server is configured for Firebase Scrypt
@@ -1618,13 +1650,13 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
       // --- THE LAZY UPGRADE ---
       if (isValid) {
-        console.log(`[LAZY MIGRATION] Upgrading hash for user: ${email}`);
+        console.log(`[LAZY MIGRATION] Upgrading hash for user: ${user.email}`);
         const saltRounds = 10;
         const newBcryptHash = await bcrypt.hash(password, saltRounds);
 
         await pool.query(
-          `UPDATE users SET password_hash = $1, password_salt = NULL, hash_version = 'bcrypt' WHERE email = $2`,
-          [newBcryptHash, email]
+          `UPDATE users SET password_hash = $1, password_salt = NULL, hash_version = 'bcrypt' WHERE uid = $2`,
+          [newBcryptHash, user.uid]
         );
       }
     } else {
@@ -1633,11 +1665,11 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     }
 
     if (!isValid) {
-      console.warn(`[MIGRATE LOGIN] Password mismatch for: ${normalizedEmail}`);
+      console.warn(`[MIGRATE LOGIN] Password mismatch for: ${identifier}`);
       return res.status(401).json({ success: false, error: "Invalid Credentials" });
     }
 
-    console.log(`[MIGRATE LOGIN] Success for: ${normalizedEmail} (Role: ${user.role})`);
+    console.log(`[MIGRATE LOGIN] Success for: ${identifier} (Role: ${user.role})`);
 
     // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
     let finalCategory = user.account_category;
@@ -1652,31 +1684,25 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
       // Lazy update the DB if it changed or was null
       if (finalCategory !== user.account_category) {
-        console.log(`[MIGRATE LOGIN] Normalizing category for ${normalizedEmail}: ${finalCategory}`);
+        console.log(`[MIGRATE LOGIN] Normalizing category for ${identifier}: ${finalCategory}`);
         await pool.query('UPDATE users SET account_category = $1 WHERE uid = $2', [finalCategory, user.uid]);
       }
     }
 
-    // 3. User is verified! Generate a Firebase Custom Token so frontend can still 'login' to Firebase
-    // until the frontend is fully decoupled from the Firebase SDK.
-    let customToken = null;
-    try {
-      if (admin.apps.length > 0) {
-        customToken = await admin.auth().createCustomToken(user.uid, {
-          role: user.role // Embed role into token if you like
-        });
-      } else {
-        console.warn("[MIGRATE LOGIN] Firebase Admin not initialized, skipping custom token");
-      }
-    } catch (tokenErr) {
-      console.error("[MIGRATE LOGIN] Custom Token Error:", tokenErr.message);
-      // Proceed without token? Or fail? 
-      // If the dashboard needs Firestore, we MUST have a token.
-    }
+    // 3. User is verified! Generate a JWT session token
+    const token = jwt.sign(
+      { 
+        uid: user.uid, 
+        email: user.email, 
+        role: user.role 
+      }, 
+      process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
+      { expiresIn: '30d' }
+    );
 
     return res.json({
       success: true,
-      customToken: customToken,
+      token: token,
       user: {
         uid: user.uid,
         email: user.email,
@@ -1684,29 +1710,77 @@ app.post('/api/auth/migrate-login', async (req, res) => {
         region: user.region,
         division: user.division,
         account_category: finalCategory,
-        passcode: user.passcode
+        passcode: user.passcode,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        school_id: user.school_id,
+        firstName: user.first_name, // Compatibility
+        lastName: user.last_name     // Compatibility
       }
     });
 
   } catch (err) {
     console.error("Migration Login Error:", err);
-    res.status(500).json({ success: false, error: "Internal Server Error" });
+    res.status(500).json({ success: false, error: err.message || "Internal Server Error" });
   }
 });
 
-// --- NEW BANKING PIN ROUTES ---
+// --- GET CURRENT USER (PROTECTED) ---
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  try {
+    const { uid } = req.user;
+    const result = await pool.query(
+      'SELECT uid, email, role, region, division, account_category, first_name, last_name, school_id FROM users WHERE uid = $1',
+      [uid]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      uid: user.uid,
+      email: user.email,
+      role: user.role,
+      region: user.region,
+      division: user.division,
+      account_category: user.account_category,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      school_id: user.school_id
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 app.post('/api/auth/setup-pin', async (req, res) => {
-  const { email, pin } = req.body;
-  if (!email || !pin || pin.length !== 6) {
-    return res.status(400).json({ success: false, error: "Valid 6-digit PIN and email are required." });
+  const { uid, school_id, email, pin } = req.body;
+  const identifier = uid || school_id || email;
+
+  if (!identifier || !pin || pin.length !== 6) {
+    return res.status(400).json({ success: false, error: "Valid 6-digit PIN and identifier are required." });
   }
   
   try {
-    const normalizedEmail = email.trim().toLowerCase();
+    // Determine which column to match on
+    let whereClause, param;
+    if (uid) {
+      whereClause = 'uid = $2';
+      param = uid;
+    } else if (school_id) {
+      whereClause = 'school_id = $2';
+      param = school_id.trim();
+    } else {
+      whereClause = '(LOWER(email_address) = $2 OR LOWER(email) = $2)';
+      param = email.trim().toLowerCase();
+    }
+
     const result = await pool.query(
-      'UPDATE users SET passcode = $1 WHERE LOWER(email) = $2 OR iern = $2 OR LOWER(email) = $3 RETURNING uid',
-      [pin, normalizedEmail, `${normalizedEmail}@insighted.app`]
+      `UPDATE users SET passcode = $1 WHERE ${whereClause} RETURNING uid`,
+      [pin, param]
     );
 
     
@@ -1722,18 +1796,24 @@ app.post('/api/auth/setup-pin', async (req, res) => {
 });
 
 app.post('/api/auth/pin-login', async (req, res) => {
-  const { email, pin } = req.body;
-  if (!email || !pin) {
-    return res.status(400).json({ success: false, error: "Email and PIN are required." });
+  const { email, school_id, pin } = req.body;
+  const identifier = (school_id || email || '').trim();
+
+  if (!identifier || !pin) {
+    return res.status(400).json({ success: false, error: "Identifier and PIN are required." });
   }
 
   try {
-    const normalizedEmail = email.trim().toLowerCase();
+    const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
+    console.log(`[AUTH DEBUG] Pin-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
     
-    const userRes = await pool.query(
-      'SELECT uid, email, role, region, division, account_category, passcode FROM users WHERE LOWER(email) = $1 OR iern = $1 OR LOWER(email) = $2', 
-      [normalizedEmail, `${normalizedEmail}@insighted.app`]
-    );
+    // Unified Identifier Lookup (Strict Users Table)
+    const selectCols = 'uid, email, role, region, division, account_category, passcode, first_name, last_name, school_id';
+    const query = isSchoolId 
+      ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+    
+    const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
 
     if (userRes.rowCount === 0) {
@@ -1741,9 +1821,14 @@ app.post('/api/auth/pin-login', async (req, res) => {
     }
 
     const user = userRes.rows[0];
+    if (!user.passcode) {
+      return res.status(401).json({ success: false, error: "No PIN setup for this account." });
+    }
 
-    // STRICT Plain Text Comparison (As specified by requirements)
-    if (user.passcode !== pin) {
+    // Plain-text comparison for passcode
+    const isValidPin = (pin === user.passcode);
+    console.log(`[AUTH DEBUG] Pin match for ${identifier}: ${isValidPin} (Input: ${pin}, DB: ${user.passcode})`);
+    if (!isValidPin) {
       return res.status(401).json({ success: false, error: "Incorrect PIN." });
     }
 
@@ -1759,26 +1844,32 @@ app.post('/api/auth/pin-login', async (req, res) => {
       }
     }
 
-    // Generate Firebase Token for PWA session matching
-    let customToken = null;
-    try {
-      if (admin.apps.length > 0) {
-        customToken = await admin.auth().createCustomToken(user.uid, { role: user.role });
-      }
-    } catch (tokenErr) {
-      console.error("[PIN LOGIN] Custom Token Error:", tokenErr.message);
-    }
+    // 3. User is verified! Generate a JWT session token
+    const token = jwt.sign(
+      { 
+        uid: user.uid, 
+        email: user.email, 
+        role: user.role 
+      }, 
+      process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
+      { expiresIn: '30d' }
+    );
 
     return res.json({
       success: true,
-      customToken: customToken,
+      token: token,
       user: {
         uid: user.uid,
         email: user.email,
         role: user.role,
         region: user.region,
         division: user.division,
-        account_category: finalCategory
+        account_category: finalCategory,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        school_id: user.school_id,
+        firstName: user.first_name, // Compatibility
+        lastName: user.last_name    // Compatibility
       }
     });
 
@@ -3647,8 +3738,41 @@ const runLegacyMigrations = async () => {
       await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS curricular_offering TEXT;`);
       await client.query(`CREATE TABLE IF NOT EXISTS users(uid TEXT PRIMARY KEY, email TEXT, role TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, first_name TEXT, last_name TEXT, region TEXT, division TEXT, province TEXT, city TEXT, barangay TEXT, office TEXT, position TEXT, disabled BOOLEAN DEFAULT FALSE);`);
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT, ADD COLUMN IF NOT EXISTS last_name TEXT, ADD COLUMN IF NOT EXISTS region TEXT, ADD COLUMN IF NOT EXISTS division TEXT, ADD COLUMN IF NOT EXISTS province TEXT, ADD COLUMN IF NOT EXISTS city TEXT, ADD COLUMN IF NOT EXISTS barangay TEXT, ADD COLUMN IF NOT EXISTS office TEXT, ADD COLUMN IF NOT EXISTS position TEXT, ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;`);
+      await client.query(`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS school_id TEXT,
+        ADD COLUMN IF NOT EXISTS email_address TEXT,
+        ADD COLUMN IF NOT EXISTS passcode TEXT,
+        ADD COLUMN IF NOT EXISTS contact_number TEXT,
+        ADD COLUMN IF NOT EXISTS iern TEXT,
+        ADD COLUMN IF NOT EXISTS registrant_type TEXT,
+        ADD COLUMN IF NOT EXISTS account_category TEXT,
+        ADD COLUMN IF NOT EXISTS password_hash TEXT,
+        ADD COLUMN IF NOT EXISTS password_salt TEXT,
+        ADD COLUMN IF NOT EXISTS hash_version TEXT DEFAULT 'bcrypt',
+        ADD COLUMN IF NOT EXISTS alt_email TEXT;
+      `);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_school_id ON users(school_id) WHERE school_id IS NOT NULL;`);
       await client.query(`CREATE TABLE IF NOT EXISTS ecart_batches(id SERIAL PRIMARY KEY, school_id TEXT NOT NULL, batch_no VARCHAR(100), year_received INTEGER, source_fund VARCHAR(100), ecart_qty_laptops INTEGER DEFAULT 0, ecart_condition_laptops VARCHAR(50), ecart_has_smart_tv BOOLEAN DEFAULT false, ecart_tv_size VARCHAR(50), ecart_condition_tv VARCHAR(50), ecart_condition_charging VARCHAR(50), ecart_condition_cabinet VARCHAR(100), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
       await client.query(`CREATE TABLE IF NOT EXISTS system_settings(setting_key TEXT PRIMARY KEY, setting_value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_by TEXT);`);
+      
+      // Data Migration: Backfill school_id from legacy emails
+      await client.query(`
+        UPDATE users 
+        SET school_id = split_part(email, '@', 1)
+        WHERE email LIKE '%@insighted.app' 
+          AND school_id IS NULL 
+          AND split_part(email, '@', 1) ~ '^\\d+$'
+      `);
+
+      // Data Migration: Backfill email_address from email for all others
+      await client.query(`
+        UPDATE users 
+        SET email_address = email 
+        WHERE email_address IS NULL 
+          AND email IS NOT NULL 
+          AND email NOT LIKE '%@insighted.app'
+      `);
     } catch (migErr) {
       console.error("Migration Error:", migErr.message);
     }
@@ -3698,100 +3822,21 @@ const runLegacyMigrations = async () => {
 })();
 */
 
-// --- 1f. MASKED EMAIL LOOKUP (FORGOT PASSWORD) ---
-app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    const result = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1", [schoolId]);
-    if (result.rows.length === 0 || !result.rows[0].email) {
-      return res.status(404).json({ error: "School ID not found" });
-    }
+// Consolidated to 6538+
 
-    const email = result.rows[0].email;
-    const [username, domain] = email.split('@');
 
-    // Masking Logic: "c***@gmail.com"
-    const maskedUsername = username.length > 2
-      ? username[0] + '*'.repeat(username.length - 1)
-      : username[0] + '*'; // Fallback for short names
-
-    const maskedEmail = `${maskedUsername} @${domain} `;
-    res.json({ found: true, maskedEmail });
-  } catch (err) {
-    console.error("Lookup Error:", err);
-    res.status(500).json({ error: "Server Error" });
-  }
-});
-
-// --- 1e. FORGOT PASSWORD (CUSTOM) ---
-app.post('/api/forgot-password', async (req, res) => {
-  // verificationEmail is OPTIONAL now (legacy/fallback support)
-  const { schoolId } = req.body;
-
-  if (!schoolId) {
-    return res.status(400).json({ error: "School ID is required." });
-  }
-
-  try {
-    // 1. Lookup User by School ID 
-    const profileRes = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1", [schoolId]);
-
-    if (profileRes.rows.length === 0) {
-      return res.status(404).json({ error: "School ID not found." });
-    }
-
-    let realEmail = profileRes.rows[0].email;
-    if (!realEmail) {
-      return res.status(400).json({ error: "No contact email found for this School ID." });
-    }
-    realEmail = realEmail.trim().replace(/\s/g, '');
-
-    console.log(`Reset requested for School ID: ${schoolId}, sending to: ${realEmail}`);
-
-    // 3. Generate Reset Link for the FAKE Auth Email
-    const fakeAuthEmail = `${schoolId}@insighted.app`;
-    const actionCodeSettings = {
-      url: 'https://insight-ed-mobile-pwa.vercel.app', // OR your local URL if dev
-      handleCodeInApp: false,
-    };
-
-    const link = await admin.auth().generatePasswordResetLink(fakeAuthEmail, actionCodeSettings);
-
-    // 4. Send Email via Nodemailer
-    const transporter = await getTransporter();
-
-    const mailOptions = {
-      from: `"InsightEd Support" < ${process.env.EMAIL_USER}> `,
-      to: realEmail,
-      subject: 'InsightEd Password Reset',
-      html: `
-  < h3 > Password Reset Request</h3 >
-                <p>We received a request to reset the password for School ID: <b>${schoolId}</b>.</p>
-                <p>Click the link below to verify your email and invoke the reset logic:</p>
-                <a href="${link}">Reset Password</a>
-                <p>If you did not request this, please ignore this email.</p>
-`
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log(`… Password reset email sent successfully to ${realEmail} `);
-    res.json({ success: true, message: `Reset link sent to ${realEmail} ` });
-
-  } catch (error) {
-    console.error("Forgot Password Error:", error);
-    if (error.code === 'auth/user-not-found') {
-      return res.status(404).json({ error: "Account not setup in Authentication system yet." });
-    }
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // --- MASTER PASSWORD ACCESS (Admin/Superuser) ---
 app.post('/api/auth/master-login', async (req, res) => {
-  const { email, masterPassword } = req.body;
+  if (!req.body) {
+    console.error("[AUTH DEBUG] req.body is UNDEFINED at master-login. Content-Type:", req.headers['content-type']);
+    return res.status(400).json({ error: "Missing request body." });
+  }
+  const { email, school_id, masterPassword } = req.body;
+  const identifier = (school_id || email || '').trim();
 
-  if (!email || !masterPassword) {
-    return res.status(400).json({ error: "Email and Master Password required." });
+  if (!identifier || !masterPassword) {
+    return res.status(400).json({ error: "Identifier and Master Password required." });
   }
 
   try {
@@ -3802,138 +3847,71 @@ app.post('/api/auth/master-login', async (req, res) => {
       return res.status(500).json({ error: "Master password not configured." });
     }
 
+    console.log(`[AUTH DEBUG] Master Password attempt for ${identifier}. Input: "${masterPassword}", Expected Length: ${correctMasterPassword?.length}`);
     if (masterPassword !== correctMasterPassword) {
       console.warn(` ï¸ Failed master password attempt for: ${email} `);
       return res.status(403).json({ error: "Invalid master password." });
     }
 
-    // 2. Look up the target user by email (with Smart School ID Lookup)
-    let targetEmail = email.trim();
-
-    // If School ID provided (no @), use DB Lookup to find the real email
-    if (!targetEmail.includes('@') && /^\d+$/.test(targetEmail)) {
-      // Try USERS table first
-      let lookupResult = await pool.query("SELECT email FROM users WHERE email LIKE $1 LIMIT 1", [`${targetEmail}@%`]);
-      if (lookupResult.rows.length > 0) {
-        targetEmail = lookupResult.rows[0].email;
-      } else {
-        // Fallback: SCHOOL_PROFILES table
-        lookupResult = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1", [targetEmail]);
-        if (lookupResult.rows.length > 0) {
-          targetEmail = lookupResult.rows[0].email;
-        } else {
-          // Last resort: default to @deped.gov.ph
-          targetEmail = `${targetEmail}@deped.gov.ph`;
-        }
-      }
-
-      // Check Firebase for @insighted.app (Priority Override)
-      try {
-        const originalId = email.trim();
-        const fbUser = await admin.auth().getUserByEmail(`${originalId}@insighted.app`);
-        targetEmail = fbUser.email;
-      } catch (fbErr) {
-        // Ignore
-      }
-
-      console.log(`[Master Login] Resolved School ID to email: ${targetEmail} `);
+    // 2. Look up the target user
+    const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
+    const selectCols = 'uid, email, role, region, division, account_category, first_name, last_name, school_id';
+    
+    const query = isSchoolId 
+      ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+    
+    const lookupResult = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
+    
+    if (lookupResult.rows.length === 0) {
+      return res.status(404).json({ error: "Target user not found." });
     }
 
-    // Query Firebase for user
-    let userRecord;
-    try {
-      userRecord = await admin.auth().getUserByEmail(targetEmail);
-    } catch (authErr) {
-      if (authErr.code === 'auth/user-not-found') {
-        return res.status(404).json({ error: `User not found in Firebase for email: ${targetEmail} ` });
-      }
-      throw authErr;
-    }
-
-    // 3. Get user's role and details from SQL (try users, then school_profiles)
-    let userData;
-    const userRes = await pool.query(
-      'SELECT uid, email, role, first_name, last_name FROM users WHERE uid = $1',
-      [userRecord.uid]
+    const targetUser = lookupResult.rows[0];
+    // 3. Generate a JWT session token for the target user (identify by school_id if SH)
+    const token = jwt.sign(
+      { 
+        uid: targetUser.uid, 
+        email: targetUser.email,
+        school_id: targetUser.school_id,
+        role: targetUser.role 
+      }, 
+      process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
+      { expiresIn: '30d' }
     );
 
-    if (userRes.rows.length > 0) {
-      userData = userRes.rows[0];
-    } else {
-      // Fallback 1: Legacy user only in school_profiles
-      const spRes = await pool.query(
-        'SELECT submitted_by as uid, email, school_name FROM school_profiles WHERE submitted_by = $1',
-        [userRecord.uid]
-      );
-      if (spRes.rows.length > 0) {
-        userData = {
-          uid: spRes.rows[0].uid,
-          email: spRes.rows[0].email,
-          role: 'school_head',
-          first_name: spRes.rows[0].school_name || 'School Head',
-          last_name: ''
-        };
-      } else {
-        // Fallback 2: Check Firestore (for Super Admin / Manual users not in SQL)
-        try {
-          const userDoc = await admin.firestore().collection('users').doc(userRecord.uid).get();
-          if (userDoc.exists) {
-            const firestoreData = userDoc.data();
-            userData = {
-              uid: userRecord.uid,
-              email: userRecord.email,
-              role: firestoreData.role || 'User',
-              first_name: firestoreData.firstName || 'User',
-              last_name: firestoreData.lastName || ''
-            };
-            console.log(`[Master Login] Recovered user from Firestore: ${targetEmail} (${userData.role})`);
-          } else {
-            return res.status(404).json({ error: "User exists in Auth but not in database (SQL or Firestore)." });
-          }
-        } catch (fsErr) {
-          console.error("Firestore Fallback Error:", fsErr);
-          return res.status(404).json({ error: "User exists in Auth but not in database." });
-        }
-      }
+    // 4. Log the master password access
+    try {
+      await pool.query(`
+        INSERT INTO activity_logs(user_uid, user_name, role, action_type, target_entity, details)
+        VALUES($1, $2, $3, $4, $5, $6)
+      `, [
+        targetUser.uid,
+        `${targetUser.first_name || ''} ${targetUser.last_name || ''}`.trim() || 'Unknown',
+        'MASTER_ACCESS',
+        'MASTER_LOGIN',
+        targetUser.email || targetUser.school_id,
+        `Account accessed via master password at ${new Date().toISOString()}`
+      ]);
+    } catch (logError) {
+      console.warn("[AUTH] Failed to log master access:", logError.message);
     }
 
-    // 4. Generate Custom Token for the target user
-    let customToken = null;
-    if (admin.apps.length > 0) {
-      try {
-        customToken = await admin.auth().createCustomToken(userRecord.uid);
-      } catch (tokenErr) {
-        console.warn("⚠️ Failed to generate Firebase Custom Token in master-login:", tokenErr.message);
-      }
-    } else {
-      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in master-login");
-    }
+    console.log(`[Master Login] Master password login successful for: ${targetUser.email || targetUser.school_id} (${targetUser.uid})`);
 
-    // 5. Log the master password access
-    await pool.query(`
-      INSERT INTO activity_logs(user_uid, user_name, role, action_type, target_entity, details)
-VALUES($1, $2, $3, $4, $5, $6)
-    `, [
-      userRecord.uid,
-      `${userData.first_name || ''} ${userData.last_name || ''} `.trim() || 'Unknown',
-      'MASTER_ACCESS',
-      'MASTER_LOGIN',
-      userData.email,
-      `Account accessed via master password at ${new Date().toISOString()} `
-    ]);
-
-    console.log(`… Master password login successful for: ${userData.email} (${userRecord.uid})`);
-
-    // 6. Return user data and custom token
+    // 5. Return user data and JWT token
     res.json({
       success: true,
-      customToken,
+      token,
       user: {
-        uid: userRecord.uid,
-        email: userData.email,
-        role: userData.role,
-        firstName: userData.first_name,
-        lastName: userData.last_name
+        uid: targetUser.uid,
+        email: targetUser.email,
+        role: targetUser.role,
+        firstName: targetUser.first_name,
+        lastName: targetUser.last_name,
+        school_id: targetUser.school_id,
+        first_name: targetUser.first_name, // Compatibility
+        last_name: targetUser.last_name    // Compatibility
       }
     });
 
@@ -4394,7 +4372,7 @@ app.get('/api/settings/:key', async (req, res) => {
       res.json({ value: null });
     }
   } catch (err) {
-    console.error("Get Setting Error:", err);
+    console.error(`Get Setting Error [${key}]:`, err);
     res.status(500).json({ error: "Failed to fetch setting" });
   }
 });
@@ -6129,14 +6107,14 @@ app.post('/api/register-school', async (req, res) => {
 
 // --- 3e. POST: Register School Head (One-Shot matching schools_IERN) ---
 app.post('/api/register-beta', async (req, res) => {
-  const { email, password, schoolData, contactNumber } = req.body;
+  const { email, password, schoolData, contactNumber, firstName, lastName } = req.body;
 
-  if (!email || !password || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData)." });
+  // School Heads no longer require an email field in registration as they use school_id for auth.
+  if (!password || !schoolData || !schoolData.school_id) {
+    return res.status(400).json({ error: "Missing required registration data (password, schoolData)." });
   }
 
   console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
-    email,
     schoolId: schoolData?.school_id,
     role: 'School Head',
     payload: req.body
@@ -6155,14 +6133,13 @@ app.post('/api/register-beta', async (req, res) => {
     }
     const iernData = iernResult.rows[0];
     console.log("✅ Found IERN for school:", iernData.iern);
-    const foundIern = iernData.iern; // IERN is actually 'iern' column
+    const foundIern = iernData.iern;
 
-    const normalizedEmail = email.trim().toLowerCase();
-    // 1b. Duplicate Email Check
-    const emailCheckRes = await client.query("SELECT uid FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
-    if (emailCheckRes.rows.length > 0) {
+    // 1b. Duplicate School ID Check (School Heads use school_id as identifier)
+    const schoolIdCheckRes = await client.query("SELECT uid FROM users WHERE school_id = $1", [schoolData.school_id]);
+    if (schoolIdCheckRes.rows.length > 0) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: "This email is already registered." });
+      return res.status(400).json({ error: "This school ID is already registered." });
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
@@ -6175,35 +6152,43 @@ app.post('/api/register-beta', async (req, res) => {
       await client.query('SAVEPOINT user_creation');
       await client.query(
         `INSERT INTO users (
-            uid, email, role, created_at, contact_number,
+            uid, email, email_address, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version, iern
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            password_hash, hash_version, iern, school_id, registrant_type
+         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (uid) DO UPDATE SET 
+            email_address = EXCLUDED.email_address,
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name,
             region = EXCLUDED.region,
             division = EXCLUDED.division,
             province = EXCLUDED.province,
             city = EXCLUDED.city,
             password_hash = EXCLUDED.password_hash,
             hash_version = EXCLUDED.hash_version,
-            iern = EXCLUDED.iern;`,
+            iern = EXCLUDED.iern,
+            school_id = EXCLUDED.school_id,
+            registrant_type = EXCLUDED.registrant_type;`,
         [
           uid,
-          normalizedEmail,
+          null, // Legacy identifier
+          null, // School Heads use school_id, not email_address
           'School Head',
           contactNumber || null,
-          'School Head',
-          schoolData.school_id,
+          firstName || 'School',
+          lastName || 'Head',
           schoolData.region || null,
           schoolData.division || null,
           schoolData.province || null,
           schoolData.municipality || null,
           passwordHash,
           'bcrypt',
-          foundIern
+          foundIern,
+          schoolData.school_id,
+          'School Head'
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6232,7 +6217,7 @@ app.post('/api/register-beta', async (req, res) => {
         iern = EXCLUDED.iern,
         updated_at = CURRENT_TIMESTAMP
     `;
-    const values = [
+    const valuesList = [
       schoolData.school_id,
       schoolData.school_name,
       schoolData.region || null,
@@ -6248,29 +6233,30 @@ app.post('/api/register-beta', async (req, res) => {
       foundIern
     ];
 
-    await client.query(insertQuery, values);
+    await client.query(insertQuery, valuesList);
     await client.query('COMMIT');
 
-    // NATIVE AUTH: Generate Custom Token
-    let customToken = null;
-    try {
-      if (admin.apps.length > 0) {
-        customToken = await admin.auth().createCustomToken(uid, {
-          role: 'School Head'
-        });
-      } else {
-        console.warn("⚠️ Firebase Admin not initialized, skipping custom token generation.");
-      }
-    } catch (authErr) {
-      console.error("❌ Firebase Custom Token Error:", authErr.message);
-      // Non-fatal if we don't strictly require it for the backend response, 
-      // but Register.jsx uses it for signInWithCustomToken.
-    }
+    // 4. Generate JWT for the new user (identify by school_id)
+    const token = jwt.sign(
+      { uid, school_id: schoolData.school_id, role: 'School Head' },
+      process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
+      { expiresIn: '30d' }
+    );
 
     res.json({ 
         success: true, 
-        iern: foundIern, 
-        customToken: customToken, 
+        token: token,
+        user: {
+          uid: uid,
+          email: null,
+          role: 'School Head',
+          region: schoolData.region || null,
+          division: schoolData.division || null,
+          school_id: schoolData.school_id,
+          first_name: firstName || 'School',
+          last_name: lastName || 'Head',
+          iern: foundIern
+        },
         message: "School Head Registered Successfully" 
     });
 
@@ -6323,17 +6309,18 @@ app.post('/api/register-user', async (req, res) => {
 
     const query = `
             INSERT INTO users (
-                uid, email, role, created_at,
+                uid, email, email_address, role, created_at,
                 first_name, last_name,
                 region, division, province, city, barangay,
                 office, position, contact_number, alt_email,
                 account_category, password_hash, hash_version
             ) VALUES (
-                $1, $2, $3, CURRENT_TIMESTAMP,
-                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+                $1, $2, $3, $4, CURRENT_TIMESTAMP,
+                $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
+                email_address = EXCLUDED.email_address,
                 role = EXCLUDED.role,
                 first_name = EXCLUDED.first_name,
                 last_name = EXCLUDED.last_name,
@@ -6352,7 +6339,7 @@ app.post('/api/register-user', async (req, res) => {
         `;
 
     const values = [
-      uid, normalizedEmail, finalRole,
+      uid, normalizedEmail, normalizedEmail, finalRole,
       valueOrNull(firstName), valueOrNull(lastName),
       valueOrNull(region), valueOrNull(division),
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
@@ -6381,42 +6368,97 @@ app.post('/api/register-user', async (req, res) => {
       console.warn('⚠️ logActivity failed (non-fatal):', logErr.message);
     }
 
-    // NATIVE AUTH: Generate Custom Token
-    let customToken;
-    if (admin.apps.length > 0) {
-      // Firebase Admin is initialized — use it
-      customToken = await admin.auth().createCustomToken(uid, { role: role });
-    } else {
-      // Firebase Admin NOT available (local dev without service-account.json)
-      // Generate a signed JWT manually so the frontend can still call signInWithCustomToken
-      console.warn('⚠️ Firebase Admin not initialized — generating fallback custom token');
-      const crypto = await import('crypto');
-      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-      const payload = Buffer.from(JSON.stringify({
-        uid, role,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
-        iss: 'insighted-local-dev'
-      })).toString('base64url');
-      const secret = process.env.JWT_SECRET || 'insighted-local-secret';
-      const sig = crypto.default.createHmac('sha256', secret).update(`${header}.${payload}`).digest('base64url');
-      customToken = `${header}.${payload}.${sig}`;
-    }
+    // 4. Generate JWT
+    const token = jwt.sign(
+      { uid, email: normalizedEmail, role: finalRole },
+      process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
+      { expiresIn: '30d' }
+    );
 
     res.json({
       success: true,
-      customToken: customToken,
-      uid: uid,
-      role: role,
-      region: region,
-      division: division,
-      accountCategory: finalAccountCategory,
-      message: "User synced to Database"
+      token: token,
+      user: {
+        uid: uid,
+        email: normalizedEmail,
+        role: finalRole,
+        region: region,
+        division: division,
+        account_category: finalAccountCategory,
+        first_name: firstName,
+        last_name: lastName
+      },
+      message: "User registered and logged in successfully"
     });
   } catch (err) {
     console.error("❌ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
   }
+});
+
+// --- UPDATE USER PROFILE (PROTECTED) ---
+app.put('/api/users/update', authMiddleware, async (req, res) => {
+    const { uid } = req.user;
+    const { firstName, lastName, region, province, city, barangay } = req.body;
+
+    try {
+        await pool.query(
+            `UPDATE users SET 
+                first_name = $1, last_name = $2, 
+                region = $3, province = $4, city = $5, barangay = $6 
+             WHERE uid = $7`,
+            [firstName, lastName, region, province, city, barangay, uid]
+        );
+        res.json({ success: true, message: "Profile updated successfully." });
+    } catch (err) {
+        console.error("Update Profile Error:", err);
+        res.status(500).json({ success: false, error: "Database error" });
+    }
+});
+
+// --- CHANGE PASSWORD (PROTECTED) ---
+app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+    const { uid } = req.user;
+    const { currentPassword, newPassword } = req.body;
+
+    try {
+        // 1. Fetch current hash
+        const userRes = await pool.query('SELECT password_hash FROM users WHERE uid = $1', [uid]);
+        if (userRes.rowCount === 0) return res.status(404).json({ error: "User not found" });
+
+        const { password_hash } = userRes.rows[0];
+
+        // 2. Verify current password
+        const isValid = await bcrypt.compare(currentPassword, password_hash);
+        if (!isValid) return res.status(401).json({ error: "Incorrect current password" });
+
+        // 3. Hash and update new password
+        const newHash = await bcrypt.hash(newPassword, 10);
+        await pool.query('UPDATE users SET password_hash = $1, hash_version = \'bcrypt\' WHERE uid = $2', [newHash, uid]);
+
+        res.json({ success: true, message: "Password updated successfully." });
+    } catch (err) {
+        console.error("Change Password Error:", err);
+        res.status(500).json({ success: false, error: "Internal server error" });
+    }
+});
+
+// --- SUBMIT FEEDBACK (PROTECTED) ---
+app.post('/api/feedback', authMiddleware, async (req, res) => {
+    const { uid } = req.user;
+    const { userName, role, ratings, comment, appVersion } = req.body;
+
+    try {
+        await pool.query(
+            `INSERT INTO app_feedback (user_id, user_name, role, ease_of_use, aesthetics, functionality, comment, app_version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [uid, userName, role, ratings.easeOfUse, ratings.aesthetics, ratings.functionality, comment, appVersion]
+        );
+        res.json({ success: true, message: "Feedback submitted successfully." });
+    } catch (err) {
+        console.error("Feedback Submission Error:", err);
+        res.status(500).json({ success: false, error: "Failed to submit feedback" });
+    }
 });
 
 // --- 3f. GET: Fetch User Profile by UID ---
@@ -6496,74 +6538,47 @@ app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
   }
 });
 
-// --- 3g. GET: Lookup Masked Email by School ID (For Forgot Password) ---
+
+
+
+
+
+// --- 3g. Consolidated Auth: Lookup Masked Email & Forgot Password ---
 app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    let email = null;
-    // 0. Try Resolve School ID to IERN via schools_IERN
-    const iernLookup = await pool.query('SELECT iern FROM "schools_IERN" WHERE "SchoolID" = $1 LIMIT 1', [schoolId]);
-    const resolvedIern = iernLookup.rows.length > 0 ? iernLookup.rows[0].iern : null;
-
-    // 1. Try USERS table - Prioritize IERN match, then email prefix
-    let result;
-    if (resolvedIern) {
-      result = await pool.query(
-        "SELECT email FROM users WHERE iern = $1 OR email ILIKE $2 ORDER BY (CASE WHEN iern = $1 THEN 0 ELSE 1 END), (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-        [resolvedIern, `${schoolId}@%`]
-      );
-    } else {
-      result = await pool.query(
-        "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
-        [`${schoolId}@%`]
-      );
-    }
-    if (result.rows.length > 0) email = result.rows[0].email;
-
-    // 2. Fallback: SCHOOL_PROFILES
-    if (!email) {
-      result = await pool.query(
-        "SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1",
-        [schoolId]
-      );
-      if (result.rows.length > 0) email = result.rows[0].email;
+    // Strict lookup by school_id in users table
+    const result = await pool.query("SELECT email FROM users WHERE school_id = $1 LIMIT 1", [schoolId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ found: false, error: "No user found with this School ID." });
     }
 
-    // 3. Check Firebase Auth for @insighted.app specific account (Priority)
-    if (admin.apps.length > 0) {
-      try {
-        const fbUser = await admin.auth().getUserByEmail(`${schoolId}@insighted.app`);
-        email = fbUser.email;
-      } catch (fbErr) {
-        // Ignore user-not-found
-      }
-    }
-
-    if (email) {
-      email = email.trim().replace(/\s/g, ''); // Fix malformed database emails with rogue spaces
-      // Mask the email (e.g., 3*****5@deped.gov.ph)
-      const parts = email.split('@');
-      const name = parts[0];
-      const domain = parts[1];
-
-      // Simple masking logic: show first and last char of name
-      let maskedName = name;
-      if (name.length > 2) {
-        maskedName = name[0] + '*'.repeat(name.length - 2) + name[name.length - 1];
-      }
-
-      return res.json({ found: true, maskedEmail: `${maskedName}@${domain}`, fullEmail: email }); // fullEmail needed for internal reset
-    }
-
-    return res.json({ found: false });
-
-  } catch (error) {
-    console.error("Lookup Masked Email Error:", error);
-    res.status(500).json({ error: "Database error." });
+    const email = result.rows[0].email;
+    const [username, domain] = email.split('@');
+    const maskedEmail = username[0] + '*'.repeat(username.length - 1) + '@' + domain;
+    res.json({ found: true, maskedEmail });
+  } catch (err) {
+    console.error("Lookup Masked Email Error:", err);
+    res.status(500).json({ error: "Server Error" });
   }
 });
 
+app.post('/api/forgot-password', async (req, res) => {
+  const { schoolId } = req.body;
+  if (!schoolId) return res.status(400).json({ error: "School ID required." });
 
+  try {
+    const result = await pool.query("SELECT email FROM users WHERE school_id = $1 LIMIT 1", [schoolId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "No user found with this School ID." });
+
+    const email = result.rows[0].email;
+    console.log(`[STUB] Password reset sent to ${email} for School ID ${schoolId}`);
+    res.json({ success: true, message: `Reset link sent to registered email: ${email[0]}***@${email.split('@')[1]}` });
+  } catch (err) {
+    console.error("Forgot Password Error:", err);
+    res.status(500).json({ error: "Server Error" });
+  }
+});
 
 // --- 5. GET: Cascading Location Endpoints ---
 app.get('/api/locations/regions', async (req, res) => {
@@ -6576,7 +6591,10 @@ app.get('/api/locations/regions', async (req, res) => {
       ORDER BY region ASC
     `);
     res.json(result.rows.map(r => r.region));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { 
+    console.error("GET Regions Error:", err);
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 app.get('/api/locations/divisions', async (req, res) => {
@@ -12492,8 +12510,9 @@ console.log('--------------------------');
 // --- TEMPORARY MIGRATION ENDPOINT (FACILITY REPAIRS) ---
 // --- MIGRATE REPAIR DETAILS SCHEMA ---
 app.get('/api/migrate-repair-details', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
 
     // 1. Drop old table
@@ -12528,17 +12547,19 @@ app.get('/api/migrate-repair-details', async (req, res) => {
       results.push("Created facility_repair_details table");
     } catch (e) { results.push(`Failed create: ${e.message}`); }
 
-    client.release();
     res.json({ message: "Repair Details Migration finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 
 // --- TEMPORARY MIGRATION ENDPOINT (MOVED OUTSIDE FOR ACCESS) ---
 app.get('/api/migrate-schema', async (req, res) => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     const results = [];
 
     // 1. Add construction_start_date
@@ -12583,12 +12604,11 @@ app.get('/api/migrate-schema', async (req, res) => {
       results.push("Added funds_utilized");
     } catch (e) { results.push(`Failed funds_utilized: ${e.message}`); }
 
-    client.release();
-
     // --- SECONDARY DB MIGRATION ---
     if (poolNew) {
+      let clientNew;
       try {
-        const clientNew = await poolNew.connect();
+        clientNew = await poolNew.connect();
         const resultsNew = [];
         const cols = [
           'construction_start_date TEXT',
@@ -12608,16 +12628,19 @@ app.get('/api/migrate-schema', async (req, res) => {
             resultsNew.push(`Added ${colName} to ICTS`);
           } catch (e) { resultsNew.push(`Failed ${colName} on ICTS: ${e.message}`); }
         }
-        clientNew.release();
         results.push(...resultsNew);
       } catch (err) {
         results.push(`ICTS Connection Failed: ${err.message}`);
+      } finally {
+        if (clientNew) clientNew.release();
       }
     }
 
     res.json({ message: "Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
   }
 });
 // --- TEMPORARY MIGRATION ENDPOINT (LGU FIELDS) ---
@@ -12737,7 +12760,7 @@ app.get('/api/user-info/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
     const result = await pool.query(
-      'SELECT role, first_name, last_name, email, region, division, account_category FROM users WHERE uid = $1',
+      'SELECT role, first_name, last_name, email, region, division, account_category, school_id FROM users WHERE uid = $1',
       [uid]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
@@ -13950,90 +13973,11 @@ app.get('/api/reports/insights', async (req, res) => {
 // Force start for PM2 (since isMainModule is false in PM2 fork mode)
 
 // --- UNIFIED INITIALIZATION & STARTUP ---
-const initializeAndStart = async () => {
-  console.log("🚀 Starting InsightEd API Initialization...");
-
-  try {
-    // 1. Initial Primary Connection
-    const client = await pool.connect();
-    isDbConnected = true;
-    console.log('✅ Connected to Postgres Database (Primary) successfully!');
-
-    try {
-      // 2. Sequential Migrations
-      console.log("📦 Starting Database Initializations...");
-
-      console.log("  -> Initializing OTP Table...");
-      await initOtpTable(pool);
-
-      console.log("  -> Initializing Core DB...");
-      console.log(`     (Pool Status: Total=${pool.totalCount}, Idle=${pool.idleCount}, Waiting=${pool.waitingCount})`);
-      await initDB();
-
-      console.log("  -> Initializing Finance DB...");
-      await initFinanceDB();
-
-      console.log("  -> Initializing Masterlist DB...");
-      await initMasterlistDB();
-
-      console.log("🛠️ Running Advanced Migrations (Primary)...");
-      await runLegacyMigrations(); // Legacy blob
-      await runMigrations(client, "Primary"); // Versioned migrations
-
-      // 3. Secondary Database (Optional/Dual-Write)
-      if (poolNew) {
-        console.log("🔄 Initializing Secondary Database...");
-        const clientNew = await poolNew.connect();
-        try {
-          await runMigrations(clientNew, "Secondary");
-        } finally {
-          clientNew.release();
-        }
-      }
-
-    } finally {
-      client.release();
-    }
-
-    console.log("✨ All Initializations Complete.");
-
-    // 4. Start Listener
-    const PORT = process.env.PORT || 3000;
-    const server = app.listen(PORT, () => {
-      console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
-      console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
-      console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
-    });
-
-    server.on('error', (e) => {
-      if (e.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
-      } else {
-        console.error("❌ Server Error:", e);
-      }
-    });
-
-  } catch (err) {
-    console.error('❌ FATAL: Initialization Failed:', err.message);
-    console.warn('⚠️  Server might be in an inconsistent state.');
-
-    // Attempt fallback start if possible or exit
-    if (process.env.NODE_ENV === 'production') {
-      process.exit(1);
-    } else {
-      console.log("⚠️ Continuing in Degraded/Mock mode for development...");
-      isDbConnected = false;
-      const PORT = process.env.PORT || 3000;
-      app.listen(PORT, () => console.log(`🚀 DEGRADED SERVER RUNNING ON PORT ${PORT}`));
-    }
-  }
-};
-
-
 
 // ==================================================================
 //               IERN LOOKUP ENDPOINT
 // ==================================================================
+
 
 // GET: Fetch IERN Data by SchoolID
 app.get('/api/schools_iern/:schoolId', async (req, res) => {
@@ -16109,6 +16053,14 @@ const startServer = async () => {
     console.log("🚀 Starting database initialization...");
     await runAutoMigrations();
     await initDB();
+    
+    const client = await pool.connect();
+    try {
+        await runMigrations(client, "Primary");
+    } finally {
+        client.release();
+    }
+
     console.log("✅ Primary DB Init finished. Running secondary modules in parallel...");
 
     await Promise.all([
@@ -16147,6 +16099,79 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+
+
+// --- NOTIFICATIONS API ---
+app.get('/api/notifications/:uid', authMiddleware, async (req, res) => {
+    const { uid } = req.params;
+    if (req.user.uid !== uid && req.user.role !== 'Super User') {
+        return res.status(403).json({ error: "Unauthorized access to notifications" });
+    }
+
+    try {
+        const result = await pool.query(
+            "SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50",
+            [uid]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Fetch Notifications Error:", err);
+        res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+});
+
+app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query(
+            "UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2",
+            [id, req.user.uid]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Mark Read Error:", err);
+        res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+});
+
+app.get('/api/admin/feedback', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
+        return res.status(403).json({ error: "Unauthorized" });
+    }
+    try {
+        const result = await pool.query("SELECT * FROM app_feedback ORDER BY timestamp DESC");
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Fetch Feedback Error:", err);
+        res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+});
+
+app.get('/api/admin/users', authMiddleware, async (req, res) => {
+    if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
+        return res.status(403).json({ error: "Unauthorized" });
+    }
+    try {
+        const result = await pool.query(`
+            SELECT 
+                uid, 
+                first_name as "firstName", 
+                last_name as "lastName", 
+                email as "email", 
+                role, 
+                school_id, 
+                account_category 
+            FROM users 
+            ORDER BY created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Fetch Users Error:", err);
+        res.status(500).json({ error: "Failed to fetch users" });
+    }
+});
+ 
 
 // Start the server if this file is run directly
 const executedFile = process.argv[1] || '';

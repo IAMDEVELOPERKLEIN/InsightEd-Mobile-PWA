@@ -2,10 +2,8 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import logo from './assets/InsightEd1.png';
-import { auth, db } from './firebase';
-import { signInWithCustomToken } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore'; 
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
 import PageTransition from './components/PageTransition';
 import Papa from 'papaparse';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -70,6 +68,7 @@ const getDashboardPath = (role, accountCategory) => {
 
 const Register = () => {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [loading, setLoading] = useState(false);
 
     // --- BASIC FORM STATE ---
@@ -377,16 +376,14 @@ const Register = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
 
-        // FAKE EMAIL STRATEGY:
-        // If School Head, Auth Email is [SchoolID]@insighted.app
-        // The "Real" email is stored in formData.schoolEmail and sent to backend
-        const authEmail = (formData.role === 'School Head')
-            ? `${selectedSchool.school_id}@insighted.app`
+        // School Heads are identified by school_id only, others by email
+        const identifier = (formData.role === 'School Head')
+            ? selectedSchool.school_id
             : (formData.email || '').trim();
 
         const contactEmail = (formData.role === 'School Head')
             ? (formData.schoolEmail || '').trim()
-            : authEmail; // For others, auth email is contact email
+            : identifier;
 
         const contactDigits = (formData.contactNumber || '').replace(/\D/g, '');
 
@@ -408,10 +405,6 @@ const Register = () => {
         if (formData.role === 'School Head') {
             if (!selectedSchool) {
                 alert("Please select a school.");
-                return;
-            }
-            if (!authEmail) {
-                alert("Please enter your school email address.");
                 return;
             }
 
@@ -437,7 +430,7 @@ const Register = () => {
 
 
         // STRICT EMAIL VALIDATION (Global Check)
-        if (formData.role !== 'Local Government Unit' && formData.role !== 'Implementing Agency' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
+        if (formData.role !== 'School Head' && formData.role !== 'Local Government Unit' && formData.role !== 'Implementing Agency' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
             alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
         }
@@ -518,9 +511,10 @@ const Register = () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        email: contactEmail,
-                        password: formData.password, // Send password securely to backend
+                        password: formData.password,
                         contactNumber: contactDigits,
+                        firstName: formData.firstName,
+                        lastName: formData.lastName,
                         schoolData: finalSchoolData
                     })
                 });
@@ -538,109 +532,55 @@ const Register = () => {
                     throw new Error(regData.error || "Server Registration Failed.");
                 }
 
-                // Authenticate frontend using Custom Token
-                if (!regData.customToken) {
-                    throw new Error("Registration succeeded but no authentication token was received. Please try logging in.");
+                if (regData.success && regData.token) {
+                    login(regData.user, regData.token);
+                } else {
+                    throw new Error(regData.error || "Registration succeeded but no session was established. Please log in.");
                 }
-                const userCredential = await signInWithCustomToken(auth, regData.customToken);
-                const user = userCredential.user;
-
-                // Save to Firestore (Minimal user profile + schoolId link) using the Native Backend UID
-                await setDoc(doc(db, "users", user.uid), {
-                    email: user.email,
-                    role: formData.role, // Use formData.role to preserve School Head
-                    schoolId: selectedSchool.school_id,
-                    loginId: selectedSchool.school_id,
-                    contactNumber: contactDigits,
-                    firstName: formData.role,
-                    lastName: selectedSchool.school_id,
-                    iern: regData.iern, // From Backend
-                    authProvider: "native",
-                    createdAt: new Date()
-                });
 
             } else {
                 // GENERIC REGISTRATION (Engineer, etc.)
-                let user;
-                // SYNC TO NATIVE BACKEND FIRST
-                try {
-                    console.log("Syncing to Native Backend...");
-                    const regRes = await fetch('/api/register-user', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            email: authEmail,
-                            password: formData.password,
-                            role: formData.role === 'Implementing Agency' ? (formData.agencyType || formData.role) : formData.role,
-                            firstName: formData.firstName,
-                            lastName: formData.lastName,
-                            region: formData.region,
-                            division: formData.role === 'Implementing Agency' ? `${formData.agencyType} ${formData.specificAgency}`.trim() : formData.division,
-                            province: formData.province,
-                            city: formData.city,
-                            barangay: formData.barangay,
-                            office: formData.office,
-                            position: formData.position,
-                            contactNumber: formData.contactNumber,
-                            altEmail: formData.altEmail,
-                            accountCategory: formData.accountCategory
-                        })
-                    });
-
-                    const regText = await regRes.text();
-                    console.log("Generic Registration response text:", regText);
-                    if (!regText) throw new Error("Empty response from /api/register-user");
-                    regData = JSON.parse(regText);
-                    if (!regData.success) {
-                       throw new Error(regData.error || "Server Registration Failed.");
-                    }
-
-                    // NATIVE SESSION MANAGEMENT (Replacing Firebase)
-                    console.log("✅ Registration Successful! Setting native session...");
-                    localStorage.setItem('uid', regData.uid);
-                    localStorage.setItem('userRole', regData.role);
-                    localStorage.setItem('userEmail', authEmail);
-                    if (regData.region) localStorage.setItem('userRegion', regData.region);
-                    if (regData.division) localStorage.setItem('userDivision', regData.division);
-                    if (regData.accountCategory) {
-                        localStorage.setItem('accountCategory', regData.accountCategory);
-                    }
-
-                    // For specialized redirects, we need to pass these directly
-                    const destPath = getDashboardPath(regData.role, regData.accountCategory);
-                    console.log("Intended Dashboard:", destPath);
-                    
-                    localStorage.setItem('needs_pin_setup', 'true');
-                    
-                    alert("✅ Account created successfully!");
-                    navigate('/setup-pin');
-                    return;
-
-                } catch (backendErr) {
-                    console.error("Native Registration Failed:", backendErr);
-                    throw backendErr;
-                }
-
-                // Persist to Firestore using the Native Backend UID
-                try {
-                    await setDoc(doc(db, "users", user.uid), {
-                        email: user.email,
-                        role: formData.role,
-                        firstName: formData.firstName || "User",
-                        lastName: formData.lastName || "",
-                        authProvider: "native",
-                        createdAt: new Date(),
+                console.log("Syncing to Native Backend...");
+                const regRes = await fetch('/api/register-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: authEmail,
+                        password: formData.password,
+                        role: formData.role === 'Implementing Agency' ? (formData.agencyType || formData.role) : formData.role,
+                        firstName: formData.firstName,
+                        lastName: formData.lastName,
                         region: formData.region,
-                        division: formData.division,
+                        division: formData.role === 'Implementing Agency' ? `${formData.agencyType} ${formData.specificAgency}`.trim() : formData.division,
+                        province: formData.province,
+                        city: formData.city,
+                        barangay: formData.barangay,
                         office: formData.office,
                         position: formData.position,
                         contactNumber: formData.contactNumber,
                         altEmail: formData.altEmail,
                         accountCategory: formData.accountCategory
-                    });
-                } catch (fsErr) {
-                    console.warn("Firestore setDoc failed (non-fatal):", fsErr.message);
+                    })
+                });
+
+                const regText = await regRes.text();
+                console.log("Generic Registration response text:", regText);
+                if (!regText) throw new Error("Empty response from /api/register-user");
+                regData = JSON.parse(regText);
+                if (!regData.success) {
+                    throw new Error(regData.error || "Server Registration Failed.");
                 }
+
+                console.log("✅ Registration Successful! Setting session...");
+                if (regData.token) {
+                    login(regData.user, regData.token);
+                } else {
+                    throw new Error("No session token received.");
+                }
+
+                alert("✅ Account created successfully!");
+                navigate('/setup-pin');
+                return;
             }
 
             // STEP D: Success
@@ -654,8 +594,8 @@ const Register = () => {
                 
                 // Set user email and uid for subsequent steps (like PinSetup)
                 localStorage.setItem('userEmail', contactEmail);
-                if (auth.currentUser?.uid || regData?.uid) {
-                    localStorage.setItem('uid', auth.currentUser?.uid || regData?.uid);
+                if (regData?.user?.uid) {
+                    localStorage.setItem('uid', regData.user.uid);
                 }
 
                 // NEW: Mark for PIN setup since they are newly registered

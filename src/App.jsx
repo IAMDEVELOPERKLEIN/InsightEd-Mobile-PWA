@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 import Login from './Login';
 import Register from './Register';
 import PinSetup from './components/PinSetup';
+import { AuthProvider } from './context/AuthContext';
 
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
@@ -98,21 +99,44 @@ const AnimatedRoutes = () => {
 
   // Check Maintenance Status on Route Change
   useEffect(() => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
+
     const checkMaintenance = async () => {
       try {
-        const res = await fetch('/api/settings/maintenance_mode');
-        const data = await res.json();
+        const res = await fetch('/api/settings/maintenance_mode', { signal: controller.signal });
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : {};
         setMaintenanceMode(data.value === 'true');
       } catch (err) {
-        console.error("Maintenance Check Failed:", err);
+        if (err.name === 'AbortError') {
+          console.warn("Maintenance check timed out, proceeding anyway.");
+        } else {
+          console.error("Maintenance Check Failed:", err);
+        }
       } finally {
+        clearTimeout(timeoutId);
         setCheckingMaintenance(false);
       }
     };
     checkMaintenance();
+    
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [location.pathname]); // Re-check on nav
 
-  if (checkingMaintenance) return null; // Or a mini loader
+  if (checkingMaintenance) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 font-medium animate-pulse">Initializing InsightEd...</p>
+        </div>
+      </div>
+    );
+  }
 
   const role = localStorage.getItem('userRole');
   const isProtected = location.pathname !== '/' && location.pathname !== '/register';

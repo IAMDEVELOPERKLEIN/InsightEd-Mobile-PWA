@@ -3,19 +3,18 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TbArrowLeft, TbCheck, TbX, TbBuildingSkyscraper, TbFileDescription, TbCalendar, TbCoin, TbActivity, TbPhoto, TbSearch } from "react-icons/tb";
 import { FiChevronRight } from "react-icons/fi";
-import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import PageTransition from '../components/PageTransition';
 import BottomNav from './BottomNav';
 
 const ProjectValidation = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [projects, setProjects] = useState([]);
     const queryParams = new URLSearchParams(window.location.search);
     const monitorSchoolId = queryParams.get('schoolId');
     const [schoolId, setSchoolId] = useState(monitorSchoolId || null);
-    const [user, setUser] = useState(null);
     const [schoolHeadName, setSchoolHeadName] = useState(null);
 
     // New State for Detailed View
@@ -23,31 +22,30 @@ const ProjectValidation = () => {
     const [projectImages, setProjectImages] = useState([]);
     const [imageLoading, setImageLoading] = useState(false);
     const [remarks, setRemarks] = useState('');
-    const userRole = localStorage.getItem('userRole') || 'School Head';
+    const userRole = user?.role || 'School Head';
 
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
-        const checkAccess = () => {
-            const role = localStorage.getItem('userRole');
+        if (user) {
+            const role = user.role;
             if (role === 'Regional Office' || role === 'School Division Office') {
                 navigate('/monitoring-dashboard');
             }
-        };
-        checkAccess();
+        }
+    }, [user, navigate]);
 
+    useEffect(() => {
         const fetchData = async () => {
-            const currentUser = auth.currentUser;
-            if (!currentUser) return;
-            setUser(currentUser);
+            if (!user) return;
 
             try {
                 let targetSchoolId = monitorSchoolId;
 
                 // If no schoolId in URL, we try to get it from the user's school profile (Normal Flow)
                 if (!targetSchoolId) {
-                    const profileRes = await fetch(`/api/school-by-user/${currentUser.uid}`);
+                    const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
                     const profileJson = await profileRes.json();
                     if (profileJson.exists) {
                         targetSchoolId = profileJson.data.school_id;
@@ -73,8 +71,9 @@ const ProjectValidation = () => {
                 setLoading(false);
             }
         };
+
         fetchData();
-    }, []);
+    }, [user, monitorSchoolId]);
 
     // Fetch images when a project is selected
     useEffect(() => {

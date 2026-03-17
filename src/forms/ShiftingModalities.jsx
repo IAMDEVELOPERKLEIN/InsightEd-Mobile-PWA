@@ -1,8 +1,7 @@
 // src/forms/ShiftingModalities.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from '../context/AuthContext';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
@@ -61,6 +60,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
 );
 
 const ShiftingModalities = ({ embedded }) => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
 
     // --- STATE ---
@@ -71,7 +71,7 @@ const ShiftingModalities = ({ embedded }) => {
     const isDummy = location.state?.isDummy || false;
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -124,11 +124,11 @@ const ShiftingModalities = ({ embedded }) => {
     // --- FETCH DATA (With Offline Offering Recovery) ---
     // --- FETCH DATA (Strict Instant Load Strategy) ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const loadInitialData = async () => {
             if (user) {
                 // Check Role for Read-Only
                 try {
-                    const role = localStorage.getItem('userRole');
+                    const role = user.role;
                     if (role === 'Central Office' || isDummy) {
                         setIsReadOnly(true);
                     }
@@ -242,7 +242,7 @@ const ShiftingModalities = ({ embedded }) => {
                     // B. Network Fetch
                     if (!restored) {
                         let fetchUrl = `/api/learning-modalities/${user.uid}`;
-                        const role = localStorage.getItem('userRole');
+                        const role = user.role;
                         if (isAuditMode) {
                             fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
                         } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
@@ -317,9 +317,10 @@ const ShiftingModalities = ({ embedded }) => {
 
                 performAsyncChecks();
             }
-        });
-        return () => unsubscribe();
-    }, [viewOnly, schoolIdParam]);
+        };
+
+        loadInitialData();
+    }, [user, viewOnly, schoolIdParam, isAuditMode, auditTargetId, isDummy]);
 
 
 
@@ -383,6 +384,7 @@ const ShiftingModalities = ({ embedded }) => {
         if (!showSHS()) { ["g11", "g12"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
 
         const payload = {
+            uid: user.uid,
             schoolId: schoolId || localStorage.getItem('schoolId'),
             ...cleanShifts,
             ...cleanModes,

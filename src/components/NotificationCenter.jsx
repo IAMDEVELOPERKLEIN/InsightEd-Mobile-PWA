@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FiBell, FiX, FiCheck } from 'react-icons/fi';
-import { auth } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 
 const NotificationCenter = () => {
+    const { user } = useAuth();
     const [notifications, setNotifications] = useState([]);
     const [isOpen, setIsOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -10,7 +11,6 @@ const NotificationCenter = () => {
 
     // Fetch Notifications
     const fetchNotifications = async () => {
-        const user = auth.currentUser;
         if (!user) return;
 
         try {
@@ -27,10 +27,12 @@ const NotificationCenter = () => {
 
     // Poll for new notifications
     useEffect(() => {
-        fetchNotifications();
-        const interval = setInterval(fetchNotifications, 10000); // Poll every 10s
-        return () => clearInterval(interval);
-    }, []);
+        if (user) {
+            fetchNotifications();
+            const interval = setInterval(fetchNotifications, 10000); // Poll every 10s
+            return () => clearInterval(interval);
+        }
+    }, [user]);
 
     // Mark as Read
     const markAsRead = async (id) => {

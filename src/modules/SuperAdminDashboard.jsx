@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import PageTransition from '../components/PageTransition';
 
 const SuperAdminDashboard = () => {
     const navigate = useNavigate();
+    const { logout, token } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -13,12 +13,13 @@ const SuperAdminDashboard = () => {
     useEffect(() => {
         const fetchUsers = async () => {
             try {
-                const querySnapshot = await getDocs(collection(db, "users"));
-                const userList = querySnapshot.docs.map(doc => ({
-                    uid: doc.id,
-                    ...doc.data()
-                }));
-                setUsers(userList);
+                const res = await fetch('/api/admin/users', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setUsers(data);
+                }
                 setLoading(false);
             } catch (error) {
                 console.error("Error fetching users:", error);
@@ -26,8 +27,8 @@ const SuperAdminDashboard = () => {
             }
         };
 
-        fetchUsers();
-    }, []);
+        if (token) fetchUsers();
+    }, [token]);
 
     // --- IMPERSONATION LOGIC ---
     // A simplified "View As" that navigates to their dashboard.
@@ -75,7 +76,7 @@ const SuperAdminDashboard = () => {
                         </div>
                         <button 
                             onClick={() => {
-                                localStorage.clear();
+                                logout();
                                 navigate('/');
                             }} 
                             className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 p-3 rounded-xl transition-all shadow-lg active:scale-95 text-white"
