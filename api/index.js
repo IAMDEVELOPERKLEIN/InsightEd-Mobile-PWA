@@ -7515,7 +7515,7 @@ app.post('/api/save-project', async (req, res) => {
         funding_year, funding_year_justification,
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
         mode_of_project, implementing_agency, implementing_agency_specific, no_of_units
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -8406,7 +8406,9 @@ app.get('/api/projects', async (req, res) => {
     `;
 
     // 1. ADD FILTER: Only show projects belonging to this engineer or their agency
-    if (engineer_id && implementing_agency) {
+    if (req.query.beff === 'true') {
+      whereClauses.push(`p.implementing_agency IS NOT NULL`);
+    } else if (engineer_id && implementing_agency) {
       queryParams.push(engineer_id);
       queryParams.push(implementing_agency);
       whereClauses.push(`(p.engineer_id = $${queryParams.length - 1} OR p.implementing_agency = $${queryParams.length})`);
