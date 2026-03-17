@@ -67,6 +67,7 @@ const EFDMonitoring = () => {
     const [externalPreviews, setExternalPreviews] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [activeCategory, setActiveCategory] = useState('Internal');
+    const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
 
     // Refs for hidden file inputs
     const fileInputRef = React.useRef(null);
@@ -215,6 +216,7 @@ const EFDMonitoring = () => {
                 ));
                 setSelectedProject(null);
                 setSelectedEngineer('');
+                setEngineerSearchTerm('');
             } else {
                 const err = await response.json();
                 setMessage({ text: err.message || "Failed to assign project", type: 'error' });
@@ -789,7 +791,10 @@ const EFDMonitoring = () => {
                     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 px-4">
                         <div className="bg-white w-full max-w-xl rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col relative px-4 sm:px-8">
                             <button 
-                                onClick={() => setSelectedProject(null)}
+                                onClick={() => {
+                                    setSelectedProject(null);
+                                    setEngineerSearchTerm('');
+                                }}
                                 className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
                             >
                                 <FiX size={20} />
@@ -800,10 +805,28 @@ const EFDMonitoring = () => {
                                 <p className="text-xs text-slate-400 font-medium">Assignment for project: <span className="text-blue-600 font-bold">{selectedProject.projectName}</span></p>
                             </div>
 
-                            <div className="space-y-4 mb-8">
+                            <div className="space-y-4 mb-8 h-full flex flex-col min-h-0">
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Active Engineer</label>
-                                <div className="grid grid-cols-1 gap-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar flex-1">
-                                    {engineers.map((eng) => (
+                                
+                                {/* Engineer Search Bar */}
+                                <div className="relative group mb-2">
+                                    <input 
+                                        type="text"
+                                        placeholder="Search engineer name or division..."
+                                        value={engineerSearchTerm}
+                                        onChange={(e) => setEngineerSearchTerm(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5 transition-all placeholder:text-slate-300"
+                                    />
+                                    <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-500" size={16} />
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-2 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-0">
+                                    {engineers.filter(eng => {
+                                        const search = engineerSearchTerm.toLowerCase();
+                                        return eng.firstName?.toLowerCase().includes(search) || 
+                                               eng.lastName?.toLowerCase().includes(search) || 
+                                               eng.division?.toLowerCase().includes(search);
+                                    }).map((eng) => (
                                         <button
                                             key={eng.uid}
                                             onClick={() => setSelectedEngineer(eng.uid)}
@@ -828,7 +851,10 @@ const EFDMonitoring = () => {
 
                             <div className="flex flex-col sm:flex-row gap-3 mt-auto">
                                 <button 
-                                    onClick={() => setSelectedProject(null)}
+                                    onClick={() => {
+                                        setSelectedProject(null);
+                                        setEngineerSearchTerm('');
+                                    }}
                                     className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
                                 >
                                     Cancel
