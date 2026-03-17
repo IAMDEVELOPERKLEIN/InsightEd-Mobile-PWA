@@ -46,6 +46,7 @@ import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRou
 import EFDHome from './modules/EFDHome';
 import EFDMonitoring from './modules/EFDMonitoring';
 import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
+import BEFFDashboard from './modules/BEFFDashboard';
 
 
 
@@ -160,6 +161,7 @@ const AnimatedRoutes = () => {
       <Route path="/efd-dashboard" element={<EFDHome />} />
       <Route path="/agency-dashboard" element={<AgencyDashboard />} />
       <Route path="/efd-monitoring" element={<EFDMonitoring />} />
+      <Route path="/beff-dashboard" element={<BEFFDashboard />} />
       <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />
       <Route path="/school-management" element={<SchoolManagement />} />
       <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />

@@ -123,13 +123,15 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI Engineer': [
-            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            // { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI': [
-            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            // { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
