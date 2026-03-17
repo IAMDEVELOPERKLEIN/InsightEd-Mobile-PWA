@@ -146,7 +146,7 @@ const SuperUserSelector = () => {
                     navigate('/psip');
                     break;
                 case 'EFD':
-                    navigate('/efd-dashboard');
+                    navigate('/beff-dashboard');
                     break;
                 case 'Finance':
                     navigate('/finance-dashboard');
@@ -380,10 +380,10 @@ const SuperUserSelector = () => {
                                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                                 </div>
-                                <h3 className="text-xl font-bold text-slate-800 mb-2">HRODI Engineer</h3>
+                                <h3 className="text-xl font-bold text-slate-800 mb-2">BEFF Monitoring</h3>
                                 <p className="text-sm text-slate-500 mb-6 flex-grow">Human Resource and Organizational Development</p>
                                 <button onClick={() => handleSelection('EFD')} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
-                                    Select HRODI Engineer Dashboard
+                                    Select BEFF Monitoring Dashboard
                                 </button>
                             </motion.div>
 
