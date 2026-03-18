@@ -98,32 +98,15 @@ const UserProfile = () => {
         const syncUserData = async () => {
             // Priority 1: User object from AuthContext
             // Priority 2: localStorage fallbacks
-            const currentUid = user?.uid || localStorage.getItem('uid');
+            const currentUid = user?.uid || user?.school_id || localStorage.getItem('uid') || localStorage.getItem('userId') || localStorage.getItem('schoolId');
             const currentRole = user?.account_category || user?.role || localStorage.getItem('userRole') || 'User';
-            
-            if (user) {
-                const firstName = user.first_name || user.firstName || '';
-                const lastName = user.last_name || user.lastName || '';
-                
-                setUserData({
-                    ...user,
-                    firstName,
-                    lastName,
-                    role: currentRole
-                });
-
-                setFormData({
-                    firstName,
-                    lastName,
-        const fetchData = async () => {
-            const uid = user?.uid || user?.school_id || localStorage.getItem('userId') || localStorage.getItem('schoolId');
-            const cachedRole = user?.role || localStorage.getItem('userRole');
-            const cachedEmail = localStorage.getItem('userEmail');
+            const cachedEmail = user?.email || localStorage.getItem('userEmail');
             
             let fallbackFirstName = "User";
             let fallbackLastName = "";
             let fallbackEmail = cachedEmail || "";
 
+            // Try to get more info from remembered_user (often set during login)
             try {
                 const remStr = localStorage.getItem('remembered_user');
                 if (remStr) {
@@ -136,23 +119,6 @@ const UserProfile = () => {
                 // Ignore parse errors
             }
 
-            console.log("[UserProfile] Identity Check:", { uid, role: cachedRole, hasContext: !!user });
-
-            // 1. Instantly populate fallback
-            if (uid || cachedRole) {
-                setUserData(prev => ({
-                    ...(prev || {}),
-                    role: cachedRole || prev?.role || 'User',
-                    firstName: prev?.firstName || fallbackFirstName,
-                    lastName: prev?.lastName || fallbackLastName,
-                    email: prev?.email || fallbackEmail,
-                    school_id: user?.school_id || localStorage.getItem('schoolId')
-                }));
-                if (cachedRole) {
-                    setHomeRoute(getDashboardPath(cachedRole));
-                }
-            }
-
             if (user) {
                 // Support both snake_case (from /api/auth/me) and camelCase (from login/register)
                 const mappedUser = {
@@ -160,13 +126,10 @@ const UserProfile = () => {
                     firstName: user.first_name || user.firstName || fallbackFirstName,
                     lastName: user.last_name || user.lastName || fallbackLastName,
                     email: user.email || user.email_address || fallbackEmail,
-                    role: user.role || cachedRole || 'User'
+                    role: user.role || user.account_category || currentRole || 'User'
                 };
                 
                 setUserData(mappedUser);
-                setHomeRoute(getDashboardPath(mappedUser?.role || 'User'));
-
-                // Initialize form data
                 setFormData({
                     firstName: mappedUser.firstName,
                     lastName: mappedUser.lastName,
@@ -175,13 +138,15 @@ const UserProfile = () => {
                     city: user.city || '',
                     barangay: user.barangay || ''
                 });
+                setHomeRoute(getDashboardPath(mappedUser.role));
 
-                setHomeRoute(getDashboardPath(currentRole));
-
-                // Fetch school info if we have a UID
-                if (currentUid && !schoolId) {
+                // School ID check (if missing, fetch it)
+                const currentSchoolId = mappedUser.school_id || mappedUser.schoolId;
+                if (currentSchoolId) {
+                    setSchoolId(currentSchoolId);
+                } else if (mappedUser.uid) {
                     try {
-                        const response = await fetch(`/api/school-by-user/${currentUid}`);
+                        const response = await fetch(`/api/school-by-user/${mappedUser.uid}`);
                         if (response.ok) {
                             const result = await response.json();
                             if (result.exists) {
@@ -193,61 +158,21 @@ const UserProfile = () => {
                         // Silent error
                     }
                 }
-            } else {
+            } else if (!authLoading) {
                 // Initial/Logout state fallbacks from localStorage
-                const cachedRole = localStorage.getItem('userRole');
-                const cachedEmail = localStorage.getItem('userEmail');
-                
-                let fallbackFirstName = "User";
-                let fallbackLastName = "";
-                
-                try {
-                    const remStr = localStorage.getItem('remembered_user');
-                    if (remStr) {
-                        const parsed = JSON.parse(remStr);
-                        fallbackFirstName = parsed.firstName || parsed.first_name || "User";
-                        fallbackLastName = parsed.lastName || parsed.last_name || "";
-                    }
-                } catch (e) {}
-
                 setUserData({
-                    role: cachedRole || 'User',
+                    role: currentRole,
                     firstName: fallbackFirstName,
                     lastName: fallbackLastName,
-                    email: cachedEmail || ""
+                    email: fallbackEmail
                 });
-                
-                if (cachedRole) {
-                    setHomeRoute(getDashboardPath(cachedRole));
-                }
+                setHomeRoute(getDashboardPath(currentRole));
             }
         };
 
         syncUserData();
-    }, [user, user?.uid]); // Re-run when user object or its UID changes
-                // School ID check
-                const currentSchoolId = mappedUser.school_id || mappedUser.schoolId;
-                if (currentSchoolId) {
-                    setSchoolId(currentSchoolId);
-                } else if (mappedUser.uid) {
-                    try {
-                        const response = await fetch(`/api/school-by-user/${mappedUser.uid}`);
-                        const result = await response.json();
-                        if (result.exists) {
-                            setSchoolId(result.data.school_id);
-                            setIern(result.data.iern);
-                        }
-                    } catch (error) {
-                        // console.error("Failed to fetch school ID:", error);
-                    }
-                }
-            }
-        };
+    }, [user, user?.uid, authLoading, getDashboardPath]); // Dependencies for sync
 
-        if (!authLoading) {
-            fetchData();
-        }
-    }, [user, authLoading]);
 
     // --- HELPERS ---
     const getDashboardPath = (role) => {
