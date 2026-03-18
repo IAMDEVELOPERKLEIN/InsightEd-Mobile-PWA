@@ -16,22 +16,22 @@ const FAQ_DATA = [
     {
         question: "How do I sync my data when back online?",
         answer: "The app automatically syncs when it detects an internet connection. If 'Pending Sync' persists, pull down on your dashboard to force a refresh.",
-        roles: ['School Head', 'DepEd Engineer', 'Admin']
+        roles: ['School Head', 'DepEd Engineer', 'Division Engineer', 'Admin']
     },
     {
         question: "Why is the 'Submit' button disabled?",
         answer: "Ensure all required fields (marked with *) are filled. Also, check if your geolocation is enabled, as some forms require location tagging.",
-        roles: ['School Head', 'DepEd Engineer']
+        roles: ['School Head', 'DepEd Engineer', 'Division Engineer']
     },
     {
         question: "How do I attach photos to a report?",
         answer: "Tap the 'Upload Photo' icon in the form. You can select from your gallery or take a new photo. Please use landscape mode for better visibility.",
-        roles: ['DepEd Engineer', 'School Head']
+        roles: ['DepEd Engineer', 'Division Engineer', 'School Head']
     },
     {
         question: "Can I edit a report after submission?",
         answer: "Submitted reports enter a 'Processing' state. You cannot edit them directly. Please contact your Division Office Admin to request changes.",
-        roles: ['School Head', 'DepEd Engineer']
+        roles: ['School Head', 'DepEd Engineer', 'Division Engineer']
     },
     {
         question: "Where can I see the status of my funding request?",
@@ -91,74 +91,89 @@ const UserProfile = () => {
     const [passwordError, setPasswordError] = useState('');
 
 
-    // --- INITIAL FETCH ---
+    // --- INITIAL FETCH & SYNC ---
     useEffect(() => {
-        const fetchData = async () => {
-            const uid = localStorage.getItem('uid');
-            const cachedRole = localStorage.getItem('userRole');
-            const cachedEmail = localStorage.getItem('userEmail');
+        const syncUserData = async () => {
+            // Priority 1: User object from AuthContext
+            // Priority 2: localStorage fallbacks
+            const currentUid = user?.uid || localStorage.getItem('uid');
+            const currentRole = user?.account_category || user?.role || localStorage.getItem('userRole') || 'User';
             
-            let fallbackFirstName = "User";
-            let fallbackLastName = "";
-            let fallbackEmail = cachedEmail || "";
-
-            try {
-                const remStr = localStorage.getItem('remembered_user');
-                if (remStr) {
-                    const parsed = JSON.parse(remStr);
-                    if (parsed.firstName) fallbackFirstName = parsed.firstName;
-                    if (parsed.lastName) fallbackLastName = parsed.lastName; // (Might not exist, but let's try)
-                    if (parsed.email && !fallbackEmail) fallbackEmail = parsed.email;
-                }
-            } catch (e) {
-                // Ignore parse errors
-            }
-
-            // 1. Instantly populate fallback so UI doesn't hang/crash
-            if (uid || cachedRole) {
+            if (user) {
+                const firstName = user.first_name || user.firstName || '';
+                const lastName = user.last_name || user.lastName || '';
+                
                 setUserData({
-                    role: cachedRole || 'User',
-                    firstName: fallbackFirstName,
-                    lastName: fallbackLastName,
-                    email: fallbackEmail
+                    ...user,
+                    firstName,
+                    lastName,
+                    role: currentRole
                 });
-                if (cachedRole) {
-                    setHomeRoute(getDashboardPath(cachedRole));
-                }
-            }            if (uid && user) {
-                setUserData(user);
-                setHomeRoute(getDashboardPath(user.role));
 
-                // Initialize form data with existing values
                 setFormData({
-                    firstName: user.first_name || user.firstName || '',
-                    lastName: user.last_name || user.lastName || '',
+                    firstName,
+                    lastName,
                     region: user.region || '',
                     province: user.province || '',
                     city: user.city || '',
                     barangay: user.barangay || ''
                 });
 
-                // 2. Fetch Assigned School from Neon
-                try {
-                    const response = await fetch(`/api/school-by-user/${uid}`);
-                    const result = await response.json();
-                    if (result.exists) {
-                        setSchoolId(result.data.school_id);
-                        setIern(result.data.iern);
+                setHomeRoute(getDashboardPath(currentRole));
+
+                // Fetch school info if we have a UID
+                if (currentUid && !schoolId) {
+                    try {
+                        const response = await fetch(`/api/school-by-user/${currentUid}`);
+                        if (response.ok) {
+                            const result = await response.json();
+                            if (result.exists) {
+                                setSchoolId(result.data.school_id);
+                                setIern(result.data.iern);
+                            }
+                        }
+                    } catch (error) {
+                        // Silent error
                     }
-                } catch (error) {
-                    // console.error("Failed to fetch school ID:", error);
+                }
+            } else {
+                // Initial/Logout state fallbacks from localStorage
+                const cachedRole = localStorage.getItem('userRole');
+                const cachedEmail = localStorage.getItem('userEmail');
+                
+                let fallbackFirstName = "User";
+                let fallbackLastName = "";
+                
+                try {
+                    const remStr = localStorage.getItem('remembered_user');
+                    if (remStr) {
+                        const parsed = JSON.parse(remStr);
+                        fallbackFirstName = parsed.firstName || parsed.first_name || "User";
+                        fallbackLastName = parsed.lastName || parsed.last_name || "";
+                    }
+                } catch (e) {}
+
+                setUserData({
+                    role: cachedRole || 'User',
+                    firstName: fallbackFirstName,
+                    lastName: fallbackLastName,
+                    email: cachedEmail || ""
+                });
+                
+                if (cachedRole) {
+                    setHomeRoute(getDashboardPath(cachedRole));
                 }
             }
         };
-        fetchData();
-    }, [user]); // Add user as dependency since we use it to populate formData
+
+        syncUserData();
+    }, [user, user?.uid]); // Re-run when user object or its UID changes
 
     // --- HELPERS ---
     const getDashboardPath = (role) => {
         const roleMap = {
             'DepEd Engineer': '/engineer-dashboard',
+            'Division Engineer': '/engineer-dashboard',
             'Non-DepEd Engineer': '/non-deped-dashboard',
             'Engineer': '/engineer-dashboard',
             'Local Government Unit': '/lgu-dashboard',
@@ -172,6 +187,7 @@ const UserProfile = () => {
             'Central Office': '/monitoring-dashboard',
             'Central Office Finance': '/finance-dashboard',
             'EFD': '/efd-dashboard',
+            'EFD Engineer': '/efd-dashboard',
         };
         return roleMap[role] || '/';
     };
@@ -987,7 +1003,7 @@ const UserProfile = () => {
 
                 </div>
 
-                <BottomNav homeRoute={homeRoute} userRole={userData?.role || localStorage.getItem('userRole')} />
+                <BottomNav homeRoute={homeRoute} userRole={userData?.role || user?.account_category || user?.role || localStorage.getItem('userRole')} />
             </div>
         </PageTransition>
     );

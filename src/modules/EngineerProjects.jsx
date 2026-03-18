@@ -326,7 +326,12 @@ const EngineerProjects = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [userName, setUserName] = useState(user?.first_name || user?.firstName || "Engineer");
-    const [userRole, setUserRole] = useState(user?.role || "DepEd Engineer");
+    const [userRole, setUserRole] = useState(() => {
+        let role = user?.role || localStorage.getItem('userRole') || "Division Engineer";
+        if (role === 'deped_engineer' || role === 'DepEd Engineer') return 'Division Engineer';
+        if (role === 'hrodi_engineer' || role === 'HRODI Engineer' || role === 'EFD' || role === 'HRODI') return 'EFD Engineer';
+        return role;
+    });
   const [accountCategory, setAccountCategory] = useState(null);
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -361,123 +366,103 @@ const EngineerProjects = () => {
   // Fetch User & Projects
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
-      const uid = user?.uid;
-      if (uid) {
-        // 1. Get User Name & Account Category from our own API (replaced Firebase dependency)
-        try {
-          const infoRes = await fetch(`/api/user-info/${uid}`);
-          if (infoRes.ok) {
-            const info = await infoRes.json();
-            setUserName(info.first_name || info.firstName || 'Engineer');
-            setAccountCategory(info.account_category);
-          }
-        } catch (e) {
-          console.error("Error fetching user info:", e);
+      const currentUid = user?.uid || localStorage.getItem('uid');
+      let currentRole = user?.account_category || user?.role || localStorage.getItem('userRole');
+      
+      if (currentUid) {
+        // Sync Basic Info from User Object if available
+        if (user) {
+            setUserName(`${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim() || 'Engineer');
+            setAccountCategory(user.account_category);
         }
 
         try {
           setIsLoading(true);
-          let currentRole = localStorage.getItem('userRole');
-          // Normalize
-          if (currentRole === 'deped_engineer') currentRole = 'DepEd Engineer';
+          // Normalize role for BottomNav and logic
+          if (currentRole === 'deped_engineer' || currentRole === 'DepEd Engineer') currentRole = 'Division Engineer';
+          if (currentRole === 'hrodi_engineer' || currentRole === 'HRODI Engineer' || currentRole === 'EFD' || currentRole === 'HRODI') currentRole = 'EFD Engineer';
           if (currentRole === 'non_deped_engineer') currentRole = 'Non-DepEd Engineer';
           if (currentRole === 'engineer') currentRole = 'Engineer';
           
           setUserRole(currentRole);
           let currentProjects = [];
 
-          if (userRole === 'Super Admin' || userRole === 'Super User') {
-            // SUPER ADMIN: Use API instead of Firestore
-            const response = await fetch(`${API_BASE}/api/projects`);
-            if (!response.ok) throw new Error("Failed to fetch all projects");
-            const data = await response.json();
-            currentProjects = data;
-          } else {
-
-            // ENGINEER: Stale-While-Revalidate Strategy
-
-            // 1. Immediate Cache Load (Fast Render)
-            try {
-              const cachedData = await getCachedProjects();
-              if (cachedData && cachedData.length > 0) {
-                setProjects(cachedData);
-                currentProjects = cachedData; // Prevent overwrite by empty array later
-                setIsLoading(false); // Stop spinner if we have data
-              }
-            } catch (err) {
-              console.warn("Cache read failed", err);
+          // 1. Immediate Cache Load (Fast Render)
+          try {
+            const cachedData = await getCachedProjects();
+            if (cachedData && cachedData.length > 0) {
+              setProjects(cachedData);
+              currentProjects = cachedData;
+              setIsLoading(false);
             }
-
-            // 2. Network Request (Background Sync)
-            try {
-              let url = `${API_BASE}/api/projects?engineer_id=${uid}`;
-
-              const userRole = localStorage.getItem('userRole');
-              if (userRole === 'Super User') {
-                const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
-                if (impersonatedDivision) {
-                  url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
-                } else {
-                  // If no specific division (unlikely via selector), maybe fetch all? 
-                  // Or rely on backend restriction? 
-                  // EngineerDashboard defaults to ALL.
-                  url = `${API_BASE}/api/projects`;
-                }
-              }
-
-              const response = await fetch(url);
-              if (!response.ok) throw new Error("Failed to fetch projects");
-              const data = await response.json();
-
-              currentProjects = data.map(item => ({
-                id: item.id,
-                projectName: item.projectName,
-                schoolName: item.schoolName,
-                schoolId: item.schoolId,
-                status: item.status,
-                accomplishmentPercentage: item.accomplishmentPercentage,
-                projectAllocation: item.projectAllocation,
-                targetCompletionDate: item.targetCompletionDate,
-                statusAsOfDate: item.statusAsOfDate,
-                otherRemarks: item.otherRemarks,
-                contractorName: item.contractorName,
-                ipc: item.ipc,
-                latitude: item.latitude,
-                longitude: item.longitude,
-                projectCategory: item.projectCategory,
-                scopeOfWork: item.scopeOfWork,
-                numberOfClassrooms: item.numberOfClassrooms,
-                numberOfStoreys: item.numberOfStoreys,
-                numberOfSites: item.numberOfSites,
-                fundsUtilized: item.fundsUtilized,
-                constructionStartDate: item.constructionStartDate,
-                noticeToProceed: item.noticeToProceed,
-                batchOfFunds: item.batchOfFunds,
-                hasPow: item.hasPow,
-                hasDupa: item.hasDupa,
-                hasContract: item.hasContract,
-                hasMoa: item.hasMoa,
-                hasRta: item.hasRta,
-                hasVariationOrder: item.hasVariationOrder,
-                variationOrderPdf: item.variationOrderPdf,
-                contractAmount: item.contractAmount,
-                statusDesignPhase: item.statusDesignPhase,
-                fundingYear: item.fundingYear
-              }));
-
-              // Update Cache on success
-              await cacheProjects(currentProjects);
-
-              // Update state with fresh data
-              setProjects(currentProjects);
-
-            } catch (networkError) {
-              console.warn("Network request failed:", networkError);
-              // If we didn't have cached data before, we rely on the fallback above or show empty state if truly offline & no cache
-            }
+          } catch (err) {
+            console.warn("Cache read failed", err);
           }
 
-          setProjects(currentProjects);
+          // 2. Network Request
+          try {
+            let url = `${API_BASE}/api/projects?engineer_id=${currentUid}`;
+
+            if (currentRole === 'Super User') {
+              const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
+              if (impersonatedDivision) {
+                url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
+              } else {
+                url = `${API_BASE}/api/projects`;
+              }
+            } else if (currentRole === 'Super Admin') {
+                url = `${API_BASE}/api/projects`;
+            }
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Failed to fetch projects");
+            const data = await response.json();
+
+            currentProjects = data.map(item => ({
+              id: item.id,
+              projectName: item.projectName,
+              schoolName: item.schoolName,
+              schoolId: item.schoolId,
+              status: item.status,
+              accomplishmentPercentage: item.accomplishmentPercentage,
+              projectAllocation: item.projectAllocation,
+              targetCompletionDate: item.targetCompletionDate,
+              statusAsOfDate: item.statusAsOfDate,
+              otherRemarks: item.otherRemarks,
+              contractorName: item.contractorName,
+              ipc: item.ipc,
+              latitude: item.latitude,
+              longitude: item.longitude,
+              projectCategory: item.projectCategory,
+              scopeOfWork: item.scopeOfWork,
+              numberOfClassrooms: item.numberOfClassrooms,
+              numberOfStoreys: item.numberOfStoreys,
+              numberOfSites: item.numberOfSites,
+              fundsUtilized: item.fundsUtilized,
+              constructionStartDate: item.constructionStartDate,
+              noticeToProceed: item.noticeToProceed,
+              batchOfFunds: item.batchOfFunds,
+              hasPow: item.hasPow,
+              hasDupa: item.hasDupa,
+              hasContract: item.hasContract,
+              hasMoa: item.hasMoa,
+              hasRta: item.hasRta,
+              hasVariationOrder: item.hasVariationOrder,
+              variationOrderPdf: item.variationOrderPdf,
+              contractAmount: item.contractAmount,
+              statusDesignPhase: item.statusDesignPhase,
+              fundingYear: item.fundingYear
+            }));
+
+            // Update Cache on success
+            await cacheProjects(currentProjects);
+
+            // Update state with fresh data
+            setProjects(currentProjects);
+
+          } catch (networkError) {
+            console.warn("Network request failed:", networkError);
+          }
 
         } catch (err) {
           console.error("Error loading projects:", err);
@@ -487,7 +472,7 @@ const EngineerProjects = () => {
       }
     };
     fetchUserDataAndProjects();
-  }, []);
+  }, [user, user?.uid]);
 
   // Filtered list
   const filteredProjects = projects.filter(p =>

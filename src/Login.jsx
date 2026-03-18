@@ -32,9 +32,9 @@ const getDashboardPath = (role, accountCategory) => {
         'DPWH': '/agency-dashboard',
         'CSO': '/agency-dashboard',
         'EFD': '/efd-dashboard',
-        'HRODI Engineer': '/efd-dashboard',
+        'EFD Engineer': '/efd-dashboard',
         'HRODI': '/efd-dashboard',
-        'DepEd Engineer': '/engineer-dashboard',
+        'Division Engineer': '/engineer-dashboard',
         'Non-DepEd Engineer': '/non-deped-dashboard',
         'Engineer': '/engineer-dashboard',
     };
