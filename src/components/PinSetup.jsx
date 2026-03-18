@@ -70,13 +70,22 @@ const PinSetup = () => {
 
       setIsSubmitting(true);
       try {
+        const uid = localStorage.getItem('uid');
+        const schoolId = localStorage.getItem('schoolId');
         const userEmail = localStorage.getItem('userEmail');
-        if (!userEmail) throw new Error("Missing user email");
+        
+        if (!uid && !schoolId && !userEmail) throw new Error("Missing user identifier");
 
         const response = await fetch('/api/auth/setup-pin', {
+          // Use uid, schoolId, or email in order of preference
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: userEmail, pin })
+          body: JSON.stringify({ 
+            uid: uid || null,
+            school_id: (!uid && schoolId) ? schoolId : null,
+            email: (!uid && !schoolId && userEmail) ? userEmail : null,
+            pin 
+          })
         });
         
         const data = await response.json();

@@ -2,9 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiArrowLeft, FiUser, FiBriefcase, FiAward, FiBookOpen, FiUserCheck, FiUsers, FiHelpCircle, FiInfo, FiSave } from 'react-icons/fi';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 // LoadingScreen import removed
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
@@ -34,6 +32,7 @@ const TeacherInput = ({ label, name, value, onChange, disabled }) => (
 );
 
 const TeachingPersonnel = ({ embedded }) => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
 
     // --- STATE ---
@@ -44,7 +43,7 @@ const TeachingPersonnel = ({ embedded }) => {
     const isDummy = location.state?.isDummy || false;
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -111,11 +110,11 @@ const TeachingPersonnel = ({ embedded }) => {
 
     // --- FETCH DATA (Strict Instant Load Strategy) ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const loadInitialData = async () => {
             if (user) {
                 // Check Role for Read-Only
                 try {
-                    const role = localStorage.getItem('userRole');
+                    const role = user.role;
                     if (role === 'Central Office' || isDummy) {
                         setIsReadOnly(true);
                     }
@@ -188,7 +187,7 @@ const TeachingPersonnel = ({ embedded }) => {
                                 setIsLocked(false); // Unlocks form for draft editing
                                 setLoading(false);
 
-                                getDoc(doc(db, "users", user.uid)).then(s => { if (s.exists()) setUserRole(s.data().role); });
+                                setUserRole(user.role);
                                 return;
                             }
                         } catch (e) { console.error("Outbox check failed:", e); }
@@ -197,7 +196,7 @@ const TeachingPersonnel = ({ embedded }) => {
                     // B. Network Fetch
                     if (!restored) {
                         let fetchUrl = `/api/teaching-personnel/${user.uid}`;
-                        const role = localStorage.getItem('userRole');
+                        const role = user.role;
                         if (isAuditMode) {
                             fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
                         } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
@@ -208,12 +207,9 @@ const TeachingPersonnel = ({ embedded }) => {
                         if (!loadedFromCache) setLoading(true);
 
                         try {
-                            const [userDoc, apiResult] = await Promise.all([
-                                getDoc(doc(db, "users", user.uid)).catch(e => ({ exists: () => false })),
-                                fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
-                            ]);
+                            const apiResult = await fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }));
 
-                            if (userDoc.exists()) setUserRole(userDoc.data().role);
+                            setUserRole(user.role);
 
                             const json = apiResult;
 
@@ -284,12 +280,12 @@ const TeachingPersonnel = ({ embedded }) => {
                         }
                     }
                 };
-
                 performAsyncChecks();
             }
-        });
-        return () => unsubscribe();
-    }, []);
+        };
+
+        loadInitialData();
+    }, [user, viewOnly, schoolIdParam, isAuditMode, auditTargetId, isDummy]);
 
     // --- HELPERS ---
     // --- HELPERS (Case Insensitive) ---
@@ -403,8 +399,7 @@ const TeachingPersonnel = ({ embedded }) => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
-
-        const user = auth.currentUser;
+        if (!user) return;
 
         // We send the UID so the backend can find the row WHERE submitted_by = uid
         const payload = {

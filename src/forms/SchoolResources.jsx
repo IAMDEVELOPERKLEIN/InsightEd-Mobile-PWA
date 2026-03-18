@@ -2,9 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiArrowLeft, FiPackage, FiMapPin, FiLayout, FiCheckCircle, FiXCircle, FiMonitor, FiTool, FiDroplet, FiZap, FiHelpCircle, FiInfo, FiSave, FiPlus, FiTrash2 } from 'react-icons/fi';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 // LoadingScreen import removed
 import { addToOutbox, getOutbox, saveSpaceDraft, getSpaceDrafts, clearSpaceDrafts } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
@@ -166,6 +164,7 @@ const LabRow = ({ label, name, formData, handleChange, isLocked, viewOnly }) => 
 
 const SchoolResources = ({ embedded }) => {
     const navigate = useNavigate();
+    const { user, token } = useAuth();
 
     // --- STATE ---
     const location = useLocation();
@@ -175,7 +174,7 @@ const SchoolResources = ({ embedded }) => {
     const isDummy = location.state?.isDummy || false;
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -335,7 +334,7 @@ const SchoolResources = ({ embedded }) => {
         }
         setSpaces(prev => {
             const updated = [...prev, { ...currentSpace, id: Date.now() }];
-            if (auth.currentUser) saveSpaceDraft(auth.currentUser.uid, updated).catch(console.error);
+            if (user) saveSpaceDraft(user.uid, updated).catch(console.error);
             return updated;
         });
         setCurrentSpace({ lat: null, lng: null, length: '', width: '', area: 0 });
@@ -344,7 +343,7 @@ const SchoolResources = ({ embedded }) => {
     const removeSpace = (id) => {
         setSpaces(prev => {
             const updated = prev.filter(s => s.id !== id);
-            if (auth.currentUser) saveSpaceDraft(auth.currentUser.uid, updated).catch(console.error);
+            if (user) saveSpaceDraft(user.uid, updated).catch(console.error);
             return updated;
         });
     };
@@ -395,38 +394,141 @@ const SchoolResources = ({ embedded }) => {
     const [curricularOffering, setCurricularOffering] = useState('');
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // DEFAULT STATE
-                const defaultFormData = initialFields;
+        if (!user) return;
+        const loadData = async () => {
+            // DEFAULT STATE
+            const defaultFormData = initialFields;
+            setUserRole(user.role);
 
-                // Check Role for Read-Only and Fetch Logic
-                let isCORole = false;
+            // Check Role for Read-Only and Fetch Logic
+            const role = user.role;
+            let isCORole = (role === 'Central Office');
+            if (role === 'Central Office' || isDummy) {
+                setIsReadOnly(true);
+            }
+
+            // Sync Cache Loading
+            const storedSchoolId = localStorage.getItem('schoolId');
+            const storedOffering = localStorage.getItem('schoolOffering');
+            if (storedSchoolId) setSchoolId(storedSchoolId);
+            if (storedOffering) setCurricularOffering(storedOffering);
+
+            // Load Profile Cache (Enrollment) - Critical for calculations
+            const cachedProfile = localStorage.getItem('fullSchoolProfile');
+            if (cachedProfile) {
                 try {
-                    const role = localStorage.getItem('userRole');
-                    if (role === 'Central Office' || isDummy) {
-                        setIsReadOnly(true);
-                        isCORole = (role === 'Central Office');
-                    }
-                } catch (e) { }
+                    const pData = JSON.parse(cachedProfile);
+                    // Offering from profile has precedence if valid
+                    if (pData.curricular_offering) setCurricularOffering(pData.curricular_offering);
+                    if (pData.iern) setIern(pData.iern);
 
-                // Sync Cache Loading
-                const storedSchoolId = localStorage.getItem('schoolId');
-                const storedOffering = localStorage.getItem('schoolOffering');
-                if (storedSchoolId) setSchoolId(storedSchoolId);
-                if (storedOffering) setCurricularOffering(storedOffering);
+                    // Map Enrollment using cached data
+                    setEnrollmentData({
+                        gradeKinder: pData.grade_kinder || pData.kinder || 0,
+                        grade1: pData.grade_1 || 0, grade2: pData.grade_2 || 0,
+                        grade3: pData.grade_3 || 0, grade4: pData.grade_4 || 0,
+                        grade5: pData.grade_5 || 0, grade6: pData.grade_6 || 0,
+                        grade7: pData.grade_7 || 0, grade8: pData.grade_8 || 0,
+                        grade9: pData.grade_9 || 0, grade10: pData.grade_10 || 0,
+                        grade11: (pData.abm_11 + pData.stem_11 + pData.humss_11 + pData.gas_11 + pData.tvl_ict_11 + pData.tvl_he_11 + pData.tvl_ia_11 + pData.tvl_afa_11 + pData.arts_11 + pData.sports_11) || 0,
+                        grade12: (pData.abm_12 + pData.stem_12 + pData.humss_12 + pData.gas_12 + pData.tvl_ict_12 + pData.tvl_he_12 + pData.tvl_ia_12 + pData.tvl_afa_12 + pData.arts_12 + pData.sports_12) || 0
+                    });
+                } catch (e) { console.error("Profile cache error", e); }
+            }
 
-                // Load Profile Cache (Enrollment) - Critical for calculations
-                const cachedProfile = localStorage.getItem('fullSchoolProfile');
-                if (cachedProfile) {
+            // Load Resources Cache (Main Form)
+            let loadedFromCache = false;
+            const CACHE_KEY_RES = `CACHE_RESOURCES_${user.uid}`;
+            const cachedRes = localStorage.getItem(CACHE_KEY_RES);
+
+            if (cachedRes) {
+                try {
+                    const parsed = JSON.parse(cachedRes);
+                    setFormData({ ...defaultFormData, ...parsed });
+                    setOriginalData({ ...defaultFormData, ...parsed });
+
+                    const hasCachedData = Object.keys(initialFields).some(k => parsed[k]);
+                    setIsLocked(hasCachedData);
+                    setLoading(false);
+                    loadedFromCache = true;
+                    console.log("Loaded cached Resources (Instant Load)");
+                } catch (e) { console.error("Resources cache error", e); }
+            }
+
+            // Load Shifting Cache
+            const CACHE_KEY_SHIFTING = `CACHE_SHIFTING_${user.uid}`;
+            const cachedShifting = localStorage.getItem(CACHE_KEY_SHIFTING);
+            if (cachedShifting) {
+                try {
+                    const parsed = JSON.parse(cachedShifting);
+                    setShiftingData(parsed.shifts || {});
+                } catch (e) { console.error("Shifting cache error", e); }
+            }
+
+            try {
+                // 2. CHECK OUTBOX
+                let restored = false;
+                if (!viewOnly) {
                     try {
-                        const pData = JSON.parse(cachedProfile);
-                        // Offering from profile has precedence if valid
-                        if (pData.curricular_offering) setCurricularOffering(pData.curricular_offering);
-                        if (pData.iern) setIern(pData.iern); // [NEW] Load IERN from cache
+                        const drafts = await getOutbox();
+                        const draft = drafts.find(d => d.type === 'SCHOOL_RESOURCES');
+                        if (draft) {
+                            console.log("Restored draft from Outbox");
+                            setFormData({ ...defaultFormData, ...draft.payload });
+                            if (draft.payload.spaces) setSpaces(draft.payload.spaces);
+                            setIsLocked(false);
+                            restored = true;
+                            setLoading(false);
+                        }
+                    } catch (e) { console.error("Outbox check failed:", e); }
+                }
 
-                        // Map Enrollment using cached data
-                        setEnrollmentData({
+                if (!restored) {
+                    let profileFetchUrl = `/api/school-by-user/${user.uid}`;
+                    let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
+
+                    if (isAuditMode) {
+                        profileFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        resourcesFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                    } else if ((viewOnly || isCORole) && schoolIdParam) {
+                        profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    let shiftingFetchUrl = `/api/learning-modalities/${user.uid}`;
+                    if (isAuditMode) {
+                        shiftingFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                    } else if ((viewOnly || isCORole) && schoolIdParam) {
+                        shiftingFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    if (!loadedFromCache) setLoading(true);
+
+                    const [profileRes, resourcesRes, shiftingRes] = await Promise.all([
+                        fetch(profileFetchUrl).then(r => r.json()).catch(e => ({ exists: false })),
+                        fetch(resourcesFetchUrl).then(r => r.json()).catch(e => ({ exists: false })),
+                        fetch(shiftingFetchUrl).then(r => r.json()).catch(e => ({ exists: false }))
+                    ]);
+
+                    // Handle Shifting Modalities
+                    if (shiftingRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                        const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? shiftingRes : (shiftingRes.data || {});
+                        const loadedShifts = {};
+                        const LEVELS = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+                        LEVELS.forEach(lvl => {
+                            loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
+                        });
+                        setShiftingData(loadedShifts);
+                    }
+
+                    // Handle Profile
+                    if (profileRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                        const pData = ((viewOnly && schoolIdParam) || isAuditMode) ? profileRes : profileRes.data;
+                        setSchoolId(pData.school_id || pData.schoolId);
+                        if (pData.iern) setIern(pData.iern);
+                        setCurricularOffering(normalizeOffering(pData.curricular_offering || pData.curricularOffering || ""));
+
+                        const newEnrollment = {
                             gradeKinder: pData.grade_kinder || pData.kinder || 0,
                             grade1: pData.grade_1 || 0, grade2: pData.grade_2 || 0,
                             grade3: pData.grade_3 || 0, grade4: pData.grade_4 || 0,
@@ -435,260 +537,96 @@ const SchoolResources = ({ embedded }) => {
                             grade9: pData.grade_9 || 0, grade10: pData.grade_10 || 0,
                             grade11: (pData.abm_11 + pData.stem_11 + pData.humss_11 + pData.gas_11 + pData.tvl_ict_11 + pData.tvl_he_11 + pData.tvl_ia_11 + pData.tvl_afa_11 + pData.arts_11 + pData.sports_11) || 0,
                             grade12: (pData.abm_12 + pData.stem_12 + pData.humss_12 + pData.gas_12 + pData.tvl_ict_12 + pData.tvl_he_12 + pData.tvl_ia_12 + pData.tvl_afa_12 + pData.arts_12 + pData.sports_12) || 0
+                        };
+                        setEnrollmentData(newEnrollment);
+
+                        if (!viewOnly && pData.school_id) {
+                            localStorage.setItem('schoolId', pData.school_id);
+                        }
+
+                        if (pData.latitude && pData.longitude && !isNaN(pData.latitude)) {
+                            const lat = parseFloat(pData.latitude);
+                            const lng = parseFloat(pData.longitude);
+                            setSchoolLocation({ lat, lng });
+                            setMapCenter([lat, lng]);
+                        }
+                    }
+
+                    // Handle Resources
+                    if (resourcesRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                        const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? resourcesRes : resourcesRes.data;
+                        const loaded = {};
+                        Object.keys(defaultFormData).forEach(key => {
+                            loaded[key] = dbData[key] ?? (typeof defaultFormData[key] === 'string' ? '' : 0);
                         });
-                    } catch (e) { console.error("Profile cache error", e); }
-                }
 
-                // Load Resources Cache (Main Form)
-                let loadedFromCache = false;
-                const CACHE_KEY_RES = `CACHE_RESOURCES_${user.uid}`;
-                const cachedRes = localStorage.getItem(CACHE_KEY_RES);
+                        setFormData(loaded);
+                        setOriginalData(loaded);
+                        setIsLocked(Object.keys(initialFields).some(k => loaded[k]));
+                        localStorage.setItem(CACHE_KEY_RES, JSON.stringify(loaded));
 
-                if (cachedRes) {
-                    try {
-                        const parsed = JSON.parse(cachedRes);
-                        setFormData({ ...defaultFormData, ...parsed });
-                        setOriginalData({ ...defaultFormData, ...parsed });
-
-                        const hasCachedData = Object.keys(initialFields).some(k => parsed[k]);
-                        setIsLocked(hasCachedData);
-                        setLoading(false); // CRITICAL: Instant Load
-                        loadedFromCache = true;
-                        console.log("Loaded cached Resources (Instant Load)");
-                    } catch (e) { console.error("Resources cache error", e); }
-                }
-
-                // Load Shifting Cache (For Double Shift logic)
-                const CACHE_KEY_SHIFTING = `CACHE_SHIFTING_${user.uid}`;
-                const cachedShifting = localStorage.getItem(CACHE_KEY_SHIFTING);
-                if (cachedShifting) {
-                    try {
-                        const parsed = JSON.parse(cachedShifting);
-                        setShiftingData(parsed.shifts || {});
-                    } catch (e) { console.error("Shifting cache error", e); }
-                }
-
-                try {
-                    // 2. CHECK OUTBOX
-                    let restored = false;
-                    if (!viewOnly) {
-                        try {
-                            const drafts = await getOutbox();
-                            const draft = drafts.find(d => d.type === 'SCHOOL_RESOURCES');
-                            if (draft) {
-                                console.log("Restored draft from Outbox");
-                                setFormData({ ...defaultFormData, ...draft.payload });
-                                if (draft.payload.spaces) setSpaces(draft.payload.spaces); // Restore spaces
-                                setIsLocked(false);
-                                restored = true;
-                                setLoading(false);
-                                return; // EXIT EARLY
-                            }
-                        } catch (e) { console.error("Outbox check failed:", e); }
-                    }
-
-
-                    // 3. BACKGROUND FETCHES
-                    if (!restored) {
-                        let profileFetchUrl = `/api/school-by-user/${user.uid}`;
-                        let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
-
-                        if (isAuditMode) {
-                            profileFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
-                            resourcesFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
-                        } else if ((viewOnly || isCORole) && schoolIdParam) {
-                            profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                            resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                        }
-
-                        let shiftingFetchUrl = `/api/learning-modalities/${user.uid}`;
-                        if (isAuditMode) {
-                            shiftingFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
-                        } else if ((viewOnly || isCORole) && schoolIdParam) {
-                            shiftingFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                        }
-
-                        // Only show loading if we didn't load from cache
-                        if (!loadedFromCache) setLoading(true);
-
-                        // Fetch All in Parallel
-                        const [userDoc, profileRes, resourcesRes, shiftingRes] = await Promise.all([
-                            getDoc(doc(db, "users", user.uid)).catch(() => ({ exists: () => false })),
-                            fetch(profileFetchUrl).then(r => r.json()).catch(e => ({ exists: false })),
-                            fetch(resourcesFetchUrl).then(r => r.json()).catch(e => ({ exists: false })),
-                            fetch(shiftingFetchUrl).then(r => r.json()).catch(e => ({ exists: false }))
-                        ]);
-
-                        // Handle Role
-                        if (userDoc.exists()) setUserRole(userDoc.data().role);
-
-                        // Handle Shifting Modalities
-                        if (shiftingRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
-                            const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? shiftingRes : (shiftingRes.data || {});
-                            // Map shift_kinder, shift_g1, etc.
-                            const loadedShifts = {};
-                            const LEVELS = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
-                            LEVELS.forEach(lvl => {
-                                loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
-                            });
-                            setShiftingData(loadedShifts);
-                        }
-
-                        // Handle Profile (Enrollment updates)
-                        if (profileRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
-                            const pData = ((viewOnly && schoolIdParam) || isAuditMode) ? profileRes : profileRes.data;
-                            setSchoolId(pData.school_id || pData.schoolId);
-                            if (pData.iern) setIern(pData.iern); // [NEW] Set IERN from fetch
-                            setCurricularOffering(normalizeOffering(pData.curricular_offering || pData.curricularOffering || storedOffering));
-
-                            const newEnrollment = {
-                                gradeKinder: pData.grade_kinder || pData.kinder || 0,
-                                grade1: pData.grade_1 || 0, grade2: pData.grade_2 || 0,
-                                grade3: pData.grade_3 || 0, grade4: pData.grade_4 || 0,
-                                grade5: pData.grade_5 || 0, grade6: pData.grade_6 || 0,
-                                grade7: pData.grade_7 || 0, grade8: pData.grade_8 || 0,
-                                grade9: pData.grade_9 || 0, grade10: pData.grade_10 || 0,
-                                grade11: (pData.abm_11 + pData.stem_11 + pData.humss_11 + pData.gas_11 + pData.tvl_ict_11 + pData.tvl_he_11 + pData.tvl_ia_11 + pData.tvl_afa_11 + pData.arts_11 + pData.sports_11) || 0,
-                                grade12: (pData.abm_12 + pData.stem_12 + pData.humss_12 + pData.gas_12 + pData.tvl_ict_12 + pData.tvl_he_12 + pData.tvl_ia_12 + pData.tvl_afa_12 + pData.arts_12 + pData.sports_12) || 0
-                            };
-                            setEnrollmentData(newEnrollment);
-
-                            if (!viewOnly && pData.school_id) {
-                                localStorage.setItem('schoolId', pData.school_id);
-                            }
-
-                            // [NEW] SMART MAP INITIALIZATION
-                            if (pData.latitude && pData.longitude && !isNaN(pData.latitude)) {
-                                const lat = parseFloat(pData.latitude);
-                                const lng = parseFloat(pData.longitude);
-                                setSchoolLocation({ lat, lng });
-                                setMapCenter([lat, lng]);
-                                console.log("Map Centered on School Profile:", lat, lng);
-                            } else {
-                                // Fallback: Try Device GPS
-                                if (navigator.geolocation) {
-                                    navigator.geolocation.getCurrentPosition(
-                                        (pos) => {
-                                            const { latitude, longitude } = pos.coords;
-                                            setSchoolLocation({ lat: latitude, lng: longitude }); // Treat as temp school loc
-                                            setMapCenter([latitude, longitude]);
-                                            console.log("Map Centered on Device GPS");
-                                        },
-                                        (err) => console.warn("GPS Fallback failed:", err),
-                                        { enableHighAccuracy: true, timeout: 5000 }
-                                    );
-                                }
-                            }
-                        }
-
-                        // Handle Resources
-                        if (resourcesRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
-                            const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? resourcesRes : resourcesRes.data;
-
-                            // Map to State
-                            const loaded = {};
-                            Object.keys(defaultFormData).forEach(key => {
-                                loaded[key] = dbData[key] ?? (typeof defaultFormData[key] === 'string' ? '' : 0);
-                            });
-
-                            setFormData(loaded);
-                            setOriginalData(loaded);
-
-                            const hasOnlineData = Object.keys(initialFields).some(k => loaded[k]);
-                            setIsLocked(hasOnlineData);
-
-                            // Update Cache
-                            localStorage.setItem(CACHE_KEY_RES, JSON.stringify(loaded));
-
-                            // Fetch Buildable Spaces if applicable
-                            // Use dbData (current scope) or fallback IDs
-                            const resolvedSchoolId = dbData.school_id || schoolIdParam || auditTargetId || localStorage.getItem('schoolId');
-                            if (loaded.res_buildable_space === 'Yes' && resolvedSchoolId) {
-                                try {
-                                    const spacesRes = await fetch(`/api/buildable-spaces/${resolvedSchoolId}`);
-                                    if (spacesRes.ok) {
-                                        const spacesData = await spacesRes.json();
-                                        const mappedSpaces = spacesData.map(s => ({
-                                            id: s.space_id,
-                                            lat: parseFloat(s.latitude),
-                                            lng: parseFloat(s.longitude),
-                                            length: parseFloat(s.length),
-                                            width: parseFloat(s.width),
-                                            area: parseFloat(s.total_area)
-                                        }));
-                                        setSpaces(mappedSpaces);
-                                        // Cache Spaces
-                                        localStorage.setItem(`CACHE_SPACES_${user.uid}`, JSON.stringify(mappedSpaces));
-                                    }
-                                } catch (e) {
-                                    console.error("Failed to load spaces", e);
-                                }
-                            }
-
-                            // Fetch e-Cart Batches
-                            if (resolvedSchoolId) {
-                                try {
-                                    const ecartRes = await fetch(`/api/ecart-batches/${resolvedSchoolId}`);
-                                    if (ecartRes.ok) {
-                                        const ecartData = await ecartRes.json();
-                                        if (ecartData.length > 0) {
-                                            setEcartBatches(ecartData.map(b => ({
-                                                batch_no: b.batch_no || '',
-                                                year_received: b.year_received || '',
-                                                source_fund: b.source_fund || '',
-                                                ecart_qty_laptops: b.ecart_qty_laptops || 0,
-                                                ecart_condition_laptops: b.ecart_condition_laptops || '',
-                                                ecart_has_smart_tv: !!b.ecart_has_smart_tv,
-                                                ecart_tv_size: b.ecart_tv_size || '',
-                                                ecart_condition_tv: b.ecart_condition_tv || '',
-                                                ecart_condition_charging: b.ecart_condition_charging || '',
-                                                ecart_condition_cabinet: b.ecart_condition_cabinet || ''
-                                            })));
-                                        }
-                                    }
-                                } catch (e) {
-                                    console.error("Failed to load e-Cart batches", e);
-                                }
-                            }
-                        }
-                    }
-
-                } catch (error) {
-                    console.error("Fetch Error:", error);
-                    if (!loadedFromCache) {
-                        const CACHE_KEY_RES = `CACHE_RESOURCES_${user.uid}`;
-                        const cached = localStorage.getItem(CACHE_KEY_RES);
-                        if (cached) {
+                        const resolvedSchoolId = dbData.school_id || schoolIdParam || auditTargetId || localStorage.getItem('schoolId');
+                        if (loaded.res_buildable_space === 'Yes' && resolvedSchoolId) {
                             try {
-                                const data = JSON.parse(cached);
-                                setFormData(data);
-                                setOriginalData(data);
-                                const hasOfflineData = Object.keys(initialFields).some(k => data[k]);
-                                setIsLocked(hasOfflineData);
-
-                                // Load Spaces Draft from IndexedDB (Priority over cache)
-                                try {
-                                    const drafts = await getSpaceDrafts(user.uid);
-                                    if (drafts && drafts.length > 0) {
-                                        setSpaces(drafts);
-                                        console.log("Loaded spaces from IndexedDB Drafts");
-                                    } else {
-                                        // Fallback to localStorage if no IDB draft
-                                        const cachedSpaces = localStorage.getItem(`CACHE_SPACES_${user.uid}`);
-                                        if (cachedSpaces) {
-                                            setSpaces(JSON.parse(cachedSpaces));
-                                        }
-                                    }
-                                } catch (e) { console.error("Failed to load space drafts", e); }
-                            } catch (e) { }
+                                const spacesRes = await fetch(`/api/buildable-spaces/${resolvedSchoolId}`);
+                                if (spacesRes.ok) {
+                                    const spacesData = await spacesRes.json();
+                                    const mappedSpaces = spacesData.map(s => ({
+                                        id: s.space_id,
+                                        lat: parseFloat(s.latitude),
+                                        lng: parseFloat(s.longitude),
+                                        length: parseFloat(s.length),
+                                        width: parseFloat(s.width),
+                                        area: parseFloat(s.total_area)
+                                    }));
+                                    setSpaces(mappedSpaces);
+                                    localStorage.setItem(`CACHE_SPACES_${user.uid}`, JSON.stringify(mappedSpaces));
+                                }
+                            } catch (e) { console.error("Failed to load spaces", e); }
                         }
+
+                        if (resolvedSchoolId) {
+                            try {
+                                const ecartRes = await fetch(`/api/ecart-batches/${resolvedSchoolId}`);
+                                if (ecartRes.ok) {
+                                    const ecartData = await ecartRes.json();
+                                    if (ecartData.length > 0) {
+                                        setEcartBatches(ecartData.map(b => ({
+                                            batch_no: b.batch_no || '',
+                                            year_received: b.year_received || '',
+                                            source_fund: b.source_fund || '',
+                                            ecart_qty_laptops: b.ecart_qty_laptops || 0,
+                                            ecart_condition_laptops: b.ecart_condition_laptops || '',
+                                            ecart_has_smart_tv: !!b.ecart_has_smart_tv,
+                                            ecart_tv_size: b.ecart_tv_size || '',
+                                            ecart_condition_tv: b.ecart_condition_tv || '',
+                                            ecart_condition_charging: b.ecart_condition_charging || '',
+                                            ecart_condition_cabinet: b.ecart_condition_cabinet || ''
+                                        })));
+                                    }
+                                }
+                            } catch (e) { console.error("Failed to load e-Cart batches", e); }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                if (!loadedFromCache) {
+                    const cached = localStorage.getItem(CACHE_KEY_RES);
+                    if (cached) {
+                        try {
+                            const data = JSON.parse(cached);
+                            setFormData(data);
+                            setOriginalData(data);
+                            setIsLocked(Object.keys(initialFields).some(k => data[k]));
+                        } catch (e) { }
                     }
                 }
             }
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        };
+        loadData();
+    }, [user]);
 
 
     const handleChange = (e) => {
@@ -759,7 +697,7 @@ const SchoolResources = ({ embedded }) => {
 
         const rawPayload = {
             schoolId: schoolId || localStorage.getItem('schoolId'),
-            uid: auth.currentUser.uid,
+            uid: user.uid,
             ...formData,
             spaces: formData.res_buildable_space === 'Yes' ? spaces : [], // Include spaces
             ecartBatches: ecartBatches // Include e-Cart batches
@@ -812,7 +750,7 @@ const SchoolResources = ({ embedded }) => {
                 setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
-                if (auth.currentUser) clearSpaceDrafts(auth.currentUser.uid).catch(console.error);
+                if (user) clearSpaceDrafts(user.uid).catch(console.error);
             } else {
                 const errorData = await res.json();
                 alert(`Server Error: ${errorData.error || errorData.message || "Update failed"}`);
@@ -834,7 +772,7 @@ const SchoolResources = ({ embedded }) => {
             url: '/api/save-school-resources',
             payload: payload
         });
-        if (auth.currentUser) clearSpaceDrafts(auth.currentUser.uid).catch(console.error);
+        if (user) clearSpaceDrafts(user.uid).catch(console.error);
         setShowOfflineModal(true);
         setOriginalData({ ...formData });
         setIsLocked(true);

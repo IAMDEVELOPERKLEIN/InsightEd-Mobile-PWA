@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TbTrophy, TbArrowLeft, TbMap2, TbMedal, TbSearch, TbFileExport, TbDownload } from "react-icons/tb";
-import { auth } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import PageTransition from '../components/PageTransition';
 import MyRankFooter from './MyRankFooter';
 import { generateLeaderboardReport, downloadCSV } from '../utils/ReportGenerator';
 
 const Leaderboard = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
 
@@ -22,11 +23,10 @@ const Leaderboard = () => {
 
     // 2. CHANGED: Search now filters divisions/regions
     const [search, setSearch] = useState('');
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
 
     useEffect(() => {
         const init = async () => {
-            const user = auth.currentUser;
             if (!user) return;
 
             try {
@@ -34,7 +34,7 @@ const Leaderboard = () => {
                 const headRes = await fetch(`/api/school-head/${user.uid}`);
                 const headJson = await headRes.json();
 
-                let regionFilter = 'Region VIII'; // Default fallback
+                let regionFilter = user.region || 'Region VIII'; // Use region from AuthContext if available
 
                 if (headJson.exists) {
                     setCurrentUserRegion(headJson.data.region);
@@ -42,11 +42,8 @@ const Leaderboard = () => {
                     setCurrentUserDivision(headJson.data.division);
                     setCurrentSchoolId(headJson.data.school_id); // Save ID for highlighting
                     regionFilter = headJson.data.region;
-                } else {
-                    const savedRole = localStorage.getItem('userRole');
-                    if (savedRole === 'Regional Office') {
-                        regionFilter = 'Region VIII';
-                    }
+                } else if (user.role === 'Regional Office') {
+                    regionFilter = user.region || 'Region VIII';
                 }
 
                 setCurrentUserRegion(regionFilter);
@@ -61,7 +58,7 @@ const Leaderboard = () => {
             }
         };
         init();
-    }, []);
+    }, [user]);
 
     const handleTabChange = async (tab) => {
         setActiveTab(tab);

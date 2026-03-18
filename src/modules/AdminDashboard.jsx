@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { auth, db } from '../firebase';
-import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool, FiKey, FiCopy, FiX, FiMapPin, FiCheck } from "react-icons/fi";
 import { TbSchool } from "react-icons/tb";
 import KnowledgeManager from '../components/KnowledgeManager';
@@ -22,7 +21,7 @@ const StatCard = ({ label, value, icon, color }) => (
 );
 
 const AdminDashboard = () => {
-    // --- STATE ---
+    const { user } = useAuth();
     const [userName, setUserName] = useState('Admin');
     const [activeTab, setActiveTab] = useState('overview'); // overview, schools, school-management, projects, audit
 
@@ -131,28 +130,17 @@ const AdminDashboard = () => {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, maintenanceRes, feedbackQuerySnapshot] = await Promise.all([
-                // checking user role/name
-                (async () => {
-                    const user = auth.currentUser;
-                    if (user) {
-                        const snap = await getDoc(doc(db, "users", user.uid));
-                        if (snap.exists()) setUserName(snap.data().firstName || 'Admin');
-                    }
-                })(),
+            if (user) {
+                setUserName(user.first_name || user.firstName || 'Admin');
+            }
+ 
+            const [schoolsRes, projectsRes, auditRes, deadlineRes, maintenanceRes, feedbackRes] = await Promise.all([
                 fetch('/api/schools').then(r => r.json()),
-                fetch('/api/projects').then(r => r.json()), // Changed to /api/projects
+                fetch('/api/projects').then(r => r.json()),
                 fetch('/api/activities').then(r => r.json()),
-
                 fetch('/api/settings/enrolment_deadline').then(r => r.json()),
-                fetch('/api/settings/maintenance_mode').then(r => r.json()), // Fetch Maintenance Status
-                // Fetch Feedback directly from Firestore for real-time accuracy
-                // Added catch block to prevent entire dashboard failure if permissions are missing
-                getDocs(query(collection(db, "app_feedback"), orderBy("timestamp", "desc")))
-                    .catch(err => {
-                        console.warn("Feedback fetch failed (likely permissions):", err);
-                        return null;
-                    })
+                fetch('/api/settings/maintenance_mode').then(r => r.json()),
+                fetch('/api/admin/feedback').then(r => r.json())
             ]);
 
 
@@ -177,13 +165,9 @@ const AdminDashboard = () => {
             }
 
             // Handle Feedback
-            const feedbackData = [];
-            if (feedbackQuerySnapshot && feedbackQuerySnapshot.forEach) {
-                feedbackQuerySnapshot.forEach(doc => {
-                    feedbackData.push({ id: doc.id, ...doc.data() });
-                });
+            if (Array.isArray(feedbackRes)) {
+                setFeedbackList(feedbackRes);
             }
-            setFeedbackList(feedbackData);
 
 
         } catch (error) {
@@ -281,7 +265,7 @@ const AdminDashboard = () => {
     const handleUpdateDeadline = async () => {
         setUpdatingDeadline(true);
         try {
-            const user = auth.currentUser;
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch('/api/settings/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -311,7 +295,7 @@ const AdminDashboard = () => {
 
         setTogglingMaintenance(true);
         try {
-            const user = auth.currentUser;
+            const adminUid = user ? user.uid : 'unknown';
             const newValue = (!maintenanceMode).toString();
 
             const res = await fetch('/api/settings/save', {
@@ -343,7 +327,7 @@ const AdminDashboard = () => {
         if (!window.confirm(`Are you sure you want to ${currentStatus ? 'ENABLE' : 'DISABLE'} this user?`)) return;
 
         try {
-            const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch(`/api/admin/users/${uid}/status`, {
                 method: 'POST',
 
@@ -365,7 +349,7 @@ const AdminDashboard = () => {
         if (!window.confirm("Are you sure you want to PERMANENTLY DELETE this user? This action cannot be undone.")) return;
 
         try {
-            const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch(`/api/admin/users/${uid}?adminUid=${adminUid}`, {
                 method: 'DELETE'
             });
@@ -383,7 +367,7 @@ const AdminDashboard = () => {
     const handleApproveSchool = async (pendingId) => {
         if (!window.confirm("Are you sure you want to APPROVE this school?")) return;
         try {
-            const user = auth.currentUser;
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch(`/api/admin/approve-school/${pendingId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -413,7 +397,7 @@ const AdminDashboard = () => {
         if (reason === null) return; // Cancelled
 
         try {
-            const user = auth.currentUser;
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch(`/api/admin/reject-school/${pendingId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -443,7 +427,7 @@ const AdminDashboard = () => {
         if (!comment) return; // Cancelled or empty
 
         try {
-            const user = auth.currentUser;
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch(`/api/admin/resubmit-request/${pendingId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -477,7 +461,7 @@ const AdminDashboard = () => {
 
         // 2. Call API
         try {
-            const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch('/api/admin/reset-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -510,7 +494,7 @@ const AdminDashboard = () => {
         setIsRunningFraud(true);
         setFraudOutput(null);
         try {
-            const user = auth.currentUser;
+            const adminUid = user ? user.uid : 'unknown';
             const res = await fetch('/api/admin/run-fraud-detection', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

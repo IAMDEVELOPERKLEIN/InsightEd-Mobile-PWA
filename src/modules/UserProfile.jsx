@@ -1,9 +1,7 @@
 // src/modules/UserProfile.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'; // Added addDoc, collection, serverTimestamp
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 
 import PageTransition from '../components/PageTransition';
@@ -44,6 +42,7 @@ const FAQ_DATA = [
 
 const UserProfile = () => {
     const navigate = useNavigate();
+    const { user, logout } = useAuth();
     const { isDarkMode, toggleTheme } = useTheme();
     const { checkForUpdates, isUpdateAvailable, updateApp, hardReset } = useServiceWorker(); // Added hardReset
 
@@ -99,8 +98,8 @@ const UserProfile = () => {
             const cachedRole = localStorage.getItem('userRole');
             const cachedEmail = localStorage.getItem('userEmail');
             
-            let fallbackFirstName = "My";
-            let fallbackLastName = "Profile";
+            let fallbackFirstName = "User";
+            let fallbackLastName = "";
             let fallbackEmail = cachedEmail || "";
 
             try {
@@ -126,32 +125,19 @@ const UserProfile = () => {
                 if (cachedRole) {
                     setHomeRoute(getDashboardPath(cachedRole));
                 }
-            }
+            }            if (uid && user) {
+                setUserData(user);
+                setHomeRoute(getDashboardPath(user.role));
 
-            if (uid) {
-                // 2. Fetch Detailed Info from Firebase (or your backend if migrated)
-                try {
-                    const docRef = doc(db, "users", uid);
-                    const docSnap = await getDoc(docRef);
-
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        setUserData(data);
-                        setHomeRoute(getDashboardPath(data.role));
-
-                        // Initialize form data with existing values
-                        setFormData({
-                            firstName: data.firstName || '',
-                            lastName: data.lastName || '',
-                            region: data.region || '',
-                            province: data.province || '',
-                            city: data.city || '',
-                            barangay: data.barangay || ''
-                        });
-                    }
-                } catch (fsErr) {
-                    console.warn("Firestore user profile fetch failed:", fsErr);
-                }
+                // Initialize form data with existing values
+                setFormData({
+                    firstName: user.first_name || user.firstName || '',
+                    lastName: user.last_name || user.lastName || '',
+                    region: user.region || '',
+                    province: user.province || '',
+                    city: user.city || '',
+                    barangay: user.barangay || ''
+                });
 
                 // 2. Fetch Assigned School from Neon
                 try {
@@ -167,7 +153,7 @@ const UserProfile = () => {
             }
         };
         fetchData();
-    }, []);
+    }, [user]); // Add user as dependency since we use it to populate formData
 
     // --- HELPERS ---
     const getDashboardPath = (role) => {
@@ -213,38 +199,32 @@ const UserProfile = () => {
                 });
             } catch (e) { console.warn("Logout Log Failed", e); }
 
-            // SOFT LOGOUT
+            // Perform Logout
             try {
-                await auth.signOut();
-                
                 // Preserve remembered user identity
                 const userEmail = userData?.email || localStorage.getItem('userEmail');
-                const userFirstName = userData?.firstName || 'User';
+                const rawFirstName = userData?.firstName || userData?.first_name || 'User';
+                const userFirstName = (rawFirstName === 'My' || !rawFirstName) ? 'User' : rawFirstName;
                 
-                localStorage.clear(); // Clear all session data
+                const rememberedUser = {
+                    email: userEmail,
+                    firstName: userFirstName,
+                    lastName: userData?.lastName || userData?.last_name || '',
+                    role: userData?.role || localStorage.getItem('userRole'),
+                    school_id: schoolId || localStorage.getItem('schoolId')
+                };
+
+                logout(); // This clears localStorage and session
                 
                 if (userEmail) {
-                    localStorage.setItem('remembered_user', JSON.stringify({
-                        email: userEmail,
-                        firstName: userFirstName
-                    }));
+                    localStorage.setItem('remembered_user', JSON.stringify(rememberedUser));
                 }
                 
                 navigate('/');
             } catch (error) {
                 console.error("Logout Error:", error);
-                
-                const userEmail = userData?.email || localStorage.getItem('userEmail');
-                const userFirstName = userData?.firstName || 'User';
-                
-                localStorage.clear();
-                if (userEmail) {
-                    localStorage.setItem('remembered_user', JSON.stringify({
-                        email: userEmail,
-                        firstName: userFirstName
-                    }));
-                }
-                window.location.href = '/';
+                logout();
+                navigate('/');
             }
         }
     };
@@ -255,17 +235,16 @@ const UserProfile = () => {
             const uid = localStorage.getItem('uid');
             if (!uid) return;
 
-            const docRef = doc(db, "users", uid);
-
-            // Only update the allowed fields in Firestore
-            await updateDoc(docRef, {
-                firstName: formData.firstName,
-                lastName: formData.lastName,
-                region: formData.region,
-                province: formData.province,
-                city: formData.city,
-                barangay: formData.barangay
+            const response = await fetch('/api/users/update', {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify(formData)
             });
+
+            if (!response.ok) throw new Error("Update failed");
 
             // Update local state to reflect changes immediately without refetching
             setUserData(prev => ({ ...prev, ...formData }));
@@ -305,14 +284,20 @@ const UserProfile = () => {
 
         setLoading(true);
         try {
-            const user = auth.currentUser;
-            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+            const response = await fetch('/api/auth/change-password', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    currentPassword,
+                    newPassword
+                })
+            });
 
-            // 1. Re-authenticate
-            await reauthenticateWithCredential(user, credential);
-
-            // 2. Update Password
-            await updatePassword(user, newPassword);
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Failed to update password");
 
             alert("Password updated successfully!");
             setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -337,15 +322,22 @@ const UserProfile = () => {
 
         setLoading(true);
         try {
-            await addDoc(collection(db, "app_feedback"), {
-                userId: localStorage.getItem('uid') || 'anonymous',
-                userName: userData?.firstName ? `${userData.firstName} ${userData.lastName}` : 'Anonymous',
-                role: userData?.role || 'User',
-                ratings: feedbackRatings,
-                comment: feedbackComment,
-                timestamp: serverTimestamp(),
-                appVersion: '1.0.1'
+            const response = await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    userName: userData?.firstName ? `${userData.firstName} ${userData.lastName}` : (userData?.first_name ? `${userData.first_name} ${userData.last_name}` : 'Anonymous'),
+                    role: userData?.role || 'User',
+                    ratings: feedbackRatings,
+                    comment: feedbackComment,
+                    appVersion: '1.1.0'
+                })
             });
+
+            if (!response.ok) throw new Error("Submission failed");
 
             alert("Thank you for your feedback! We appreciate your input.");
             // Reset form and go back

@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPortal } from 'react-dom';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2 } from 'react-icons/fi';
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { uploadFileInChunks } from '../utils/chunkedUploader';
 import EditProjectModal from '../components/EditProjectModal';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2 } from 'react-icons/fi';
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 
 const EFDMonitoring = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const [projects, setProjects] = useState([]);
     const [engineers, setEngineers] = useState([]);
@@ -45,11 +46,7 @@ const EFDMonitoring = () => {
     const [isAssigning, setIsAssigning] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
     const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
-    const [userRole, setUserRole] = useState(() => {
-        const saved = localStorage.getItem('userRole');
-        if (saved === 'hrodi_engineer') return 'HRODI Engineer';
-        return saved || '';
-    });
+    const userRole = user?.role === 'hrodi_engineer' ? 'HRODI Engineer' : (user?.role || '');
     
     // New State for Document Uploads
     const [selectedProjectForDocs, setSelectedProjectForDocs] = useState(null);
@@ -264,7 +261,7 @@ const EFDMonitoring = () => {
                 body: JSON.stringify({
                     projectId: selectedProjectForDocs.id,
                     documents: documents,
-                    uid: localStorage.getItem('uid')
+                    uid: user.uid
                 })
             });
 

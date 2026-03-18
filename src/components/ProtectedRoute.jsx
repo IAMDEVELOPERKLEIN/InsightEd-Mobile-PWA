@@ -1,19 +1,22 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import LoadingScreen from './LoadingScreen';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-    const role = localStorage.getItem('userRole');
+    const { user, loading } = useAuth();
+
+    if (loading) {
+        return <LoadingScreen />;
+    }
 
     // If not logged in, redirect to login
-    if (!role) {
+    if (!user) {
         return <Navigate to="/" replace />;
     }
 
-    // If role is not allowed, redirect to home (or unauthorized page)
-    if (allowedRoles && !allowedRoles.includes(role)) {
-        // If super user tries to access normal routes? 
-        // Or if normal user tries to access super user route?
-        // Fallback to home for now.
+    // If role is not allowed, redirect to home
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
         return <Navigate to="/" replace />;
     }
 

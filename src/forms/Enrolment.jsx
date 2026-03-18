@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from '../context/AuthContext';
 import { addToOutbox, getOutbox } from '../db';
 import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
@@ -38,6 +37,7 @@ const GridSection = ({ label, icon, color, children, totalLabel, totalValue }) =
 );
 
 const Enrolment = ({ embedded = false }) => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
@@ -47,7 +47,7 @@ const Enrolment = ({ embedded = false }) => {
     const isSuperUserReadOnly = useReadOnly(); // Use Hook
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -136,116 +136,115 @@ const Enrolment = ({ embedded = false }) => {
 
     // --- INSTANT LOAD STRATEGY ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // Check Role for Read-Only
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
+        const performAsyncChecks = async () => {
+            // Check Role for Read-Only
+            try {
+                const role = user.role;
+                if (role === 'Central Office' || isDummy) {
+                    setIsReadOnly(true);
+                }
+            } catch (e) { }
+
+            const storedSchoolId = localStorage.getItem('schoolId');
+            const storedOffering = localStorage.getItem('schoolOffering');
+            if (storedSchoolId) setSchoolId(storedSchoolId);
+            if (storedOffering) setCurricularOffering(storedOffering);
+
+            // 1. SYNC CACHE LOADING
+            const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
+            const cachedData = localStorage.getItem(CACHE_KEY);
+
+            if (cachedData) {
                 try {
-                    const role = localStorage.getItem('userRole');
-                    if (role === 'Central Office' || isDummy) {
-                        setIsReadOnly(true);
+                    const parsed = JSON.parse(cachedData);
+                    const cleaned = {};
+                    Object.keys(initialFields).forEach(key => {
+                        if (parsed[key] !== undefined) cleaned[key] = parsed[key];
+                        // Legacy mapping just in case
+                        if (key === 'grade_kinder' && parsed.gradeKinder !== undefined) cleaned[key] = parsed.gradeKinder;
+                        if (key === 'grade_1' && parsed.grade1 !== undefined) cleaned[key] = parsed.grade1;
+                    });
+
+                    const merged = { ...initialFields, ...parsed, ...cleaned };
+                    setFormData(merged);
+                    setOriginalData(merged);
+                    if (parsed.curricular_offering) setCurricularOffering(parsed.curricular_offering);
+
+                    setIsLocked((merged.total_enrollment || 0) > 0);
+                    setLoading(false); // CRITICAL: Instant Load
+                    console.log("Loaded cached Enrolment (Instant Load)");
+                } catch (e) { console.error("Cache error", e); }
+            }
+
+            // 2. ASYNC CHECKS
+            let restored = false;
+            if (!viewOnly) {
+                try {
+                    const drafts = await getOutbox();
+                    const draft = drafts.find(d => d.type === 'ENROLMENT');
+                    if (draft) {
+                        console.log("Restored draft from Outbox");
+                        setFormData({ ...initialFields, ...draft.payload });
+                        setSchoolId(draft.payload.school_id);
+                        setCurricularOffering(draft.payload.curricular_offering);
+                        setIsLocked(false);
+                        restored = true;
+                        setLoading(false);
+                        return;
                     }
-                } catch (e) { }
+                } catch (e) { console.error("Outbox check failed", e); }
+            }
 
-                const storedSchoolId = localStorage.getItem('schoolId');
-                const storedOffering = localStorage.getItem('schoolOffering');
-                if (storedSchoolId) setSchoolId(storedSchoolId);
-                if (storedOffering) setCurricularOffering(storedOffering);
+            if (!restored) {
+                let fetchUrl = `/api/enrolment/${user.uid}`;
+                const role = user.role;
 
-                // 1. SYNC CACHE LOADING
-                const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
-                const cachedData = localStorage.getItem(CACHE_KEY);
-
-                if (cachedData) {
-                    try {
-                        const parsed = JSON.parse(cachedData);
-                        const cleaned = {};
-                        Object.keys(initialFields).forEach(key => {
-                            if (parsed[key] !== undefined) cleaned[key] = parsed[key];
-                            // Legacy mapping just in case
-                            if (key === 'grade_kinder' && parsed.gradeKinder !== undefined) cleaned[key] = parsed.gradeKinder;
-                            if (key === 'grade_1' && parsed.grade1 !== undefined) cleaned[key] = parsed.grade1;
-                        });
-
-                        const merged = { ...initialFields, ...parsed, ...cleaned };
-                        setFormData(merged);
-                        setOriginalData(merged);
-                        if (parsed.curricular_offering) setCurricularOffering(parsed.curricular_offering);
-
-                        setIsLocked((merged.total_enrollment || 0) > 0);
-                        setLoading(false); // CRITICAL: Instant Load
-                        console.log("Loaded cached Enrolment (Instant Load)");
-                    } catch (e) { console.error("Cache error", e); }
+                if (isAuditMode) {
+                    fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
+                    fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                 }
 
-                // 2. ASYNC CHECKS
-                const performAsyncChecks = async () => {
-                    let restored = false;
-                    if (!viewOnly) {
-                        try {
-                            const drafts = await getOutbox();
-                            const draft = drafts.find(d => d.type === 'ENROLMENT');
-                            if (draft) {
-                                console.log("Restored draft from Outbox");
-                                setFormData({ ...initialFields, ...draft.payload });
-                                setSchoolId(draft.payload.school_id);
-                                setCurricularOffering(draft.payload.curricular_offering);
-                                setIsLocked(false);
-                                restored = true;
-                                setLoading(false);
-                                return;
+                if (!cachedData) setLoading(true);
+
+                try {
+                    const res = await fetch(fetchUrl);
+                    if (res.ok) {
+                        const json = await res.json();
+                        // For Audit Mode, we treat it like viewOnly with schoolIdParam
+                        const data = (isAuditMode || (viewOnly && schoolIdParam)) ? json : (json.exists ? json.data : null);
+
+                        if (data) {
+                            setSchoolId(data.school_id);
+                            const normOffering = normalizeOffering(data.curricular_offering || storedOffering);
+                            setCurricularOffering(normOffering);
+                            if (!viewOnly) {
+                                localStorage.setItem('schoolId', data.school_id);
+                                if (data.curricular_offering) localStorage.setItem('schoolOffering', normOffering);
                             }
-                        } catch (e) { console.error("Outbox check failed", e); }
-                    }
 
-                    if (!restored) {
-                        let fetchUrl = `/api/enrolment/${user.uid}`;
-                        const role = localStorage.getItem('userRole');
+                            const loaded = {};
+                            Object.keys(initialFields).forEach(key => {
+                                loaded[key] = data[key] ?? 0;
+                            });
 
-                        if (isAuditMode) {
-                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
-                        } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
-                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                            setFormData(loaded);
+                            setOriginalData(loaded);
+                            setIsLocked((loaded.total_enrollment || 0) > 0);
+                            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
                         }
-
-                        if (!cachedData) setLoading(true);
-
-                        try {
-                            const res = await fetch(fetchUrl);
-                            if (res.ok) {
-                                const json = await res.json();
-                                // For Audit Mode, we treat it like viewOnly with schoolIdParam
-                                const data = (isAuditMode || (viewOnly && schoolIdParam)) ? json : (json.exists ? json.data : null);
-
-                                if (data) {
-                                    setSchoolId(data.school_id);
-                                    const normOffering = normalizeOffering(data.curricular_offering || storedOffering);
-                                    setCurricularOffering(normOffering);
-                                    if (!viewOnly) {
-                                        localStorage.setItem('schoolId', data.school_id);
-                                        if (data.curricular_offering) localStorage.setItem('schoolOffering', normOffering);
-                                    }
-
-                                    const loaded = {};
-                                    Object.keys(initialFields).forEach(key => {
-                                        loaded[key] = data[key] ?? 0;
-                                    });
-
-                                    setFormData(loaded);
-                                    setOriginalData(loaded);
-                                    setIsLocked((loaded.total_enrollment || 0) > 0);
-                                    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-                                }
-                            }
-                        } catch (e) { console.error("Fetch Error", e); }
-                        finally { setLoading(false); }
                     }
-                };
-                performAsyncChecks();
+                } catch (e) { console.error("Fetch Error", e); }
+                finally { setLoading(false); }
             }
-            setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        };
+        performAsyncChecks();
+    }, [user, isAuditMode, auditTargetId, viewOnly, schoolIdParam, isDummy]);
 
     // --- AUTO-CALCULATE TOTALS ---
     useEffect(() => {
@@ -335,7 +334,7 @@ const Enrolment = ({ embedded = false }) => {
 
         const payload = {
             schoolId: schoolId || localStorage.getItem('schoolId'),
-            submittedBy: auth.currentUser.uid,
+            submittedBy: user.uid,
             curricularOffering: curricularOffering,
             school_id: schoolId,
             curricular_offering: curricularOffering,
@@ -371,7 +370,7 @@ const Enrolment = ({ embedded = false }) => {
                 setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
-                localStorage.setItem(`CACHE_ENROLMENT_${auth.currentUser.uid}`, JSON.stringify(formData));
+                localStorage.setItem(`CACHE_ENROLMENT_${user.uid}`, JSON.stringify(formData));
             } else {
                 const txt = await res.text();
                 console.error("Save failed response:", txt);

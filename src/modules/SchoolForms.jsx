@@ -1,8 +1,7 @@
 // src/modules/SchoolForms.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav'; // ✅ UPDATED IMPORT
 import { normalizeOffering } from '../utils/dataNormalization';
 
@@ -15,6 +14,7 @@ import { TbSchool, TbReportAnalytics, TbActivity } from "react-icons/tb";
 import { FiChevronDown } from "react-icons/fi";
 
 const SchoolForms = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
 
     // --- STATE ---
@@ -115,7 +115,7 @@ const SchoolForms = () => {
     // --- 2. FETCH DATA ---
     // --- 2. FETCH DATA ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const loadInitialData = async () => {
             if (user) {
                 // STEP 1: IMMEDIATE CACHE LOAD
                 let loadedFromCache = false;
@@ -176,9 +176,9 @@ const SchoolForms = () => {
                 }
             }
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        };
+        loadInitialData();
+    }, [user]);
 
     // --- 3. STATUS LOGIC ---
     const getStatus = (id) => {
@@ -486,7 +486,7 @@ const SchoolForms = () => {
                 </div>
             </div>
 
-            <BottomNav userRole="School Head" />
+            <BottomNav userRole={user?.role || "School Head"} />
         </div >
     );
 };

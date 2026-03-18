@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { FiPlus, FiFilter, FiSearch, FiEdit2, FiEye, FiMoreVertical, FiCheckCircle } from 'react-icons/fi';
-import { auth } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import LguEditModal from '../components/LguEditModal';
 import BottomNav from './BottomNav';
 
 const LguDashboard = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -30,9 +31,9 @@ const LguDashboard = () => {
     // --- FETCH PROJECTS ---
     useEffect(() => {
         const fetchProjects = async () => {
-            if (!auth.currentUser) return;
+            if (!user) return;
             try {
-                const res = await fetch(`/api/lgu/projects?uid=${auth.currentUser.uid}`);
+                const res = await fetch(`/api/lgu/projects?uid=${user.uid}`);
                 if (res.ok) {
                     const data = await res.json();
                     setProjects(data);
@@ -44,12 +45,12 @@ const LguDashboard = () => {
             }
         };
 
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) fetchProjects();
-            else setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        if (user) fetchProjects();
+        else {
+            const lsRole = localStorage.getItem('userRole');
+            if (!lsRole) setLoading(false);
+        }
+    }, [user]);
 
     // --- FILTER ---
     const filteredProjects = projects.filter(p => {

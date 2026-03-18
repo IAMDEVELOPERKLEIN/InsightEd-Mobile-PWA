@@ -145,8 +145,17 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS alt_email TEXT,
             ADD COLUMN IF NOT EXISTS account_category TEXT, -- DepEd vs Non-DepEd
             ADD COLUMN IF NOT EXISTS iern TEXT,
+            ADD COLUMN IF NOT EXISTS school_id TEXT,
+            ADD COLUMN IF NOT EXISTS registrant_type TEXT,
+            ADD COLUMN IF NOT EXISTS password_hash TEXT,
+            ADD COLUMN IF NOT EXISTS password_salt TEXT,
+            ADD COLUMN IF NOT EXISTS hash_version TEXT,
+            ADD COLUMN IF NOT EXISTS passcode TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
+        // Ensure passcode is TEXT to support bcrypt hashes (previously might have been VARCHAR(6))
+        await client.query(`ALTER TABLE users ALTER COLUMN passcode TYPE TEXT;`);
+        console.log(`✅ [${dbLabel}] Passcode column altered to TEXT`);
         console.log(`✅ [${dbLabel}] Users Table Schema Updated`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate users table:`, migErr.message);
@@ -737,6 +746,27 @@ const runMigrations = async (client, dbLabel) => {
         console.log(`✅ [${dbLabel}] System Feedback Table Initialized`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init system_feedback table:`, migErr.message);
+    }
+
+    // --- 20. APP FEEDBACK TABLE (DETAILED) ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS app_feedback (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT,
+                user_name TEXT,
+                role TEXT,
+                ease_of_use INTEGER,
+                aesthetics INTEGER,
+                functionality INTEGER,
+                comment TEXT,
+                app_version TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log(`✅ [${dbLabel}] App Feedback Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init app_feedback table:`, migErr.message);
     }
 };
 
