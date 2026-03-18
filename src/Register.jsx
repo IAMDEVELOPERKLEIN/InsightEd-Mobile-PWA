@@ -80,7 +80,7 @@ const Register = () => {
         contactNumber: '', // School Head: 11-digit contact number
         password: '',
         confirmPassword: '',
-        role: 'Regional Office', // Default
+        role: 'School Head', // Default
         // Legacy/Other Role Fields
         bureau: '',
         office: '',
