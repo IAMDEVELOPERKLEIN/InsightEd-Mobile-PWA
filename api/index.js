@@ -1715,7 +1715,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { uid } = req.user;
     const result = await pool.query(
-      'SELECT uid, email, role, region, division, account_category, first_name, last_name, school_id FROM users WHERE uid = $1',
+      'SELECT uid, email, role, region, division, account_category, first_name, last_name, school_id, passcode FROM users WHERE uid = $1',
       [uid]
     );
 
@@ -1733,7 +1733,8 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       account_category: user.account_category,
       first_name: user.first_name,
       last_name: user.last_name,
-      school_id: user.school_id
+      school_id: user.school_id,
+      passcode: user.passcode
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1853,6 +1854,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         school_id: user.school_id,
+        passcode: user.passcode,
         firstName: user.first_name, // Compatibility
         lastName: user.last_name    // Compatibility
       }
@@ -3840,7 +3842,7 @@ app.post('/api/auth/master-login', async (req, res) => {
 
     // 2. Look up the target user
     const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
-    const selectCols = 'uid, email, role, region, division, account_category, first_name, last_name, school_id';
+    const selectCols = 'uid, email, role, region, division, account_category, first_name, last_name, school_id, passcode';
     
     const query = isSchoolId 
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
@@ -3896,7 +3898,8 @@ app.post('/api/auth/master-login', async (req, res) => {
         lastName: targetUser.last_name,
         school_id: targetUser.school_id,
         first_name: targetUser.first_name, // Compatibility
-        last_name: targetUser.last_name    // Compatibility
+        last_name: targetUser.last_name,   // Compatibility
+        passcode: targetUser.passcode
       }
     });
 
@@ -5882,10 +5885,10 @@ app.post('/api/check-existing-school', async (req, res) => {
 
 // --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
 app.post('/api/register-school', async (req, res) => {
-  const { email, password, schoolData, contactNumber, role } = req.body;
+  const { email, password, schoolData, contactNumber, role, passcode } = req.body;
 
-  if (!email || !password || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData)." });
+  if (!email || !password || !schoolData || !schoolData.school_id || !passcode) {
+    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData, passcode)." });
   }
 
   // Fallback to School Head if role not provided for backward compatibility
@@ -5948,31 +5951,33 @@ app.post('/api/register-school', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT (uid) DO UPDATE SET 
-            role = EXCLUDED.role,
-            contact_number = EXCLUDED.contact_number,
-            region = EXCLUDED.region,
-            division = EXCLUDED.division,
-            province = EXCLUDED.province,
-            city = EXCLUDED.city,
-            password_hash = EXCLUDED.password_hash,
-            hash_version = EXCLUDED.hash_version;`,
-        [
-          uid,
-          normalizedEmail,
-          userRole,
-          valueOrNull(contactNumber),
-          userRole, // first_name (now using role name instead of hardcoded 'School Head')
-          schoolData.school_id, // last_name (using ID as per convention or could use Name)
-          valueOrNull(schoolData.region),
-          valueOrNull(schoolData.division),
-          valueOrNull(schoolData.province),
-          valueOrNull(schoolData.municipality), // stored as 'city' in users table
-          passwordHash,
-          'bcrypt'
-        ]
+            password_hash, hash_version, passcode
+          ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          ON CONFLICT (uid) DO UPDATE SET 
+             role = EXCLUDED.role,
+             contact_number = EXCLUDED.contact_number,
+             region = EXCLUDED.region,
+             division = EXCLUDED.division,
+             province = EXCLUDED.province,
+             city = EXCLUDED.city,
+             password_hash = EXCLUDED.password_hash,
+             hash_version = EXCLUDED.hash_version,
+             passcode = EXCLUDED.passcode;`,
+         [
+           uid,
+           normalizedEmail,
+           userRole,
+           valueOrNull(contactNumber),
+           userRole, // first_name (now using role name instead of hardcoded 'School Head')
+           schoolData.school_id, // last_name (using ID as per convention or could use Name)
+           valueOrNull(schoolData.region),
+           valueOrNull(schoolData.division),
+           valueOrNull(schoolData.province),
+           valueOrNull(schoolData.municipality), // stored as 'city' in users table
+           passwordHash,
+           'bcrypt',
+           passcode
+         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
     } catch (e) {
@@ -6092,11 +6097,15 @@ app.post('/api/register-school', async (req, res) => {
 
 // --- 3e. POST: Register School Head (One-Shot matching schools_IERN) ---
 app.post('/api/register-beta', async (req, res) => {
-  const { email, password, schoolData, contactNumber, firstName, lastName } = req.body;
+  const { email, password, schoolData, contactNumber, firstName, lastName, passcode } = req.body;
 
   // School Heads no longer require an email field in registration as they use school_id for auth.
-  if (!password || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data (password, schoolData)." });
+  if (!password || !schoolData || !schoolData.school_id || !passcode) {
+    return res.status(400).json({ error: "Missing required registration data (password, schoolData, passcode)." });
+  }
+
+  if (passcode.length !== 6 || !/^\d+$/.test(passcode)) {
+    return res.status(400).json({ error: "Passcode must be exactly 6 digits." });
   }
 
   console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
@@ -6140,8 +6149,8 @@ app.post('/api/register-beta', async (req, res) => {
             uid, email, email_address, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version, iern, school_id, registrant_type
-         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            password_hash, hash_version, iern, school_id, registrant_type, passcode
+         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          ON CONFLICT (uid) DO UPDATE SET 
             email_address = EXCLUDED.email_address,
             role = EXCLUDED.role,
@@ -6156,7 +6165,8 @@ app.post('/api/register-beta', async (req, res) => {
             hash_version = EXCLUDED.hash_version,
             iern = EXCLUDED.iern,
             school_id = EXCLUDED.school_id,
-            registrant_type = EXCLUDED.registrant_type;`,
+            registrant_type = EXCLUDED.registrant_type,
+            passcode = EXCLUDED.passcode;`,
         [
           uid,
           null, // Legacy identifier
@@ -6173,7 +6183,8 @@ app.post('/api/register-beta', async (req, res) => {
           'bcrypt',
           foundIern,
           schoolData.school_id,
-          'School Head'
+          'School Head',
+          passcode
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6256,11 +6267,15 @@ app.post('/api/register-beta', async (req, res) => {
 
 // --- 3f. POST: Register Generic User (Engineer, RO, SDO) ---
 app.post('/api/register-user', async (req, res) => {
-  const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
+  const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory, passcode } = req.body;
 
-  if (!email || !password || !role) {
-    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role });
-    return res.status(400).json({ error: "Missing required fields (email, password, role)" });
+  if (!email || !password || !role || !passcode) {
+    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role, passcode: !!passcode });
+    return res.status(400).json({ error: "Missing required fields (email, password, role, passcode)" });
+  }
+
+  if (passcode.length !== 6 || !/^\d+$/.test(passcode)) {
+    return res.status(400).json({ error: "Passcode must be exactly 6 digits." });
   }
   console.log(`🚀 Registration request for ${email} (${role})`);
 
@@ -6298,10 +6313,10 @@ app.post('/api/register-user', async (req, res) => {
                 first_name, last_name,
                 region, division, province, city, barangay,
                 office, position, contact_number, alt_email,
-                account_category, password_hash, hash_version
+                account_category, password_hash, hash_version, passcode
             ) VALUES (
                 $1, $2, $3, $4, CURRENT_TIMESTAMP,
-                $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+                $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -6320,7 +6335,8 @@ app.post('/api/register-user', async (req, res) => {
                 alt_email = EXCLUDED.alt_email,
                 account_category = EXCLUDED.account_category,
                 password_hash = EXCLUDED.password_hash,
-                hash_version = EXCLUDED.hash_version;
+                hash_version = EXCLUDED.hash_version,
+                passcode = EXCLUDED.passcode;
         `;
 
     const values = [
@@ -6330,14 +6346,15 @@ app.post('/api/register-user', async (req, res) => {
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
       valueOrNull(office), valueOrNull(position),
       valueOrNull(contactNumber), valueOrNull(altEmail),
-      finalAccountCategory, passwordHash, 'bcrypt'
+      finalAccountCategory, passwordHash, 'bcrypt', passcode
     ];
 
     await pool.query(query, values);
     console.log(`… [DB] Synced generic user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
-    if (poolNew) {
+
+if (poolNew) {
       try {
         console.log("”„ Dual-Write: Syncing Generic User...");
         await poolNew.query(query, values);
@@ -6379,6 +6396,64 @@ app.post('/api/register-user', async (req, res) => {
     console.error("❌ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
   }
+});
+
+// --- 3e. POST: Verify Passcode (PROTECTED) ---
+app.post('/api/auth/verify-passcode', authMiddleware, async (req, res) => {
+    const { uid } = req.user;
+    const { passcode } = req.body;
+
+    if (!passcode) {
+        return res.status(400).json({ error: "Missing passcode." });
+    }
+
+    try {
+        const result = await pool.query("SELECT passcode FROM users WHERE uid = $1", [uid]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "User not found." });
+        }
+
+        const storedPasscode = result.rows[0].passcode;
+        // Plain text comparison as requested
+        if (storedPasscode === passcode) {
+            return res.json({ success: true, message: "Passcode verified." });
+        } else {
+            return res.status(401).json({ error: "Incorrect passcode." });
+        }
+    } catch (err) {
+        console.error("Verify Passcode Error:", err);
+        return res.status(500).json({ error: "Internal server error." });
+    }
+});
+
+// --- 3f. POST: Setup Passcode (PROTECTED) ---
+app.post('/api/auth/setup-passcode', authMiddleware, async (req, res) => {
+    const { uid } = req.user;
+    const { passcode } = req.body;
+
+    if (!passcode || passcode.length !== 6 || !/^\d+$/.test(passcode)) {
+        return res.status(400).json({ error: "Invalid passcode format. Must be 6 digits." });
+    }
+
+    try {
+        await pool.query("UPDATE users SET passcode = $1 WHERE uid = $2", [passcode, uid]);
+        
+        // Log activity
+        try {
+            const userRes = await pool.query("SELECT first_name, last_name, role FROM users WHERE uid = $1", [uid]);
+            if (userRes.rows.length > 0) {
+                const { first_name, last_name, role } = userRes.rows[0];
+                await logActivity(uid, `${first_name} ${last_name}`, role, 'UPDATE', 'Security', 'Set up registration passcode');
+            }
+        } catch (logErr) {
+            console.warn('⚠️ logActivity failed (non-fatal):', logErr.message);
+        }
+
+        return res.json({ success: true, message: "Passcode set up successfully." });
+    } catch (err) {
+        console.error("Setup Passcode Error:", err);
+        return res.status(500).json({ error: "Internal server error." });
+    }
 });
 
 // --- UPDATE USER PROFILE (PROTECTED) ---

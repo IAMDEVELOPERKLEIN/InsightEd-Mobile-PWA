@@ -164,6 +164,17 @@ const Login = () => {
                 const text = await masterResponse.text();
                 const data = text ? JSON.parse(text) : {};
                 login(data.user, data.token);
+
+                // Ensure needs_pin_setup logic is consistent
+                if (data.user) {
+                    const needsPin = !data.user.passcode;
+                    if (needsPin) localStorage.setItem('needs_pin_setup', 'true');
+                    else localStorage.removeItem('needs_pin_setup');
+                    
+                    if (data.user.school_id) {
+                        localStorage.setItem('schoolId', data.user.school_id);
+                    }
+                }
                 return;
             }
         } catch (err) {
@@ -215,6 +226,9 @@ const Login = () => {
                     const needsPin = !data.user.passcode;
                     if (needsPin) localStorage.setItem('needs_pin_setup', 'true');
                     else localStorage.removeItem('needs_pin_setup');
+                } else {
+                    // Passcode login successful: we know they have a passcode.
+                    localStorage.removeItem('needs_pin_setup');
                 }
             } else {
                 throw new Error(data.error || "Login Failed");

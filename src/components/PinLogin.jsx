@@ -53,12 +53,16 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
 
   const verifyPin = async (completedPin) => {
     setLoading(true);
+    const identifier = rememberedUser?.school_id || rememberedUser?.schoolId || rememberedUser?.email || rememberedUser?.email_address;
+    const isNumericId = /^\d{6,}$/.test(identifier);
+    const useSchoolIdField = (rememberedUser?.role?.toLowerCase()?.includes('school head') || isNumericId);
+
     try {
       const response = await fetch('/api/auth/pin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: rememberedUser.email,
+          [useSchoolIdField ? 'school_id' : 'email']: identifier,
           pin: completedPin
         })
       });

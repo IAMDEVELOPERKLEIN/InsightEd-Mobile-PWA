@@ -6,7 +6,7 @@ import { FiLogOut } from 'react-icons/fi'; // Import Icon
 
 const SuperUserSelector = () => {
     const navigate = useNavigate();
-    const { logout } = useAuth();
+    const { logout, confirmLogout } = useAuth();
 
     // --- STATE ---
     const [loading, setLoading] = useState(false);
@@ -162,13 +162,8 @@ const SuperUserSelector = () => {
         }, 500);
     };
 
-    const handleLogout = async () => {
-        try {
-            await logout();
-            navigate('/', { replace: true });
-        } catch (error) {
-            console.error("Logout Failed:", error);
-        }
+    const handleLogout = () => {
+        confirmLogout();
     };
 
     return (
