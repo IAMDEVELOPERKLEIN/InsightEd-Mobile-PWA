@@ -117,6 +117,8 @@ const UserProfile = () => {
         newPassword: '',
         confirmPassword: ''
     });
+    const [passwordError, setPasswordError] = useState('');
+
     // --- REDIRECT IF NOT LOGGED IN ---
     useEffect(() => {
         if (!authLoading && !user) {

@@ -1608,7 +1608,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     
     const query = isSchoolId 
       ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
-      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1`;
     
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
@@ -1770,7 +1770,7 @@ app.post('/api/auth/setup-pin', async (req, res) => {
       whereClause = 'school_id = $2';
       param = school_id.trim();
     } else {
-      whereClause = '(LOWER(email_address) = $2 OR LOWER(email) = $2)';
+      whereClause = 'LOWER(email) = $2';
       param = email.trim().toLowerCase();
     }
 
@@ -1807,7 +1807,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
     const selectCols = 'uid, email, role, region, division, account_category, passcode, first_name, last_name, school_id';
     const query = isSchoolId 
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
-      : `SELECT ${selectCols} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
     
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
@@ -3856,7 +3856,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     
     const query = isSchoolId 
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
-      : `SELECT ${selectCols} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
     
     const lookupResult = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
     
@@ -3918,6 +3918,50 @@ app.post('/api/auth/master-login', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// --- ADMIN: RESET DIVISION ENGINEER PASSWORDS ---
+app.post('/api/admin/reset-division-engineer-passwords', async (req, res) => {
+  const { adminPassword, newPassword } = req.body;
+  const correctAdminPassword = process.env.ADMIN_MASTER_PASSWORD;
+
+  if (!adminPassword || adminPassword !== correctAdminPassword) {
+    return res.status(403).json({ success: false, error: "Invalid admin password." });
+  }
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ success: false, error: "New password must be at least 6 characters." });
+  }
+
+  try {
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    const query = `
+      UPDATE users 
+      SET 
+        password_hash = $1, 
+        password_salt = NULL, 
+        hash_version = 'bcrypt' 
+      WHERE role = 'Division Engineer'
+      RETURNING uid, email;
+    `;
+
+    const result = await pool.query(query, [passwordHash]);
+
+    console.log(`[ADMIN] Reset ${result.rowCount} Division Engineer passwords to default.`);
+
+    return res.json({
+      success: true,
+      message: `Successfully reset ${result.rowCount} Division Engineer accounts.`,
+      updatedUsers: result.rows.map(u => u.email)
+    });
+
+  } catch (error) {
+    console.error("Admin Password Reset Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 
 // ==================================================================
 //                        HELPER FUNCTIONS
@@ -6156,13 +6200,12 @@ app.post('/api/register-beta', async (req, res) => {
       await client.query('SAVEPOINT user_creation');
       await client.query(
         `INSERT INTO users (
-            uid, email, email_address, role, created_at, contact_number,
+            uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
             password_hash, hash_version, iern, school_id, registrant_type, passcode
-         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (uid) DO UPDATE SET 
-            email_address = EXCLUDED.email_address,
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
             first_name = EXCLUDED.first_name,
@@ -6180,7 +6223,6 @@ app.post('/api/register-beta', async (req, res) => {
         [
           uid,
           null, // Legacy identifier
-          null, // School Heads use school_id, not email_address
           'School Head',
           contactNumber || null,
           firstName || 'School',
@@ -6319,14 +6361,14 @@ app.post('/api/register-user', async (req, res) => {
 
     const query = `
             INSERT INTO users (
-                uid, email, email_address, role, created_at,
+                uid, email, role, created_at,
                 first_name, last_name,
                 region, division, province, city, barangay,
                 office, position, contact_number, alt_email,
                 account_category, password_hash, hash_version, passcode
             ) VALUES (
-                $1, $2, $3, $4, CURRENT_TIMESTAMP,
-                $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+                $1, $2, $3, CURRENT_TIMESTAMP,
+                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -6350,7 +6392,7 @@ app.post('/api/register-user', async (req, res) => {
         `;
 
     const values = [
-      uid, normalizedEmail, normalizedEmail, finalRole,
+      uid, normalizedEmail, finalRole,
       valueOrNull(firstName), valueOrNull(lastName),
       valueOrNull(region), valueOrNull(division),
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
