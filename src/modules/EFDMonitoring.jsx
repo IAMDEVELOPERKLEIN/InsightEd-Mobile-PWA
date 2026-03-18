@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2 } from 'react-icons/fi';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2, FiImage } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
@@ -442,7 +442,7 @@ const EFDMonitoring = () => {
                                     Engineer Resource Allocation • System Monitoring
                                 </p>
                             </div>
-                            {userRole === 'HRODI Engineer' && (
+                            {(userRole === 'HRODI Engineer' || userRole === 'EFD Engineer') && (
                                 <button
                                     onClick={() => navigate('/new-project')}
                                     className="group bg-white text-[#004A99] px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
@@ -683,6 +683,13 @@ const EFDMonitoring = () => {
                                                             title="View Details"
                                                         >
                                                             <FiChevronRight size={18} />
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
+                                                            className="p-2.5 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-600 hover:text-white hover:shadow-lg transition-all"
+                                                            title="Project Gallery"
+                                                        >
+                                                            <FiImage size={18} />
                                                         </button>
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
