@@ -384,7 +384,7 @@ const initDB = async () => {
         CONSTRAINT unique_project_finance UNIQUE(project_id)
       );
 
-      -- Cleanup redundant columns from engineer_form (already handled by initDB or specific tables)
+      -- Cleanup legacy tranche and PDF columns from engineer_form
       ALTER TABLE engineer_form
       DROP COLUMN IF EXISTS tranche_1,
       DROP COLUMN IF EXISTS tranche_2,
@@ -394,39 +394,24 @@ const initDB = async () => {
       DROP COLUMN IF EXISTS liquidated_tranche_3,
       DROP COLUMN IF EXISTS implementing_agencies,
       DROP COLUMN IF EXISTS rta,
-      DROP COLUMN IF EXISTS moa;
+      DROP COLUMN IF EXISTS moa,
+      DROP COLUMN IF EXISTS pow_pdf,
+      DROP COLUMN IF EXISTS dupa_pdf,
+      DROP COLUMN IF EXISTS contract_pdf,
+      DROP COLUMN IF EXISTS rta_pdf,
+      DROP COLUMN IF EXISTS moa_pdf;
     `);
 
-    // Base columns remain, but PDFs are now in engineer_documents. 
-    // We keep checkAndAddColumn for transition then eventually drop.
-    await checkAndAddColumn('engineer_form', 'pow_pdf', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'dupa_pdf', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'contract_pdf', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'rta_pdf', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'moa_pdf', 'TEXT');
     await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
     await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT');
     await checkAndAddColumn('engineer_form', 'implementing_agency_specific', 'TEXT');
     await checkAndAddColumn('engineer_form', 'uploader_id_moa_rta', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
     await checkAndAddColumn('engineer_form', 'assigned_engineer_id', 'TEXT');
     await checkAndAddColumn('engineer_form', 'assigned_engineer_name', 'TEXT');
     await checkAndAddColumn('engineer_form', 'date_assigned', 'TIMESTAMP');
     await checkAndAddColumn('engineer_form', 'actions', 'TEXT');
 
-    // 2. Drop legacy PDF columns from engineer_form as they are now in engineer_documents
-    const pdfColsToDrop = ['moa_pdf', 'rta_pdf', 'pow_pdf', 'dupa_pdf', 'contract_pdf'];
-    for (const col of pdfColsToDrop) {
-      await checkAndDropColumn('engineer_form', col);
-      if (poolNew) {
-        // Also drop from secondary if connected
-        try {
-          await poolNew.query(`ALTER TABLE engineer_form DROP COLUMN IF EXISTS ${col}`);
-        } catch (err) {
-          // Ignore if column already dropped or table doesn't exist on secondary yet
-        }
-      }
-    }
+    // 2. Drop legacy PDF columns from engineer_form - Handled in SQL above for efficiency
 
     await pool.query(`
       -- Cleanup redundant VO columns
@@ -8995,47 +8980,40 @@ app.post('/api/upload-project-document', async (req, res) => {
   try {
     client = await pool.connect();
     
-    // 1. Get the latest data for this project to clone it
-    const latestRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
-    if (latestRes.rows.length === 0) {
+    // 1. Get the IPC from engineer_form to ensure consistent records
+    const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+    if (projectRes.rows.length === 0) {
       return res.status(404).json({ error: "Project not found" });
     }
-    const old = latestRes.rows[0];
+    const { ipc } = projectRes.rows[0];
 
-    // 2. Prepare new row data
-    // We clone almost everything, but update the document column and status metadata
-    const newRow = { ...old };
-    delete newRow.project_id; // Let DB generate new ID
-    newRow[column] = base64;
-    newRow.status_as_of = new Date().toISOString();
-    newRow.actions = `Uploaded ${type}`;
-    // Store updater UID for auditing ONLY if MOA or RTA
-    if (type === 'MOA' || type === 'RTA') {
-      newRow.uploader_id_update_moa_rta = uid || 'Unknown';
-    }
-    newRow.engineer_id = old.engineer_id; // Preserve original owner
-
-    // 3. Construct Insert Query Dynamically
-    const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
-    const vals = cols.map(k => newRow[k]);
-    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    // 2. UPSERT into engineer_documents
+    const upsertQuery = `
+      INSERT INTO engineer_documents (project_id, ipc, ${column}, uploader_id)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (project_id) 
+      DO UPDATE SET 
+        ${column} = EXCLUDED.${column},
+        uploader_id = EXCLUDED.uploader_id,
+        created_at = CURRENT_TIMESTAMP
+      RETURNING project_id;
+    `;
     
-    const insertQuery = `INSERT INTO "engineer_form" (${cols.join(', ')}) VALUES (${placeholders}) RETURNING project_id`;
-    const result = await client.query(insertQuery, vals);
+    const result = await client.query(upsertQuery, [parseInt(projectId), ipc, base64, uid]);
 
-    console.log(`✅ Appended document update: New row project_id ${result.rows[0].project_id}`);
+    console.log(`✅ Updated ${type} in engineer_documents for project_id ${projectId}`);
 
     // --- DUAL WRITE ---
     if (poolNew) {
       try {
-        await poolNew.query(insertQuery, vals);
-        console.log(`✅ Dual-Write: ${type} Append Synced!`);
+        await poolNew.query(upsertQuery, [parseInt(projectId), ipc, base64, uid]);
+        console.log(`✅ Dual-Write: ${type} UPSERT Synced!`);
       } catch (dwErr) {
-        console.error("❌ Dual-Write Doc Append Error:", dwErr.message);
+        console.error("❌ Dual-Write Doc UPSERT Error:", dwErr.message);
       }
     }
 
-    res.json({ success: true, newProjectId: result.rows[0].project_id });
+    res.json({ success: true, projectId: projectId });
   } catch (err) {
     console.error("❌ Doc Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save document" });
@@ -9046,7 +9024,7 @@ app.post('/api/upload-project-document', async (req, res) => {
 
 // --- NEW BLUK UPLOAD ENDPOINT TO PREVENT DUPLICATES ---
 app.post('/api/bulk-upload-project-documents', async (req, res) => {
-  const { projectId, documents, uid } = req.body; // documents = { RTA: base64, MOA: base64 }
+  const { projectId, documents, uid } = req.body; // documents = { POW: base64, DUPA: base64, etc. }
 
   console.log(`📂 Incoming Bulk Doc Upload for Project [${projectId}]`);
   
@@ -9058,114 +9036,66 @@ app.post('/api/bulk-upload-project-documents', async (req, res) => {
   try {
     client = await pool.connect();
     
-    // 1. Get the latest data for this project to clone it
-    const latestRes = await client.query('SELECT * FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
-    if (latestRes.rows.length === 0) {
+    // 1. Get Project Metadata (IPC)
+    const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+    if (projectRes.rows.length === 0) {
       return res.status(404).json({ error: "Project not found" });
     }
-    const old = latestRes.rows[0];
+    const { ipc } = projectRes.rows[0];
 
-    // 2. Prepare new row data
-    const newRow = { ...old };
-    delete newRow.project_id;
+    // 2. Prepare UPSERT Query
+    const docEntries = Object.entries(documents);
+    const updateCols = [];
+    const values = [parseInt(projectId), ipc, uid];
     
-    let actions = [];
-    let docUpdates = {};
-    for (const [type, base64] of Object.entries(documents)) {
-      let column = null;
-      if (type === 'POW') column = 'pow_pdf';
-      else if (type === 'DUPA') column = 'dupa_pdf';
-      else if (type === 'CONTRACT') column = 'contract_pdf';
-      else if (type === 'RTA') column = 'rta_pdf';
-      else if (type === 'MOA') column = 'moa_pdf';
+    docEntries.forEach(([type, base64], index) => {
+      let col = '';
+      if (type === 'POW') col = 'pow_pdf';
+      else if (type === 'DUPA') col = 'dupa_pdf';
+      else if (type === 'CONTRACT') col = 'contract_pdf';
+      else if (type === 'RTA') col = 'rta_pdf';
+      else if (type === 'MOA') col = 'moa_pdf';
       
-      if (column) {
-        docUpdates[column] = base64;
-        actions.push(type);
+      if (col) {
+        updateCols.push({ name: col, index: values.length + 1 });
+        values.push(base64);
       }
+    });
+
+    if (updateCols.length === 0) {
+      return res.status(400).json({ error: "No valid documents provided" });
     }
 
-    newRow.status_as_of = new Date().toISOString();
-    newRow.actions = `Bulk Upload: ${actions.join(', ')}`;
+    const colList = updateCols.map(c => c.name).join(', ');
+    const placeholderList = updateCols.map(c => `$${c.index}`).join(', ');
+    const updateSet = updateCols.map(c => `${c.name} = EXCLUDED.${c.name}`).join(', ');
 
-    // Remove legacy PDF columns from newRow if they exist to avoid schema errors later
-    delete newRow.pow_pdf; delete newRow.dupa_pdf; delete newRow.contract_pdf;
-    delete newRow.rta_pdf; delete newRow.moa_pdf;
+    const bulkUpsertQuery = `
+      INSERT INTO engineer_documents (project_id, ipc, uploader_id, ${colList})
+      VALUES ($1, $2, $3, ${placeholderList})
+      ON CONFLICT (project_id) 
+      DO UPDATE SET 
+        ${updateSet},
+        uploader_id = EXCLUDED.uploader_id,
+        created_at = CURRENT_TIMESTAMP
+      RETURNING project_id;
+    `;
 
-    // Store updater UID for auditing
-    if (actions.includes('MOA') || actions.includes('RTA')) {
-      newRow.uploader_id_moa_rta = uid || 'Unknown';
-    }
-    newRow.engineer_id = old.engineer_id; // Preserve original owner
+    const result = await client.query(bulkUpsertQuery, values);
 
-    // 3. Construct Insert Query Dynamically
-    const cols = Object.keys(newRow).filter(k => newRow[k] !== undefined);
-    const vals = cols.map(k => newRow[k]);
-    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
-    
-    const insertQuery = `INSERT INTO "engineer_form" (${cols.join(', ')}) VALUES (${placeholders}) RETURNING project_id`;
-    const result = await client.query(insertQuery, vals);
-    const newProjectId = result.rows[0].project_id;
-
-    // --- 3.5 Handle Documents for Bulk Upload ---
-    const oldDocs = await client.query('SELECT * FROM engineer_documents WHERE project_id = $1', [parseInt(projectId)]);
-    const d = oldDocs.rows[0];
-    await client.query(`
-      INSERT INTO engineer_documents (project_id, ipc, pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf, uploader_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `, [
-      newProjectId, old.ipc,
-      docUpdates.pow_pdf || (d ? d.pow_pdf : null),
-      docUpdates.dupa_pdf || (d ? d.dupa_pdf : null),
-      docUpdates.contract_pdf || (d ? d.contract_pdf : null),
-      docUpdates.rta_pdf || (d ? d.rta_pdf : null),
-      docUpdates.moa_pdf || (d ? d.moa_pdf : null),
-      uid || (d ? d.uploader_id : null)
-    ]);
-
-    console.log(`✅ Appended bulk document update: New row project_id ${newProjectId}`);
-
-    // 4. Update Extension Tables (Finance) (Conditional)
-    // MOA/RTA are already handled in the dynamic insert above because they are now in engineer_form
-
-    // Only carry over co_finance if it exists for the original project
-    const financePrev = await client.query('SELECT * FROM co_finance WHERE project_id = $1', [parseInt(projectId)]);
-    if (financePrev.rows.length > 0) {
-      const fData = financePrev.rows[0];
-      await client.query(`
-        INSERT INTO co_finance (project_id, ipc, tranche_1, tranche_2, tranche_3, liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [
-        newProjectId,
-        fData.ipc || old.ipc,
-        fData.tranche_1 || 0,
-        fData.tranche_2 || 0,
-        fData.tranche_3 || 0,
-        fData.liquidated_tranche_1 || 0,
-        fData.liquidated_tranche_2 || 0,
-        fData.liquidated_tranche_3 || 0
-      ]);
-    }
+    console.log(`✅ Bulk updated documents in engineer_documents for project_id ${projectId}`);
 
     // --- DUAL WRITE ---
     if (poolNew) {
       try {
-        // We insert into NEW DB too
-        await poolNew.query(insertQuery, vals);
-        if (documents.MOA || documents.RTA) {
-           // Merged directly into engineer_form on secondary too
-           await poolNew.query(`
-             UPDATE engineer_form SET moa_pdf=$1, rta_pdf=$2, uploader_id_moa_rta=$3
-             WHERE project_id = $4
-           `, [documents.MOA, documents.RTA, uid, newProjectId]);
-        }
-        console.log(`✅ Dual-Write: Bulk Append Synced!`);
+        await poolNew.query(bulkUpsertQuery, values);
+        console.log(`✅ Dual-Write: Bulk Doc UPSERT Synced!`);
       } catch (dwErr) {
-        console.error("❌ Dual-Write Bulk Doc Append Error:", dwErr.message);
+        console.error("❌ Dual-Write Bulk Doc UPSERT Error:", dwErr.message);
       }
     }
 
-    res.json({ success: true, newProjectId: newProjectId });
+    res.json({ success: true, projectId: projectId });
   } catch (err) {
     console.error("❌ Bulk Doc Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save documents" });

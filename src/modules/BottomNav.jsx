@@ -113,28 +113,28 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/psip', state: { activeTab: 'settings' }, icon: FiSettings },
         ],
         'EFD': [
-            // { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'EFD Engineer': [
-            // { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI Engineer': [
-            // { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'HRODI': [
-            // { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
@@ -157,8 +157,8 @@ const BottomNav = ({ userRole }) => {
     if (!finalNavItems) return null;
 
     return createPortal(
-        <div style={styles.wrapper}>
-            <div style={styles.navContainer}>
+        <div className="fixed bottom-0 left-0 w-full h-[70px] z-[1000] bg-white border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] flex items-center">
+            <div className="w-full h-full flex justify-around items-center px-1 sm:px-2">
                 {finalNavItems.map((item) => {
                     const isActive = location.pathname === item.path &&
                         (!item.state || location.state?.activeTab === item.state.activeTab || (!location.state?.activeTab && (item.state.activeTab === 'all' || item.state.activeTab === 'home')));
@@ -168,32 +168,27 @@ const BottomNav = ({ userRole }) => {
                     return (
                         <button
                             key={item.label}
-                            style={styles.navButton}
-                        onClick={() => {
-                            if (item.id === 'chatbot-toggle') {
-                                window.dispatchEvent(new CustomEvent('toggle-chatbot'));
-                                return;
-                            }
-                            if (item.logout) {
-                                logout();
-                                localStorage.clear();
-                                sessionStorage.clear();
-                                navigate('/');
-                                return;
-                            }
-                            navigate(item.path, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });
-                        }}
+                            className="flex-1 flex flex-col items-center justify-center h-full bg-transparent border-none cursor-pointer group transition-all"
+                            onClick={() => {
+                                if (item.id === 'chatbot-toggle') {
+                                    window.dispatchEvent(new CustomEvent('toggle-chatbot'));
+                                    return;
+                                }
+                                if (item.logout) {
+                                    logout();
+                                    localStorage.clear();
+                                    sessionStorage.clear();
+                                    navigate('/');
+                                    return;
+                                }
+                                navigate(item.path, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });
+                            }}
                         >
                             <Icon
-                                size={24}
-                                color={isActive ? '#004A99' : '#B0B0B0'}
-                                style={styles.icon}
+                                size={20}
+                                className={`mb-1 transition-colors ${isActive ? 'text-[#004A99] scale-110' : 'text-slate-400 group-hover:text-slate-600'}`}
                             />
-                            <span style={{
-                                ...styles.label,
-                                ...styles.label,
-                                color: isActive ? '#004A99' : '#B0B0B0'
-                            }}>
+                            <span className={`text-[7px] sm:text-[9px] font-bold uppercase tracking-wider transition-colors text-center px-1 ${isActive ? 'text-[#004A99]' : 'text-slate-400 group-hover:text-slate-600'}`}>
                                 {item.label}
                             </span>
                         </button>
@@ -203,50 +198,6 @@ const BottomNav = ({ userRole }) => {
         </div>,
         document.body
     );
-};
-
-const styles = {
-    wrapper: {
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        width: '100%',
-        height: '70px',
-        zIndex: 1000,
-        backgroundColor: '#ffffff',
-        borderTop: '1px solid #e2e8f0',
-        boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.05)',
-        display: 'flex',
-        alignItems: 'center'
-    },
-    navContainer: {
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        justifyContent: 'space-around',
-        alignItems: 'center'
-    },
-    navButton: {
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        height: '100%'
-    },
-    icon: {
-        marginBottom: '4px',
-        transition: 'all 0.2s ease'
-    },
-    label: {
-        fontSize: '10px',
-        fontWeight: '700',
-        textTransform: 'uppercase',
-        letterSpacing: '0.02em'
-    }
 };
 
 export default BottomNav;

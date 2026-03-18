@@ -211,7 +211,7 @@ const NewProjects = () => {
     });
 
     // --- NEW: GEOLOCATION LOGIC ---
-    const handleGetLocation = () => {
+    const handleGetCurrentLocation = () => {
         if (!navigator.geolocation) {
             alert("❌ Geolocation is not supported by your browser.");
             return;
@@ -691,47 +691,42 @@ const NewProjects = () => {
 
             const projectData = await projectRes.json();
             
-            // --- E. SEQUENTIAL DOCUMENT UPLOADS ---
+            // --- E. BULK DOCUMENT UPLOAD ---
             const newProjectId = projectData.project.project_id;
             console.log("Project Created! ID:", newProjectId);
 
-            // Helper function for doc upload
-            const uploadDoc = async (type, file) => {
-                if (!file) return;
-                // setUploadProgress(`Uploading ${type}...`); // If we had this state
+            // Filter for non-null documents to send in bulk
+            const docsToUpload = {};
+            if (documents.POW) docsToUpload.POW = await convertFullFileToBase64(documents.POW);
+            if (documents.DUPA) docsToUpload.DUPA = await convertFullFileToBase64(documents.DUPA);
+            if (documents.CONTRACT) docsToUpload.CONTRACT = await convertFullFileToBase64(documents.CONTRACT);
+
+            const isEFDOrHRODI = (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI' || user?.account_category === 'HRODI Engineer' || user?.account_category === 'EFD');
+            if (documents.RTA && isEFDOrHRODI) docsToUpload.RTA = await convertFullFileToBase64(documents.RTA);
+            if (documents.MOA && isEFDOrHRODI) docsToUpload.MOA = await convertFullFileToBase64(documents.MOA);
+
+            if (Object.keys(docsToUpload).length > 0) {
+                console.log("Uploading documents in bulk...");
                 try {
-                   console.log(`Uploading ${type}...`);
-                    const base64 = await convertFullFileToBase64(file);
-                    const uploadEndpoint = (user.role === 'Local Government Unit') ? '/api/lgu/upload-project-document' : '/api/upload-project-document';
+                    const bulkEndpoint = (user?.role === 'Local Government Unit') ? '/api/lgu/upload-project-document' : '/api/bulk-upload-project-documents';
                     
-                    const docRes = await fetch(uploadEndpoint, {
+                    const bulkRes = await fetch(bulkEndpoint, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             projectId: newProjectId,
-                            type: type,
-                            base64: base64,
+                            documents: docsToUpload,
                             uid: user.uid
                         })
                     });
-                    
-                    if (!docRes.ok) throw new Error(`Failed to upload ${type}`);
-                    console.log(`${type} Uploaded!`);
-                } catch (err) {
-                    console.error(`Failed to upload ${type}:`, err);
-                    alert(`⚠️ Failed to upload ${type}. Please try updating the project later.`);
-                    // Continue to next doc...
-                }
-            };
 
-            // Process sequentially
-            if (documents.POW) await uploadDoc('POW', documents.POW);
-            if (documents.DUPA) await uploadDoc('DUPA', documents.DUPA);
-            if (documents.CONTRACT) await uploadDoc('CONTRACT', documents.CONTRACT);
-            
-            const isEFDOrHRODI = (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI' || user?.account_category === 'HRODI Engineer' || user?.account_category === 'EFD');
-            if (documents.RTA && isEFDOrHRODI) await uploadDoc('RTA', documents.RTA);
-            if (documents.MOA && isEFDOrHRODI) await uploadDoc('MOA', documents.MOA);
+                    if (!bulkRes.ok) throw new Error("Failed to upload documents in bulk");
+                    console.log("Bulk Documentation Uploaded successfully!");
+                } catch (docErr) {
+                    console.error("Bulk upload failed:", docErr);
+                    alert("⚠️ Project metadata saved, but documents failed to upload. Please try updating them in the Edit modal.");
+                }
+            }
             const ipc = projectData.ipc;
 
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
@@ -800,20 +795,16 @@ const NewProjects = () => {
 
                 <form onSubmit={handleSubmit} className="px-6 -mt-10">
                     {/* --- TAB NAVIGATION --- */}
-                    <div className="flex bg-white/80 backdrop-blur-md p-1.5 rounded-2xl shadow-lg border border-slate-100 mb-4 z-30 overflow-x-auto no-scrollbar">
+                    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-8 pb-2 -mx-2 px-2">
                         {TABS.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all whitespace-nowrap flex-1 justify-center ${
-                                    activeTab === tab.id 
-                                    ? 'bg-[#004A99] text-white shadow-md shadow-blue-200' 
-                                    : 'text-slate-400 hover:bg-slate-50'
-                                }`}
+                                className={`flex flex-col items-center justify-center min-w-[80px] sm:min-w-[100px] p-3 sm:p-4 rounded-2xl transition-all duration-300 ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
                             >
-                                <span className="text-sm">{tab.icon}</span>
-                                <span className={activeTab === tab.id ? 'block' : 'hidden sm:block'}>{tab.label}</span>
+                                <span className="text-lg sm:text-xl mb-1">{tab.icon}</span>
+                                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider">{tab.label}</span>
                             </button>
                         ))}
                     </div>
@@ -1011,12 +1002,12 @@ const NewProjects = () => {
                                 />
                             </div>
 
-                             <div className="flex gap-3">
-                                 <div className="flex-1">
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                 <div>
                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Region</label>
                                      <input name="region" value={formData.region} readOnly className="w-full p-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-sm focus:outline-none" />
                                  </div>
-                                 <div className="flex-1">
+                                 <div>
                                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Division</label>
                                      <input name="division" value={formData.division} readOnly className="w-full p-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-sm focus:outline-none" />
                                  </div>
@@ -1202,7 +1193,7 @@ const NewProjects = () => {
                                 <SectionHeader title="Procurement Milestones" icon="⚖️" />
                                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
                                     <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Procurement Dates</h4>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Issuance of Invitation to Bid</label>
                                             <input type="date" name="issuanceOfInvitationToBid" value={formData.issuanceOfInvitationToBid || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
@@ -1280,7 +1271,7 @@ const NewProjects = () => {
                                         <SectionHeader title="LGU Project Details" icon="🏛️" />
                                         <div className="space-y-4">
                                             {/* Location Details */}
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province</label>
                                                     <input name="province" value={formData.province} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
@@ -1289,7 +1280,7 @@ const NewProjects = () => {
                                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality</label>
                                                     <input name="municipality" value={formData.municipality} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                                 </div>
-                                                <div>
+                                                <div className="sm:col-span-2">
                                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District</label>
                                                     <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                                 </div>
@@ -1310,7 +1301,7 @@ const NewProjects = () => {
                                             {/* Tranches */}
                                             <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
                                                 <h4 className="font-bold text-blue-800 text-xs uppercase mb-3">Fund Tranches</h4>
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches</label>
                                                         <input type="number" name="tranches_count" value={formData.tranches_count} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
@@ -1357,7 +1348,7 @@ const NewProjects = () => {
                                                     <option value="Awarded">Awarded</option>
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
                                                     <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
