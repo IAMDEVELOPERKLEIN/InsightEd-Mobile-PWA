@@ -40,6 +40,33 @@ const FAQ_DATA = [
     }
 ];
 
+// --- HELPERS (Moved outside to prevent re-initialization and infinite loops) ---
+const getDashboardPath = (role) => {
+    const roleMap = {
+        'DepEd Engineer': '/engineer-dashboard',
+        'Division Engineer': '/engineer-dashboard',
+        'Non-DepEd Engineer': '/non-deped-dashboard',
+        'Engineer': '/engineer-dashboard',
+        'Local Government Unit': '/lgu-dashboard',
+        'School Head': '/my-activity',
+        'Human Resource': '/hr-dashboard',
+        'Regional Office': '/monitoring-dashboard',
+        'School Division Office': '/monitoring-dashboard',
+        'Admin': '/admin-dashboard',
+        'Super Admin': '/super-user-selector',
+        'Super User': '/super-user-selector',
+        'Central Office': '/monitoring-dashboard',
+        'Central Office Finance': '/finance-dashboard',
+        'EFD': '/efd-dashboard',
+        'EFD Engineer': '/efd-dashboard',
+    };
+    return roleMap[role] || '/';
+};
+
+const getInitials = (first, last) => {
+    return `${first?.charAt(0) || ''}${last?.charAt(0) || ''}`.toUpperCase();
+};
+
 const UserProfile = () => {
     const navigate = useNavigate();
     const auth = useAuth();
@@ -90,10 +117,14 @@ const UserProfile = () => {
         newPassword: '',
         confirmPassword: ''
     });
-    const [passwordError, setPasswordError] = useState('');
+    // --- REDIRECT IF NOT LOGGED IN ---
+    useEffect(() => {
+        if (!authLoading && !user) {
+            console.log("[UserProfile] No user found, redirecting to login...");
+            navigate('/', { replace: true });
+        }
+    }, [user, authLoading, navigate]);
 
-
-    // --- INITIAL FETCH & SYNC ---
     useEffect(() => {
         const syncUserData = async () => {
             // Priority 1: User object from AuthContext
@@ -171,35 +202,8 @@ const UserProfile = () => {
         };
 
         syncUserData();
-    }, [user, user?.uid, authLoading, getDashboardPath]); // Dependencies for sync
+    }, [user, user?.uid, authLoading]); // Removed getDashboardPath as it's now stable outside
 
-
-    // --- HELPERS ---
-    const getDashboardPath = (role) => {
-        const roleMap = {
-            'DepEd Engineer': '/engineer-dashboard',
-            'Division Engineer': '/engineer-dashboard',
-            'Non-DepEd Engineer': '/non-deped-dashboard',
-            'Engineer': '/engineer-dashboard',
-            'Local Government Unit': '/lgu-dashboard',
-            'School Head': '/my-activity',
-            'Human Resource': '/hr-dashboard',
-            'Regional Office': '/monitoring-dashboard',
-            'School Division Office': '/monitoring-dashboard',
-            'Admin': '/admin-dashboard',
-            'Super Admin': '/super-user-selector',
-            'Super User': '/super-user-selector',
-            'Central Office': '/monitoring-dashboard',
-            'Central Office Finance': '/finance-dashboard',
-            'EFD': '/efd-dashboard',
-            'EFD Engineer': '/efd-dashboard',
-        };
-        return roleMap[role] || '/';
-    };
-
-    const getInitials = (first, last) => {
-        return `${first?.charAt(0) || ''}${last?.charAt(0) || ''}`.toUpperCase();
-    };
 
     // --- HANDLERS ---
     const handleLogout = () => {
