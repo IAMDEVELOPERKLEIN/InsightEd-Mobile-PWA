@@ -634,9 +634,9 @@ const NewProjects = () => {
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString(),
-                uploader_type: (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI') ? 'EFD Engineer' :
-                               ((user?.role === 'Non-DepEd Engineer' || user?.account_category === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'DepEd Engineer'),
-                implementingAgency: (user?.role === 'DepEd Engineer' || user?.role === 'Engineer') ? 'DepEd' : (formData.implementingAgency || null),
+                uploader_type: (user?.role === 'EFD' || user?.role === 'EFD Engineer' || user?.role === 'HRODI') ? 'EFD Engineer' :
+                               ((user?.role === 'Non-DepEd Engineer' || user?.account_category === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'Division Engineer'),
+                implementingAgency: (user?.role === 'Division Engineer' || user?.role === 'Engineer') ? 'DepEd' : (formData.implementingAgency || null),
                 implementingAgencySpecific: formData.implementingAgencySpecific || null
             };
 
@@ -656,7 +656,7 @@ const NewProjects = () => {
                 alert("📁 No internet. Project (Metadata & Images) saved to Sync Center.\n⚠️ Documents must be uploaded when online.");
                 setIsSubmitting(false);
                 
-                if (user.role === 'EFD' || user.role === 'HRODI Engineer' || user.role === 'EFD Engineer') {
+                if (user.role === 'EFD' || user.role === 'EFD Engineer' || user.role === 'HRODI') {
                     navigate('/efd-monitoring');
                 } else {
                     navigate('/engineer-dashboard');

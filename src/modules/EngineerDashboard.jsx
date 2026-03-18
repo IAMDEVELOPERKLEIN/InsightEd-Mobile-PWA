@@ -188,8 +188,13 @@ const StatsChart = ({ projects }) => {
 
 const EngineerDashboard = () => {
   const { user } = useAuth();
-  const [userName, setUserName] = useState("DepEd Engineer");
-  const [userRole, setUserRole] = useState("");
+  const [userName, setUserName] = useState("Engineer");
+  const [userRole, setUserRole] = useState(() => {
+    let role = user?.role || localStorage.getItem('userRole') || "Division Engineer";
+    if (role === 'deped_engineer' || role === 'DepEd Engineer') return 'Division Engineer';
+    if (role === 'hrodi_engineer' || role === 'HRODI Engineer' || role === 'EFD' || role === 'HRODI') return 'EFD Engineer';
+    return role;
+  });
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]);
 
@@ -202,24 +207,28 @@ const EngineerDashboard = () => {
   const navigate = useNavigate();
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
-      if (user) {
-        const uid = user.uid;
-        setUserName(`${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim());
+      const currentUid = user?.uid || localStorage.getItem('uid');
+      let currentRole = user?.account_category || user?.role || localStorage.getItem('userRole');
+      
+      if (currentUid) {
+        if (user) {
+            setUserName(`${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim() || 'Engineer');
+        }
         
-        let roleFromDb = user.role;
         // Normalize Role
-        if (roleFromDb === 'deped_engineer') roleFromDb = 'DepEd Engineer';
-        if (roleFromDb === 'non_deped_engineer') roleFromDb = 'Non-DepEd Engineer';
-        if (roleFromDb === 'engineer') roleFromDb = 'Engineer';
+        if (currentRole === 'deped_engineer' || currentRole === 'DepEd Engineer') currentRole = 'Division Engineer';
+        if (currentRole === 'hrodi_engineer' || currentRole === 'HRODI Engineer' || currentRole === 'EFD' || currentRole === 'HRODI') currentRole = 'EFD Engineer';
+        if (currentRole === 'non_deped_engineer') currentRole = 'Non-DepEd Engineer';
+        if (currentRole === 'engineer') currentRole = 'Engineer';
 
-        setUserRole(roleFromDb);
+        setUserRole(currentRole);
 
         try {
           setIsLoading(true);
-          let url = `${API_BASE}/api/projects?engineer_id=${uid}`;
+          let url = `${API_BASE}/api/projects?engineer_id=${currentUid}`;
           let currentProjects = [];
 
-          if (roleFromDb === 'Super User') {
+          if (currentRole === 'Super User') {
             const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
             if (impersonatedDivision) {
               url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
@@ -300,7 +309,7 @@ const EngineerDashboard = () => {
       }
     };
     fetchUserDataAndProjects();
-  }, [user]);
+  }, [user, user?.uid]);
 
   return (
     <PageTransition>

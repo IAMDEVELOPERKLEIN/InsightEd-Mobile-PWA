@@ -660,6 +660,16 @@ const initDB = async () => {
     console.log("✅ DB Init: LGU Schema SKIPPED (Removed in cleanup).");
     */
 
+    // Role Renaming Migration (2026-03-18)
+    currentSegment = "Segment: Rename Roles";
+    console.log(`     [${currentSegment}]`);
+    await pool.query("UPDATE users SET role = 'Division Engineer' WHERE role = 'DepEd Engineer' OR role = 'deped_engineer'");
+    await pool.query("UPDATE users SET role = 'EFD Engineer' WHERE role = 'HRODI Engineer' OR role = 'hrodi_engineer'");
+    await pool.query("UPDATE users SET account_category = 'Division Engineer' WHERE account_category = 'DepEd Engineer'");
+    await pool.query("UPDATE users SET account_category = 'EFD Engineer' WHERE account_category = 'HRODI Engineer'");
+    await pool.query("UPDATE engineer_form SET uploader_type = 'Division Engineer' WHERE uploader_type = 'DepEd Engineer'");
+    await pool.query("UPDATE engineer_form SET uploader_type = 'EFD Engineer' WHERE uploader_type = 'HRODI Engineer'");
+
     // Segment 8: engineer_image
     currentSegment = "Segment 8: engineer_image";
     console.log(`     [${currentSegment}]`);
@@ -1658,11 +1668,11 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
     let finalCategory = user.account_category;
-    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
-      if (user.role === 'EFD' || user.role === 'HRODI') {
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI' || user.account_category === 'DepEd Engineer' || user.account_category === 'HRODI Engineer') {
+      if (user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer') {
         finalCategory = 'EFD Engineer';
       } else if (user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
-        finalCategory = 'DepEd Engineer';
+        finalCategory = 'Division Engineer';
       } else {
         finalCategory = user.role;
       }
@@ -1820,11 +1830,11 @@ app.post('/api/auth/pin-login', async (req, res) => {
 
     // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
     let finalCategory = user.account_category;
-    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI') {
-      if (user.role === 'EFD' || user.role === 'HRODI') {
+    if (!finalCategory || user.role === 'EFD' || user.role === 'HRODI' || user.account_category === 'DepEd Engineer' || user.account_category === 'HRODI Engineer') {
+      if (user.role === 'EFD' || user.role === 'HRODI' || user.role === 'EFD Engineer') {
         finalCategory = 'EFD Engineer';
-      } else if (user.role === 'Division Engineer') {
-        finalCategory = 'DepEd Engineer';
+      } else if (user.role === 'DepEd Engineer' || user.role === 'Division Engineer') {
+        finalCategory = 'Division Engineer';
       } else {
         finalCategory = user.role;
       }

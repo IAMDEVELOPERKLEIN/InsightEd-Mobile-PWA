@@ -23,6 +23,12 @@ export const AuthProvider = ({ children }) => {
                     });
                     if (res.ok) {
                         const userData = await res.json();
+                        // Sync localStorage
+                        if (userData.uid) localStorage.setItem('uid', userData.uid);
+                        if (userData.role) localStorage.setItem('userRole', userData.role);
+                        if (userData.email) localStorage.setItem('userEmail', userData.email);
+                        if (userData.account_category) localStorage.setItem('accountCategory', userData.account_category);
+                        
                         setUser(userData);
                         
                         // Sync session data for components relying on localStorage
@@ -55,6 +61,11 @@ export const AuthProvider = ({ children }) => {
 
     const login = (userData, token) => {
         localStorage.setItem('token', token);
+        if (userData.uid) localStorage.setItem('uid', userData.uid);
+        if (userData.role) localStorage.setItem('userRole', userData.role);
+        if (userData.email) localStorage.setItem('userEmail', userData.email);
+        if (userData.account_category) localStorage.setItem('accountCategory', userData.account_category);
+        
         localStorage.setItem('remembered_user', JSON.stringify(userData));
         
         // Ensure consistent identity storage

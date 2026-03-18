@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare } from "react-icons/fi"; // Added FiMessageSquare
+import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList } from "react-icons/fi"; // Added FiMessageSquare, FiHome, FiUser, FiList
 
 const BottomNav = ({ userRole: propRole }) => {
     const { user, logout, confirmLogout } = useAuth();
@@ -23,7 +23,8 @@ const BottomNav = ({ userRole: propRole }) => {
     let effectiveRole = userRole;
 
     // Normalization logic for database vs UI role strings
-    if (effectiveRole === 'deped_engineer') effectiveRole = 'DepEd Engineer';
+    if (effectiveRole === 'deped_engineer' || effectiveRole === 'DepEd Engineer') effectiveRole = 'Division Engineer';
+    if (effectiveRole === 'hrodi_engineer' || effectiveRole === 'HRODI Engineer' || effectiveRole === 'EFD' || effectiveRole === 'HRODI') effectiveRole = 'EFD Engineer';
     if (effectiveRole === 'non_deped_engineer') effectiveRole = 'Non-DepEd Engineer';
     if (effectiveRole === 'engineer') effectiveRole = 'Engineer';
     if (effectiveRole === 'school_head') effectiveRole = 'School Head';
@@ -41,18 +42,7 @@ const BottomNav = ({ userRole: propRole }) => {
 
     // --- CONFIGURATION BY ROLE ---
     const navConfigs = {
-        'Engineer': [
-            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
-            { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
-            { label: 'Settings', path: '/profile', icon: FiSettings },
-        ],
-        'DepEd Engineer': [
-            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
-            { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
-            { label: 'Settings', path: '/profile', icon: FiSettings },
-        ],
+
         'Non-DepEd Engineer': [
             { label: 'Home', path: '/non-deped-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
@@ -67,6 +57,12 @@ const BottomNav = ({ userRole: propRole }) => {
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: TbHomeEdit },
             { label: 'Modules', path: '/modular-dashboard', icon: LuCompass },
+            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'Division Engineer': [
+            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
+            { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
             { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
@@ -105,40 +101,16 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
-        'Finance': [
-            { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
-            { label: 'Settings', path: '/profile', icon: FiSettings },
-        ],
+
         'Masterlist': [
             { label: 'Home', path: '/psip', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Data', path: '/psip', state: { activeTab: 'data' }, icon: TbChartBar },
             { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
             { label: 'Settings', path: '/psip', state: { activeTab: 'settings' }, icon: FiSettings },
         ],
-        'EFD': [
-            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
-            { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
-            { label: 'Settings', path: '/profile', icon: FiSettings },
-        ],
+
         'EFD Engineer': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
-            { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
-            { label: 'Settings', path: '/profile', icon: FiSettings },
-        ],
-        'HRODI Engineer': [
-            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
-            { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
-            { label: 'Settings', path: '/profile', icon: FiSettings },
-        ],
-        'HRODI': [
-            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
-            { label: 'BEFF', path: '/beff-dashboard', icon: TbChartBar },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Settings', path: '/profile', icon: FiSettings },
