@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiSave, FiUsers, FiArrowLeft, FiGrid, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbActivity } from 'react-icons/tb';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
@@ -110,13 +110,14 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
 };
 
 const LearnerStatistics = ({ embedded }) => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     // Use location to determine viewOnly mode
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -199,7 +200,6 @@ const LearnerStatistics = ({ embedded }) => {
 
     useEffect(() => {
         const fetchData = async () => {
-            const user = auth.currentUser;
             if (!user) return;
 
             // Check Role for Read-Only
@@ -217,7 +217,7 @@ const LearnerStatistics = ({ embedded }) => {
             // We'll rely on `isDummy` and also check `localStorage.getItem('userRole')` if available 
             // or fetch the user doc if needed. Use a quick check:
             try {
-                const role = localStorage.getItem('userRole');
+                const role = user.role;
                 if (role === 'Central Office' || isDummy) {
                     setIsReadOnly(true);
                 }
@@ -286,7 +286,7 @@ const LearnerStatistics = ({ embedded }) => {
                 if (!restored) {
                     let fetchUrl = `/api/learner-statistics/${user.uid}`;
                     // Check logic for CO/Monitoring
-                    const role = localStorage.getItem('userRole');
+                    const role = user.role;
                     if (isAuditMode) {
                         fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
                     } else if ((viewOnly || role === 'Central Office' || isDummy) && monitorSchoolId) {
@@ -386,7 +386,7 @@ const LearnerStatistics = ({ embedded }) => {
             }
         };
         fetchData();
-    }, []);
+    }, [user, isAuditMode, auditTargetId, viewOnly, monitorSchoolId, isDummy]);
 
     // --- VALIDATION ---
     const isFormValid = () => {
@@ -421,16 +421,13 @@ const LearnerStatistics = ({ embedded }) => {
     };
 
     const handleSave = async () => {
-        const user = auth.currentUser;
         if (!user) return;
-
         setSaving(true);
-
         const payload = {
             ...formData,
             schoolId: formData.schoolId || formData.school_id || localStorage.getItem('schoolId'),
             uid: user.uid,
-            userName: user.displayName || 'School Head',
+            userName: user.firstName ? `${user.firstName} ${user.lastName}` : 'School Head',
             role: 'School Head',
             submitted_at: new Date().toISOString(),
             // IMPORTANT: Also update the nested object for JSONB persistence

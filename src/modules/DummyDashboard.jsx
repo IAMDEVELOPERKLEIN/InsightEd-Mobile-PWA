@@ -4,28 +4,20 @@ import PageTransition from '../components/PageTransition';
 import { TbChevronLeft, TbSchool, TbUsers, TbBooks, TbActivity, TbHammer, TbClipboardList, TbBuildingSkyscraper, TbReportAnalytics, TbMapSearch } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck } from "react-icons/lu";
 import { FiArrowLeft } from "react-icons/fi";
-import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 
 const DummyDashboard = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [userData, setUserData] = React.useState(null);
+    const { user } = useAuth();
+    const [userData, setUserData] = React.useState(user);
 
     React.useEffect(() => {
-        const fetchUser = async () => {
-            const user = auth.currentUser;
-            if (user) {
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setUserData(docSnap.data());
-                }
-            }
-        };
-        fetchUser();
-    }, []);
+        if (user) {
+            setUserData(user);
+        }
+    }, [user]);
 
     // Default to 'school' if no type is passed
     const formType = location.state?.type || 'school';

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { auth } from '../firebase'; // Import auth
+import { useAuth } from '../context/AuthContext'; // Import useAuth
 import { FiLogOut } from 'react-icons/fi'; // Import Icon
 
 const SuperUserSelector = () => {
     const navigate = useNavigate();
+    const { logout } = useAuth();
 
     // --- STATE ---
     const [loading, setLoading] = useState(false);
@@ -163,9 +164,7 @@ const SuperUserSelector = () => {
 
     const handleLogout = async () => {
         try {
-            await auth.signOut();
-            localStorage.clear();
-            sessionStorage.clear();
+            await logout();
             navigate('/', { replace: true });
         } catch (error) {
             console.error("Logout Failed:", error);

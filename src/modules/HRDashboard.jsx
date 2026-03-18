@@ -1,25 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition'; // Import Transition
-import { auth, db } from '../firebase'; 
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 
 const HRDashboard = () => {
-    const [userName, setUserName] = useState('HR Officer');
+    const { user, token } = useAuth();
+    const [userName, setUserName] = useState('User');
 
     useEffect(() => {
-        const fetchUserData = async () => {
-            const user = auth.currentUser;
-            if (user) {
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setUserName(docSnap.data().firstName);
-                }
-            }
-        };
-        fetchUserData();
-    }, []);
+        if (user) {
+            setUserName(user.firstName || user.displayName || 'User');
+        }
+    }, [user]);
 
     return (
         <PageTransition>

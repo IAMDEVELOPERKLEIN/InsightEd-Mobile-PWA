@@ -10,8 +10,7 @@ import "swiper/css/pagination";
 import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
 import CalendarWidget from "../components/CalendarWidget";
-import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";
 import { cacheProjects, getCachedProjects } from "../db";
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import Context
 
@@ -188,8 +187,9 @@ const StatsChart = ({ projects }) => {
 // --- MAIN DASHBOARD COMPONENT ---
 
 const EngineerDashboard = () => {
+  const { user } = useAuth();
   const [userName, setUserName] = useState("DepEd Engineer");
-  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "");
+  const [userRole, setUserRole] = useState("");
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]);
 
@@ -200,39 +200,26 @@ const EngineerDashboard = () => {
 
   const API_BASE = "";
   const navigate = useNavigate();
-
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
-      const uid = localStorage.getItem('uid');
-      if (uid) {
-        // 1. Fetch Basic Info from PostgreSQL backend
-        try {
-          const userRes = await fetch(`/api/users/${uid}`);
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            setUserName(`${userData.firstName} ${userData.lastName || ''}`.trim());
-            
-            let roleFromDb = userData.role;
-            // Normalize Role
-            if (roleFromDb === 'deped_engineer') roleFromDb = 'DepEd Engineer';
-            if (roleFromDb === 'non_deped_engineer') roleFromDb = 'Non-DepEd Engineer';
-            if (roleFromDb === 'engineer') roleFromDb = 'Engineer';
+      if (user) {
+        const uid = user.uid;
+        setUserName(`${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim());
+        
+        let roleFromDb = user.role;
+        // Normalize Role
+        if (roleFromDb === 'deped_engineer') roleFromDb = 'DepEd Engineer';
+        if (roleFromDb === 'non_deped_engineer') roleFromDb = 'Non-DepEd Engineer';
+        if (roleFromDb === 'engineer') roleFromDb = 'Engineer';
 
-            setUserRole(roleFromDb);
-            localStorage.setItem('userRole', roleFromDb);
-          }
-        } catch (error) {
-          console.error("Failed to fetch user data:", error);
-        }
-
-        const currentRole = localStorage.getItem('userRole');
+        setUserRole(roleFromDb);
 
         try {
           setIsLoading(true);
           let url = `${API_BASE}/api/projects?engineer_id=${uid}`;
           let currentProjects = [];
 
-          if (currentRole === 'Super User') {
+          if (roleFromDb === 'Super User') {
             const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
             if (impersonatedDivision) {
               url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
@@ -242,21 +229,17 @@ const EngineerDashboard = () => {
           }
 
           // ENGINEER: Stale-While-Revalidate Strategy
-
-          // 1. Immediate Cache Load (Fast Render)
           try {
             const cachedData = await getCachedProjects();
             if (cachedData && cachedData.length > 0) {
-              // If we have cache, show it immediately
               setProjects(cachedData);
-              currentProjects = cachedData; // Prevent overwrite by empty array later
-              setIsLoading(false); // Stop spinner early if we have data
+              currentProjects = cachedData;
+              setIsLoading(false);
             }
           } catch (err) {
             console.warn("Cache read failed", err);
           }
 
-          // 2. Network Request (Background Sync)
           try {
             const response = await fetch(url);
             if (!response.ok) throw new Error("Failed to fetch projects");
@@ -273,7 +256,6 @@ const EngineerDashboard = () => {
               contractAmount: item.contractAmount,
               targetCompletionDate: item.targetCompletionDate,
               projects_count: 1,
-              // Additional fields for charts
               region: item.region,
               division: item.division,
               statusAsOfDate: item.statusAsOfDate,
@@ -286,19 +268,14 @@ const EngineerDashboard = () => {
               hasRta: item.hasRta
             }));
 
-            // Cache data if we are an Engineer
-            if (currentRole !== 'Super User') {
+            if (roleFromDb !== 'Super User') {
               await cacheProjects(currentProjects);
             }
 
-            // Update state with fresh data
             setProjects(currentProjects);
 
           } catch (networkError) {
             console.warn("Dashboard network request failed:", networkError);
-            // If we didn't have cached data before, we might need to rely on the fallback from the 'cache read' block above
-            // But typically if cache read passed, we are good. 
-            // We basically just suppress the network error UI-wise if we have stale data.
           }
 
           try {
@@ -316,10 +293,14 @@ const EngineerDashboard = () => {
         } finally {
           setIsLoading(false);
         }
+      } else {
+        // Fallback for loading state if user is null
+        const lsRole = localStorage.getItem('userRole');
+        if (!lsRole) setIsLoading(false);
       }
     };
     fetchUserDataAndProjects();
-  }, []);
+  }, [user]);
 
   return (
     <PageTransition>
@@ -332,7 +313,7 @@ const EngineerDashboard = () => {
                 DepEd Infrastructure
               </p>
               <h1 className="text-2xl font-bold text-white mt-1">
-                {userRole === 'Local Government Unit' ? 'LGU Partner' : 'Engr.'} {userName}
+                {userRole === 'LocalGovernmentUnit' ? 'LGU Partner' : 'Engr.'} {userName.split(' ')[0]}
               </h1>
               <p className="text-blue-100 mt-1 text-sm">
                 {userRole === 'Super User' && sessionStorage.getItem('impersonatedDivision')
@@ -400,7 +381,7 @@ const EngineerDashboard = () => {
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
                   <h3 className="text-[#004A99] dark:text-blue-400 font-bold text-sm flex items-center mb-1">
                     <span className="text-xl mr-2">👷</span>
-                    Welcome, {userRole === 'Local Government Unit' ? 'LGU Partner' : 'Engr.'} {userName}!
+                    Welcome, {userRole === 'LocalGovernmentUnit' ? 'LGU Partner' : 'Engr.'} {userName.split(' ')[0]}!
                   </h3>
                   <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed ml-7">
                     {userRole === 'Local Government Unit'

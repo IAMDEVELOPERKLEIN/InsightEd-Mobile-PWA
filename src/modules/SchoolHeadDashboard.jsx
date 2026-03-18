@@ -11,10 +11,8 @@ import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, 
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
 import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle, FiCheckSquare, FiActivity } from "react-icons/fi";
 
-import { auth, db, app } from '../firebase'; // Import app
-import { doc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged } from "firebase/auth";
-import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Import Messaging
+import { useAuth } from '../context/AuthContext';
+// import { getMessaging, getToken, onMessage } from "firebase/messaging"; // FCM temporarily disabled or requires separate setup
 
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
@@ -24,6 +22,7 @@ import { DASHBOARD_METADATA } from '../config/dashboardMetadata';
 
 const SchoolHeadDashboard = () => {
     const navigate = useNavigate();
+    const { user, logout } = useAuth();
 
     // --- STATE ---
     const [loading, setLoading] = useState(true);
@@ -83,7 +82,7 @@ const SchoolHeadDashboard = () => {
     };
 
     const handleConfirmValidation = async () => {
-        if (!auth.currentUser || !schoolProfile) return;
+        if (!user || !schoolProfile) return;
 
         try {
             const response = await fetch('/api/school/validate-data', {
@@ -91,7 +90,7 @@ const SchoolHeadDashboard = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     schoolId: schoolProfile.school_id,
-                    uid: auth.currentUser.uid
+                    uid: user.uid
                 })
             });
 
@@ -141,7 +140,7 @@ const SchoolHeadDashboard = () => {
 
             if (data.success) {
                 // Refresh Profile Data
-                const targetUid = impersonatedUid || (auth.currentUser ? auth.currentUser.uid : null);
+                const targetUid = impersonatedUid || (user ? user.uid : null);
                 if (targetUid) {
                     const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
                     const profileJson = await profileRes.json();
@@ -299,105 +298,57 @@ const SchoolHeadDashboard = () => {
             }
         };
 
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
+        if (user) {
+            const loadDashboard = async () => {
                 try {
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        setUserName(userData.firstName);
+                    setUserName(user.first_name || user.firstName || 'School Head');
 
-                        let targetUid = user.uid;
-                        // Impersonation Logic
-                        const isSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
-                        // If Generic Mode (no specific UID selected, just role)
-                        if (isSuperUser && !impersonatedUid) {
-                            // Set Dummy Data for Generic Preview
-                            setSchoolName("Generic High School");
-                            setSchoolId("000000");
-                            setUserName("Super User (Preview)");
-                            setSchoolProfile({ start_date: new Date().toISOString() }); // Dummy profile
-                            setLoading(false);
-                            return; // Stop fetching real data
-                        }
-
-                        if (userData.role === 'Super User' && impersonatedUid) {
-                            targetUid = impersonatedUid;
-                            setUserName(`Super User (Viewing: ${targetUid.slice(0, 5)}...)`);
-                        }
-
-                        const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
-                        const profileJson = await profileRes.json();
-                        if (profileJson.exists) {
-                            setSchoolProfile(profileJson.data);
-
-                        }
-
-                        const headRes = await fetch(`/api/school-head/${targetUid}`);
-                        const headJson = await headRes.json();
-                        if (headJson.exists) setHeadProfile(headJson.data);
-
-                        // --- FCM TOKEN REGISTRATION (ROBUST) ---
-                        // --- FCM TOKEN REGISTRATION (ROBUST) ---
-                        try {
-                            const messaging = getMessaging(app);
-                            const permission = await Notification.requestPermission();
-
-                            if (permission === 'granted') {
-                                // Ensure Service Worker is ready (Required for Mobile PWA)
-                                let swRegistration = await navigator.serviceWorker.getRegistration();
-                                if (!swRegistration) {
-                                    swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-                                }
-
-                                const currentToken = await getToken(messaging, {
-                                    vapidKey: 'BDuZsrGgFnp6Iwm6dVXxVGeppwi40LyNw48VdVOizotxUZ45BGlGHogswLUq82Q3G8UjhnUit-yW8z3dYISorcQ',
-                                    serviceWorkerRegistration: swRegistration
-                                });
-
-                                if (currentToken) {
-                                    console.log("📲 FCM Token Generated:", currentToken.slice(0, 10) + "...");
-                                    // SAVE TO SERVER
-                                    await fetch('/api/save-token', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ uid: user.uid, token: currentToken })
-                                    });
-                                }
-                            }
-
-                            // --- FOREGROUND LISTENER ---
-                            onMessage(messaging, (payload) => {
-                                console.log('🔔 Foreground Message:', payload);
-                                const { title, body } = payload.notification;
-                                new Notification(title, { body, icon: '/pwa-192x192.png' });
-                            });
-
-                        } catch (msgErr) {
-                            console.log("ℹ️ FCM Token Logic Error:", msgErr);
-                        }
+                    let targetUid = user.uid;
+                    // Impersonation Logic
+                    const isSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
+                    // If Generic Mode (no specific UID selected, just role)
+                    if (isSuperUser && !impersonatedUid) {
+                        setUserName("Super User (Preview)");
+                        setSchoolProfile({ start_date: new Date().toISOString() }); // Dummy profile
+                        setLoading(false);
+                        return;
                     }
+
+                    if (user.role === 'Super User' && impersonatedUid) {
+                        targetUid = impersonatedUid;
+                        setUserName(`Super User (Viewing: ${targetUid.slice(0, 5)}...)`);
+                    }
+
+                    const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
+                    const profileJson = await profileRes.json();
+                    if (profileJson.exists) {
+                        setSchoolProfile(profileJson.data);
+                    }
+
+                    const headRes = await fetch(`/api/school-head/${targetUid}`);
+                    const headJson = await headRes.json();
+                    if (headJson.exists) setHeadProfile(headJson.data);
 
                 } catch (error) {
                     console.error("Dashboard Load Error:", error);
                 }
                 setTimeout(() => setLoading(false), 800);
-            } else {
-                // Not authenticated
-                const isSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
+            };
 
-                if (isSuperUser) {
-                    console.warn("Auth state missing for Super User/Generic View. Preventing redirect.");
-                    // Allow to proceed (will render with default/empty state)
-                    setLoading(false);
-                } else {
-                    // Normal user not authenticated -> Redirect
-                    navigate('/');
-                }
+            loadDashboard();
+        } else {
+            // Not authenticated
+            const isSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
+
+            if (isSuperUser) {
+                console.warn("Auth state missing for Super User/Generic View. Preventing redirect.");
+                setLoading(false);
+            } else {
+                // Normal user not authenticated -> Redirect
+                navigate('/');
             }
-        });
-        return () => unsubscribe();
-    }, [impersonatedUid]); // Re-run if query param changes
+        }
+    }, [user, impersonatedUid]); // Re-run if user or query param changes
 
     const { completedForms, totalForms } = stats;
     // Prefer DB percentage if available to ensure consistency
@@ -420,16 +371,14 @@ const SchoolHeadDashboard = () => {
                                 <div className="inline-flex items-center gap-2 bg-blue-800/50 px-3 py-1 rounded-full border border-blue-400/20 backdrop-blur-sm mb-3">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
                                     <p className="text-blue-100 text-[10px] font-bold tracking-wider uppercase">
-                                        {(headProfile?.head_first_name || headProfile?.first_name) ? 'School Head' : userName}
+                                        School Head
                                     </p>
                                 </div>
                                 <h1 className="text-3xl font-bold text-white tracking-tight">
-                                    {(headProfile?.head_first_name || headProfile?.first_name) || (schoolProfile ? schoolProfile.school_id : '---')}
+                                    {schoolProfile?.school_id || 'School Head'}
                                 </h1>
                                 <p className="text-blue-200 text-sm mt-1 opacity-90">
-                                    {(headProfile?.head_first_name || headProfile?.first_name) && schoolProfile
-                                        ? `${schoolProfile.school_id} • ${schoolProfile.school_name}`
-                                        : (schoolProfile ? schoolProfile.school_name : 'School Principal')}
+                                    {schoolProfile?.school_name || (headProfile?.head_first_name ? `${headProfile.head_first_name} ${headProfile.head_last_name}` : 'Principal Profile')}
                                 </p>
                                 {schoolProfile?.iern && (
                                     <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-500/20 border border-blue-400/30 rounded-md px-2 py-0.5">
@@ -731,7 +680,7 @@ const SchoolHeadDashboard = () => {
                                             <TbSchool size={100} className="dark:text-white" />
                                         </div>
                                         <h3 className="text-[#004A99] dark:text-blue-400 font-bold text-lg flex items-center mb-2 z-10">
-                                            Welcome, Principal!
+                                            Welcome, {schoolProfile?.school_id || 'School Head'}!
                                         </h3>
                                         <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed max-w-[85%] z-10">
                                             Ensure all school forms are up to date before the division deadline. Tap here to view forms.

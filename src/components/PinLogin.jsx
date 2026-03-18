@@ -1,13 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { setPersistence, browserLocalPersistence, signInWithCustomToken } from 'firebase/auth';
+import { useAuth } from '../context/AuthContext';
 
 const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleKeyPress = useCallback((num) => {
     if (error) setError('');
@@ -65,26 +65,9 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
       
       const data = await response.json();
       
-      if (response.ok && data.success && data.user) {
-        // Soft login successful! Apply session data securely
-        localStorage.setItem('uid', data.user.uid);
-        localStorage.setItem('userRole', data.user.role);
-        localStorage.setItem('userEmail', data.user.email);
-        sessionStorage.setItem('stride_unlocked', 'true');
-        
-        if (data.user.region) localStorage.setItem('userRegion', data.user.region);
-        if (data.user.division) localStorage.setItem('userDivision', data.user.division);
-        if (data.user.account_category) localStorage.setItem('accountCategory', data.user.account_category);
-
-        // Sign into Firebase silently if Custom Token is returned
-        if (data.customToken) {
-          try {
-            await setPersistence(auth, browserLocalPersistence);
-            await signInWithCustomToken(auth, data.customToken);
-          } catch (fbErr) {
-            console.warn("Firebase silent login failed", fbErr);
-          }
-        }
+      if (response.ok && data.success && data.user && data.token) {
+        // Soft login successful! Apply session data securely via AuthContext
+        login(data.user, data.token);
         
         // Navigation 
         const destPath = getDashboardPath(data.user.role, data.user.account_category);
@@ -116,12 +99,14 @@ const PinLogin = ({ rememberedUser, onSwitchAccount, onUsePassword }) => {
         </span>
       </div>
       
-      <h2 className="text-2xl font-bold mb-1 text-slate-800">
-        Welcome back, {
-          (rememberedUser?.role?.toLowerCase() === 'school head' || 
-           rememberedUser?.role?.toLowerCase() === 'school_head')
-            ? (rememberedUser?.school_id || rememberedUser?.schoolId || 'School Head')
-            : (rememberedUser?.firstName || rememberedUser?.first_name || rememberedUser?.email || 'User')
+      <h2 className="text-2xl font-bold mb-1 text-slate-800 text-center">
+        Welcome, {
+          (rememberedUser?.role?.toLowerCase()?.includes('school head') || 
+           rememberedUser?.role?.toLowerCase()?.includes('school_head') ||
+           localStorage.getItem('userRole')?.toLowerCase()?.includes('school head') ||
+           (rememberedUser?.school_id || localStorage.getItem('schoolId')))
+            ? (rememberedUser?.school_id || rememberedUser?.schoolId || localStorage.getItem('schoolId') || 'School Head')
+            : (rememberedUser?.firstName || rememberedUser?.first_name || rememberedUser?.email || localStorage.getItem('userEmail')?.split('@')[0] || 'User')
         }!
       </h2>
       <p className="text-slate-500 mb-6 text-sm">

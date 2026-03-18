@@ -1,8 +1,7 @@
 // src/forms/SchoolInformation.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from '../context/AuthContext';
 // LoadingScreen import removed 
 import { addToOutbox, getOutbox } from '../db';
 import Papa from 'papaparse'; //
@@ -12,6 +11,7 @@ import { FiArrowLeft, FiUser, FiMapPin, FiBriefcase, FiHash, FiSearch, FiCheckCi
 
 const SchoolInformation = ({ embedded = false }) => {
     const navigate = useNavigate();
+    const { user, token } = useAuth();
 
     // --- STATE MANAGEMENT ---
     const location = useLocation();
@@ -115,8 +115,8 @@ const SchoolInformation = ({ embedded = false }) => {
     // --- 2. LOAD DATA ---
     // --- 2. LOAD DATA (Strict Sync Cache Strategy) ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
+        if (!user) return;
+        const loadData = async () => {
                 // Check Role for Read-Only
                 try {
                     const role = localStorage.getItem('userRole');
@@ -226,9 +226,8 @@ const SchoolInformation = ({ embedded = false }) => {
                 }
             }
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        loadData();
+    }, [user]);
 
 
 
@@ -307,7 +306,6 @@ const SchoolInformation = ({ embedded = false }) => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
-        const user = auth.currentUser;
 
         // Package all data including the new CSV fields
         const payload = {

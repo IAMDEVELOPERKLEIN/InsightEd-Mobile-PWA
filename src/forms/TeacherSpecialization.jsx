@@ -2,8 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiArrowLeft, FiBriefcase, FiCheckCircle, FiHelpCircle, FiInfo, FiSave, FiTrash2, FiPlus, FiPieChart, FiAlertCircle, FiChevronsLeft, FiChevronsRight, FiRefreshCw } from 'react-icons/fi';
-import { auth } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from '../context/AuthContext';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
@@ -43,6 +42,7 @@ const ACADEMIC_MAP = {
 };
 
 const TeacherSpecialization = ({ embedded }) => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
@@ -51,7 +51,7 @@ const TeacherSpecialization = ({ embedded }) => {
     const isDummy = location.state?.isDummy || false;
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -163,10 +163,10 @@ const TeacherSpecialization = ({ embedded }) => {
 
     // --- DATA FETCHING ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const loadInitialData = async () => {
             if (user) {
                 try {
-                    const role = localStorage.getItem('userRole');
+                    const role = user.role;
                     if (role === 'Central Office' || isDummy) setIsReadOnly(true);
                 } catch (e) { }
 
@@ -274,9 +274,9 @@ const TeacherSpecialization = ({ embedded }) => {
                     setLoading(false);
                 }
             }
-        });
-        return () => unsubscribe();
-    }, [viewOnly, schoolIdParam, isAuditMode, auditTargetId, isDummy]);
+        };
+        loadInitialData();
+    }, [user, viewOnly, schoolIdParam, isAuditMode, auditTargetId, isDummy]);
 
     const goBack = () => {
         if (isDummy) {
@@ -427,7 +427,7 @@ const TeacherSpecialization = ({ embedded }) => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
-        const user = auth.currentUser;
+        if (!user) return;
 
         // 1. Prepare TEACHER LIST Payload
         const teachersPayload = teacherList.map(t => {

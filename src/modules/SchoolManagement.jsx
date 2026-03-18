@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiMapPin, FiCheck, FiX, FiClock, FiSave, FiList } from 'react-icons/fi';
@@ -47,6 +46,7 @@ const searchNominatim = async (query) => {
 };
 
 const SchoolManagement = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -114,38 +114,28 @@ const SchoolManagement = () => {
     ];
 
     useEffect(() => {
-        const fetchUserData = async () => {
-            const user = auth.currentUser;
-            if (!user) {
-                navigate('/login');
-                return;
+        if (user) {
+            setUserData(user);
+            // Pre-set map center based on region if possible (simplified)
+            if (user.region === 'NCR') {
+                setMapPosition([14.5995, 120.9842]);
+            } else if (user.region === 'Region III') {
+                setMapPosition([15.4818, 120.7121]); // Central Luzon
             }
 
-            const docRef = doc(db, 'users', user.uid);
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setUserData(data);
-
-                // Pre-set map center based on region if possible (simplified)
-                if (data.region === 'NCR') {
-                    setMapPosition([14.5995, 120.9842]);
-                } else if (data.region === 'Region III') {
-                    setMapPosition([15.4818, 120.7121]); // Central Luzon
-                }
-
-                // Fetch location options for this user's region/division
-                fetchLocationOptions(data.region, data.division);
-                fetchLocationCoordinates(data.region, data.division);
-                fetchDivisions(data.region); // Fetch divisions for converted school tab
-            }
+            // Fetch location options for this user's region/division
+            fetchLocationOptions(user.region, user.division);
+            fetchLocationCoordinates(user.region, user.division);
+            fetchDivisions(user.region); // Fetch divisions for converted school tab
+            fetchPendingSchools();
             setLoading(false);
-        };
-
-        fetchUserData();
-        fetchPendingSchools();
-    }, [navigate]);
+        } else {
+            // If strictly loading and no user, we might wait or redirect
+            // But usually AuthContext handles the redirect if protected.
+            // For safety:
+            // navigate('/login');
+        }
+    }, [user, navigate]);
 
     const fetchDivisions = async (region) => {
         try {
@@ -273,7 +263,6 @@ const SchoolManagement = () => {
     };
 
     const fetchPendingSchools = async () => {
-        const user = auth.currentUser;
         if (!user) return;
 
         try {
@@ -484,7 +473,6 @@ const SchoolManagement = () => {
         setShowConfirmModal(false); // Close modal
 
         try {
-            const user = auth.currentUser;
             const endpoint = isConverting ? '/api/sdo/convert-school' : '/api/sdo/submit-school';
 
             const res = await fetch(endpoint, {

@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Papa from 'papaparse';
-import { auth } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuth } from '../context/AuthContext';
 import locationData from '../locations.json';
 // LoadingScreen import removed 
 import { addToOutbox } from '../db';
@@ -14,6 +13,7 @@ import SuccessModal from '../components/SuccessModal'; // NEW // NEW
 import { normalizeOffering } from '../utils/dataNormalization';
 
 const SchoolProfile = ({ embedded }) => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -21,7 +21,7 @@ const SchoolProfile = ({ embedded }) => {
     const isDummy = location.state?.isDummy || false; // NEW: Dummy Mode Check
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -240,13 +240,17 @@ const SchoolProfile = ({ embedded }) => {
         loadDirectory();
 
         // B. User Profile Load - Sync Cache Strategy
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+            setLoading(false);
+            return;
+        }
+
+        const loadData = async () => {
             if (!isMounted) return;
-            if (!user) { navigate('/'); return; }
 
             // Check Role for Read-Only
             try {
-                const role = localStorage.getItem('userRole');
+                const role = user.role;
                 if (role === 'Central Office' || isDummy) {
                     setIsReadOnly(true);
                 }
@@ -299,7 +303,7 @@ const SchoolProfile = ({ embedded }) => {
 
             // STEP 2: BACKGROUND FETCH
             try {
-                const role = localStorage.getItem('userRole');
+                const role = user.role;
                 let fetchUrl = `/api/school-by-user/${user.uid}`;
                 if (isAuditMode) {
                     fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
@@ -343,10 +347,11 @@ const SchoolProfile = ({ embedded }) => {
             }
 
             setLoading(false);
-        });
+        };
+        loadData();
 
-        return () => { isMounted = false; unsubscribe(); };
-    }, []);
+        return () => { isMounted = false; };
+    }, [user, isAuditMode, auditTargetId, viewOnly, monitorSchoolId, isDummy, isFirstTime]);
 
     // --- 2.1 SYNC OPTIONS WHEN MAPS LOAD ---
     // If formData is loaded BEFORE CSV, we need to populate dropdowns when CSV arrives.
@@ -559,7 +564,7 @@ const SchoolProfile = ({ embedded }) => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
-        const payload = { ...formData, submittedBy: auth.currentUser.uid };
+        const payload = { ...formData, submittedBy: user.uid };
 
         const finalize = (newIern) => {
             const updated = { ...formData };

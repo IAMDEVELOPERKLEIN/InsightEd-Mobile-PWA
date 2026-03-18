@@ -5,7 +5,7 @@ import PageTransition from '../components/PageTransition';
 import { getCachedProjects, cacheGallery, getCachedGallery } from '../db';
 import LocationPickerMap from '../components/LocationPickerMap';
 import { TbPhoto } from "react-icons/tb";
-import { auth } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import EditProjectModal from '../components/EditProjectModal';
 import { compressImage } from '../utils/imageCompression';
 import { LuHistory, LuUser, LuCalendar, LuX } from "react-icons/lu";
@@ -407,6 +407,7 @@ const RealignmentComparison = ({ current, previous, remarks }) => {
 };
 
 const DetailedProjInfo = () => {
+    const { user } = useAuth();
     const { id } = useParams();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -621,23 +622,10 @@ const DetailedProjInfo = () => {
             }
         };
 
-        const fetchUserRole = async () => {
-            const uid = localStorage.getItem('uid');
-            if (uid) {
-                try {
-                    const res = await fetch(`/api/user-info/${uid}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        setUserRole(data.role);
-                        setAccountCategory(data.account_category);
-                    }
-                } catch (err) {
-                    console.error("Failed to fetch user role:", err);
-                }
-            }
-        };
-
-        fetchUserRole();
+        if (user) {
+            setUserRole(user.role);
+            setAccountCategory(user.account_category);
+        }
         fetchProjectDetails();
         const fetchImages = async () => {
             if (type === 'LGU') return; // LGU images handled in main fetch
@@ -771,7 +759,7 @@ const DetailedProjInfo = () => {
     };
 
     const handleSaveProject = async (updatedProject) => {
-        const uid = localStorage.getItem('uid');
+        const uid = user ? user.uid : localStorage.getItem('uid');
         if (!uid) return;
 
         // CHECK: Mandatory Location

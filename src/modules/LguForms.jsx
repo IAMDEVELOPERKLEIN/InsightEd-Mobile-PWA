@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
-import { auth } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import { compressImage } from '../utils/imageCompression';
 import { uploadFileInChunks } from '../utils/chunkedUploader'; // NEW CHUNK UPLOADER
 import { FiCamera, FiUpload, FiMapPin, FiSave, FiAlertCircle, FiCheck } from 'react-icons/fi';
@@ -16,6 +16,7 @@ const SectionHeader = ({ title, icon }) => (
 );
 
 const LguForms = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLookingUp, setIsLookingUp] = useState(false);
@@ -90,9 +91,9 @@ const LguForms = () => {
     // --- CHECK FOR EXISTING PROJECTS ---
     useEffect(() => {
         const checkProjects = async () => {
-            if (!auth.currentUser) return;
+            if (!user) return;
             try {
-                const res = await fetch(`/api/lgu/projects?uid=${auth.currentUser.uid}`);
+                const res = await fetch(`/api/lgu/projects?uid=${user.uid}`);
                 if (res.ok) {
                     const data = await res.json();
                     setHasProjects(data.length > 0);
@@ -103,16 +104,13 @@ const LguForms = () => {
                 setCheckingProjects(false);
             }
         };
-        // Wait for auth to settle
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) {
-                checkProjects();
-            } else {
-                setCheckingProjects(false);
-            }
-        });
-        return () => unsubscribe();
-    }, []);
+
+        if (user) {
+            checkProjects();
+        } else {
+            setCheckingProjects(false);
+        }
+    }, [user]);
 
     // --- HANDLERS ---
     const handleChange = (e) => {
@@ -251,7 +249,7 @@ const LguForms = () => {
             // 1. Prepare Payload
             const payload = {
                 ...formData,
-                created_by_uid: auth.currentUser?.uid // Add User ID
+                created_by_uid: user.uid // Add User ID
             };
             // Auto-calc some logic if needed
 
@@ -277,7 +275,7 @@ const LguForms = () => {
                         body: JSON.stringify({
                             project_id: projectId,
                             image_data: compressed,
-                            uploaded_by: auth.currentUser?.uid || 'LGU',
+                            uploaded_by: user.uid || 'LGU',
                             category: category // 'Internal' or 'External'
                         })
                     });
