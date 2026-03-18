@@ -8,12 +8,15 @@ import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight
 import { LuCompass } from "react-icons/lu";
 import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList } from "react-icons/fi"; // Added FiMessageSquare, FiHome, FiUser, FiList
 
-const BottomNav = ({ userRole }) => {
-    const { user, logout } = useAuth();
+const BottomNav = ({ userRole: propRole }) => {
+    const { user, logout, confirmLogout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
-    // If no role is provided yet (loading), don't show the nav bar
+    // Robust role detection: Prop -> Context -> Cache
+    const userRole = propRole || user?.role || localStorage.getItem('userRole');
+
+    // If no role is detected yet, don't show the nav bar (prevents flashes/errors)
     if (!userRole) return null;
 
     // --- SUPER USER OVERRIDE ---
@@ -147,10 +150,7 @@ const BottomNav = ({ userRole }) => {
                                     return;
                                 }
                                 if (item.logout) {
-                                    logout();
-                                    localStorage.clear();
-                                    sessionStorage.clear();
-                                    navigate('/');
+                                    confirmLogout();
                                     return;
                                 }
                                 navigate(item.path, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });

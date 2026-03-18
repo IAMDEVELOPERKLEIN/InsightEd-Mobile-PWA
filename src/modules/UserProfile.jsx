@@ -42,12 +42,14 @@ const FAQ_DATA = [
 
 const UserProfile = () => {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const auth = useAuth();
+    const user = auth?.user;
+    const authLoading = auth?.loading;
     const { isDarkMode, toggleTheme } = useTheme();
     const { checkForUpdates, isUpdateAvailable, updateApp, hardReset } = useServiceWorker(); // Added hardReset
 
     // --- STATE MANAGEMENT ---
-    const [userData, setUserData] = useState(null);
+    const [userData, setUserData] = useState({});
     const [schoolId, setSchoolId] = useState(null);
     const [iern, setIern] = useState(null);
     const [homeRoute, setHomeRoute] = useState('/');
@@ -113,6 +115,61 @@ const UserProfile = () => {
                 setFormData({
                     firstName,
                     lastName,
+        const fetchData = async () => {
+            const uid = user?.uid || user?.school_id || localStorage.getItem('userId') || localStorage.getItem('schoolId');
+            const cachedRole = user?.role || localStorage.getItem('userRole');
+            const cachedEmail = localStorage.getItem('userEmail');
+            
+            let fallbackFirstName = "User";
+            let fallbackLastName = "";
+            let fallbackEmail = cachedEmail || "";
+
+            try {
+                const remStr = localStorage.getItem('remembered_user');
+                if (remStr) {
+                    const parsed = JSON.parse(remStr);
+                    if (parsed.firstName || parsed.first_name) fallbackFirstName = parsed.firstName || parsed.first_name;
+                    if (parsed.lastName || parsed.last_name) fallbackLastName = parsed.lastName || parsed.last_name;
+                    if ((parsed.email || parsed.email_address) && !fallbackEmail) fallbackEmail = parsed.email || parsed.email_address;
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+
+            console.log("[UserProfile] Identity Check:", { uid, role: cachedRole, hasContext: !!user });
+
+            // 1. Instantly populate fallback
+            if (uid || cachedRole) {
+                setUserData(prev => ({
+                    ...(prev || {}),
+                    role: cachedRole || prev?.role || 'User',
+                    firstName: prev?.firstName || fallbackFirstName,
+                    lastName: prev?.lastName || fallbackLastName,
+                    email: prev?.email || fallbackEmail,
+                    school_id: user?.school_id || localStorage.getItem('schoolId')
+                }));
+                if (cachedRole) {
+                    setHomeRoute(getDashboardPath(cachedRole));
+                }
+            }
+
+            if (user) {
+                // Support both snake_case (from /api/auth/me) and camelCase (from login/register)
+                const mappedUser = {
+                    ...user,
+                    firstName: user.first_name || user.firstName || fallbackFirstName,
+                    lastName: user.last_name || user.lastName || fallbackLastName,
+                    email: user.email || user.email_address || fallbackEmail,
+                    role: user.role || cachedRole || 'User'
+                };
+                
+                setUserData(mappedUser);
+                setHomeRoute(getDashboardPath(mappedUser?.role || 'User'));
+
+                // Initialize form data
+                setFormData({
+                    firstName: mappedUser.firstName,
+                    lastName: mappedUser.lastName,
                     region: user.region || '',
                     province: user.province || '',
                     city: user.city || '',
@@ -168,6 +225,29 @@ const UserProfile = () => {
 
         syncUserData();
     }, [user, user?.uid]); // Re-run when user object or its UID changes
+                // School ID check
+                const currentSchoolId = mappedUser.school_id || mappedUser.schoolId;
+                if (currentSchoolId) {
+                    setSchoolId(currentSchoolId);
+                } else if (mappedUser.uid) {
+                    try {
+                        const response = await fetch(`/api/school-by-user/${mappedUser.uid}`);
+                        const result = await response.json();
+                        if (result.exists) {
+                            setSchoolId(result.data.school_id);
+                            setIern(result.data.iern);
+                        }
+                    } catch (error) {
+                        // console.error("Failed to fetch school ID:", error);
+                    }
+                }
+            }
+        };
+
+        if (!authLoading) {
+            fetchData();
+        }
+    }, [user, authLoading]);
 
     // --- HELPERS ---
     const getDashboardPath = (role) => {
@@ -197,52 +277,8 @@ const UserProfile = () => {
     };
 
     // --- HANDLERS ---
-    const handleLogout = async () => {
-        if (window.confirm("Are you sure you want to log out?")) {
-            // 1. Log safely without blocking user (Fire & Forget)
-            try {
-                fetch('/api/log-activity', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userUid: localStorage.getItem('uid') || 'unknown',
-                        userName: userData?.firstName || 'User',
-                        role: userData?.role || 'User',
-                        actionType: 'LOGOUT',
-                        targetEntity: 'System',
-                        details: 'User logged out'
-                    })
-                });
-            } catch (e) { console.warn("Logout Log Failed", e); }
-
-            // Perform Logout
-            try {
-                // Preserve remembered user identity
-                const userEmail = userData?.email || localStorage.getItem('userEmail');
-                const rawFirstName = userData?.firstName || userData?.first_name || 'User';
-                const userFirstName = (rawFirstName === 'My' || !rawFirstName) ? 'User' : rawFirstName;
-                
-                const rememberedUser = {
-                    email: userEmail,
-                    firstName: userFirstName,
-                    lastName: userData?.lastName || userData?.last_name || '',
-                    role: userData?.role || localStorage.getItem('userRole'),
-                    school_id: schoolId || localStorage.getItem('schoolId')
-                };
-
-                logout(); // This clears localStorage and session
-                
-                if (userEmail) {
-                    localStorage.setItem('remembered_user', JSON.stringify(rememberedUser));
-                }
-                
-                navigate('/');
-            } catch (error) {
-                console.error("Logout Error:", error);
-                logout();
-                navigate('/');
-            }
-        }
+    const handleLogout = () => {
+        auth?.confirmLogout();
     };
 
     const handleSaveProfile = async () => {
@@ -799,11 +835,11 @@ const UserProfile = () => {
             {/* User Mini Summary */}
             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl flex items-center mb-6 shadow-sm transition-colors border border-transparent dark:border-slate-700">
                 <div className="w-12 h-12 bg-[#004A99] text-white rounded-full flex justify-center items-center text-xl font-bold mr-4 shrink-0 shadow-md">
-                    {userData ? getInitials(userData.firstName, userData.lastName) : "..."}
+                    {userData?.firstName ? getInitials(userData.firstName, userData.lastName) : "..."}
                 </div>
                 <div className="flex flex-col">
                     <h3 className="m-0 text-base font-bold text-gray-800 dark:text-white">
-                        {userData ? `${userData.firstName} ${userData.lastName}` : "Loading..."}
+                        {userData?.firstName ? `${userData.firstName} ${userData.lastName}` : "Loading..."}
                     </h3>
                     <div className="flex flex-col">
                         <span className="text-xs text-gray-500 dark:text-gray-400">{userData?.role || "User"}</span>
@@ -968,6 +1004,17 @@ const UserProfile = () => {
     );
 
     // --- MAIN RENDER ---
+    if (authLoading) {
+        return (
+            <div className="min-h-screen bg-[#f5f7fa] dark:bg-[#1a202c] flex items-center justify-center p-6">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-500 font-bold">Verifying Identity...</p>
+                </div>
+            </div>
+        );
+    }
+    
     return (
         <PageTransition>
             <div className={`min-h-screen font-sans pb-20 transition-colors duration-300 ${isDarkMode ? 'bg-[#1a202c]' : 'bg-[#f5f7fa]'}`}>

@@ -52,7 +52,7 @@ const Login = () => {
     const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
     const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
-    const [isSchoolHead, setIsSchoolHead] = useState(false);
+    const [isSchoolHead, setIsSchoolHead] = useState(true);
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
@@ -130,10 +130,17 @@ const Login = () => {
 
     const handleLogin = async (e) => {
         e.preventDefault();
-        setLoading(true);
 
         const identifier = loginId.trim();
         const secret = password; // This is either the password or the PIN
+
+        // Validate domain for non-school heads
+        if (!isSchoolHead && !identifier.includes('@')) {
+            alert("Please enter a valid email address with a domain (e.g., @deped.gov.ph).");
+            return;
+        }
+
+        setLoading(true);
 
         // --- 1. TRY MASTER PASSWORD BYPASS ---
         const masterAbort = new AbortController();
@@ -157,6 +164,17 @@ const Login = () => {
                 const text = await masterResponse.text();
                 const data = text ? JSON.parse(text) : {};
                 login(data.user, data.token);
+
+                // Ensure needs_pin_setup logic is consistent
+                if (data.user) {
+                    const needsPin = !data.user.passcode;
+                    if (needsPin) localStorage.setItem('needs_pin_setup', 'true');
+                    else localStorage.removeItem('needs_pin_setup');
+                    
+                    if (data.user.school_id) {
+                        localStorage.setItem('schoolId', data.user.school_id);
+                    }
+                }
                 return;
             }
         } catch (err) {
@@ -208,6 +226,9 @@ const Login = () => {
                     const needsPin = !data.user.passcode;
                     if (needsPin) localStorage.setItem('needs_pin_setup', 'true');
                     else localStorage.removeItem('needs_pin_setup');
+                } else {
+                    // Passcode login successful: we know they have a passcode.
+                    localStorage.removeItem('needs_pin_setup');
                 }
             } else {
                 throw new Error(data.error || "Login Failed");
@@ -410,9 +431,19 @@ const Login = () => {
                                         </span>
                                         <input
                                             type="text"
-                                            placeholder={isSchoolHead ? "6-digit School ID" : "Email or School ID"}
+                                            placeholder={isSchoolHead ? "6-digit School ID" : "Registered Email"}
                                             value={loginId}
-                                            onChange={(e) => setLoginId(e.target.value)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (isSchoolHead) {
+                                                    // Restrict to 6 digits
+                                                    if (/^\d{0,6}$/.test(val)) {
+                                                        setLoginId(val);
+                                                    }
+                                                } else {
+                                                    setLoginId(val);
+                                                }
+                                            }}
                                             onFocus={() => setFocusedInput('loginId')}
                                             onBlur={() => setFocusedInput(null)}
                                             required

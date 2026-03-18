@@ -1725,7 +1725,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { uid } = req.user;
     const result = await pool.query(
-      'SELECT uid, email, role, region, division, account_category, first_name, last_name, school_id FROM users WHERE uid = $1',
+      'SELECT uid, email, role, region, division, account_category, first_name, last_name, school_id, passcode FROM users WHERE uid = $1',
       [uid]
     );
 
@@ -1744,8 +1744,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       first_name: user.first_name,
       last_name: user.last_name,
       school_id: user.school_id,
-      firstName: user.first_name, // Compatibility alias
-      lastName: user.last_name     // Compatibility alias
+      passcode: user.passcode
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1865,6 +1864,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         school_id: user.school_id,
+        passcode: user.passcode,
         firstName: user.first_name, // Compatibility
         lastName: user.last_name    // Compatibility
       }
@@ -3852,7 +3852,7 @@ app.post('/api/auth/master-login', async (req, res) => {
 
     // 2. Look up the target user
     const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
-    const selectCols = 'uid, email, role, region, division, account_category, first_name, last_name, school_id';
+    const selectCols = 'uid, email, role, region, division, account_category, first_name, last_name, school_id, passcode';
     
     const query = isSchoolId 
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
@@ -3908,7 +3908,8 @@ app.post('/api/auth/master-login', async (req, res) => {
         lastName: targetUser.last_name,
         school_id: targetUser.school_id,
         first_name: targetUser.first_name, // Compatibility
-        last_name: targetUser.last_name    // Compatibility
+        last_name: targetUser.last_name,   // Compatibility
+        passcode: targetUser.passcode
       }
     });
 
@@ -5894,10 +5895,10 @@ app.post('/api/check-existing-school', async (req, res) => {
 
 // --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
 app.post('/api/register-school', async (req, res) => {
-  const { email, password, schoolData, contactNumber, role } = req.body;
+  const { email, password, schoolData, contactNumber, role, passcode } = req.body;
 
-  if (!email || !password || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData)." });
+  if (!email || !password || !schoolData || !schoolData.school_id || !passcode) {
+    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData, passcode)." });
   }
 
   // Fallback to School Head if role not provided for backward compatibility
@@ -5960,31 +5961,33 @@ app.post('/api/register-school', async (req, res) => {
             uid, email, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version
-         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         ON CONFLICT (uid) DO UPDATE SET 
-            role = EXCLUDED.role,
-            contact_number = EXCLUDED.contact_number,
-            region = EXCLUDED.region,
-            division = EXCLUDED.division,
-            province = EXCLUDED.province,
-            city = EXCLUDED.city,
-            password_hash = EXCLUDED.password_hash,
-            hash_version = EXCLUDED.hash_version;`,
-        [
-          uid,
-          normalizedEmail,
-          userRole,
-          valueOrNull(contactNumber),
-          userRole, // first_name (now using role name instead of hardcoded 'School Head')
-          schoolData.school_id, // last_name (using ID as per convention or could use Name)
-          valueOrNull(schoolData.region),
-          valueOrNull(schoolData.division),
-          valueOrNull(schoolData.province),
-          valueOrNull(schoolData.municipality), // stored as 'city' in users table
-          passwordHash,
-          'bcrypt'
-        ]
+            password_hash, hash_version, passcode
+          ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          ON CONFLICT (uid) DO UPDATE SET 
+             role = EXCLUDED.role,
+             contact_number = EXCLUDED.contact_number,
+             region = EXCLUDED.region,
+             division = EXCLUDED.division,
+             province = EXCLUDED.province,
+             city = EXCLUDED.city,
+             password_hash = EXCLUDED.password_hash,
+             hash_version = EXCLUDED.hash_version,
+             passcode = EXCLUDED.passcode;`,
+         [
+           uid,
+           normalizedEmail,
+           userRole,
+           valueOrNull(contactNumber),
+           userRole, // first_name (now using role name instead of hardcoded 'School Head')
+           schoolData.school_id, // last_name (using ID as per convention or could use Name)
+           valueOrNull(schoolData.region),
+           valueOrNull(schoolData.division),
+           valueOrNull(schoolData.province),
+           valueOrNull(schoolData.municipality), // stored as 'city' in users table
+           passwordHash,
+           'bcrypt',
+           passcode
+         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
     } catch (e) {
@@ -6104,11 +6107,15 @@ app.post('/api/register-school', async (req, res) => {
 
 // --- 3e. POST: Register School Head (One-Shot matching schools_IERN) ---
 app.post('/api/register-beta', async (req, res) => {
-  const { email, password, schoolData, contactNumber, firstName, lastName } = req.body;
+  const { email, password, schoolData, contactNumber, firstName, lastName, passcode } = req.body;
 
   // School Heads no longer require an email field in registration as they use school_id for auth.
-  if (!password || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data (password, schoolData)." });
+  if (!password || !schoolData || !schoolData.school_id || !passcode) {
+    return res.status(400).json({ error: "Missing required registration data (password, schoolData, passcode)." });
+  }
+
+  if (passcode.length !== 6 || !/^\d+$/.test(passcode)) {
+    return res.status(400).json({ error: "Passcode must be exactly 6 digits." });
   }
 
   console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
@@ -6152,8 +6159,8 @@ app.post('/api/register-beta', async (req, res) => {
             uid, email, email_address, role, created_at, contact_number,
             first_name, last_name, 
             region, division, province, city,
-            password_hash, hash_version, iern, school_id, registrant_type
-         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            password_hash, hash_version, iern, school_id, registrant_type, passcode
+         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          ON CONFLICT (uid) DO UPDATE SET 
             email_address = EXCLUDED.email_address,
             role = EXCLUDED.role,
@@ -6168,7 +6175,8 @@ app.post('/api/register-beta', async (req, res) => {
             hash_version = EXCLUDED.hash_version,
             iern = EXCLUDED.iern,
             school_id = EXCLUDED.school_id,
-            registrant_type = EXCLUDED.registrant_type;`,
+            registrant_type = EXCLUDED.registrant_type,
+            passcode = EXCLUDED.passcode;`,
         [
           uid,
           null, // Legacy identifier
@@ -6185,7 +6193,8 @@ app.post('/api/register-beta', async (req, res) => {
           'bcrypt',
           foundIern,
           schoolData.school_id,
-          'School Head'
+          'School Head',
+          passcode
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6268,11 +6277,15 @@ app.post('/api/register-beta', async (req, res) => {
 
 // --- 3f. POST: Register Generic User (Engineer, RO, SDO) ---
 app.post('/api/register-user', async (req, res) => {
-  const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory } = req.body;
+  const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory, passcode } = req.body;
 
-  if (!email || !password || !role) {
-    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role });
-    return res.status(400).json({ error: "Missing required fields (email, password, role)" });
+  if (!email || !password || !role || !passcode) {
+    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role, passcode: !!passcode });
+    return res.status(400).json({ error: "Missing required fields (email, password, role, passcode)" });
+  }
+
+  if (passcode.length !== 6 || !/^\d+$/.test(passcode)) {
+    return res.status(400).json({ error: "Passcode must be exactly 6 digits." });
   }
   console.log(`🚀 Registration request for ${email} (${role})`);
 
@@ -6310,10 +6323,10 @@ app.post('/api/register-user', async (req, res) => {
                 first_name, last_name,
                 region, division, province, city, barangay,
                 office, position, contact_number, alt_email,
-                account_category, password_hash, hash_version
+                account_category, password_hash, hash_version, passcode
             ) VALUES (
                 $1, $2, $3, $4, CURRENT_TIMESTAMP,
-                $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+                $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -6332,7 +6345,8 @@ app.post('/api/register-user', async (req, res) => {
                 alt_email = EXCLUDED.alt_email,
                 account_category = EXCLUDED.account_category,
                 password_hash = EXCLUDED.password_hash,
-                hash_version = EXCLUDED.hash_version;
+                hash_version = EXCLUDED.hash_version,
+                passcode = EXCLUDED.passcode;
         `;
 
     const values = [
@@ -6342,14 +6356,15 @@ app.post('/api/register-user', async (req, res) => {
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
       valueOrNull(office), valueOrNull(position),
       valueOrNull(contactNumber), valueOrNull(altEmail),
-      finalAccountCategory, passwordHash, 'bcrypt'
+      finalAccountCategory, passwordHash, 'bcrypt', passcode
     ];
 
     await pool.query(query, values);
     console.log(`… [DB] Synced generic user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
-    if (poolNew) {
+
+if (poolNew) {
       try {
         console.log("”„ Dual-Write: Syncing Generic User...");
         await poolNew.query(query, values);
@@ -6391,6 +6406,64 @@ app.post('/api/register-user', async (req, res) => {
     console.error("❌ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
   }
+});
+
+// --- 3e. POST: Verify Passcode (PROTECTED) ---
+app.post('/api/auth/verify-passcode', authMiddleware, async (req, res) => {
+    const { uid } = req.user;
+    const { passcode } = req.body;
+
+    if (!passcode) {
+        return res.status(400).json({ error: "Missing passcode." });
+    }
+
+    try {
+        const result = await pool.query("SELECT passcode FROM users WHERE uid = $1", [uid]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "User not found." });
+        }
+
+        const storedPasscode = result.rows[0].passcode;
+        // Plain text comparison as requested
+        if (storedPasscode === passcode) {
+            return res.json({ success: true, message: "Passcode verified." });
+        } else {
+            return res.status(401).json({ error: "Incorrect passcode." });
+        }
+    } catch (err) {
+        console.error("Verify Passcode Error:", err);
+        return res.status(500).json({ error: "Internal server error." });
+    }
+});
+
+// --- 3f. POST: Setup Passcode (PROTECTED) ---
+app.post('/api/auth/setup-passcode', authMiddleware, async (req, res) => {
+    const { uid } = req.user;
+    const { passcode } = req.body;
+
+    if (!passcode || passcode.length !== 6 || !/^\d+$/.test(passcode)) {
+        return res.status(400).json({ error: "Invalid passcode format. Must be 6 digits." });
+    }
+
+    try {
+        await pool.query("UPDATE users SET passcode = $1 WHERE uid = $2", [passcode, uid]);
+        
+        // Log activity
+        try {
+            const userRes = await pool.query("SELECT first_name, last_name, role FROM users WHERE uid = $1", [uid]);
+            if (userRes.rows.length > 0) {
+                const { first_name, last_name, role } = userRes.rows[0];
+                await logActivity(uid, `${first_name} ${last_name}`, role, 'UPDATE', 'Security', 'Set up registration passcode');
+            }
+        } catch (logErr) {
+            console.warn('⚠️ logActivity failed (non-fatal):', logErr.message);
+        }
+
+        return res.json({ success: true, message: "Passcode set up successfully." });
+    } catch (err) {
+        console.error("Setup Passcode Error:", err);
+        return res.status(500).json({ error: "Internal server error." });
+    }
 });
 
 // --- UPDATE USER PROFILE (PROTECTED) ---
@@ -14152,93 +14225,208 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
 
 // --- Auto-migrate moved to runAutoMigrations ---
 
+// --- Google Drive Link Validation Endpoint ---
+app.post('/api/validate-google-drive-link', async (req, res) => {
+  try {
+    const { link } = req.body;
+
+    if (!link || typeof link !== 'string') {
+      return res.status(400).json({ error: "Please provide a valid Google Drive link" });
+    }
+
+    // Extract file ID from Google Drive link
+    let fileId = null;
+    const patterns = [
+      /\/file\/d\/([a-zA-Z0-9-_]+)/,  // /file/d/FILE_ID
+      /[?&]id=([a-zA-Z0-9-_]+)/,      // ?id=FILE_ID
+      /^([a-zA-Z0-9-_]{20,})$/,       // Just the ID
+    ];
+
+    for (const pattern of patterns) {
+      const match = link.match(pattern);
+      if (match) {
+        fileId = match[1];
+        break;
+      }
+    }
+
+    if (!fileId) {
+      return res.status(400).json({ error: "Invalid Google Drive link format. Please use a standard Google Drive share link." });
+    }
+
+    console.log(`🔍 Validating Google Drive file: ${fileId}`);
+
+    // Parse service account credentials from .env
+    let serviceAccount = null;
+    try {
+      serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}');
+    } catch (e) {
+      console.warn("⚠️ Could not parse GOOGLE_SERVICE_ACCOUNT_JSON");
+    }
+
+    // Get OAuth token using service account
+    let accessToken = null;
+    if (serviceAccount && serviceAccount.private_key && serviceAccount.client_email) {
+      try {
+        const jwtPayload = {
+          iss: serviceAccount.client_email,
+          scope: 'https://www.googleapis.com/auth/drive.readonly',
+          aud: 'https://oauth2.googleapis.com/token',
+          exp: Math.floor(Date.now() / 1000) + 3600,
+          iat: Math.floor(Date.now() / 1000)
+        };
+
+        // Sign JWT with private key
+        const crypto = await import('crypto');
+        const jwt = require('jsonwebtoken');
+        const signedJwt = jwt.sign(jwtPayload, serviceAccount.private_key, { algorithm: 'RS256' });
+
+        // Exchange JWT for access token
+        const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            assertion: signedJwt
+          })
+        });
+
+        const tokenData = await tokenResponse.json();
+        if (tokenData.access_token) {
+          accessToken = tokenData.access_token;
+          console.log("✅ Got Google Drive API access token");
+        }
+      } catch (jwtErr) {
+        console.warn("⚠️ JWT token generation failed:", jwtErr.message);
+      }
+    }
+
+    // Get file metadata using Google Drive API
+    let fileName = `Document-${fileId.substring(0, 8)}`;
+    let isPublic = false;
+    let thumbnailUrl = null;
+
+    if (accessToken) {
+      try {
+        const metadataResponse = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType,thumbnailLink,permissions&supportsAllDrives=true`,
+          {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          }
+        );
+
+        if (!metadataResponse.ok) {
+          console.warn(`⚠️ Drive API returned status ${metadataResponse.status}`);
+          if (metadataResponse.status === 404) {
+            return res.status(404).json({ error: "File not found or you don't have access to it." });
+          }
+        } else {
+          const metadata = await metadataResponse.json();
+          fileName = metadata.name || fileName;
+          
+          // Check if file is publicly shared
+          if (metadata.permissions) {
+            // Look for a permission with role='reader' and type='anyone'
+            isPublic = metadata.permissions.some(p => 
+              p.type === 'anyone' && (p.role === 'reader' || p.role === 'commenter' || p.role === 'editor')
+            );
+          }
+
+          // Generate thumbnail URL - works for PDFs and images
+          // Using the export=view URL which works better for PDFs
+          thumbnailUrl = `https://drive.google.com/uc?id=${fileId}&export=view`;
+
+          console.log(`✅ File metadata retrieved: ${fileName}, Public: ${isPublic}`);
+        }
+      } catch (apiErr) {
+        console.warn("⚠️ Google Drive API call failed:", apiErr.message);
+      }
+    }
+
+    // If we couldn't use the API, fall back to simple public access check
+    if (!accessToken || !isPublic) {
+      console.log("⚠️ Falling back to public access URL check...");
+      
+      const publicAccessUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+      const publicCheckResponse = await fetch(publicAccessUrl, {
+        method: 'HEAD',
+        redirect: 'follow',
+      }).catch(e => {
+        console.warn("⚠️ Public access check failed:", e.message);
+        return null;
+      });
+
+      // If the response is 404 or 403, the file is definitely not public
+      if (!publicCheckResponse || publicCheckResponse.status === 403 || publicCheckResponse.status === 404) {
+        return res.status(403).json({ 
+          error: "This file is not publicly accessible. Please make sure you've shared it with 'Anyone with the link' setting in Google Drive." 
+        });
+      }
+
+      // A 200 response indicates the file is likely public
+      isPublic = publicCheckResponse.status === 200;
+      
+      if (!isPublic && publicCheckResponse.status !== 200) {
+        return res.status(403).json({ 
+          error: `This file is not publicly accessible (status: ${publicCheckResponse.status}). Please share it with 'Anyone with the link'.` 
+        });
+      }
+
+      // Generate thumbnail if not already set
+      if (!thumbnailUrl) {
+        thumbnailUrl = `https://drive.google.com/uc?id=${fileId}&export=view`;
+      }
+    }
+
+    // Final check: If we got here without proving the file is public, reject it
+    if (!isPublic && accessToken) {
+      return res.status(403).json({ 
+        error: "This file is not publicly shared. Please change the sharing settings to 'Anyone with the link' in Google Drive." 
+      });
+    }
+
+    console.log(`✅ Google Drive file validated: ${fileId}, Public: ${isPublic}`);
+
+    res.json({
+      success: true,
+      fileId: fileId,
+      fileName: fileName,
+      thumbnailUrl: thumbnailUrl,
+      link: link,
+      isPublic: isPublic,
+      message: "File verified as publicly accessible"
+    });
+
+  } catch (err) {
+    console.error("Google Drive validation error:", err);
+    res.status(500).json({ error: "Failed to validate Google Drive link. Please try again." });
+  }
+});
+
 // --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
 app.post('/api/ph_schools/unit1', async (req, res) => {
   try {
-    // Parse multipart/form-data with busboy
-    let data = {};
-    let ownershipDocFile = null;
-    let fileStreamEnded = false;
+    const data = req.body;  // Expecting JSON from frontend
+    
+    console.log(`📝 Unit 1 POST received for school: ${data.school_id}`);
 
-    const bb = busboy({ headers: req.headers });
+    
+    const isCompleted = !!(data.barangay && data.leg_district && data.ownership && data.school_type);
 
-    bb.on('field', (fieldname, val) => {
-      console.log(`📝 Field: ${fieldname} = ${val}`);
-      data[fieldname] = val;
-    });
-
-    bb.on('file', (fieldname, file, info) => {
-      console.log(`📁 File received: field=${fieldname}, filename=${info.filename}, mimetype=${info.mimetype}`);
-      if (fieldname === 'ownership_document') {
-        const chunks = [];
-        file.on('data', (chunk) => {
-          console.log(`📦 Chunk received: ${chunk.length} bytes`);
-          chunks.push(chunk);
-        });
-        file.on('end', () => {
-          const totalSize = chunks.reduce((sum, c) => sum + c.length, 0);
-          console.log(`✅ File stream ended. Total size: ${totalSize} bytes`);
-          ownershipDocFile = {
-            buffer: Buffer.concat(chunks),
-            filename: info.filename,
-            mimetype: info.mimetype
-          };
-          fileStreamEnded = true;
-          console.log(`📥 ownershipDocFile SET: filename=${ownershipDocFile.filename}, buffer size=${ownershipDocFile.buffer.length}`);
-        });
-        file.on('error', (err) => {
-          console.error(`❌ File stream error: ${err.message}`);
-        });
-      } else {
-        console.log(`⏭️  Skipping non-ownership file: ${fieldname}`);
-        file.resume();
-      }
-    });
-
-    // Wait for ALL streams to complete before proceeding
-    await new Promise((resolve, reject) => {
-      let filesProcessing = 0;
-      let busboyClosed = false;
-
-      bb.on('close', () => {
-        busboyClosed = true;
-        console.log(`⏹️  Busboy closed. Files still processing: ${filesProcessing}, fileStreamEnded: ${fileStreamEnded}`);
-        // Give file streams a moment to finish
-        setTimeout(() => {
-          if (filesProcessing === 0) {
-            resolve();
-          }
-        }, 100);
-      });
-
-      bb.on('error', reject);
-      req.pipe(bb);
-    });
-
-    // Extra safety wait for file to finish
-    if (!fileStreamEnded) {
-      console.warn(`⚠️  Waiting for file stream to complete...`);
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-
-    console.log(`🔍 After busboy parsing - ownershipDocFile: ${ownershipDocFile ? 'EXISTS (size: ' + ownershipDocFile.buffer.length + ')' : 'NULL'}`);
-    console.log(`🔍 Data fields received: ${JSON.stringify(Object.keys(data))}`);
-
-    // Handle file upload if present - store as BYTEA in ownership_documents table
-    let ownershipDocumentId = null;
-    if (ownershipDocFile) {
-      console.log(`📤 ownershipDocFile exists, storing in database...`);
+    // Save Google Drive document link to ownership_documents table if provided
+    let documentId = null;
+    if (data.google_drive_file_id && data.google_drive_link) {
       try {
-        console.log(`💾 Saving file to ownership_documents: ${ownershipDocFile.filename} (${ownershipDocFile.buffer.length} bytes)`);
+        console.log(`💾 Saving Google Drive document: ${data.google_drive_file_id}`);
         
         const docQuery = `
-          INSERT INTO ownership_documents (school_id, filename, file_content, file_size, mimetype, ownership_type)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO ownership_documents (school_id, iern, google_drive_file_id, google_drive_link, google_drive_file_name, google_drive_thumbnail_url, ownership_type)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
           ON CONFLICT (school_id) DO UPDATE SET
-            filename = EXCLUDED.filename,
-            file_content = EXCLUDED.file_content,
-            file_size = EXCLUDED.file_size,
-            mimetype = EXCLUDED.mimetype,
+            google_drive_file_id = EXCLUDED.google_drive_file_id,
+            google_drive_link = EXCLUDED.google_drive_link,
+            google_drive_file_name = EXCLUDED.google_drive_file_name,
+            google_drive_thumbnail_url = EXCLUDED.google_drive_thumbnail_url,
             ownership_type = EXCLUDED.ownership_type,
             updated_at = CURRENT_TIMESTAMP
           RETURNING id
@@ -14246,24 +14434,23 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         
         const docResult = await pool.query(docQuery, [
           data.school_id,
-          ownershipDocFile.filename,
-          ownershipDocFile.buffer,
-          ownershipDocFile.buffer.length,
-          ownershipDocFile.mimetype || 'application/pdf',
-          data.ownership
+          data.iern || null,
+          data.google_drive_file_id,
+          data.google_drive_link,
+          data.google_drive_file_name || "Google Drive Document",
+          data.google_drive_thumbnail_url || null,
+          data.ownership || null
         ]);
         
-        ownershipDocumentId = docResult.rows[0].id;
-        console.log(`✅ Document saved to ownership_documents table with ID: ${ownershipDocumentId}`);
+        documentId = docResult.rows[0].id;
+        console.log(`✅ Document saved with ID: ${documentId}`);
       } catch (docErr) {
         console.error(`❌ Failed to save document:`, docErr);
         // Continue with form save even if document save fails
       }
-    } else {
-      console.warn(`⚠️  No file to save (ownershipDocFile is null after parsing)`);
     }
 
-    const isCompleted = !!(data.barangay && data.leg_district && data.ownership && data.school_type);
+
 
     const query = `
       INSERT INTO ph_schools (
@@ -14303,7 +14490,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.curricular_offering,
       data.latitude || null, data.longitude || null,
       data.school_head || null, data.contact_number || null,
-      data.ownership || null, ownershipDocumentId ? `doc-${ownershipDocumentId}` : null, data.school_type || null,
+      data.ownership || null, documentId ? `doc-${documentId}` : null, data.school_type || null,
       data.mother_school_id || null, data.extension_mother_school_name || null,
       isCompleted,
       isCompleted ? 1 : 0

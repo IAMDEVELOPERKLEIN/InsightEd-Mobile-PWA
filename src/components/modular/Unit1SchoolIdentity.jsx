@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2 } from "react-icons/fi";
 import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
+import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
@@ -42,6 +43,7 @@ const SkeletonWizard = () => (
 // ── Main Component ───────────────────────────────────────────────────────────
 const Unit1SchoolIdentity = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -68,8 +70,10 @@ const Unit1SchoolIdentity = () => {
         school_head: "",
         contact_number: "",
         ownership: "",
-        ownership_document: null,
-        ownership_document_name: "",
+        google_drive_link: "",
+        google_drive_file_id: "",
+        google_drive_file_name: "",
+        google_drive_thumbnail_url: "",
         school_type: "",
         mother_school_id: "",
         extension_mother_school_name: "",
@@ -81,15 +85,17 @@ const Unit1SchoolIdentity = () => {
     const [divisionOptions, setDivisionOptions] = useState([]);
     const [districtOptions, setDistrictOptions] = useState([]);
     const [legDistrictOptions, setLegDistrictOptions] = useState([]);
-    const [fileError, setFileError] = useState("");
-    const [dragActive, setDragActive] = useState(false);
+    const [driveLinkValidating, setDriveLinkValidating] = useState(false);
+    const [driveLinkError, setDriveLinkError] = useState("");
     const [fetchingMotherSchool, setFetchingMotherSchool] = useState(false);
     const [motherSchoolNotFound, setMotherSchoolNotFound] = useState(false);
+    const [showGDriveGuide, setShowGDriveGuide] = useState(false);
+    const [showFullscreenPdf, setShowFullscreenPdf] = useState(false);
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
     useEffect(() => {
         const init = async () => {
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
                 const draft = await getUnit1Draft("draft_unit_1");
                 if (draft) {
@@ -143,6 +149,15 @@ const Unit1SchoolIdentity = () => {
                     longitude:           d.longitude || iernRow?.Longitude || "",
                     school_head:         d.school_head || "",
                     contact_number:      d.contact_number || "",
+                    // FIX: Load missing fields for Ownership page
+                    ownership:           d.ownership === "deped owned" ? "deped" : (d.ownership || ""),
+                    google_drive_link:   d.google_drive_link || "",
+                    google_drive_file_id: d.google_drive_file_id || "",
+                    google_drive_file_name: d.google_drive_file_name || "",
+                    google_drive_thumbnail_url: d.google_drive_thumbnail_url || "",
+                    school_type:         d.school_type || "",
+                    mother_school_id:    d.mother_school_id || "",
+                    extension_mother_school_name: d.extension_mother_school_name || "",
                 };
                 setFormData(merged);
 
@@ -253,42 +268,76 @@ const Unit1SchoolIdentity = () => {
     const handleCityChange = (e) => setFormData(prev => ({ ...prev, municipality: e.target.value, barangay: "" }));
     const handleDivisionChange = (e) => setFormData(prev => ({ ...prev, division: e.target.value, district: "" }));
     const handleOwnershipChange = (e) => {
-        setFileError("");
-        setFormData(prev => ({ ...prev, ownership: e.target.value, ownership_document: null, ownership_document_name: "" }));
+        setDriveLinkError("");
+        setFormData(prev => ({ ...prev, ownership: e.target.value, google_drive_link: "", google_drive_file_id: "", google_drive_file_name: "", google_drive_thumbnail_url: "" }));
     };
     const handleSchoolTypeChange = (e) => setFormData(prev => ({ ...prev, school_type: e.target.value, mother_school_id: "", extension_mother_school_name: "" }));
     
-    const validateFile = (file) => {
-        if (!file) { setFileError("Please select a file"); return false; }
-        if (file.type !== "application/pdf") { setFileError("Only PDF files are accepted"); return false; }
-        if (file.size > 10485760) { setFileError("File is too large. Max 10MB allowed"); return false; }
-        setFileError("");
-        return true;
+    const handleGoogleDriveLink = (e) => {
+        const link = e.target.value;
+        setFormData(prev => ({ ...prev, google_drive_link: link }));
+        setDriveLinkError("");
     };
 
-    const handleFileSelect = (e) => {
-        const file = e.target.files?.[0];
-        if (file && validateFile(file)) {
-            setFormData(prev => ({ ...prev, ownership_document: file, ownership_document_name: file.name }));
+    const validateAndFetchGoogleDriveLink = async (link) => {
+        if (!link.trim()) {
+            setDriveLinkError("Please enter a Google Drive link");
+            return;
+        }
+
+        setDriveLinkValidating(true);
+        setDriveLinkError("");
+
+        try {
+            const response = await fetch("/api/validate-google-drive-link", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ link }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                setDriveLinkError(result.error || "Failed to validate link. Make sure it's public and shared correctly.");
+                setDriveLinkValidating(false);
+                return;
+            }
+
+            setFormData(prev => ({
+                ...prev,
+                google_drive_file_id: result.fileId,
+                google_drive_file_name: result.fileName,
+                google_drive_thumbnail_url: result.thumbnailUrl,
+            }));
+
+            setDriveLinkError("");
+        } catch (err) {
+            console.error("Validation error:", err);
+            setDriveLinkError("Error validating link. Please try again.");
+        } finally {
+            setDriveLinkValidating(false);
         }
     };
 
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        setDragActive(true);
-    };
-
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        setDragActive(false);
-    };
-
-    const handleDrop = (e) => {
-        e.preventDefault();
-        setDragActive(false);
-        const file = e.dataTransfer.files?.[0];
-        if (file && validateFile(file)) {
-            setFormData(prev => ({ ...prev, ownership_document: file, ownership_document_name: file.name }));
+    const openGoogleDrivePicker = () => {
+        // Load Google Picker API and open file picker
+        if (window.gapi && window.gapi.picker) {
+            const picker = new window.gapi.picker.PickerBuilder()
+                .addView(window.gapi.picker.ViewId.DOCS)
+                .addView(window.gapi.picker.ViewId.PDFS)
+                .setOAuthToken(localStorage.getItem("google_auth_token"))
+                .setCallback((data) => {
+                    if (data.action === window.gapi.picker.Action.PICKED) {
+                        const file = data.docs[0];
+                        const driveLink = `https://drive.google.com/file/d/${file.id}/view`;
+                        setFormData(prev => ({ ...prev, google_drive_link: driveLink }));
+                        validateAndFetchGoogleDriveLink(driveLink);
+                    }
+                })
+                .build();
+            picker.setVisible(true);
+        } else {
+            alert("Google Picker not loaded. Please paste the link manually instead.");
         }
     };
 
@@ -326,21 +375,37 @@ const Unit1SchoolIdentity = () => {
                 }
             }
 
-            // Prepare FormData for file upload
-            const formDataToSend = new FormData();
-            Object.keys(formData).forEach(key => {
-                if (key !== "ownership_document") {
-                    formDataToSend.append(key, formData[key] || "");
-                }
-            });
-            formDataToSend.append("iern", finalIern || "");
-            if (formData.ownership_document) {
-                formDataToSend.append("ownership_document", formData.ownership_document);
-            }
+            // Prepare JSON payload (no more files - using Google Drive links)
+            const dataToSend = {
+                school_id: formData.school_id,
+                school_name: formData.school_name,
+                region: formData.region,
+                province: formData.province,
+                municipality: formData.municipality,
+                barangay: formData.barangay,
+                division: formData.division,
+                district: formData.district,
+                leg_district: formData.leg_district,
+                curricular_offering: formData.curricular_offering,
+                latitude: formData.latitude,
+                longitude: formData.longitude,
+                iern: finalIern || "",
+                school_head: formData.school_head,
+                contact_number: formData.contact_number,
+                ownership: formData.ownership,
+                google_drive_link: formData.google_drive_link,
+                google_drive_file_id: formData.google_drive_file_id,
+                google_drive_file_name: formData.google_drive_file_name,
+                google_drive_thumbnail_url: formData.google_drive_thumbnail_url,
+                school_type: formData.school_type,
+                mother_school_id: formData.mother_school_id,
+                extension_mother_school_name: formData.extension_mother_school_name,
+            };
             
             const res = await fetch("/api/ph_schools/unit1", {
                 method: "POST",
-                body: formDataToSend,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(dataToSend),
             });
             
             if (!res.ok) {
@@ -396,7 +461,7 @@ const Unit1SchoolIdentity = () => {
         { q: "Where is the school located?", sub: "Select the specific region, division, and district details." },
         { q: "What does the school offer?", sub: "Choose the curricular levels provided by the school." },
         { q: "Pin the school 📍", sub: "Confirm the coordinates to update the school's map registry." },
-        { q: "School Ownership & Classification", sub: "Provide ownership details and school classification per DepEd Order 2014-040." },
+        { q: "School Ownership & Classification", sub: "Provide ownership details and school classification." },
     ];
 
     const isStep0Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id);
@@ -404,7 +469,7 @@ const Unit1SchoolIdentity = () => {
     const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
     const isStep3Valid = formData.curricular_offering !== "";
     const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
-    const isStep5Valid = formData.ownership && formData.ownership_document && formData.school_type && (
+    const isStep5Valid = formData.ownership && formData.google_drive_file_id && formData.school_type && (
         (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
         (formData.school_type === "without_annex") ||
         (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound))
@@ -588,14 +653,14 @@ const Unit1SchoolIdentity = () => {
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Province</label>
                                                     <select name="province" value={formData.province} onChange={handleProvinceChange} className={chunkySelect} disabled={!formData.region}>
-                                                        <option value="">Select</option>
+                                                        <option value="" disabled hidden style={{color: '#999'}}>Select</option>
                                                         {provinceOptions.map(p => <option key={p}>{p}</option>)}
                                                     </select>
                                                 </div>
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Municipality</label>
                                                     <select name="municipality" value={formData.municipality} onChange={handleCityChange} className={chunkySelect} disabled={!formData.province}>
-                                                        <option value="">Select</option>
+                                                        <option value="" disabled hidden style={{color: '#999'}}>Select</option>
                                                         {cityOptions.map(c => <option key={c}>{c}</option>)}
                                                     </select>
                                                 </div>
@@ -603,7 +668,7 @@ const Unit1SchoolIdentity = () => {
                                             <div>
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Division</label>
                                                 <select name="division" value={formData.division} onChange={handleDivisionChange} className={chunkySelect} disabled={!formData.region}>
-                                                    <option value="">Select Division</option>
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Select Division</option>
                                                     {divisionOptions.map(d => <option key={d}>{d}</option>)}
                                                 </select>
                                             </div>
@@ -611,14 +676,14 @@ const Unit1SchoolIdentity = () => {
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">District</label>
                                                     <select name="district" value={formData.district} onChange={handleChange} className={chunkySelect} disabled={!formData.division}>
-                                                        <option value="">Select</option>
+                                                        <option value="" disabled hidden style={{color: '#999'}}>Select</option>
                                                         {districtOptions.map(d => <option key={d}>{d}</option>)}
                                                     </select>
                                                 </div>
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Barangay</label>
                                                     <select name="barangay" value={formData.barangay} onChange={handleChange} className={chunkySelect} disabled={!formData.municipality}>
-                                                        <option value="">Select</option>
+                                                        <option value="" disabled hidden style={{color: '#999'}}>Select</option>
                                                         {barangayOptions.map(b => <option key={b}>{b}</option>)}
                                                     </select>
                                                 </div>
@@ -626,7 +691,7 @@ const Unit1SchoolIdentity = () => {
                                             <div>
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Legislative District</label>
                                                 <select name="leg_district" value={formData.leg_district} onChange={handleChange} className={chunkySelect} disabled={!formData.region}>
-                                                    <option value="">Select Leg. District</option>
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Select Leg. District</option>
                                                     {legDistrictOptions.map(l => <option key={l}>{l}</option>)}
                                                 </select>
                                             </div>
@@ -638,7 +703,7 @@ const Unit1SchoolIdentity = () => {
                                     <div className="space-y-6">
                                         <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Audit Category</label>
                                         <select name="curricular_offering" value={formData.curricular_offering} onChange={handleChange} className={chunkySelect}>
-                                            <option value="">Select Category...</option>
+                                            <option value="" disabled hidden style={{color: '#999'}}>Select Category...</option>
                                             <option value="Purely Elementary">Purely Elementary</option>
                                             <option value="Elementary School and Junior High School (K-10)">ES and JHS (K to 10)</option>
                                             <option value="Junior High and Senior High">JHS with SHS</option>
@@ -677,79 +742,131 @@ const Unit1SchoolIdentity = () => {
                                         <div>
                                             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block mb-2">Ownership Type</label>
                                             <select name="ownership" value={formData.ownership} onChange={handleOwnershipChange} className={chunkySelect}>
-                                                <option value="">Select Ownership...</option>
+                                                <option value="" disabled hidden style={{color: '#999'}}>Select Ownership...</option>
                                                 <option value="deped">DepEd Owned</option>
                                                 <option value="privately_owned">Privately Owned</option>
                                                 <option value="lgu_owned">LGU Owned</option>
                                             </select>
                                         </div>
 
-                                        {/* File Upload - Conditional on ownership selection */}
+                                        {/* Ownership Document - Google Drive Link */}
                                         {formData.ownership && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
-                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">
-                                                    {formData.ownership === "deped" && "Upload CTC (Certificate of Transfer of Certificate)"}
-                                                    {formData.ownership === "privately_owned" && "Upload DOD / DOU (Deed of Donation / Deed of Undertaking)"}
-                                                    {formData.ownership === "lgu_owned" && "Upload Tax Declaration"}
-                                                </label>
-                                                
-                                                <input
-                                                    type="file"
-                                                    accept=".pdf"
-                                                    onChange={handleFileSelect}
-                                                    className="hidden"
-                                                    id="file-input"
-                                                />
-                                                
-                                                <label
-                                                    htmlFor="file-input"
-                                                    onDragOver={handleDragOver}
-                                                    onDragLeave={handleDragLeave}
-                                                    onDrop={handleDrop}
-                                                    className={`block p-8 border-2 border-dashed rounded-2xl text-center cursor-pointer transition-all ${dragActive ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}
-                                                >
-                                                    {formData.ownership_document ? (
-                                                        <div className="space-y-3">
-                                                            <div className="text-3xl">📄</div>
-                                                            <p className="font-bold text-gray-800">{formData.ownership_document_name}</p>
-                                                            <p className="text-xs text-gray-400">Click to replace or drag new file</p>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="space-y-2">
-                                                            <div className="text-3xl">📥</div>
-                                                            <p className="font-bold text-gray-700">Drop your PDF here</p>
-                                                            <p className="text-xs text-gray-400">or click to select</p>
-                                                            <p className="text-xs text-gray-300 mt-2">Max 10MB • PDF only</p>
-                                                        </div>
-                                                    )}
-                                                </label>
+                                                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl">
+                                                    <p className="text-xs text-blue-600 font-semibold mb-1">Selected Ownership Type</p>
+                                                    <p className="text-lg font-bold text-blue-800">
+                                                        {formData.ownership === "deped" && "DepEd Owned"}
+                                                        {formData.ownership === "privately_owned" && "Privately Owned"}
+                                                        {formData.ownership === "lgu_owned" && "LGU Owned"}
+                                                    </p>
+                                                </div>
 
-                                                {fileError && (
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">
+                                                    {formData.ownership === "deped" && "CTC (Certificate of Transfer of Certificate)"}
+                                                    {formData.ownership === "privately_owned" && "DOD / DOU (Deed of Donation / Deed of Undertaking)"}
+                                                    {formData.ownership === "lgu_owned" && "Tax Declaration"}
+                                                </label>
+                                                
+                                                {/* Google Drive Link Input */}
+                                                <div className="space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Paste Google Drive link (must be publicly shared)"
+                                                        value={formData.google_drive_link}
+                                                        onChange={handleGoogleDriveLink}
+                                                        className={chunkyInput}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={openGoogleDrivePicker}
+                                                        className="w-full p-4 mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-3xl transition-all"
+                                                    >
+                                                        📁 Browse Google Drive
+                                                    </button>
+                                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between gap-3">
+                                                        <p className="text-xs text-blue-700 font-semibold flex-1">💡 Tip: Make sure your file is accessible to the public by sharing it with "Anyone with the link" in Google Drive.</p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowGDriveGuide(true)}
+                                                            className="flex-shrink-0 p-2 hover:bg-blue-100 rounded-full transition-colors"
+                                                            title="View guide"
+                                                        >
+                                                            <FiInfo className="w-5 h-5 text-blue-600" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Validate Button */}
+                                                {formData.google_drive_link && !formData.google_drive_file_id && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => validateAndFetchGoogleDriveLink(formData.google_drive_link)}
+                                                        disabled={driveLinkValidating}
+                                                        className="w-full p-4 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-3xl transition-all disabled:opacity-50"
+                                                    >
+                                                        {driveLinkValidating ? "Validating..." : "Validate & Preview"}
+                                                    </button>
+                                                )}
+
+                                                {/* Error Message */}
+                                                {driveLinkError && (
                                                     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                                                         className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex items-center gap-3">
                                                         <span className="text-xl">❌</span>
-                                                        <p className="text-sm font-bold text-red-700">{fileError}</p>
+                                                        <p className="text-sm font-bold text-red-700">{driveLinkError}</p>
                                                     </motion.div>
                                                 )}
 
-                                                {formData.ownership_document && !fileError && (
+                                                {/* Thumbnail Preview */}
+                                                {formData.google_drive_file_id && formData.google_drive_thumbnail_url && (
                                                     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                                                        className="p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center gap-3">
-                                                        <span className="text-xl">✅</span>
-                                                        <p className="text-sm font-bold text-emerald-700">Document ready to upload</p>
+                                                        className="space-y-3 p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xl">✅</span>
+                                                            <p className="text-sm font-bold text-emerald-700">Document verified & ready</p>
+                                                        </div>
+                                                        <div className="relative w-full h-40 bg-white rounded-xl overflow-hidden border border-emerald-200 shadow-sm group">
+                                                            <iframe
+                                                                src={`https://drive.google.com/file/d/${formData.google_drive_file_id}/preview`}
+                                                                loading="lazy"
+                                                                className="w-full h-full border-0"
+                                                                allowFullScreen
+                                                                referrerPolicy="no-referrer"
+                                                                title="Document preview"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setShowFullscreenPdf(true)}
+                                                                className="absolute top-2 right-2 p-2 bg-white rounded-lg shadow-lg hover:shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-200 text-emerald-600 hover:text-emerald-700"
+                                                                title="View fullscreen"
+                                                            >
+                                                                <FiMaximize2 className="w-5 h-5" />
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-xs text-emerald-600">
+                                                            <strong>File:</strong> {formData.google_drive_file_name}
+                                                        </p>
+                                                        <a
+                                                            href={formData.google_drive_link}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-block text-xs text-blue-600 underline"
+                                                        >
+                                                            Open in Google Drive →
+                                                        </a>
                                                     </motion.div>
                                                 )}
                                             </motion.div>
                                         )}
 
                                         {/* School Type Question */}
-                                        {formData.ownership_document && (
+                                        {formData.google_drive_file_id && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">School Type</label>
                                                 <select name="school_type" value={formData.school_type} onChange={handleSchoolTypeChange} className={chunkySelect}>
-                                                    <option value="">Select School Type...</option>
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Select School Type...</option>
                                                     <option value="with_annex">School with Annex</option>
                                                     <option value="without_annex">School without Annex</option>
                                                     <option value="extension">Extension</option>
@@ -762,8 +879,8 @@ const Unit1SchoolIdentity = () => {
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">
-                                                    {formData.school_type === "with_annex" && "Mother School ID"}
-                                                    {formData.school_type === "extension" && "Extension Mother School ID"}
+                                                    {formData.school_type === "with_annex" && "What is the school ID of your extension school?"}
+                                                    {formData.school_type === "extension" && "What is your mother school ID?"}
                                                 </label>
                                                 <div className="relative">
                                                     <input
@@ -888,6 +1005,144 @@ const Unit1SchoolIdentity = () => {
                             </button>
                         </motion.div>
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Google Drive Sharing Guide Modal */}
+            <AnimatePresence>
+                {showGDriveGuide && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden">
+                            
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-6 flex items-center justify-between">
+                                <h3 className="text-xl font-black text-white">How to Share with "Anyone"</h3>
+                                <button onClick={() => setShowGDriveGuide(false)} className="p-2 hover:bg-blue-700 rounded-full transition-colors">
+                                    <FiX className="w-6 h-6 text-white" />
+                                </button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="p-6 space-y-6">
+                                {/* Guide Image */}
+                                <div className="bg-gray-50 rounded-xl overflow-hidden border-2 border-gray-200">
+                                    <img 
+                                        src="https://lh3.googleusercontent.com/d/1-_gdU-google-drive-share-guide" 
+                                        alt="Google Drive sharing steps"
+                                        className="w-full h-auto object-contain bg-white"
+                                        onError={(e) => {
+                                            e.target.style.display = 'none';
+                                        }}
+                                    />
+                                    {/* Fallback if image fails to load */}
+                                    <div className="p-8 text-center space-y-4">
+                                        <p className="text-sm font-bold text-gray-700">Step-by-step guide:</p>
+                                        <ol className="text-left space-y-3 text-sm text-gray-600">
+                                            <li className="flex gap-3">
+                                                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs">1</span>
+                                                <span>Open your file in Google Drive</span>
+                                            </li>
+                                            <li className="flex gap-3">
+                                                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs">2</span>
+                                                <span>Click the <strong>Share</strong> button (top right)</span>
+                                            </li>
+                                            <li className="flex gap-3">
+                                                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs">3</span>
+                                                <span>Change from "Restricted" to <strong>"Anyone"</strong></span>
+                                            </li>
+                                            <li className="flex gap-3">
+                                                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs">4</span>
+                                                <span>Make sure the access level is set to <strong>"Viewer"</strong></span>
+                                            </li>
+                                            <li className="flex gap-3">
+                                                <span className="flex-shrink-0 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-xs">5</span>
+                                                <span>Copy the share link and paste it here</span>
+                                            </li>
+                                        </ol>
+                                    </div>
+                                </div>
+
+                                {/* Warning Box */}
+                                <div className="p-4 bg-amber-50 border-l-4 border-amber-400 rounded">
+                                    <p className="text-sm font-bold text-amber-900">⚠️ Important:</p>
+                                    <p className="text-xs text-amber-800 mt-1">Make sure to select <strong>"Anyone with the link"</strong> not "Restricted" or "Specific people"</p>
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="bg-gray-50 p-4 border-t border-gray-200">
+                                <button 
+                                    onClick={() => setShowGDriveGuide(false)}
+                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+                                >
+                                    Got it! 👍
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+
+                {/* Fullscreen PDF Modal */}
+                {showFullscreenPdf && formData.google_drive_file_id && (
+                    <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="w-full h-full max-w-5xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                        >
+                            {/* Header */}
+                            <div className="bg-emerald-600 p-4 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl">📄</span>
+                                    <div>
+                                        <h3 className="text-white font-bold">{formData.google_drive_file_name}</h3>
+                                        <p className="text-emerald-100 text-xs">Fullscreen View</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowFullscreenPdf(false)}
+                                    className="text-white hover:bg-emerald-700 p-2 rounded-lg transition-colors"
+                                    title="Close"
+                                >
+                                    <FiX className="w-6 h-6" />
+                                </button>
+                            </div>
+
+                            {/* PDF Viewer */}
+                            <div className="flex-1 overflow-hidden">
+                                <iframe
+                                    src={`https://drive.google.com/file/d/${formData.google_drive_file_id}/preview`}
+                                    loading="lazy"
+                                    className="w-full h-full border-0"
+                                    allowFullScreen
+                                    referrerPolicy="no-referrer"
+                                    title="Full document preview"
+                                />
+                            </div>
+
+                            {/* Footer */}
+                            <div className="bg-gray-50 border-t border-gray-200 p-4 flex items-center justify-between gap-3">
+                                <a
+                                    href={formData.google_drive_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-colors"
+                                >
+                                    Open in Google Drive
+                                </a>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowFullscreenPdf(false)}
+                                    className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 text-sm font-bold rounded-lg transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
         </div>

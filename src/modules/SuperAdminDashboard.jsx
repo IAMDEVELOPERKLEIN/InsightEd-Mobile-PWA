@@ -5,7 +5,7 @@ import PageTransition from '../components/PageTransition';
 
 const SuperAdminDashboard = () => {
     const navigate = useNavigate();
-    const { logout, token } = useAuth();
+    const { logout, confirmLogout, token } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -75,10 +75,7 @@ const SuperAdminDashboard = () => {
                             </p>
                         </div>
                         <button 
-                            onClick={() => {
-                                logout();
-                                navigate('/');
-                            }} 
+                            onClick={confirmLogout} 
                             className="bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 p-3 rounded-xl transition-all shadow-lg active:scale-95 text-white"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
