@@ -121,7 +121,13 @@ const SuperUserSelector = () => {
             sessionStorage.setItem('impersonatedMunicipality', specificLocation); // Municipality
             sessionStorage.setItem('impersonatedLocation', specificLocation); // Primary location
         } else if (role === 'School Head') {
-            sessionStorage.setItem('isGenericMode', 'true');
+            if (extraData.uid) {
+                sessionStorage.setItem('impersonatedUid', extraData.uid);
+                sessionStorage.setItem('impersonatedLocation', specificLocation);
+                sessionStorage.setItem('impersonatedRole', role);
+            } else {
+                sessionStorage.setItem('isGenericMode', 'true');
+            }
         }
 
         // 3. Navigate
@@ -135,7 +141,8 @@ const SuperUserSelector = () => {
                     navigate('/monitoring-dashboard');
                     break;
                 case 'School Head':
-                    navigate('/schoolhead-dashboard');
+                    const shPath = extraData.uid ? `/my-activity?uid=${extraData.uid}` : '/my-activity';
+                    navigate(shPath);
                     break;
                 case 'DepEd Engineer':
                     navigate('/engineer-dashboard');
@@ -274,7 +281,7 @@ const SuperUserSelector = () => {
                                 </div>
                                 <h3 className="text-xl font-bold text-slate-800 mb-2">School Head</h3>
                                 <p className="text-sm text-slate-500 mb-6 flex-grow">View Generic School Dashboard</p>
-                                <button onClick={() => handleSelection('School Head')} className="w-full py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition">
+                                <button onClick={() => handleSelection('School Head', '999990', { uid: 'dummy-sh-999990' })} className="w-full py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition">
                                     Enter View
                                 </button>
                             </motion.div>

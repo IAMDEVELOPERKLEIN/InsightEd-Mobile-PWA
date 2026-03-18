@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
 import locationData from "../../locations.json";
+import useReadOnly from "../../hooks/useReadOnly"; // Added
 
 const TOTAL_STEPS = 6;
 
@@ -52,6 +53,7 @@ const Unit1SchoolIdentity = () => {
     const [fetchedIern, setFetchedIern] = useState(null);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [isModeLoading, setIsModeLoading] = useState(true);
+    const { isReadOnly, isSuperUser: hookIsSuperUser } = useReadOnly(); // Added
 
     const [formData, setFormData] = useState({
         school_id: "",
@@ -971,15 +973,15 @@ const Unit1SchoolIdentity = () => {
                                 <FiArrowLeft className="w-6 h-6" />
                             </button>
                         )}
-                        <button onClick={handleNext} disabled={loading || !isCurrentStepValid()}
+                        <button onClick={handleNext} disabled={loading || (!hookIsSuperUser && !isCurrentStepValid())}
                             className={`flex-1 h-16 rounded-[2rem] text-white font-black text-lg transition-all shadow-xl active:scale-98 disabled:opacity-30 disabled:scale-100
-                                ${currentStep === TOTAL_STEPS - 1 ? "bg-emerald-500 shadow-emerald-200" : "bg-blue-600 shadow-blue-200"}`}>
+                                ${(currentStep === TOTAL_STEPS - 1 && !isReadOnly) ? "bg-emerald-500 shadow-emerald-200" : "bg-blue-600 shadow-blue-200"}`}>
                             {loading ? (
                                 <div className="flex items-center justify-center gap-2">
                                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                     <span>Syncing...</span>
                                 </div>
-                            ) : currentStep === TOTAL_STEPS - 1 ? "💾 Save Profile" : "Continue"}
+                            ) : (currentStep === TOTAL_STEPS - 1 && !isReadOnly) ? "💾 Save Profile" : "Continue"}
                         </button>
                     </div>
                 </div>

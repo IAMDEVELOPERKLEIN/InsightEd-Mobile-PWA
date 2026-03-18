@@ -44,19 +44,19 @@ const Enrolment = ({ embedded = false }) => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
-    const isSuperUserReadOnly = useReadOnly(); // Use Hook
+    const { isReadOnly: hookReadOnly, isSuperUser: hookIsSuperUser } = useReadOnly(); // Use Hook
 
     // Super User / Audit Context
     const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
-    const [isReadOnly, setIsReadOnly] = useState(isDummy || isSuperUserReadOnly || isAuditMode);
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || hookReadOnly || isAuditMode);
 
     // Sync state if hook changes
     useEffect(() => {
-        if (isSuperUserReadOnly) setIsReadOnly(true);
-    }, [isSuperUserReadOnly]);
+        if (hookReadOnly) setIsReadOnly(true);
+    }, [hookReadOnly]);
 
     // State
     const [loading, setLoading] = useState(true);
@@ -613,7 +613,7 @@ const Enrolment = ({ embedded = false }) => {
             {!embedded && (
                 <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                     <div className="max-w-lg mx-auto flex gap-3">
-                        {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
+                        {(viewOnly || isReadOnly || hookReadOnly) ? (
                             <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
                                 <FiAlertCircle /> View-Only Mode
                             </div>

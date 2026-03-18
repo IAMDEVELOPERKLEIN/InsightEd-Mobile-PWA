@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
 import BarongMascot from "./BarongMascot";
 import BottomNav from "../modules/BottomNav";
 import { DASHBOARD_METADATA } from "../config/dashboardMetadata";
+import { useAuth } from "../context/AuthContext";
 
 const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, isLocked }) => {
     const radius = (size - strokeWidth) / 2;
@@ -53,19 +54,42 @@ const getRank = (xp) => {
 
 const ModularDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const { user } = useAuth();
+    
+    // Parse UID from query params for Super User impersonation
+    const queryParams = new URLSearchParams(location.search);
+    const impersonatedUid = queryParams.get('uid');
+
     const [hasDraft, setHasDraft] = useState(false);
     const [questProgress, setQuestProgress] = useState(() => {
-        const stored = localStorage.getItem('quest_progress');
-        return stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+        // Only use cache if not impersonating
+        if (!impersonatedUid) {
+            const stored = localStorage.getItem('quest_progress');
+            return stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+        }
+        return { completedUnits: [], xp: 0 };
     });
     const [curricularOffering, setCurricularOffering] = useState('');
-    const [isLoading, setIsLoading] = useState(!localStorage.getItem('quest_progress'));
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const loadProgress = async () => {
-            const schoolId = localStorage.getItem('schoolId');
-            if (schoolId) {
-                try {
+            try {
+                let schoolId = localStorage.getItem('schoolId');
+                
+                // --- SUPER USER IMPERSONATION ---
+                if (user?.role === 'Super User' && impersonatedUid) {
+                    console.log(`[ModularDashboard] Impersonating UID: ${impersonatedUid}`);
+                    const profileRes = await fetch(`/api/school-by-user/${impersonatedUid}`);
+                    const profileJson = await profileRes.json();
+                    if (profileJson.exists && profileJson.data.school_id) {
+                        schoolId = profileJson.data.school_id;
+                        console.log(`[ModularDashboard] Found impersonated School ID: ${schoolId}`);
+                    }
+                }
+
+                if (schoolId) {
                     const res = await fetch(`/api/ph_schools/progress/${schoolId}`);
                     if (res.ok) {
                         const data = await res.json();
@@ -75,16 +99,23 @@ const ModularDashboard = () => {
                             }
                             // Sync if server has more/different data
                             setQuestProgress(data.progress);
-                            localStorage.setItem('quest_progress', JSON.stringify(data.progress));
+                            
+                            // Only cache if not impersonating
+                            if (!impersonatedUid) {
+                                localStorage.setItem('quest_progress', JSON.stringify(data.progress));
+                            }
                         }
                     }
-                } catch (err) {
-                    console.error("Failed to sync quest progress from server", err);
                 }
+            } catch (err) {
+                console.error("Failed to sync quest progress from server", err);
             }
             setIsLoading(false);
         };
-        loadProgress();
+        
+        if (user) {
+            loadProgress();
+        }
 
         const checkDraft = async () => {
             const draft = await getUnit1Draft('draft_unit_1');
@@ -127,7 +158,8 @@ const ModularDashboard = () => {
 
     const handleModuleClick = (mod) => {
         if (mod.locked) return;
-        navigate(mod.path);
+        const targetPath = impersonatedUid ? `${mod.path}?uid=${impersonatedUid}` : mod.path;
+        navigate(targetPath);
     };
 
     const getMascotMessage = () => {
