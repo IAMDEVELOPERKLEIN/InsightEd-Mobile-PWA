@@ -1339,9 +1339,17 @@ const DetailedProjInfo = () => {
                             <h3 className="text-slate-700 font-bold text-sm flex items-center gap-2">
                                 <TbPhoto /> Project Documentation
                             </h3>
-                            <span className="bg-slate-200 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-full">
-                                {projectImages.length} Total
-                            </span>
+                            <div className="flex items-center gap-3">
+                                <span className="bg-slate-200 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-full">
+                                    {projectImages.length} Total
+                                </span>
+                                <button 
+                                    onClick={() => navigate(`/project-gallery/${id}`)}
+                                    className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-colors"
+                                >
+                                    View All in Gallery
+                                </button>
+                            </div>
                         </div>
 
                         {imageLoading ? (
@@ -1353,9 +1361,9 @@ const DetailedProjInfo = () => {
                                 {/* EXTERNAL (First) */}
                                 {getFilteredImages('External').length > 0 && (
                                     <div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos</h4>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {getFilteredImages('External').map((img, idx) => (
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos (Latest)</h4>
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                            {getFilteredImages('External').slice(0, 4).map((img, idx) => (
                                                 <div 
                                                     key={idx} 
                                                     onClick={() => {
@@ -1382,9 +1390,9 @@ const DetailedProjInfo = () => {
                                 {/* INTERNAL (Second) */}
                                 {getFilteredImages('Internal').length > 0 && (
                                     <div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos</h4>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {getFilteredImages('Internal').map((img, idx) => (
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos (Latest)</h4>
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                            {getFilteredImages('Internal').slice(0, 4).map((img, idx) => (
                                                 <div
                                                     key={idx}
                                                     className="aspect-square bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer relative group"
