@@ -7,7 +7,7 @@ import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
 import locationData from "../../locations.json";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 const chunkyInput = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm placeholder:text-gray-300";
 const chunkySelect = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:24px] bg-[right_1rem_center] bg-no-repeat disabled:opacity-50 disabled:bg-gray-50";
@@ -67,6 +67,12 @@ const Unit1SchoolIdentity = () => {
         iern: "",
         school_head: "",
         contact_number: "",
+        ownership: "",
+        ownership_document: null,
+        ownership_document_name: "",
+        school_type: "",
+        mother_school_id: "",
+        extension_mother_school_name: "",
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -75,6 +81,10 @@ const Unit1SchoolIdentity = () => {
     const [divisionOptions, setDivisionOptions] = useState([]);
     const [districtOptions, setDistrictOptions] = useState([]);
     const [legDistrictOptions, setLegDistrictOptions] = useState([]);
+    const [fileError, setFileError] = useState("");
+    const [dragActive, setDragActive] = useState(false);
+    const [fetchingMotherSchool, setFetchingMotherSchool] = useState(false);
+    const [motherSchoolNotFound, setMotherSchoolNotFound] = useState(false);
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
     useEffect(() => {
@@ -242,6 +252,45 @@ const Unit1SchoolIdentity = () => {
     const handleProvinceChange = (e) => setFormData(prev => ({ ...prev, province: e.target.value, municipality: "", barangay: "" }));
     const handleCityChange = (e) => setFormData(prev => ({ ...prev, municipality: e.target.value, barangay: "" }));
     const handleDivisionChange = (e) => setFormData(prev => ({ ...prev, division: e.target.value, district: "" }));
+    const handleOwnershipChange = (e) => {
+        setFileError("");
+        setFormData(prev => ({ ...prev, ownership: e.target.value, ownership_document: null, ownership_document_name: "" }));
+    };
+    const handleSchoolTypeChange = (e) => setFormData(prev => ({ ...prev, school_type: e.target.value, mother_school_id: "", extension_mother_school_name: "" }));
+    
+    const validateFile = (file) => {
+        if (!file) { setFileError("Please select a file"); return false; }
+        if (file.type !== "application/pdf") { setFileError("Only PDF files are accepted"); return false; }
+        if (file.size > 10485760) { setFileError("File is too large. Max 10MB allowed"); return false; }
+        setFileError("");
+        return true;
+    };
+
+    const handleFileSelect = (e) => {
+        const file = e.target.files?.[0];
+        if (file && validateFile(file)) {
+            setFormData(prev => ({ ...prev, ownership_document: file, ownership_document_name: file.name }));
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        setDragActive(true);
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        setDragActive(false);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDragActive(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && validateFile(file)) {
+            setFormData(prev => ({ ...prev, ownership_document: file, ownership_document_name: file.name }));
+        }
+    };
 
     const handleBack = () => {
         if (currentStep > 0) setCurrentStep(s => s - 1);
@@ -277,12 +326,29 @@ const Unit1SchoolIdentity = () => {
                 }
             }
 
+            // Prepare FormData for file upload
+            const formDataToSend = new FormData();
+            Object.keys(formData).forEach(key => {
+                if (key !== "ownership_document") {
+                    formDataToSend.append(key, formData[key] || "");
+                }
+            });
+            formDataToSend.append("iern", finalIern || "");
+            if (formData.ownership_document) {
+                formDataToSend.append("ownership_document", formData.ownership_document);
+            }
+            
             const res = await fetch("/api/ph_schools/unit1", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...formData, iern: finalIern || null }),
+                body: formDataToSend,
             });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            
+            if (!res.ok) {
+                const errText = await res.text().catch(() => "");
+                console.error(`API Error: ${res.status}`, errText);
+                throw new Error(`HTTP ${res.status}: ${errText || "Unknown error"}`);
+            }
+            
             await clearUnit1Draft("draft_unit_1");
             const stored = localStorage.getItem("quest_progress");
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
@@ -314,8 +380,9 @@ const Unit1SchoolIdentity = () => {
 
             setShowSuccess(true);
         } catch (err) {
-            console.error("Submit failed:", err);
-            alert("Failed to sync. Progress saved locally.");
+            console.error("Submit error details:", err);
+            const errorMsg = err.message || "Unknown error";
+            alert(`Failed to sync: ${errorMsg}\n\nProgress saved locally.`);
         } finally {
             setLoading(false);
         }
@@ -329,6 +396,7 @@ const Unit1SchoolIdentity = () => {
         { q: "Where is the school located?", sub: "Select the specific region, division, and district details." },
         { q: "What does the school offer?", sub: "Choose the curricular levels provided by the school." },
         { q: "Pin the school 📍", sub: "Confirm the coordinates to update the school's map registry." },
+        { q: "School Ownership & Classification", sub: "Provide ownership details and school classification per DepEd Order 2014-040." },
     ];
 
     const isStep0Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id);
@@ -336,12 +404,18 @@ const Unit1SchoolIdentity = () => {
     const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
     const isStep3Valid = formData.curricular_offering !== "";
     const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
+    const isStep5Valid = formData.ownership && formData.ownership_document && formData.school_type && (
+        (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
+        (formData.school_type === "without_annex") ||
+        (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound))
+    );
     const isCurrentStepValid = () => {
         if (currentStep === 0) return isStep0Valid;
         if (currentStep === 1) return isStep1Valid;
         if (currentStep === 2) return isStep2Valid;
         if (currentStep === 3) return isStep3Valid;
         if (currentStep === 4) return isStep4Valid;
+        if (currentStep === 5) return isStep5Valid;
         return false;
     };
 
@@ -594,6 +668,175 @@ const Unit1SchoolIdentity = () => {
                                             <input type="text" value={formData.latitude} disabled placeholder="Lat" className={chunkyInput + " text-sm text-center !bg-gray-50"} />
                                             <input type="text" value={formData.longitude} disabled placeholder="Long" className={chunkyInput + " text-sm text-center !bg-gray-50"} />
                                         </div>
+                                    </div>
+                                )}
+
+                                        {currentStep === 5 && (
+                                    <div className="space-y-6 pb-20">
+                                        {/* Ownership Question */}
+                                        <div>
+                                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block mb-2">Ownership Type</label>
+                                            <select name="ownership" value={formData.ownership} onChange={handleOwnershipChange} className={chunkySelect}>
+                                                <option value="">Select Ownership...</option>
+                                                <option value="deped">DepEd Owned</option>
+                                                <option value="privately_owned">Privately Owned</option>
+                                                <option value="lgu_owned">LGU Owned</option>
+                                            </select>
+                                        </div>
+
+                                        {/* File Upload - Conditional on ownership selection */}
+                                        {formData.ownership && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-3">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">
+                                                    {formData.ownership === "deped" && "Upload CTC (Certificate of Transfer of Certificate)"}
+                                                    {formData.ownership === "privately_owned" && "Upload DOD / DOU (Deed of Donation / Deed of Undertaking)"}
+                                                    {formData.ownership === "lgu_owned" && "Upload Tax Declaration"}
+                                                </label>
+                                                
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    onChange={handleFileSelect}
+                                                    className="hidden"
+                                                    id="file-input"
+                                                />
+                                                
+                                                <label
+                                                    htmlFor="file-input"
+                                                    onDragOver={handleDragOver}
+                                                    onDragLeave={handleDragLeave}
+                                                    onDrop={handleDrop}
+                                                    className={`block p-8 border-2 border-dashed rounded-2xl text-center cursor-pointer transition-all ${dragActive ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}
+                                                >
+                                                    {formData.ownership_document ? (
+                                                        <div className="space-y-3">
+                                                            <div className="text-3xl">📄</div>
+                                                            <p className="font-bold text-gray-800">{formData.ownership_document_name}</p>
+                                                            <p className="text-xs text-gray-400">Click to replace or drag new file</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            <div className="text-3xl">📥</div>
+                                                            <p className="font-bold text-gray-700">Drop your PDF here</p>
+                                                            <p className="text-xs text-gray-400">or click to select</p>
+                                                            <p className="text-xs text-gray-300 mt-2">Max 10MB • PDF only</p>
+                                                        </div>
+                                                    )}
+                                                </label>
+
+                                                {fileError && (
+                                                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                                                        className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex items-center gap-3">
+                                                        <span className="text-xl">❌</span>
+                                                        <p className="text-sm font-bold text-red-700">{fileError}</p>
+                                                    </motion.div>
+                                                )}
+
+                                                {formData.ownership_document && !fileError && (
+                                                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                                                        className="p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center gap-3">
+                                                        <span className="text-xl">✅</span>
+                                                        <p className="text-sm font-bold text-emerald-700">Document ready to upload</p>
+                                                    </motion.div>
+                                                )}
+                                            </motion.div>
+                                        )}
+
+                                        {/* School Type Question */}
+                                        {formData.ownership_document && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-3">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">School Type</label>
+                                                <select name="school_type" value={formData.school_type} onChange={handleSchoolTypeChange} className={chunkySelect}>
+                                                    <option value="">Select School Type...</option>
+                                                    <option value="with_annex">School with Annex</option>
+                                                    <option value="without_annex">School without Annex</option>
+                                                    <option value="extension">Extension</option>
+                                                </select>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Mother School ID - For Annex & Extension */}
+                                        {(formData.school_type === "with_annex" || formData.school_type === "extension") && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                                                className="space-y-3">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">
+                                                    {formData.school_type === "with_annex" && "Mother School ID"}
+                                                    {formData.school_type === "extension" && "Extension Mother School ID"}
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="tel"
+                                                        name="mother_school_id"
+                                                        value={formData.mother_school_id}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setFormData(prev => ({ ...prev, mother_school_id: val }));
+                                                            setMotherSchoolNotFound(false);
+                                                            // Auto-fetch school name when 6 digits entered
+                                                            if (val.length === 6 && /^\d+$/.test(val)) {
+                                                                setFetchingMotherSchool(true);
+                                                                fetch(`/api/schools_iern/${val}`)
+                                                                    .then(r => r.ok ? r.json() : null)
+                                                                    .then(data => {
+                                                                        if (data?.exists && data.data?.School_Name) {
+                                                                            setFormData(prev => ({ ...prev, extension_mother_school_name: data.data.School_Name }));
+                                                                            setMotherSchoolNotFound(false);
+                                                                        } else {
+                                                                            setMotherSchoolNotFound(true);
+                                                                            setFormData(prev => ({ ...prev, extension_mother_school_name: "" }));
+                                                                        }
+                                                                        setFetchingMotherSchool(false);
+                                                                    })
+                                                                    .catch(() => {
+                                                                        setMotherSchoolNotFound(true);
+                                                                        setFormData(prev => ({ ...prev, extension_mother_school_name: "" }));
+                                                                        setFetchingMotherSchool(false);
+                                                                    });
+                                                            } else {
+                                                                setFormData(prev => ({ ...prev, extension_mother_school_name: "" }));
+                                                            }
+                                                        }}
+                                                        maxLength="6"
+                                                        placeholder="6-digit ID"
+                                                        className={chunkyInput}
+                                                        autoFocus
+                                                    />
+                                                    {formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && !fetchingMotherSchool && !motherSchoolNotFound && <FiCheckCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500 w-6 h-6" />}
+                                                    {formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && !fetchingMotherSchool && motherSchoolNotFound && <FiX className="absolute right-5 top-1/2 -translate-y-1/2 text-red-500 w-6 h-6" />}
+                                                    {fetchingMotherSchool && <div className="absolute right-5 top-1/2 -translate-y-1/2 w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />}
+                                                </div>
+
+                                                {motherSchoolNotFound && (
+                                                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                                                        className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex items-center gap-3">
+                                                        <span className="text-xl">❌</span>
+                                                        <p className="text-sm font-bold text-red-700">School ID not found in database</p>
+                                                    </motion.div>
+                                                )}
+
+                                                {formData.extension_mother_school_name && !motherSchoolNotFound && (
+                                                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                                                        className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl">
+                                                        <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Autofilled School Name</p>
+                                                        <p className="text-lg font-black text-blue-900">{formData.extension_mother_school_name}</p>
+                                                    </motion.div>
+                                                )}
+                                            </motion.div>
+                                        )}
+
+                                        {/* Compliance Banner */}
+                                        {formData.school_type && (
+                                            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                                                className="p-5 bg-indigo-50 border-2 border-indigo-100 rounded-3xl flex gap-3 mt-8">
+                                                <div className="text-xl flex-shrink-0">✓</div>
+                                                <div className="text-sm font-bold text-indigo-800 leading-relaxed">
+                                                    <p>All information you input is for your school only.</p>
+                                                    <p className="mt-1 text-[11px] text-indigo-600">Per DepEd Order 2014-040</p>
+                                                </div>
+                                            </motion.div>
+                                        )}
                                     </div>
                                 )}
                             </div>

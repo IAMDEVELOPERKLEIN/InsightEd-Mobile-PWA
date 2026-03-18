@@ -14268,16 +14268,124 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
 
 // --- 29. POST: Save Unit 1 School Identity Data (Modular Beta) ---
 app.post('/api/ph_schools/unit1', async (req, res) => {
-  const data = req.body;
   try {
-    const isCompleted = !!(data.barangay && data.leg_district);
+    // Parse multipart/form-data with busboy
+    let data = {};
+    let ownershipDocFile = null;
+    let fileStreamEnded = false;
+
+    const bb = busboy({ headers: req.headers });
+
+    bb.on('field', (fieldname, val) => {
+      console.log(`📝 Field: ${fieldname} = ${val}`);
+      data[fieldname] = val;
+    });
+
+    bb.on('file', (fieldname, file, info) => {
+      console.log(`📁 File received: field=${fieldname}, filename=${info.filename}, mimetype=${info.mimetype}`);
+      if (fieldname === 'ownership_document') {
+        const chunks = [];
+        file.on('data', (chunk) => {
+          console.log(`📦 Chunk received: ${chunk.length} bytes`);
+          chunks.push(chunk);
+        });
+        file.on('end', () => {
+          const totalSize = chunks.reduce((sum, c) => sum + c.length, 0);
+          console.log(`✅ File stream ended. Total size: ${totalSize} bytes`);
+          ownershipDocFile = {
+            buffer: Buffer.concat(chunks),
+            filename: info.filename,
+            mimetype: info.mimetype
+          };
+          fileStreamEnded = true;
+          console.log(`📥 ownershipDocFile SET: filename=${ownershipDocFile.filename}, buffer size=${ownershipDocFile.buffer.length}`);
+        });
+        file.on('error', (err) => {
+          console.error(`❌ File stream error: ${err.message}`);
+        });
+      } else {
+        console.log(`⏭️  Skipping non-ownership file: ${fieldname}`);
+        file.resume();
+      }
+    });
+
+    // Wait for ALL streams to complete before proceeding
+    await new Promise((resolve, reject) => {
+      let filesProcessing = 0;
+      let busboyClosed = false;
+
+      bb.on('close', () => {
+        busboyClosed = true;
+        console.log(`⏹️  Busboy closed. Files still processing: ${filesProcessing}, fileStreamEnded: ${fileStreamEnded}`);
+        // Give file streams a moment to finish
+        setTimeout(() => {
+          if (filesProcessing === 0) {
+            resolve();
+          }
+        }, 100);
+      });
+
+      bb.on('error', reject);
+      req.pipe(bb);
+    });
+
+    // Extra safety wait for file to finish
+    if (!fileStreamEnded) {
+      console.warn(`⚠️  Waiting for file stream to complete...`);
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    console.log(`🔍 After busboy parsing - ownershipDocFile: ${ownershipDocFile ? 'EXISTS (size: ' + ownershipDocFile.buffer.length + ')' : 'NULL'}`);
+    console.log(`🔍 Data fields received: ${JSON.stringify(Object.keys(data))}`);
+
+    // Handle file upload if present - store as BYTEA in ownership_documents table
+    let ownershipDocumentId = null;
+    if (ownershipDocFile) {
+      console.log(`📤 ownershipDocFile exists, storing in database...`);
+      try {
+        console.log(`💾 Saving file to ownership_documents: ${ownershipDocFile.filename} (${ownershipDocFile.buffer.length} bytes)`);
+        
+        const docQuery = `
+          INSERT INTO ownership_documents (school_id, filename, file_content, file_size, mimetype, ownership_type)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (school_id) DO UPDATE SET
+            filename = EXCLUDED.filename,
+            file_content = EXCLUDED.file_content,
+            file_size = EXCLUDED.file_size,
+            mimetype = EXCLUDED.mimetype,
+            ownership_type = EXCLUDED.ownership_type,
+            updated_at = CURRENT_TIMESTAMP
+          RETURNING id
+        `;
+        
+        const docResult = await pool.query(docQuery, [
+          data.school_id,
+          ownershipDocFile.filename,
+          ownershipDocFile.buffer,
+          ownershipDocFile.buffer.length,
+          ownershipDocFile.mimetype || 'application/pdf',
+          data.ownership
+        ]);
+        
+        ownershipDocumentId = docResult.rows[0].id;
+        console.log(`✅ Document saved to ownership_documents table with ID: ${ownershipDocumentId}`);
+      } catch (docErr) {
+        console.error(`❌ Failed to save document:`, docErr);
+        // Continue with form save even if document save fails
+      }
+    } else {
+      console.warn(`⚠️  No file to save (ownershipDocFile is null after parsing)`);
+    }
+
+    const isCompleted = !!(data.barangay && data.leg_district && data.ownership && data.school_type);
 
     const query = `
       INSERT INTO ph_schools (
         school_id, iern, school_name, region, province, municipality, barangay,
         division, district, leg_district, curricular_offering, latitude, longitude,
-        school_head, contact_number, unit1_completed, unit1
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        school_head, contact_number, ownership, ownership_document_path, school_type,
+        mother_school_id, extension_mother_school_name, unit1_completed, unit1
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -14293,6 +14401,11 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         longitude = EXCLUDED.longitude,
         school_head = EXCLUDED.school_head,
         contact_number = EXCLUDED.contact_number,
+        ownership = EXCLUDED.ownership,
+        ownership_document_path = EXCLUDED.ownership_document_path,
+        school_type = EXCLUDED.school_type,
+        mother_school_id = EXCLUDED.mother_school_id,
+        extension_mother_school_name = EXCLUDED.extension_mother_school_name,
         unit1_completed = EXCLUDED.unit1_completed,
         unit1 = EXCLUDED.unit1,
         updated_at = CURRENT_TIMESTAMP;
@@ -14304,6 +14417,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.curricular_offering,
       data.latitude || null, data.longitude || null,
       data.school_head || null, data.contact_number || null,
+      data.ownership || null, ownershipDocumentId ? `doc-${ownershipDocumentId}` : null, data.school_type || null,
+      data.mother_school_id || null, data.extension_mother_school_name || null,
       isCompleted,
       isCompleted ? 1 : 0
     ];
@@ -14317,7 +14432,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           municipality = $6, barangay = $7, division = $8, district = $9,
           leg_district = $10, curricular_offering = $11, latitude = $12,
           longitude = $13, school_head = $14, contact_number = $15,
-          unit1_completed = $16, unit1 = $17, updated_at = CURRENT_TIMESTAMP
+          ownership = $16, ownership_document_path = $17, school_type = $18,
+          mother_school_id = $19, extension_mother_school_name = $20,
+          unit1_completed = $21, unit1 = $22, updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2
       `, values);
       
@@ -14365,7 +14482,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     res.json({ success: true, message: "Unit 1 saved successfully!" });
   } catch (err) {
     console.error("Save Unit 1 Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({ error: err.message || "Internal Server Error" });
   }
 });
 
