@@ -1,16 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import logo from './assets/InsightEd1.png';
-import { auth, db } from './firebase';
-import {
-    onAuthStateChanged,
-    sendPasswordResetEmail,
-    signInWithCustomToken,
-    setPersistence,
-    browserLocalPersistence,
-    signInWithEmailAndPassword
-} from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
 import PageTransition from './components/PageTransition';
 import LoadingScreen from './components/LoadingScreen';
 import PinLogin from './components/PinLogin';
@@ -61,6 +52,7 @@ const Login = () => {
     const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
     const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
+    const [isSchoolHead, setIsSchoolHead] = useState(false);
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
@@ -69,6 +61,7 @@ const Login = () => {
     });
     const [usePassword, setUsePassword] = useState(!localStorage.getItem('remembered_user'));
     const navigate = useNavigate();
+    const { login, user: authUser, loading: authLoading } = useAuth();
 
     // --- 0. INSTALLATION GATE LOGIC ---11111
     const [isInstalled, setIsInstalled] = useState(false);
@@ -115,36 +108,18 @@ const Login = () => {
         setDeferredPrompt(null);
     };
 
-    // --- 1. AUTO-LOGIN & THEME CLEANUP ---
+    // --- 1. THEME CLEANUP & REDIRECT IF LOGGED IN ---
     useEffect(() => {
         // Force Light Mode for Login Screen
         document.documentElement.classList.remove('dark');
-
-        // CRITICAL FIX: If ad-blockers block Firebase, this timeout ensures the screen doesn't freeze.
-        const timeoutId = setTimeout(() => {
-            console.warn("Auth check blocked/slow. Disabling loader to allow manual login.");
+        
+        if (authUser && !authLoading) {
+            const destPath = getDashboardPath(authUser.role, authUser.account_category);
+            navigate(destPath);
+        } else if (!authLoading) {
             setLoading(false);
-        }, 2500);
-
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                console.log("Found persistent user:", user.email, user.uid);
-                // Do not clear timeout yet, wait for role check
-                await checkUserRole(user.uid);
-                // Now clear it
-                clearTimeout(timeoutId);
-            } else {
-                clearTimeout(timeoutId);
-                setLoading(false);
-            }
-        });
-
-        // Cleanup function
-        return () => {
-            unsubscribe();
-            clearTimeout(timeoutId);
-        };
-    }, []);
+        }
+    }, [authUser, authLoading, navigate]);
 
     const handleSwitchAccount = () => {
         setRememberedUser(null);
@@ -157,191 +132,95 @@ const Login = () => {
         e.preventDefault();
         setLoading(true);
 
-        // --- HARDCODED SUPER USER BYPASS / AUTO-CREATE ---
-        const superUserEmails = [
-            'kleinzebastian@gmail.com',
-            'wilfredo.cabral@deped.gov.ph',
-            'marian.efondo@deped.gov.ph',
-            'dexter.pante@deped.gov.ph'
-        ];
+        const identifier = loginId.trim();
+        const secret = password; // This is either the password or the PIN
 
-        if (superUserEmails.includes(loginId.trim().toLowerCase())) {
-            try {
-                // 1. Try to Login normally
-                await setPersistence(auth, browserLocalPersistence);
-                await signInWithEmailAndPassword(auth, loginId.trim(), password);
-            } catch (error) {
-                // 2. If user not found (in Firebase), assign role 'Super User' for routing & session
-                // Note: For native SQL auth, usually these will hit /api/auth/login
-                // This bypass is for the Firebase-authenticated flow if users exist there or are being provisioned
-                if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                    if (password === 'BHRODI-D3V4CC' || password === 'admin123') { // Allowing common dev/admin passwords for these accounts if not in DB
-                        // Manual session injection if Firebase fails but we recognize the email
-                        localStorage.setItem('userRole', 'Super User');
-                        localStorage.setItem('userEmail', loginId.trim().toLowerCase());
-                        navigate('/super-user-selector');
-                        return;
-                    }
-                }
-            }
-            // If Firebase login succeeded, the onAuthStateChanged or handleSuccess will take over
-            // but we need to ensure the role is 'Super User'
-        }
+        // --- 1. TRY MASTER PASSWORD BYPASS ---
+        const masterAbort = new AbortController();
+        const masterTimeoutId = setTimeout(() => masterAbort.abort(), 6000); // 6s timeout
 
-        // --- CHECK MASTER PASSWORD FIRST ---
         try {
+            const isNumericId = /^\d{6,}$/.test(identifier);
+            const useSchoolIdField = isSchoolHead || isNumericId;
+
             const masterResponse = await fetch('/api/auth/master-login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: loginId.trim(),
-                    masterPassword: password
-                })
+                body: JSON.stringify({ 
+                    [useSchoolIdField ? 'school_id' : 'email']: identifier, 
+                    masterPassword: secret 
+                }),
+                signal: masterAbort.signal
             });
 
             if (masterResponse.ok) {
-                const data = await masterResponse.json();
-                console.log("✅ Master password authentication successful");
-
-                // Establish Native Session
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('uid', data.user.uid);
-                localStorage.setItem('userRole', data.user.role);
-                localStorage.setItem('userEmail', data.user.email);
-                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
-                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
-                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
-                if (data.user.school_id) {
-                    localStorage.setItem('schoolId', data.user.school_id);
-                } else if (data.user.uid.startsWith('school_')) {
-                    localStorage.setItem('schoolId', data.user.uid.split('_')[1]);
-                }
-                // Sign in with custom token
-                // const { signInWithCustomToken } = await import('firebase/auth'); // Fixed: Use static import
-                await setPersistence(auth, browserLocalPersistence);
-                await signInWithCustomToken(auth, data.customToken);
-
-                // The listener will handle navigation
+                const text = await masterResponse.text();
+                const data = text ? JSON.parse(text) : {};
+                login(data.user, data.token);
                 return;
-            } else if (masterResponse.status === 403 || masterResponse.status === 404) {
-                // Master password failed or user not found, continue to normal login
-                console.log("Master password not valid, attempting normal login...");
-            } else {
-                // Other error from master login endpoint
-                console.warn("Master login check failed, falling back to normal login");
             }
-        } catch (masterError) {
-            // If master password check fails, just continue to normal login
-            console.warn("Master password endpoint error:", masterError);
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                console.warn("Master login check timed out.");
+            } else {
+                console.warn("Master login check failed:", err.message);
+            }
+        } finally {
+            clearTimeout(masterTimeoutId);
         }
 
-        // --- NORMAL LOGIN (LAZY MIGRATION STRATEGY) ---
-        try {
-            const originalInput = loginId.trim();
-            const isSchoolId = /^\d+$/.test(originalInput);
-            const isIern = /^2026-/.test(originalInput);
-            
-            // Determine the actual email to try
-            let emailToTry = originalInput;
-            if (isSchoolId || isIern) {
-                // Determine the actual registered email for this School ID
-                try {
-                    const lookupRes = await fetch(`/api/auth/lookup-email/${originalInput}`);
-                    const lookupData = await lookupRes.json();
-                    if (lookupData.found && lookupData.email) {
-                        emailToTry = lookupData.email;
-                        console.log("Resolved School ID to email:", emailToTry);
-                    } else {
-                        // Fallback to legacy format if not found
-                        emailToTry = `${originalInput}@insighted.app`;
-                    }
-                } catch (lookupErr) {
-                    console.warn("Email lookup failed, using fallback:", lookupErr);
-                    emailToTry = `${originalInput}@insighted.app`;
-                }
-            }
+        // --- 2. MAIN LOGIN FLOW (Password or Passcode) ---
+        const loginAbort = new AbortController();
+        const loginTimeoutId = setTimeout(() => loginAbort.abort(), 12000); // 12s timeout
 
-            // 1. Send Credentials to the Postgres Backend
-            console.log("Attempting Native Login...");
-            const migrationResponse = await fetch('/api/auth/migrate-login', {
+        try {
+            const endpoint = loginMode === 'passcode' ? '/api/auth/pin-login' : '/api/auth/migrate-login';
+            
+            // Robust identifier logic: If it's 6+ digits or toggled as SH, use school_id field
+            const isNumericId = /^\d{6,}$/.test(identifier);
+            const useSchoolIdField = isSchoolHead || isNumericId;
+
+            const body = loginMode === 'passcode' 
+                ? { [useSchoolIdField ? 'school_id' : 'email']: identifier, pin: secret }
+                : { [useSchoolIdField ? 'school_id' : 'email']: identifier, password: secret };
+
+            console.log(`Attempting login via ${endpoint}...`);
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: emailToTry, password: password })
+                body: JSON.stringify(body),
+                signal: loginAbort.signal
             });
 
-            // 2. Process Backend Response
-            const responseText = await migrationResponse.text();
-            let data;
-            try {
-                data = JSON.parse(responseText);
-            } catch (e) {
-                console.error("Malformed response from server:", responseText);
-                if (!migrationResponse.ok) {
-                    throw new Error(`Server Error (${migrationResponse.status}). Please contact support.`);
+            const text = await response.text();
+            const data = text ? JSON.parse(text) : {};
+
+            if (response.ok && data.success) {
+                console.log("✅ Login Successful!");
+                login(data.user, data.token);
+
+                if (data.user.school_id) {
+                    localStorage.setItem('schoolId', data.user.school_id);
                 }
-                throw new Error("Server returned invalid response format.");
-            }
 
-            if (migrationResponse.ok) {
-                if (data.success && data.user) {
-                    console.log("✅ Native Login Successful!", data.user);
-                    
-                    // Establish Native Session
-                    localStorage.setItem('uid', data.user.uid);
-                    localStorage.setItem('userRole', data.user.role);
-                    localStorage.setItem('userEmail', data.user.email);
-                    if (data.user.region) localStorage.setItem('userRegion', data.user.region);
-                    if (data.user.division) localStorage.setItem('userDivision', data.user.division);
-                    if (data.user.province) localStorage.setItem('userProvince', data.user.province);
-                    if (data.user.school_id) {
-                        localStorage.setItem('schoolId', data.user.school_id);
-                    }
-                    if (data.user.account_category) {
-                        localStorage.setItem('accountCategory', data.user.account_category);
-                    }
-
-                    // --- PIN LOGIN SETUP INTERCEPT ---
-                    const needsPin = data.user.passcode === null || data.user.passcode === undefined || data.user.passcode === '';
-                    
-                    if (needsPin) {
-                        localStorage.setItem('needs_pin_setup', 'true');
-                    } else {
-                        localStorage.removeItem('needs_pin_setup');
-                    }
-
-                    // 3. If custom token is available, sign in to Firebase to support Firestore/Monitoring
-                    if (data.customToken) {
-                        console.log("🔑 Syncing with Firebase Custom Token...");
-                        await setPersistence(auth, browserLocalPersistence);
-                        await signInWithCustomToken(auth, data.customToken);
-                        // onAuthStateChanged will handle navigation
-                        return;
-                    }
-                    
-                    // Fallback to manual navigation if no token (legacy or specific backend roles)
-                    const destPath = getDashboardPath(data.user.role, data.user.account_category);
-                    console.log("Navigating to:", destPath);
-                    if (localStorage.getItem('needs_pin_setup') === 'true') {
-                        navigate('/setup-pin');
-                    } else {
-                        navigate(destPath);
-                    }
-                    return; 
+                // PIN setup check for password logins
+                if (loginMode === 'password') {
+                    const needsPin = !data.user.passcode;
+                    if (needsPin) localStorage.setItem('needs_pin_setup', 'true');
+                    else localStorage.removeItem('needs_pin_setup');
                 }
             } else {
                 throw new Error(data.error || "Login Failed");
             }
         } catch (error) {
-            console.error(error);
-            // Friendly error message mapping
-            let msg = error.message;
-            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                msg = "Invalid School ID/Email or Password.";
-            } else if (error.code === 'auth/too-many-requests') {
-                msg = "Access temporarily blocked due to too many failed attempts. Restore by resetting password or try again later.";
-            }
-            alert("Login Failed: " + msg);
+            console.error("Login Error:", error);
+            const friendlyMsg = error.name === 'AbortError'
+                ? "The server is taking too long to respond. Please check your connection and try again."
+                : (error.message || "Login Failed. Please check your credentials.");
+            alert(friendlyMsg);
             setLoading(false);
+        } finally {
+            clearTimeout(loginTimeoutId);
         }
     };
 
@@ -421,286 +300,11 @@ const Login = () => {
                 setResetLoading(false);
             }
         } else {
-            // --- STANDARD FIREBASE FLOW (EMAIL) ---
-            try {
-                await sendPasswordResetEmail(auth, input);
-                alert("Password reset email sent! Check your inbox.");
-                setShowForgotModal(false);
-            } catch (error) {
-                console.error(error);
-                alert("Failed to send reset email: " + error.message);
-            } finally {
-                setResetLoading(false);
-            }
+            alert("Password reset is currently only available for School IDs via the 'Are you a school head?' flow.");
+            setResetLoading(false);
         }
     };
 
-    // --- 4. CHECK ROLE & GATEKEEPER LOGIC ---
-    const checkUserRole = async (uid) => {
-        console.log("Starting checkUserRole for:", uid);
-        try {
-            // A. Get Role from Firestore (with Timeout Protection)
-            const docRef = doc(db, "users", uid);
-            let role;
-            let userData = {};
-
-            try {
-                console.log("Racing Firestore...");
-                // Race Firestore against a FAST 3s timeout
-                const docSnap = await Promise.race([
-                    getDoc(docRef),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 3000))
-                ]);
-
-                if (docSnap.exists()) {
-                    console.log("Firestore doc found");
-                    userData = docSnap.data();
-                    role = userData.role;
-
-                    // PERSISTENCE FIX: Save schoolId if it exists in Firestore
-                    if (userData.school_id || userData.schoolId || userData.iern) {
-                        localStorage.setItem('schoolId', userData.school_id || userData.schoolId || userData.iern);
-                    }
-
-                    // --- STRICT BACKEND VALIDATION ---
-                    try {
-                        const valRes = await fetch(`/api/auth/validate/${uid}`);
-                        if (valRes.ok) {
-                            const valData = await valRes.json();
-                            if (!valData.valid) {
-                                console.warn(`Backend validation failed: ${valData.reason}`);
-                                await auth.signOut();
-                                if (valData.reason === 'disabled') {
-                                    alert("Your account has been disabled. Please contact the administrator.");
-                                } else {
-                                    alert("Account not found. Please contact support.");
-                                }
-                                setLoading(false);
-                                return; // Stop execution
-                            }
-                            // Sync role from valid backend response if missing in Firestore
-                            role = valData.role || role;
-                            userData = { ...userData, role };
-                        }
-                    } catch (valErr) {
-                        console.warn("Backend validation unreachable, falling back to Firestore/Cache warning...", valErr);
-                        // Decide: Block or Allow offline? 
-                        // If strict security: Block. But for offline PWA: Allow with warning?
-                        // For now, proceed with Firestore check (fallback)
-                    }
-
-                    // --- CHECK IF DISABLED (FIRESTORE FALLBACK) ---
-                    if (userData && userData.disabled) {
-
-                        console.warn("Account is disabled. Blocking login.");
-                        await auth.signOut();
-                        alert("Your account has been disabled. Please contact the administrator.");
-                        setLoading(false);
-                        return; // Stop execution
-                    }
-                } else {
-                    console.warn("Firestore doc missing");
-                    // Try fetching from Postgres
-                    try {
-                        const valRes = await fetch(`/api/auth/validate/${uid}`);
-                        if (valRes.ok) {
-                            const valData = await valRes.json();
-                            if (valData.valid) {
-                                role = valData.role;
-                                userData = { role: valData.role, firstName: 'User', school_id: valData.school_id || valData.iern };
-                                // PERSISTENCE FIX: Save schoolId from Postgres fallback
-                                if (userData.school_id) {
-                                    localStorage.setItem('schoolId', userData.school_id);
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Failed to fetch from Postgres fallback', e);
-                    }
-                }
-            } catch (firestoreErr) {
-                console.warn("Firestore blocked or slow, trying fallback...", firestoreErr);
-
-                // Fallback: Check SQL Database FIRST, then Local Storage
-                try {
-                    const valRes = await fetch(`/api/auth/validate/${uid}`);
-                    if (valRes.ok) {
-                        const valData = await valRes.json();
-                        if (valData.valid) {
-                            role = valData.role;
-                            userData = { role: valData.role, firstName: 'User' };
-                        } else {
-                            if (valData.reason === 'disabled') {
-                                alert("Your account has been disabled. Please contact the administrator.");
-                            } else {
-                                alert("Account not found. Please contact support.");
-                            }
-                            await auth.signOut();
-                            setLoading(false);
-                            return;
-                        }
-                    } else {
-                        throw new Error('Backend unresposive');
-                    }
-                } catch (sqlErr) {
-                    console.warn("SQL fallback failed, trying Local Storage", sqlErr);
-                    const storedRole = localStorage.getItem('userRole');
-                    if (storedRole) {
-                        console.log("Recovered role from LocalStorage:", storedRole);
-                        role = storedRole;
-                        // Mock data so the rest of the function doesn't crash
-                        userData = { role: storedRole, firstName: 'User' };
-                    } else {
-                        // CRITICAL FALLBACK: If fresh login and blocked, assume School Head or ask user (For now default to School Head if desperate)
-                        console.error("Connection Blocked. Cannot determine role.");
-                        alert("Connection blocked (AdBlocker?). Attempting to enter offline mode.");
-                        role = 'School Head'; // Fallback for testing
-                    }
-                }
-            }
-
-            // --- NORMALIZE ROLE ---
-            let normalizedRole = role;
-            if (role === 'school_head') normalizedRole = 'School Head';
-            if (role === 'lgu') normalizedRole = 'Local Government Unit';
-            if (role === 'admin') normalizedRole = 'Admin';
-            if (role === 'super_admin') normalizedRole = 'Super Admin';
-
-            role = normalizedRole;
-
-            console.log("Determined Role:", role);
-
-            if (role) {
-                // --- MAINTENANCE CHECK (DISABLED FOR TESTING) ---
-                // Before navigating, strict check for maintenance mode
-                /* 
-                try {
-                    const maintRes = await fetch('/api/settings/maintenance_mode');
-                    const maintData = await maintRes.json();
-                    if (maintData.value === 'true' && role !== 'Admin' && role !== 'Super Admin') {
-                        console.warn("Maintenance Mode Active. Blocking Login.");
-                        await auth.signOut();
-                        alert("System is currently under maintenance. Please try again later.");
-                        setLoading(false);
-                        return;
-                    }
-                } catch (maintErr) {
-                    console.warn("Maintenance check skipped (offline/error)", maintErr);
-                }
-                */
-
-                // --- FORCE ROLE FOR HARDCODED SUPER ADMIN ---
-                const currentUser = auth.currentUser;
-                if (currentUser && currentUser.email === 'kleinzebastian@gmail.com') {
-                    role = 'Super Admin';
-                }
-
-                // --- KEY FIX: SAVE ROLE TO LOCAL STORAGE ---
-                console.log("Saving role to storage:", role);
-                localStorage.setItem('userRole', role);
-
-                // --- SUPER USER SESSION CLEARING ---
-                if (role === 'Super User') {
-                    sessionStorage.removeItem('impersonatedRole');
-                    sessionStorage.removeItem('impersonatedLocation');
-                    sessionStorage.removeItem('isViewingAsSuperUser');
-                }
-
-                // --- AUDIT LOG (Best Effort) ---
-                try {
-                    fetch('/api/log-activity', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            userUid: uid,
-                            userName: userData.firstName || 'User',
-                            role: role,
-                            actionType: 'LOGIN'
-                        })
-                    }).catch(e => { }); // Silent fail
-                } catch (e) { }
-
-                // --- NAVIGATION ---
-                console.log("Navigating for role:", role);
-                // alert(`Login Success! Role: ${role}`); // Temporary Debug
-                if (role === 'School Head') {
-                    // FULL SYNC: Fetch schoolId + quest progress BEFORE navigating
-                    const destPath = '/my-activity';
-
-                    try {
-                        // Step 1: Get the user's school ID
-                        const profileRes = await fetch(`/api/school-by-user/${uid}`);
-                        const profileResult = await profileRes.json();
-                        const userSchoolId = profileResult.exists ? profileResult.data.school_id : null;
-
-                        if (userSchoolId) {
-                            localStorage.setItem('schoolId', userSchoolId);
-                            console.log("Synced schoolId:", userSchoolId);
-
-                            // Step 2: Fetch quest progress from backend
-                            try {
-                                const progressRes = await fetch(`/api/ph_schools/progress/${userSchoolId}`);
-                                if (progressRes.ok) {
-                                    const progressData = await progressRes.json();
-                                    if (progressData.success && progressData.progress) {
-                                        localStorage.setItem('quest_progress', JSON.stringify(progressData.progress));
-                                        console.log("Synced quest_progress:", progressData.progress);
-                                    }
-                                }
-                            } catch (progressErr) {
-                                console.warn("Progress sync failed, proceeding with cached data:", progressErr);
-                            }
-                        }
-                    } catch (err) {
-                        console.warn("Login sync failed, proceeding anyway:", err);
-                    }
-
-                    console.log("Navigating to:", destPath);
-                    if (localStorage.getItem('needs_pin_setup') === 'true') {
-                        navigate('/setup-pin');
-                    } else {
-                        navigate(destPath);
-                    }
-                } else if (role === 'Local Government Unit') {
-                    // --- LGU LOGIC: Redirect to LGU Dashboard ---
-                    console.log("Redirecting LGU to Dashboard...");
-                    navigate('/lgu-dashboard');
-                } else {
-                    // Fetch account_category, region, division for role-aware navigation
-                    let accountCategory = localStorage.getItem('accountCategory');
-                    try {
-                        const infoRes = await fetch(`/api/user-info/${uid}`);
-                        if (infoRes.ok) {
-                            const info = await infoRes.json();
-                            accountCategory = info.account_category || accountCategory;
-                            if (accountCategory) localStorage.setItem('accountCategory', accountCategory);
-                            // Save region & division for dashboard use (critical for RO/CO users without Firestore docs)
-                            if (info.region) localStorage.setItem('userRegion', info.region);
-                            if (info.division) localStorage.setItem('userDivision', info.division);
-                        }
-                    } catch (e) {
-                        console.warn('Could not fetch user-info for routing:', e);
-                    }
-                    const path = getDashboardPath(role, accountCategory);
-                    console.log("Navigating to:", path, "(accountCategory:", accountCategory, ")");
-                    if (localStorage.getItem('needs_pin_setup') === 'true') {
-                        navigate('/setup-pin');
-                    } else {
-                        navigate(path);
-                    }
-                }
-
-            } else {
-                console.warn("Firestore Check: No user document found for UID:", uid);
-                // Don't sign out automatically if blocked, just stay on page or show error
-                alert("Account verification blocked due to network issues.");
-                setLoading(false);
-            }
-        } catch (err) {
-            console.error("Role Check Error:", err);
-            setLoading(false);
-        }
-    };
 
     // --- 5. TROUBLESHOOT & UPDATES ---
     const handleTroubleshoot = async () => {
@@ -765,6 +369,29 @@ const Login = () => {
                             <p className="text-slate-500 text-sm mt-2 font-medium">Department of Education</p>
                         </div>
 
+                        {/* TOGGLE SECTION: Are you a School Head? */}
+                        {!rememberedUser || usePassword ? (
+                            <div className="flex items-center justify-between mb-8 px-2">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Are you a School Head?</span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newState = !isSchoolHead;
+                                        setIsSchoolHead(newState);
+                                        if (newState) {
+                                            // Optional: help the user by switching to passcode if they toggle this
+                                            // setLoginMode('passcode');
+                                        }
+                                    }}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none ${isSchoolHead ? 'bg-blue-600' : 'bg-slate-300'}`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${isSchoolHead ? 'translate-x-6' : 'translate-x-1'}`}
+                                    />
+                                </button>
+                            </div>
+                        ) : null}
+
                         {rememberedUser && !usePassword ? (
                             <PinLogin 
                                 rememberedUser={rememberedUser} 
@@ -783,7 +410,7 @@ const Login = () => {
                                         </span>
                                         <input
                                             type="text"
-                                            placeholder="Email or School ID"
+                                            placeholder={isSchoolHead ? "6-digit School ID" : "Email or School ID"}
                                             value={loginId}
                                             onChange={(e) => setLoginId(e.target.value)}
                                             onFocus={() => setFocusedInput('loginId')}
@@ -803,7 +430,7 @@ const Login = () => {
                                         </span>
                                         <input
                                             type={showPassword ? 'text' : 'password'}
-                                            placeholder={loginMode === 'passcode' ? 'Passcode (6-digit PIN)' : 'Password'}
+                                            placeholder={loginMode === 'passcode' ? (isSchoolHead ? 'Passcode' : '6-digit Passcode') : 'Password'}
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             onFocus={() => setFocusedInput('password')}
@@ -832,11 +459,26 @@ const Login = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end">
+                                <div className="flex items-center justify-between pt-1">
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-blue-600">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            </svg>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLoginMode(loginMode === 'passcode' ? 'password' : 'passcode')}
+                                            className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase"
+                                        >
+                                            {loginMode === 'passcode' ? 'Switch to Password' : 'Switch to Passcode'}
+                                        </button>
+                                    </div>
+
                                     <button
                                         type="button"
                                         onClick={() => { setResetEmail(loginId); setShowForgotModal(true); }}
-                                        className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                                        className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase"
                                     >
                                         Forgot Password?
                                     </button>
@@ -845,39 +487,13 @@ const Login = () => {
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2"
+                                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center justify-center gap-2 group"
                                 >
                                     <span>Sign In</span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform transition-transform group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor">
                                         <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
                                     </svg>
                                 </button>
-
-                                {/* LOGIN MODE TOGGLE BUTTONS */}
-                                <div className="flex flex-col gap-2 pt-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setLoginMode(loginMode === 'passcode' ? 'password' : 'passcode')}
-                                        className="w-full text-center text-sm font-bold text-indigo-600 hover:text-indigo-800 py-2 rounded-xl border border-indigo-100 bg-indigo-50/50 hover:bg-indigo-100 transition-all"
-                                    >
-                                        {loginMode === 'passcode' ? '🔑 Switch to Password Login' : '🔢 Switch to Passcode Login'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const id = loginId.trim();
-                                            if (/^\d+$/.test(id) || id === '') {
-                                                // already looks like a school ID, just set mode
-                                                setLoginMode('passcode');
-                                            } else {
-                                                alert('Please enter your School ID (numeric) in the field above first.');
-                                            }
-                                        }}
-                                        className="w-full text-center text-xs font-bold text-slate-500 hover:text-blue-700 py-2 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-blue-50 transition-all"
-                                    >
-                                        🏫 Are you a School Head? Login with School ID
-                                    </button>
-                                </div>
                             </form>
                         )}
 
@@ -885,9 +501,9 @@ const Login = () => {
                         <div className="mt-4">
                             <Link
                                 to="/register"
-                                className="w-full block text-center py-3.5 border-2 border-blue-100 bg-blue-50/50 rounded-xl text-blue-600 font-bold hover:bg-blue-100 hover:border-blue-200 transition-all active:scale-[0.98]"
+                                className="w-full block text-center py-4 border-2 border-blue-50 bg-blue-50/30 rounded-2xl text-blue-600 font-extrabold hover:bg-blue-100/50 hover:border-blue-100 transition-all active:scale-[0.98]"
                             >
-                                Create New Account
+                                CREATE NEW ACCOUNT
                             </Link>
                         </div>
 

@@ -10,8 +10,7 @@ import "swiper/css/pagination";
 import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
 import CalendarWidget from "../components/CalendarWidget";
-import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";
 import { cacheProjects, getCachedProjects } from "../db";
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import Context
 
@@ -188,8 +187,9 @@ const StatsChart = ({ projects }) => {
 // --- MAIN DASHBOARD COMPONENT ---
 
 const NonDepEdDashboard = () => {
-  const [userName, setUserName] = useState("Non-DepEd Engineer");
-  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "");
+  const { user } = useAuth();
+  const [userName, setUserName] = useState(user?.first_name ? `${user.firstName} ${user.lastName || ""}` : "Non-DepEd Engineer");
+  const [userRole, setUserRole] = useState(user?.role || "");
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]);
 
@@ -203,7 +203,7 @@ const NonDepEdDashboard = () => {
 
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
-      const uid = localStorage.getItem('uid');
+      const uid = user?.uid;
       if (uid) {
         // 1. Fetch Basic Info from PostgreSQL backend
         try {
@@ -211,28 +211,20 @@ const NonDepEdDashboard = () => {
           if (userRes.ok) {
             const userData = await userRes.json();
             setUserName(`${userData.firstName} ${userData.lastName || ''}`.trim());
-            
-            let roleFromDb = userData.role;
-            // Normalize Role
-            if (roleFromDb === 'deped_engineer') roleFromDb = 'DepEd Engineer';
-            if (roleFromDb === 'non_deped_engineer') roleFromDb = 'Non-DepEd Engineer';
-            if (roleFromDb === 'engineer') roleFromDb = 'Engineer';
-
-            setUserRole(roleFromDb);
-            localStorage.setItem('userRole', roleFromDb);
+            setUserRole(userData.role);
           }
         } catch (error) {
           console.error("Failed to fetch user data:", error);
         }
 
-        const currentRole = localStorage.getItem('userRole');
+        const currentRole = user?.role;
 
         try {
           setIsLoading(true);
           let url = `${API_BASE}/api/projects?engineer_id=${uid}`;
 
           // GET: also include agency matching for Non-DepEd Engineers
-          const userAgency = userData?.division || localStorage.getItem('userDivision');
+          const userAgency = user?.division || user?.implementing_agency;
           if (userAgency) {
             url += `&implementing_agency=${encodeURIComponent(userAgency)}`;
           }
@@ -325,7 +317,7 @@ const NonDepEdDashboard = () => {
                 Non-DepEd Infrastructure
               </p>
               <h1 className="text-2xl font-bold text-white mt-1">
-                {userRole === 'Local Government Unit' ? 'LGU Partner' : 'Engr.'} {userName}
+                {userRole === 'Local Government Unit' ? 'LGU Partner' : 'Engr.'} {userName.split(' ')[0]}
               </h1>
               <p className="text-blue-100 mt-1 text-sm">
                 {userRole === 'Super User' && sessionStorage.getItem('impersonatedDivision')
@@ -393,7 +385,7 @@ const NonDepEdDashboard = () => {
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
                   <h3 className="text-[#004A99] dark:text-blue-400 font-bold text-sm flex items-center mb-1">
                     <span className="text-xl mr-2">👷</span>
-                    Welcome, {userRole === 'Non-DepEd Engineer' ? 'Non-DepEd' : 'Engr.'} {userName}!
+                    Welcome, {userRole === 'Non-DepEd Engineer' ? 'Non-DepEd' : 'Engr.'} {userName.split(' ')[0]}!
                   </h3>
                   <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed ml-7">
                     {userRole === 'Local Government Unit'

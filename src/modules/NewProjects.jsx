@@ -3,8 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse';
 // Removed Firebase imports - using PostgreSQL + LocalStorage
-// import { auth, storage } from '../firebase';
-// import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useAuth } from '../context/AuthContext';
 // --- IMPORT NEW DB LOGIC ---
 import { addEngineerToOutbox, getCachedProjects } from '../db';
 // --- CONSTANTS ---
@@ -37,11 +36,10 @@ const SectionHeader = ({ title, icon }) => (
 );
 
 const NewProjects = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
-    const [userRole, setUserRole] = useState(null);
-    const [accountCategory, setAccountCategory] = useState(null);
     const [activeTab, setActiveTab] = useState(0);
 
     const TABS = [
@@ -54,34 +52,11 @@ const NewProjects = () => {
 
     // --- FETCH ROLE ---
     useEffect(() => {
-        const fetchRole = async () => {
-            const localRole = localStorage.getItem('userRole');
-            if (localRole === 'Super User') {
-                alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access to Engineer concepts.");
-                navigate('/engineer-dashboard');
-                return;
-            }
-
-            const uid = localStorage.getItem('uid');
-            if (!uid) return;
-
-            try {
-                const res = await fetch(`/api/user-info/${uid}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setUserRole(data.role);
-                    setAccountCategory(data.account_category);
-                    if (data.role === 'Super User') {
-                        alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access.");
-                        navigate('/engineer-dashboard');
-                    }
-                }
-            } catch (err) {
-                console.error("Failed to fetch user role:", err);
-            }
-        };
-        fetchRole();
-    }, []);
+        if (user && user.role === 'Super User') {
+            alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access to Engineer concepts.");
+            navigate('/engineer-dashboard');
+        }
+    }, [user, navigate]);
 
 
 
@@ -647,30 +622,27 @@ const NewProjects = () => {
                 compressedImages.push({ image_data: base64, category: 'External' });
             }
 
-            // B. Prepare Documents (Base64) - REMOVED from initial payload
             // We will upload them sequentially AFTER project creation
-
-            // C. Construct Payload
             const projectBody = {
                 ...formData,
                 statusOfConstructionPhase: formData.status,
                 approved_budget_for_contract: Number(formData.approved_budget_for_contract?.toString().replace(/,/g, '') || 0),
                 contract_amount: Number(formData.contract_amount?.toString().replace(/,/g, '') || 0),
-                uid: localStorage.getItem('uid'),
-                modifiedBy: localStorage.getItem('userName') || 'Engineer',
+                uid: user.uid,
+                modifiedBy: user.displayName || 'Engineer',
                 images: compressedImages,
                 update_type: 'Newly Created',
                 // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString(),
-                uploader_type: (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'HRODI') ? 'EFD Engineer' :
-                               ((userRole === 'Non-DepEd Engineer' || accountCategory === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'DepEd Engineer'),
-                implementingAgency: (userRole === 'DepEd Engineer' || userRole === 'Engineer') ? 'DepEd' : (formData.implementingAgency || null),
+                uploader_type: (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI') ? 'EFD Engineer' :
+                               ((user?.role === 'Non-DepEd Engineer' || user?.account_category === 'Non-DepEd Engineer') ? 'Non-DepEd Engineer' : 'DepEd Engineer'),
+                implementingAgency: (user?.role === 'DepEd Engineer' || user?.role === 'Engineer') ? 'DepEd' : (formData.implementingAgency || null),
                 implementingAgencySpecific: formData.implementingAgencySpecific || null
             };
 
             // --- OFFLINE/ONLINE CHECK ---
             // Determine endpoint based on role
-            const endpointUrl = (userRole === 'Local Government Unit') ? '/api/lgu/save-project' : '/api/save-project';
+            const endpointUrl = (user.role === 'Local Government Unit') ? '/api/lgu/save-project' : '/api/save-project';
 
             const payload = {
                 url: endpointUrl,
@@ -684,7 +656,7 @@ const NewProjects = () => {
                 alert("📁 No internet. Project (Metadata & Images) saved to Sync Center.\n⚠️ Documents must be uploaded when online.");
                 setIsSubmitting(false);
                 
-                if (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'EFD Engineer') {
+                if (user.role === 'EFD' || user.role === 'HRODI Engineer' || user.role === 'EFD Engineer') {
                     navigate('/efd-monitoring');
                 } else {
                     navigate('/engineer-dashboard');
@@ -696,7 +668,7 @@ const NewProjects = () => {
             let endpoint = '/api/save-project';
 
             // LGU SPECIFIC ENDPOINT
-            if (userRole === 'Local Government Unit') {
+            if (user.role === 'Local Government Unit') {
                 endpoint = '/api/lgu/save-project';
             }
 
@@ -729,14 +701,14 @@ const NewProjects = () => {
             if (documents.DUPA) docsToUpload.DUPA = await convertFullFileToBase64(documents.DUPA);
             if (documents.CONTRACT) docsToUpload.CONTRACT = await convertFullFileToBase64(documents.CONTRACT);
 
-            const isEFDOrHRODI = (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'HRODI' || accountCategory === 'HRODI Engineer' || accountCategory === 'EFD');
+            const isEFDOrHRODI = (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI' || user?.account_category === 'HRODI Engineer' || user?.account_category === 'EFD');
             if (documents.RTA && isEFDOrHRODI) docsToUpload.RTA = await convertFullFileToBase64(documents.RTA);
             if (documents.MOA && isEFDOrHRODI) docsToUpload.MOA = await convertFullFileToBase64(documents.MOA);
 
             if (Object.keys(docsToUpload).length > 0) {
                 console.log("Uploading documents in bulk...");
                 try {
-                    const bulkEndpoint = (userRole === 'Local Government Unit') ? '/api/lgu/upload-project-document' : '/api/bulk-upload-project-documents';
+                    const bulkEndpoint = (user?.role === 'Local Government Unit') ? '/api/lgu/upload-project-document' : '/api/bulk-upload-project-documents';
                     
                     const bulkRes = await fetch(bulkEndpoint, {
                         method: 'POST',
@@ -744,7 +716,7 @@ const NewProjects = () => {
                         body: JSON.stringify({
                             projectId: newProjectId,
                             documents: docsToUpload,
-                            uid: localStorage.getItem('uid')
+                            uid: user.uid
                         })
                     });
 
@@ -759,7 +731,7 @@ const NewProjects = () => {
 
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
             
-            if (userRole === 'EFD' || userRole === 'HRODI Engineer' || userRole === 'EFD Engineer') {
+            if (user.role === 'EFD' || user.role === 'HRODI Engineer' || user.role === 'EFD Engineer') {
                 navigate('/efd-monitoring');
             } else {
                 navigate('/engineer-dashboard');

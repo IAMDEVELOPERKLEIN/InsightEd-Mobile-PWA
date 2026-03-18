@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevronRight, FiAlertCircle, FiChevronDown } from 'react-icons/fi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LabelList } from 'recharts';
-import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 
 const EFDHome = () => {
+    const { user } = useAuth();
     const navigate = useNavigate();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -22,11 +22,13 @@ const EFDHome = () => {
     const [fundingYears, setFundingYears] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [efdLocations, setEfdLocations] = useState([]);
-    const [userRole, setUserRole] = useState(() => {
-        const saved = localStorage.getItem('userRole');
-        if (saved === 'hrodi_engineer') return 'HRODI Engineer';
-        return saved || '';
-    });
+    const [userRole, setUserRole] = useState(user?.role || '');
+ 
+    useEffect(() => {
+        if (user) {
+            setUserRole(user.role === 'hrodi_engineer' ? 'HRODI Engineer' : user.role);
+        }
+    }, [user]);
 
     const handleClearFilters = () => {
         setSelectedRegion('');
@@ -54,23 +56,13 @@ const EFDHome = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const uid = localStorage.getItem('uid');
-                if (!uid) {
+                if (!user) {
                     setLoading(false);
                     return;
                 }
-
-                try {
-                    const response = await fetch(`/api/users/${uid}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setUserData(data);
-                        if (data.region) setSelectedRegion(data.region);
-                        if (data.division) setSelectedDivision(data.division);
-                    }
-                } catch (err) {
-                    console.error("Error fetching PostgreSQL user data:", err);
-                }
+                setUserData(user);
+                if (user.region) setSelectedRegion(user.region);
+                if (user.division) setSelectedDivision(user.division);
 
                 // Concurrent fetch for project and reference data
                 const [pRes, fyRes, locRes] = await Promise.all([

@@ -5,8 +5,7 @@ import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-ico
 
 import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
-import { auth, db } from "../firebase";
-import { doc, getDoc, query, collection, where, getDocs } from "firebase/firestore";
+import { useAuth } from "../context/AuthContext";
 import { addEngineerToOutbox, cacheProjects, getCachedProjects } from "../db";
 import { compressImage } from "../utils/imageCompression";
 import { uploadFileInChunks } from '../utils/chunkedUploader'; // NEW CHUNK UPLOADER
@@ -324,15 +323,10 @@ import EditProjectModal from "../components/EditProjectModal";
 // --- MAIN PROJECT LIST COMPONENT ---
 
 const EngineerProjects = () => {
-  const navigate = useNavigate();
-  const [userName, setUserName] = useState("Engineer");
-  const [userRole, setUserRole] = useState(() => {
-    const saved = localStorage.getItem('userRole');
-    if (saved === 'deped_engineer') return 'DepEd Engineer';
-    if (saved === 'non_deped_engineer') return 'Non-DepEd Engineer';
-    if (saved === 'engineer') return 'Engineer';
-    return saved || "DepEd Engineer";
-  });
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const [userName, setUserName] = useState(user?.first_name || user?.firstName || "Engineer");
+    const [userRole, setUserRole] = useState(user?.role || "DepEd Engineer");
   const [accountCategory, setAccountCategory] = useState(null);
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -367,7 +361,7 @@ const EngineerProjects = () => {
   // Fetch User & Projects
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
-      const uid = localStorage.getItem('uid');
+      const uid = user?.uid;
       if (uid) {
         // 1. Get User Name & Account Category from our own API (replaced Firebase dependency)
         try {
@@ -393,29 +387,11 @@ const EngineerProjects = () => {
           let currentProjects = [];
 
           if (userRole === 'Super Admin' || userRole === 'Super User') {
-            // SUPER ADMIN: Firestore Query (ALL)
-            const q = query(collection(db, 'projects'));
-            const querySnapshot = await getDocs(q);
-            const mappedData = querySnapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-
-            currentProjects = mappedData.map(item => ({
-              id: item.id,
-              projectName: item.projectName || "Untitled",
-              schoolName: item.schoolName || "Unknown School",
-              schoolId: item.schoolId,
-              status: item.status,
-              accomplishmentPercentage: item.accomplishmentPercentage,
-              projectAllocation: item.projectAllocation,
-              targetCompletionDate: item.targetCompletionDate,
-              statusAsOfDate: item.statusAsOfDate,
-              otherRemarks: item.otherRemarks,
-              contractorName: item.contractorName,
-              uid: item.uid
-            }));
-
+            // SUPER ADMIN: Use API instead of Firestore
+            const response = await fetch(`${API_BASE}/api/projects`);
+            if (!response.ok) throw new Error("Failed to fetch all projects");
+            const data = await response.json();
+            currentProjects = data;
           } else {
 
             // ENGINEER: Stale-While-Revalidate Strategy
@@ -618,7 +594,7 @@ const EngineerProjects = () => {
       contract_len: updatedProject.contract_pdf?.length
     });
 
-    const uid = localStorage.getItem('uid');
+    const uid = user?.uid;
     if (!uid) return;
 
     // OPTIMIZATION: Check if progress changed

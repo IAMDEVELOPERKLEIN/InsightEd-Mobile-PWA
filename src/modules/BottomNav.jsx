@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar } from "react-icons/tb";
@@ -8,6 +9,7 @@ import { LuCompass } from "react-icons/lu";
 import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare } from "react-icons/fi"; // Added FiMessageSquare
 
 const BottomNav = ({ userRole }) => {
+    const { user, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -29,7 +31,7 @@ const BottomNav = ({ userRole }) => {
         effectiveRole = 'Implementing Agency';
     }
 
-    if (localStorage.getItem('userRole') === 'Super User') {
+    if (user?.role === 'Super User') {
         const impRole = sessionStorage.getItem('impersonatedRole');
         if (impRole) effectiveRole = impRole;
     }
@@ -173,6 +175,7 @@ const BottomNav = ({ userRole }) => {
                                     return;
                                 }
                                 if (item.logout) {
+                                    logout();
                                     localStorage.clear();
                                     sessionStorage.clear();
                                     navigate('/');

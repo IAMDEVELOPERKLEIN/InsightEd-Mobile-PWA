@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiPieChart } from 'react-icons/fi';
@@ -30,10 +29,17 @@ import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import Co
 const MonitoringDashboard = () => {
     const navigate = useNavigate();
     const location = useLocation();
-
+    const { user } = useAuth();
+    
     // Service Worker Update Context
     const { isUpdateAvailable, updateApp } = useServiceWorker();
     const [userData, setUserData] = useState(null);
+
+    useEffect(() => {
+        if (user) {
+            setUserData(user);
+        }
+    }, [user]);
     const [stats, setStats] = useState(null);
     const [engStats, setEngStats] = useState(null);
     const [jurisdictionProjects, setJurisdictionProjects] = useState([]);
@@ -655,7 +661,6 @@ const MonitoringDashboard = () => {
     };
 
     const fetchData = async (region, division, district) => {
-        let user = auth.currentUser;
         let uid = user?.uid || localStorage.getItem('uid');
         if (!uid) {
             console.warn("No UID found in auth or storage. Skipping fetch.");
@@ -687,73 +692,22 @@ const MonitoringDashboard = () => {
             : null;
 
         if (!currentUserData) {
-            try {
-                const docRef = doc(db, "users", uid);
-                const docSnap = await Promise.race([
-                    getDoc(docRef),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000))
-                ]);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    currentUserData = {
-                        ...data,
-                        region: data.region || data.Region || lsRegion || '',
-                        division: data.division || data.Division || lsDivision || '',
-                        district: data.district || data.District || '',
-                        role: data.role || data.Role || lsRole || ''
-                    };
-                    console.log("Monitoring Dashboard: Loaded user from Firestore:", currentUserData.email, currentUserData.region);
-                    setUserData(currentUserData);
-                } else {
-                    // Firestore doc missing — try native backend API
-                    console.warn("Firestore doc missing in fetchData, trying native backend...");
-                    try {
-                        const valRes = await fetch(`/api/user-info/${uid}`);
-                        if (valRes.ok) {
-                            const valData = await valRes.json();
-                            currentUserData = {
-                                uid,
-                                role: valData.role || lsRole || '',
-                                email: valData.email || lsEmail || '',
-                                region: valData.region || lsRegion || '',
-                                division: valData.division || lsDivision || '',
-                                account_category: valData.account_category || lsAccountCategory || ''
-                            };
-                            console.log("Monitoring Dashboard: Loaded user from native backend:", currentUserData.role, currentUserData.region);
-                            setUserData(currentUserData);
-                        }
-                    } catch (apiErr) {
-                        console.warn("Native backend fetch failed, falling back to localStorage:", apiErr.message);
-                    }
-                    // Final fallback: localStorage
-                    if (!currentUserData) {
-                        if (lsRole) {
-                            currentUserData = {
-                                uid,
-                                role: lsRole,
-                                email: lsEmail,
-                                region: lsRegion,
-                                division: lsDivision,
-                                account_category: lsAccountCategory
-                            };
-                            console.log("Monitoring Dashboard: Loaded user from localStorage:", currentUserData.role, currentUserData.region);
-                            setUserData(currentUserData);
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn("Firestore user fetch failed (likely blocked), using localStorage fallback:", err.message);
-                if (lsRole) {
-                    currentUserData = {
-                        uid,
-                        role: lsRole,
-                        email: lsEmail,
-                        region: lsRegion,
-                        division: lsDivision,
-                        account_category: lsAccountCategory
-                    };
-                    setUserData(currentUserData);
-                }
+            // Fallback to localStorage if context not yet ready
+            const lsRole = safeLs('userRole');
+            const lsRegion = safeLs('userRegion');
+            const lsDivision = safeLs('userDivision');
+            const lsEmail = safeLs('userEmail');
+            const lsAccountCategory = safeLs('accountCategory');
+
+            if (lsRole) {
+                currentUserData = {
+                    uid,
+                    role: lsRole,
+                    email: lsEmail,
+                    region: lsRegion,
+                    division: lsDivision,
+                    account_category: lsAccountCategory
+                };
             }
         }
 

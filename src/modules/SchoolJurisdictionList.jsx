@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiSearch, FiChevronRight, FiMapPin, FiBarChart2, FiHardDrive, FiFileText, FiTrendingUp, FiCheckCircle, FiClock, FiBell, FiRefreshCw } from 'react-icons/fi';
@@ -18,6 +17,7 @@ const useDebounce = (value, delay) => {
 };
 
 const SchoolJurisdictionList = () => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
 
@@ -41,28 +41,15 @@ const SchoolJurisdictionList = () => {
         if (!isLoadMore) setLoading(true);
         else setLoadingMore(true);
 
-        const user = auth.currentUser;
         if (!user) return;
 
         try {
             // We need userData. If not yet loaded, we might need to wait or it's already in state.
             // If this is called from useEffect deps on [userData], it's fine.
-            let regionToUse = filterRegion;
-            let divisionToUse = filterDivision;
-
-            // If not provided in URL, fallback to user data (need to ensure user data is loaded)
-            if (!regionToUse && !userData) {
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    setUserData(data);
-                    regionToUse = data.region;
-                    divisionToUse = data.division;
-                }
-            } else if (!regionToUse && userData) {
-                regionToUse = userData.region;
-                divisionToUse = userData.division;
+            // Fallback to user data if not provided in URL
+            if (!regionToUse) {
+                regionToUse = user.region;
+                divisionToUse = user.division;
             }
 
             if (!regionToUse) return; // Should not happen for valid users
@@ -102,26 +89,13 @@ const SchoolJurisdictionList = () => {
         }
     }, [filterRegion, filterDivision, userData]);
 
-    // Initial Load & Auth check
-    useEffect(() => {
-        const init = async () => {
-            const user = auth.currentUser;
-            if (user && !userData) {
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) setUserData(docSnap.data());
-            }
-        };
-        init();
-    }, []);
-
     // Trigger Fetch on Filters/Search Change
     useEffect(() => {
-        if (userData || filterRegion) {
+        if (user || filterRegion) {
             setPage(1); // Reset page on filter change
             fetchSchools(false, 1, debouncedSearch);
         }
-    }, [debouncedSearch, userData, filterRegion, filterDivision, fetchSchools]);
+    }, [debouncedSearch, user, filterRegion, filterDivision, fetchSchools]);
 
     const handleLoadMore = () => {
         if (page < totalPages) {
@@ -153,10 +127,10 @@ const SchoolJurisdictionList = () => {
                         <div className="flex-1 mr-4">
                             <h1 className="text-2xl font-black tracking-tight">Schools List</h1>
                             <p className="text-blue-200/70 text-xs mt-0.5 truncate">
-                                {userData?.role === 'Central Office' ? (
+                                {user?.role === 'Central Office' ? (
                                     `Monitoring: ${filterDivision || filterRegion || 'National'}`
                                 ) : (
-                                    userData?.role === 'Regional Office' ? `Regional Monitoring: Region ${userData?.region}` : `Division Monitoring: ${userData?.division}`
+                                    user?.role === 'Regional Office' ? `Regional Monitoring: Region ${user?.region}` : `Division Monitoring: ${user?.division}`
                                 )}
                             </p>
                         </div>
@@ -240,7 +214,7 @@ const SchoolJurisdictionList = () => {
                                 </div>
 
                                 {/* --- DATA HEALTH SCORE --- (Hidden for RO/SDO) */}
-                                {userData?.role !== 'Regional Office' && userData?.role !== 'School Division Office' && (
+                                {user?.role !== 'Regional Office' && user?.role !== 'School Division Office' && (
                                     <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
                                         <div className="flex items-center gap-3">
                                             {/* Score Badge */}
@@ -349,7 +323,7 @@ const SchoolJurisdictionList = () => {
                                             <FiClock className="text-amber-600 dark:text-amber-400" size={16} />
                                             <span className="text-[8px] font-bold mt-1 text-amber-900/60 dark:text-amber-200/60">Res</span>
                                         </button>
-                                        {userData?.role !== 'Regional Office' && userData?.role !== 'School Division Office' && (
+                                        {user?.role !== 'Regional Office' && user?.role !== 'School Division Office' && (
                                             <button
                                                 onClick={() => navigate(`/project-validation?schoolId=${school.school_id}`)}
                                                 className="col-span-4 mt-2 flex items-center justify-center gap-2 py-3 bg-[#CC0000] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20"
@@ -381,7 +355,7 @@ const SchoolJurisdictionList = () => {
                     )}
                 </div>
 
-                <BottomNav userRole={userData?.role} />
+                <BottomNav userRole={user?.role} />
             </div>
         </PageTransition>
     );

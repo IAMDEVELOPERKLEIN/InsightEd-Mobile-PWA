@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import { addToOutbox, getOutbox, addRepairToLocal, getLocalRepairs, deleteLocalRepair } from '../db';
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from 'firebase/firestore';
 import { FiChevronRight, FiEdit, FiTrash2, FiSave, FiCheckCircle, FiInfo, FiAlertCircle, FiPlus, FiArrowRight, FiFileText, FiMapPin, FiHome, FiHelpCircle, FiSearch, FiArrowLeft, FiMoreVertical, FiLayout, FiTruck, FiBox, FiArchive, FiClock, FiChevronDown } from 'react-icons/fi';
 import RepairEntryModal from '../components/RepairEntryModal';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
@@ -286,6 +284,7 @@ const BuildingInventoryModal = ({ isOpen, onClose, onSave, data, setData, status
 };
 
 const PhysicalFacilities = ({ embedded }) => {
+    const { user, token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
@@ -312,7 +311,7 @@ const PhysicalFacilities = ({ embedded }) => {
     }, []);
 
     // Super User / Audit Context
-    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const isSuperUser = user?.role === 'Super User';
     const auditTargetId = sessionStorage.getItem('targetSchoolId');
     const isAuditMode = isSuperUser && !!auditTargetId;
 
@@ -849,11 +848,11 @@ const PhysicalFacilities = ({ embedded }) => {
 
     // --- FETCH DATA (Refactored for Sync Cache) ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const loadInitialData = async () => {
             if (user) {
                 // Check Role for Read-Only
                 try {
-                    const role = localStorage.getItem('userRole');
+                    const role = user.role;
                     if (role === 'Central Office' || isDummy) {
                         setIsReadOnly(true);
                     }
@@ -909,7 +908,7 @@ const PhysicalFacilities = ({ embedded }) => {
                     // STEP 3: BACKGROUND FETCH
                     if (!restored) {
                         let fetchUrl = `/api/physical-facilities/${user.uid}`;
-                        const role = localStorage.getItem('userRole');
+                        const role = user.role;
                         if (isAuditMode) {
                             fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
                         } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
@@ -983,9 +982,9 @@ const PhysicalFacilities = ({ embedded }) => {
                 }
             }
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        };
+        loadInitialData();
+    }, [user, isAuditMode, auditTargetId, schoolIdParam, isDummy]);
 
     // --- SAVE TIMER EFFECTS ---
 
@@ -1087,7 +1086,7 @@ const PhysicalFacilities = ({ embedded }) => {
         const payload = {
             schoolId: schoolId || localStorage.getItem('schoolId'),
             iern: iern || schoolId || localStorage.getItem('schoolId'), // Use actual IERN
-            uid: auth.currentUser.uid,
+            uid: user.uid,
             ...formData,
             repairEntries,
             demolitionEntries: demolitionData,

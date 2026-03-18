@@ -1,9 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
@@ -39,6 +37,7 @@ const GridSection = ({ label, icon, color, children, totalLabel, totalValue }) =
 
 const OrganizedClasses = ({ embedded }) => {
     const navigate = useNavigate();
+    const { user, token } = useAuth();
 
     // --- STATE ---
     const location = useLocation();
@@ -106,213 +105,207 @@ const OrganizedClasses = ({ embedded }) => {
 
     // --- FETCH DATA (Strict Sync Cache Strategy) ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // Check Role for Read-Only
+        if (!user) return;
+        const loadData = async () => {
+            setUserRole(user.role);
+            // Check Role for Read-Only
+            try {
+                const role = user.role;
+                if (role === 'Central Office' || isDummy) {
+                    setIsReadOnly(true);
+                }
+            } catch (e) { }
+
+            // DEFAULT STATE (Prevents Uncontrolled Input Errors)
+            const defaultFormData = {
+                kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
+                g7: 0, g8: 0, g9: 0, g10: 0,
+                g11: 0, g12: 0
+            };
+            const defaultClassSize = {
+                cntLessKinder: 0, cntWithinKinder: 0, cntAboveKinder: 0,
+                cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
+                cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
+                cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
+                cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
+                cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
+                cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
+                cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
+                cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
+                cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
+                cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
+                cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
+                cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
+            };
+
+            const storedSchoolId = localStorage.getItem('schoolId');
+            const storedOffering = localStorage.getItem('schoolOffering');
+
+            if (storedSchoolId) setSchoolId(storedSchoolId);
+            if (storedOffering) setOffering(storedOffering);
+
+            // STEP 1: IMMEDIATE CACHE LOAD
+            let loadedFromCache = false;
+            const CACHE_KEY = `CACHE_ORGANIZED_CLASSES_${user.uid}`;
+            const cachedData = localStorage.getItem(CACHE_KEY);
+
+            if (cachedData) {
                 try {
-                    const role = localStorage.getItem('userRole');
-                    if (role === 'Central Office' || isDummy) {
-                        setIsReadOnly(true);
+                    const parsed = JSON.parse(cachedData);
+
+                    let restoredForm = {};
+                    let restoredSize = {};
+
+                    if (parsed.formData) {
+                        restoredForm = parsed.formData;
+                        restoredSize = parsed.classSizeData || {};
+                    } else {
+                        // Map FLat DB structure
+                        restoredForm = {
+                            kinder: parsed.classes_kinder ?? parsed.kinder ?? 0,
+                            g1: parsed.classes_grade_1 ?? parsed.grade_1 ?? 0, g2: parsed.classes_grade_2 ?? parsed.grade_2 ?? 0,
+                            g3: parsed.classes_grade_3 ?? parsed.grade_3 ?? 0, g4: parsed.classes_grade_4 ?? parsed.grade_4 ?? 0,
+                            g5: parsed.classes_grade_5 ?? parsed.grade_5 ?? 0, g6: parsed.classes_grade_6 ?? parsed.grade_6 ?? 0,
+                            g7: parsed.classes_grade_7 ?? parsed.grade_7 ?? 0, g8: parsed.classes_grade_8 ?? parsed.grade_8 ?? 0,
+                            g9: parsed.classes_grade_9 ?? parsed.grade_9 ?? 0, g10: parsed.classes_grade_10 ?? parsed.grade_10 ?? 0,
+                            g11: parsed.classes_grade_11 ?? parsed.grade_11 ?? 0, g12: parsed.classes_grade_12 ?? parsed.grade_12 ?? 0
+                        };
                     }
-                } catch (e) { }
 
-                // DEFAULT STATE (Prevents Uncontrolled Input Errors)
-                const defaultFormData = {
-                    kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
-                    g7: 0, g8: 0, g9: 0, g10: 0,
-                    g11: 0, g12: 0
-                };
-                const defaultClassSize = {
-                    cntLessKinder: 0, cntWithinKinder: 0, cntAboveKinder: 0,
-                    cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
-                    cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
-                    cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
-                    cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
-                    cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
-                    cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
-                    cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
-                    cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
-                    cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
-                    cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
-                    cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
-                    cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
-                };
+                    // MERGE to ensure no undefineds (Fix Uncontrolled Input)
+                    setFormData({ ...defaultFormData, ...restoredForm });
+                    setClassSizeData({ ...defaultClassSize, ...restoredSize });
 
-                const storedSchoolId = localStorage.getItem('schoolId');
-                const storedOffering = localStorage.getItem('schoolOffering');
+                    setOriginalData(parsed);
+                    // Restore Offering from cache if possible
+                    const cacheOff = parsed.curricular_offering || parsed.offering || (parsed.formData ? parsed.formData.offering : '') || storedOffering;
+                    if (cacheOff) setOffering(cacheOff);
 
-                if (storedSchoolId) setSchoolId(storedSchoolId);
-                if (storedOffering) setOffering(storedOffering);
+                    setIsLocked(Object.values(restoredForm).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
+                    setLoading(false); // CRITICAL: Instant Load
+                    loadedFromCache = true;
+                    console.log("Loaded cached Organized Classes data (Instant Load)");
+                } catch (e) { console.error("Cache parse error", e); }
+            }
 
-                // STEP 1: IMMEDIATE CACHE LOAD
-                let loadedFromCache = false;
-                const CACHE_KEY = `CACHE_ORGANIZED_CLASSES_${user.uid}`;
-                const cachedData = localStorage.getItem(CACHE_KEY);
-
-                if (cachedData) {
+            try {
+                // STEP 2: CHECK OUTBOX
+                let restored = false;
+                if (!viewOnly) {
                     try {
-                        const parsed = JSON.parse(cachedData);
+                        const drafts = await getOutbox();
+                        const draft = drafts.find(d => d.type === 'ORGANIZED_CLASSES');
 
-                        let restoredForm = {};
-                        let restoredSize = {};
+                        if (draft) {
+                            console.log("Restored draft from Outbox");
+                            const p = draft.payload;
 
-                        if (parsed.formData) {
-                            restoredForm = parsed.formData;
-                            restoredSize = parsed.classSizeData || {};
-                        } else {
-                            // Map FLat DB structure
-                            restoredForm = {
-                                kinder: parsed.classes_kinder ?? parsed.kinder ?? 0,
-                                g1: parsed.classes_grade_1 ?? parsed.grade_1 ?? 0, g2: parsed.classes_grade_2 ?? parsed.grade_2 ?? 0,
-                                g3: parsed.classes_grade_3 ?? parsed.grade_3 ?? 0, g4: parsed.classes_grade_4 ?? parsed.grade_4 ?? 0,
-                                g5: parsed.classes_grade_5 ?? parsed.grade_5 ?? 0, g6: parsed.classes_grade_6 ?? parsed.grade_6 ?? 0,
-                                g7: parsed.classes_grade_7 ?? parsed.grade_7 ?? 0, g8: parsed.classes_grade_8 ?? parsed.grade_8 ?? 0,
-                                g9: parsed.classes_grade_9 ?? parsed.grade_9 ?? 0, g10: parsed.classes_grade_10 ?? parsed.grade_10 ?? 0,
-                                g11: parsed.classes_grade_11 ?? parsed.grade_11 ?? 0, g12: parsed.classes_grade_12 ?? parsed.grade_12 ?? 0
-                            };
+                            if (p.curricular_offering || p.offering) {
+                                setOffering(p.curricular_offering || p.offering);
+                            }
+
+                            setFormData({ ...defaultFormData, ...p });
+                            setClassSizeData({ ...defaultClassSize, ...p });
+
+                            restored = true;
+                            setIsLocked(false); // Unlocks form for draft editing
+                            setLoading(false);
                         }
-
-                        // MERGE to ensure no undefineds (Fix Uncontrolled Input)
-                        setFormData({ ...defaultFormData, ...restoredForm });
-                        setClassSizeData({ ...defaultClassSize, ...restoredSize });
-
-                        setOriginalData(parsed);
-                        // Restore Offering from cache if possible
-                        const cacheOff = parsed.curricular_offering || parsed.offering || (parsed.formData ? parsed.formData.offering : '') || storedOffering;
-                        if (cacheOff) setOffering(cacheOff);
-
-                        setIsLocked(Object.values(restoredForm).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
-                        setLoading(false); // CRITICAL: Instant Load
-                        loadedFromCache = true;
-                        console.log("Loaded cached Organized Classes data (Instant Load)");
-                    } catch (e) { console.error("Cache parse error", e); }
+                    } catch (e) { console.error("Outbox check failed:", e); }
                 }
 
-                try {
-                    // STEP 2: CHECK OUTBOX
-                    let restored = false;
-                    if (!viewOnly) {
+                // STEP 3: BACKGROUND FETCH
+                if (!restored) {
+                    let fetchUrl = `/api/organized-classes/${user.uid}`;
+                    const role = user.role;
+                    if (isAuditMode) {
+                        fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                    } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
+                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    // CRITICAL: Only show loading if NOT loaded from cache
+                    if (!loadedFromCache) setLoading(true);
+
+                    const apiResult = await fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }));
+
+                    const json = apiResult;
+
+                    if (json.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                        setSchoolId(json.school_id || json.schoolId);
+                        const newOffering = normalizeOffering(json.curricular_offering || json.offering || storedOffering);
+                        setOffering(newOffering);
+
+                        if (!viewOnly && json.schoolId) {
+                            localStorage.setItem('schoolId', json.schoolId);
+                            localStorage.setItem('schoolOffering', newOffering);
+                        }
+
+                        const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? json : json.data;
+
+                        const newFormData = {
+                            kinder: dbData.classes_kinder ?? dbData.kinder ?? 0,
+                            g1: dbData.classes_grade_1 ?? dbData.grade_1 ?? 0, g2: dbData.classes_grade_2 ?? dbData.grade_2 ?? 0,
+                            g3: dbData.classes_grade_3 ?? dbData.grade_3 ?? 0, g4: dbData.classes_grade_4 ?? dbData.grade_4 ?? 0,
+                            g5: dbData.classes_grade_5 ?? dbData.grade_5 ?? 0, g6: dbData.classes_grade_6 ?? dbData.grade_6 ?? 0,
+                            g7: dbData.classes_grade_7 ?? dbData.grade_7 ?? 0, g8: dbData.classes_grade_8 ?? dbData.grade_8 ?? 0,
+                            g9: dbData.classes_grade_9 ?? dbData.grade_9 ?? 0, g10: dbData.classes_grade_10 ?? dbData.grade_10 ?? 0,
+                            g11: dbData.classes_grade_11 ?? dbData.grade_11 ?? 0, g12: dbData.classes_grade_12 ?? dbData.grade_12 ?? 0
+                        };
+
+                        const newClassSize = {
+                            cntLessKinder: dbData.cnt_less_kinder ?? 0, cntWithinKinder: dbData.cnt_within_kinder ?? 0, cntAboveKinder: dbData.cnt_above_kinder ?? 0,
+                            cntLessG1: dbData.cnt_less_g1 ?? 0, cntWithinG1: dbData.cnt_within_g1 ?? 0, cntAboveG1: dbData.cnt_above_g1 ?? 0,
+                            cntLessG2: dbData.cnt_less_g2 ?? 0, cntWithinG2: dbData.cnt_within_g2 ?? 0, cntAboveG2: dbData.cnt_above_g2 ?? 0,
+                            cntLessG3: dbData.cnt_less_g3 ?? 0, cntWithinG3: dbData.cnt_within_g3 ?? 0, cntAboveG3: dbData.cnt_above_g3 ?? 0,
+                            cntLessG4: dbData.cnt_less_g4 ?? 0, cntWithinG4: dbData.cnt_within_g4 ?? 0, cntAboveG4: dbData.cnt_above_g4 ?? 0,
+                            cntLessG5: dbData.cnt_less_g5 ?? 0, cntWithinG5: dbData.cnt_within_g5 ?? 0, cntAboveG5: dbData.cnt_above_g5 ?? 0,
+                            cntLessG6: dbData.cnt_less_g6 ?? 0, cntWithinG6: dbData.cnt_within_g6 ?? 0, cntAboveG6: dbData.cnt_above_g6 ?? 0,
+                            cntLessG7: dbData.cnt_less_g7 ?? 0, cntWithinG7: dbData.cnt_within_g7 ?? 0, cntAboveG7: dbData.cnt_above_g7 ?? 0,
+                            cntLessG8: dbData.cnt_less_g8 ?? 0, cntWithinG8: dbData.cnt_within_g8 ?? 0, cntAboveG8: dbData.cnt_above_g8 ?? 0,
+                            cntLessG9: dbData.cnt_less_g9 ?? 0, cntWithinG9: dbData.cnt_within_g9 ?? 0, cntAboveG9: dbData.cnt_above_g9 ?? 0,
+                            cntLessG10: dbData.cnt_less_g10 ?? 0, cntWithinG10: dbData.cnt_within_g10 ?? 0, cntAboveG10: dbData.cnt_above_g10 ?? 0,
+                            cntLessG11: dbData.cnt_less_g11 ?? 0, cntWithinG11: dbData.cnt_within_g11 ?? 0, cntAboveG11: dbData.cnt_above_g11 ?? 0,
+                            cntLessG12: dbData.cnt_less_g12 ?? 0, cntWithinG12: dbData.cnt_within_g12 ?? 0, cntAboveG12: dbData.cnt_above_g12 ?? 0
+                        };
+
+                        setFormData(prev => ({ ...prev, ...newFormData }));
+                        setClassSizeData(prev => ({ ...prev, ...newClassSize }));
+                        setMultigradeClasses(dbData.multigrade_classes || []);
+
+                        // Create Structured Cache
+                        const cachePayload = {
+                            formData: newFormData,
+                            classSizeData: newClassSize,
+                            curricular_offering: newOffering,
+                            schoolId: json.schoolId
+                        };
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
+                        setOriginalData(cachePayload);
+                        setIsLocked(Object.values(newFormData).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
+                    }
+                }
+            } catch (error) {
+                console.error("Network Error:", error);
+                if (!loadedFromCache) {
+                    const CACHE_KEY = `CACHE_ORGANIZED_CLASSES_${user.uid}`;
+                    const cached = localStorage.getItem(CACHE_KEY);
+                    if (cached) {
                         try {
-                            const drafts = await getOutbox();
-                            const draft = drafts.find(d => d.type === 'ORGANIZED_CLASSES');
-
-                            if (draft) {
-                                console.log("Restored draft from Outbox");
-                                const p = draft.payload;
-
-                                if (p.curricular_offering || p.offering) {
-                                    setOffering(p.curricular_offering || p.offering);
-                                }
-
-                                setFormData({ ...defaultFormData, ...p });
-                                setClassSizeData({ ...defaultClassSize, ...p });
-
-                                restored = true;
-                                setIsLocked(false); // Unlocks form for draft editing
-                                setLoading(false);
+                            const parsed = JSON.parse(cached);
+                            // Simple restore fallback
+                            if (parsed.formData) {
+                                setFormData({ ...defaultFormData, ...parsed.formData });
+                                setClassSizeData({ ...defaultClassSize, ...parsed.classSizeData });
                             }
-                        } catch (e) { console.error("Outbox check failed:", e); }
-                    }
-
-                    // STEP 3: BACKGROUND FETCH
-                    if (!restored) {
-                        const docRef = doc(db, "users", user.uid);
-                        let fetchUrl = `/api/organized-classes/${user.uid}`;
-                        const role = localStorage.getItem('userRole');
-                        if (isAuditMode) {
-                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
-                        } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
-                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                        }
-
-                        // CRITICAL: Only show loading if NOT loaded from cache
-                        if (!loadedFromCache) setLoading(true);
-
-                        const [docSnap, apiResult] = await Promise.all([
-                            getDoc(docRef).catch(e => ({ exists: () => false })),
-                            fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
-                        ]);
-
-                        if (docSnap.exists()) setUserRole(docSnap.data().role);
-
-                        const json = apiResult;
-
-                        if (json.exists || (viewOnly && schoolIdParam) || isAuditMode) {
-                            setSchoolId(json.school_id || json.schoolId);
-                            const newOffering = normalizeOffering(json.curricular_offering || json.offering || storedOffering);
-                            setOffering(newOffering);
-
-                            if (!viewOnly && json.schoolId) {
-                                localStorage.setItem('schoolId', json.schoolId);
-                                localStorage.setItem('schoolOffering', newOffering);
-                            }
-
-                            const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? json : json.data;
-
-                            const newFormData = {
-                                kinder: dbData.classes_kinder ?? dbData.kinder ?? 0,
-                                g1: dbData.classes_grade_1 ?? dbData.grade_1 ?? 0, g2: dbData.classes_grade_2 ?? dbData.grade_2 ?? 0,
-                                g3: dbData.classes_grade_3 ?? dbData.grade_3 ?? 0, g4: dbData.classes_grade_4 ?? dbData.grade_4 ?? 0,
-                                g5: dbData.classes_grade_5 ?? dbData.grade_5 ?? 0, g6: dbData.classes_grade_6 ?? dbData.grade_6 ?? 0,
-                                g7: dbData.classes_grade_7 ?? dbData.grade_7 ?? 0, g8: dbData.classes_grade_8 ?? dbData.grade_8 ?? 0,
-                                g9: dbData.classes_grade_9 ?? dbData.grade_9 ?? 0, g10: dbData.classes_grade_10 ?? dbData.grade_10 ?? 0,
-                                g11: dbData.classes_grade_11 ?? dbData.grade_11 ?? 0, g12: dbData.classes_grade_12 ?? dbData.grade_12 ?? 0
-                            };
-
-                            const newClassSize = {
-                                cntLessKinder: dbData.cnt_less_kinder ?? 0, cntWithinKinder: dbData.cnt_within_kinder ?? 0, cntAboveKinder: dbData.cnt_above_kinder ?? 0,
-                                cntLessG1: dbData.cnt_less_g1 ?? 0, cntWithinG1: dbData.cnt_within_g1 ?? 0, cntAboveG1: dbData.cnt_above_g1 ?? 0,
-                                cntLessG2: dbData.cnt_less_g2 ?? 0, cntWithinG2: dbData.cnt_within_g2 ?? 0, cntAboveG2: dbData.cnt_above_g2 ?? 0,
-                                cntLessG3: dbData.cnt_less_g3 ?? 0, cntWithinG3: dbData.cnt_within_g3 ?? 0, cntAboveG3: dbData.cnt_above_g3 ?? 0,
-                                cntLessG4: dbData.cnt_less_g4 ?? 0, cntWithinG4: dbData.cnt_within_g4 ?? 0, cntAboveG4: dbData.cnt_above_g4 ?? 0,
-                                cntLessG5: dbData.cnt_less_g5 ?? 0, cntWithinG5: dbData.cnt_within_g5 ?? 0, cntAboveG5: dbData.cnt_above_g5 ?? 0,
-                                cntLessG6: dbData.cnt_less_g6 ?? 0, cntWithinG6: dbData.cnt_within_g6 ?? 0, cntAboveG6: dbData.cnt_above_g6 ?? 0,
-                                cntLessG7: dbData.cnt_less_g7 ?? 0, cntWithinG7: dbData.cnt_within_g7 ?? 0, cntAboveG7: dbData.cnt_above_g7 ?? 0,
-                                cntLessG8: dbData.cnt_less_g8 ?? 0, cntWithinG8: dbData.cnt_within_g8 ?? 0, cntAboveG8: dbData.cnt_above_g8 ?? 0,
-                                cntLessG9: dbData.cnt_less_g9 ?? 0, cntWithinG9: dbData.cnt_within_g9 ?? 0, cntAboveG9: dbData.cnt_above_g9 ?? 0,
-                                cntLessG10: dbData.cnt_less_g10 ?? 0, cntWithinG10: dbData.cnt_within_g10 ?? 0, cntAboveG10: dbData.cnt_above_g10 ?? 0,
-                                cntLessG11: dbData.cnt_less_g11 ?? 0, cntWithinG11: dbData.cnt_within_g11 ?? 0, cntAboveG11: dbData.cnt_above_g11 ?? 0,
-                                cntLessG12: dbData.cnt_less_g12 ?? 0, cntWithinG12: dbData.cnt_within_g12 ?? 0, cntAboveG12: dbData.cnt_above_g12 ?? 0
-                            };
-
-                            setFormData(prev => ({ ...prev, ...newFormData }));
-                            setClassSizeData(prev => ({ ...prev, ...newClassSize }));
-                            setMultigradeClasses(dbData.multigrade_classes || []);
-
-                            // Create Structured Cache
-                            const cachePayload = {
-                                formData: newFormData,
-                                classSizeData: newClassSize,
-                                curricular_offering: newOffering,
-                                schoolId: json.schoolId
-                            };
-                            localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
-                            setOriginalData(cachePayload);
-                            setIsLocked(Object.values(newFormData).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
-                        }
-                    }
-                } catch (error) {
-                    console.error("Network Error:", error);
-                    if (!loadedFromCache) {
-                        const CACHE_KEY = `CACHE_ORGANIZED_CLASSES_${user.uid}`;
-                        const cached = localStorage.getItem(CACHE_KEY);
-                        if (cached) {
-                            try {
-                                const parsed = JSON.parse(cached);
-                                // Simple restore fallback
-                                if (parsed.formData) {
-                                    setFormData({ ...defaultFormData, ...parsed.formData });
-                                    setClassSizeData({ ...defaultClassSize, ...parsed.classSizeData });
-                                }
-                            } catch (e) { }
-                        }
+                        } catch (e) { }
                     }
                 }
             }
             setLoading(false);
-        });
-        return () => unsubscribe();
-    }, []);
+        };
+        loadData();
+    }, [user]);
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
