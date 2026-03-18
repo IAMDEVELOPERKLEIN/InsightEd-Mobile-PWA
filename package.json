@@ -30,6 +30,8 @@
     "firebase-admin": "^13.6.0",
     "firebase-scrypt": "^2.2.0",
     "framer-motion": "^12.24.12",
+    "google-auth-library": "^10.6.2",
+    "googleapis": "^171.4.0",
     "idb": "^8.0.3",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.0",
