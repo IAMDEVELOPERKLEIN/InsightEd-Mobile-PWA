@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell 
@@ -11,6 +11,7 @@ import {
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { DASHBOARD_METADATA } from '../config/dashboardMetadata';
+import { useAuth } from '../context/AuthContext';
 
 // --- Circular Progress Ring ---
 const ProgressRing = ({ percentage = 0, size = 160, strokeWidth = 10 }) => {
@@ -78,12 +79,24 @@ const getLevelFromXP = (xp, maxXP) => {
 
 const MyActivityDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const { user } = useAuth();
+    
+    // Parse UID from query params for Super User impersonation
+    const queryParams = new URLSearchParams(location.search);
+    const impersonatedUid = queryParams.get('uid');
+    
     const [data, setData] = useState(() => {
-        const cached = localStorage.getItem('activity_data');
-        return cached ? JSON.parse(cached) : null;
+        // Only use cache if not impersonating
+        if (!impersonatedUid) {
+            const cached = localStorage.getItem('activity_data');
+            return cached ? JSON.parse(cached) : null;
+        }
+        return null;
     });
-    const [loading, setLoading] = useState(!localStorage.getItem('activity_data'));
-    const schoolId = localStorage.getItem('schoolId');
+    
+    const [loading, setLoading] = useState(true);
+    const [targetSchoolId, setTargetSchoolId] = useState(null);
 
     const unitMap = useMemo(() => DASHBOARD_METADATA.units.map(u => ({
         id: u.id,
@@ -96,13 +109,36 @@ const MyActivityDashboard = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            if (!schoolId) { setLoading(false); return; }
             try {
+                let schoolId = localStorage.getItem('schoolId');
+                
+                // --- SUPER USER IMPERSONATION ---
+                if (user?.role === 'Super User' && impersonatedUid) {
+                    console.log(`[MyActivity] Impersonating UID: ${impersonatedUid}`);
+                    const profileRes = await fetch(`/api/school-by-user/${impersonatedUid}`);
+                    const profileJson = await profileRes.json();
+                    if (profileJson.exists && profileJson.data.school_id) {
+                        schoolId = profileJson.data.school_id;
+                        console.log(`[MyActivity] Found impersonated School ID: ${schoolId}`);
+                    }
+                }
+
+                if (!schoolId) { 
+                    setLoading(false); 
+                    return; 
+                }
+                
+                setTargetSchoolId(schoolId);
+
                 const response = await fetch(`/api/schools/${schoolId}/activity`);
                 if (response.ok) {
                     const json = await response.json();
                     setData(json.data);
-                    localStorage.setItem('activity_data', JSON.stringify(json.data));
+                    
+                    // Only cache if not impersonating
+                    if (!impersonatedUid) {
+                        localStorage.setItem('activity_data', JSON.stringify(json.data));
+                    }
                 }
             } catch (err) {
                 console.error('Fetch Error:', err);
@@ -110,8 +146,11 @@ const MyActivityDashboard = () => {
                 setLoading(false);
             }
         };
-        fetchData();
-    }, [schoolId]);
+        
+        if (user) {
+            fetchData();
+        }
+    }, [user, impersonatedUid]);
 
     const xp = useMemo(() => getXPForUnits(data?.progress?.flags), [data]);
     const maxXP = useMemo(() => DASHBOARD_METADATA.units.reduce((sum, u) => sum + u.xp, 0), []);
@@ -380,7 +419,10 @@ const MyActivityDashboard = () => {
                                                 initial={{ opacity: 0, x: -20 }}
                                                 animate={{ opacity: 1, x: 0 }}
                                                 transition={{ delay: 0.05 * i }}
-                                                onClick={() => navigate(unit.path)}
+                                                onClick={() => {
+                                                    const targetPath = impersonatedUid ? `${unit.path}?uid=${impersonatedUid}` : unit.path;
+                                                    navigate(targetPath);
+                                                }}
                                                 className={`p-4 rounded-2xl flex items-center justify-between border cursor-pointer active:scale-[0.98] transition-all ${
                                                     isNext 
                                                         ? 'bg-white border-cyan-200 shadow-lg shadow-indigo-100/50' 

@@ -153,7 +153,17 @@ const BottomNav = ({ userRole: propRole }) => {
                                     confirmLogout();
                                     return;
                                 }
-                                navigate(item.path, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });
+                                
+                                // Preserve impersonation UID if present
+                                let targetPath = item.path;
+                                if (user?.role === 'Super User') {
+                                    const impUid = sessionStorage.getItem('impersonatedUid');
+                                    if (impUid && targetPath && !targetPath.includes('uid=')) {
+                                        targetPath += (targetPath.includes('?') ? '&' : '?') + `uid=${impUid}`;
+                                    }
+                                }
+                                
+                                navigate(targetPath, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });
                             }}
                         >
                             <Icon
