@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useLocation, Navigate, useNavigate } from 'react-router-dom';
 
 // ... (lines 3-118 remain same, but I can't express that in one chunk easily if imports are at top and usage at bottom. I'll use 2 chunks)
 
@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 import Login from './Login';
 import Register from './Register';
 import PinSetup from './components/PinSetup';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
@@ -44,6 +44,7 @@ import LguForms from './modules/LguForms'; // Import newly created LguForms
 import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
 import PSIP from './modules/PSIP'; // Import PSIP
 import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRoute
+import PasscodeSetupPrompt from './components/PasscodeSetupPrompt'; // <--- IMPORT THIS
 import EFDHome from './modules/EFDHome';
 import EFDMonitoring from './modules/EFDMonitoring';
 import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
@@ -93,7 +94,21 @@ import Unit9SchoolLocation from './components/modular/Unit9SchoolLocation';
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
 const AnimatedRoutes = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    // List of public paths that don't require authentication
+    const publicPaths = ['/', '/register', '/adminlogin'];
+    
+    // If auth is finished loading and no user is found on a non-public path, redirect to login
+    if (!loading && !user && !publicPaths.includes(location.pathname)) {
+      console.log("[App] No user session found on protected route. Redirecting to login...");
+      navigate('/', { replace: true });
+    }
+  }, [user, loading, location.pathname, navigate]);
+
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [checkingMaintenance, setCheckingMaintenance] = useState(true);
 
@@ -357,6 +372,7 @@ const AppContent = () => {
       <ScrollToTop />
       <SuperUserFloatingSwitch />
       <ChatWidget showFloatingButton={showChatFloating} />
+      <PasscodeSetupPrompt />
       <AnimatedRoutes />
     </>
   );

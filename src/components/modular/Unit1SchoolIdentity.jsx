@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2 } from "react-icons/fi";
 import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
+import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
@@ -42,6 +43,7 @@ const SkeletonWizard = () => (
 // ── Main Component ───────────────────────────────────────────────────────────
 const Unit1SchoolIdentity = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -93,7 +95,7 @@ const Unit1SchoolIdentity = () => {
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
     useEffect(() => {
         const init = async () => {
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
                 const draft = await getUnit1Draft("draft_unit_1");
                 if (draft) {
