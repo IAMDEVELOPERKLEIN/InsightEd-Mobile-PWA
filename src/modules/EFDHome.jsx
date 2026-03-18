@@ -228,12 +228,12 @@ const EFDHome = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 lg:col-span-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-2">
                                 <p className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-1.5 opacity-80">Total Projects</p>
                                 <h2 className="text-3xl lg:text-4xl font-black">{projects.length.toLocaleString()}</h2>
                             </div>
-                            <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 lg:col-span-2">
+                            <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-2">
                                 <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80">Filtered Results</p>
                                 <h2 className="text-3xl lg:text-4xl font-black">{filteredProjects.length.toLocaleString()}</h2>
                             </div>
@@ -273,8 +273,8 @@ const EFDHome = () => {
                             )}
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div className="relative md:col-span-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="relative">
                                 <select
                                     value={selectedRegion}
                                     onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
@@ -285,7 +285,7 @@ const EFDHome = () => {
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
-                            <div className="relative md:col-span-1">
+                            <div className="relative">
                                 <select
                                     value={selectedDivision}
                                     onChange={(e) => setSelectedDivision(e.target.value)}
@@ -297,52 +297,52 @@ const EFDHome = () => {
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
-                            <div className="relative col-span-2 md:col-span-1">
+                            <div className="relative sm:col-span-2 md:col-span-1">
                                 <select
                                     value={selectedCategory}
                                     onChange={(e) => setSelectedCategory(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="">All Project Categories</option>
+                                    <option value="">All Categories</option>
                                     {categories.map(cat => (
                                         <option key={cat} value={cat}>{cat}</option>
                                     ))}
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
-                            <div className="relative col-span-1">
+                            <div className="relative">
                                 <select
                                     value={selectedFundingYear}
                                     onChange={(e) => setSelectedFundingYear(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="">All Funding Years</option>
+                                    <option value="">All Years</option>
                                     {fundingYears.map(year => (
                                         <option key={year} value={year}>{year}</option>
                                     ))}
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
-                            <div className="relative col-span-1">
+                            <div className="relative">
                                 <select
                                     value={selectedDonated}
                                     onChange={(e) => setSelectedDonated(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="All">All Projects</option>
-                                    <option value="Donated">Donated Projects</option>
-                                    <option value="Non-Donated">Not Donated Projects</option>
+                                    <option value="All">All Donated/Non</option>
+                                    <option value="Donated">Donated</option>
+                                    <option value="Non-Donated">Non-Donated</option>
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
-                            <div className="relative col-span-1">
+                            <div className="relative">
                                 <select
                                     value={selectedDocStatus}
                                     onChange={(e) => setSelectedDocStatus(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="All">All Documents</option>
-                                    <option value="Complete">Complete (MOA & RTA)</option>
+                                    <option value="All">All Doc Status</option>
+                                    <option value="Complete">Complete (MOA/RTA)</option>
                                     <option value="Missing RTA">Missing RTA</option>
                                     <option value="Missing MOA">Missing MOA</option>
                                     <option value="Missing Both">Missing Both</option>
@@ -351,7 +351,7 @@ const EFDHome = () => {
                             </div>
 
                             {activeTab === 'list' ? (
-                                <div className="relative animate-in slide-in-from-top-2 duration-300 col-span-2 md:col-span-1">
+                                <div className="relative animate-in slide-in-from-top-2 duration-300 sm:col-span-2 md:col-span-2">
                                     <input
                                         type="text"
                                         placeholder="Search Project, School, or ID..."
@@ -362,7 +362,7 @@ const EFDHome = () => {
                                     <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-blue-400" size={14} />
                                 </div>
                             ) : (
-                                <div className="hidden md:block md:col-span-1"></div>
+                                <div className="hidden md:block md:col-span-2"></div>
                             )}
                         </div>
                     </div>
@@ -371,7 +371,7 @@ const EFDHome = () => {
                 <div className="px-5">
                     {activeTab === 'granular' ? (
                         <div className="space-y-6 animate-in fade-in duration-700">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto w-full">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-7xl mx-auto w-full">
                                 {/* Regional Breakdown Chart */}
                                 <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 h-full flex flex-col">
                                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">

@@ -300,17 +300,17 @@ const BEFFDashboard = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                            <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
-                                <p className="text-[10px] font-black text-purple-300 uppercase tracking-widest mb-1.5 opacity-80">Total BEFF Projects</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="bg-white/5 backdrop-blur-sm p-5 rounded-2xl border border-white/10">
+                                <p className="text-[10px] font-black text-purple-300 uppercase tracking-widest mb-2 opacity-80">Total BEFF Projects</p>
                                 <h2 className="text-2xl lg:text-3xl font-black">{projects.length.toLocaleString()}</h2>
                             </div>
-                            <div className="bg-purple-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10">
-                                <p className="text-[10px] font-black text-purple-100 uppercase tracking-widest mb-1.5 opacity-80">Total ABC Allocation</p>
+                            <div className="bg-purple-400/20 backdrop-blur-sm p-5 rounded-2xl border border-white/10">
+                                <p className="text-[10px] font-black text-purple-100 uppercase tracking-widest mb-2 opacity-80">Total ABC Allocation</p>
                                 <h2 className="text-2xl lg:text-3xl font-black">{formatCurrency(totalABC)}</h2>
                             </div>
-                            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 col-span-2 lg:col-span-1">
-                                <p className="text-[10px] font-black text-purple-100 uppercase tracking-widest mb-1.5 opacity-80">Filtered Results</p>
+                            <div className="bg-white/10 backdrop-blur-sm p-5 rounded-2xl border border-white/10 sm:col-span-2 lg:col-span-1">
+                                <p className="text-[10px] font-black text-purple-100 uppercase tracking-widest mb-2 opacity-80">Filtered Results</p>
                                 <h2 className="text-2xl lg:text-3xl font-black">{filteredProjects.length.toLocaleString()}</h2>
                             </div>
                         </div>
@@ -333,7 +333,7 @@ const BEFFDashboard = () => {
                         </button>
                     </div>
 
-                    <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-4 max-w-7xl mx-auto w-full mb-4">
+                    <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col lg:flex-row items-center gap-4 max-w-7xl mx-auto w-full mb-4">
                         <div className="flex-1 w-full relative">
                             <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
@@ -344,14 +344,22 @@ const BEFFDashboard = () => {
                                 className="w-full bg-slate-50 border-none rounded-2xl pl-12 pr-4 py-3.5 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-purple-500/20 transition-all placeholder:text-slate-400"
                             />
                         </div>
-                        {(selectedRegion || selectedDivision || selectedAgency || selectedFundingYear || selectedDonated !== 'All' || selectedDocStatus !== 'All') && (
+                        <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3">
                             <button
-                                onClick={handleClearFilters}
-                                className="w-full md:w-auto text-[10px] font-black text-purple-600 hover:text-purple-700 uppercase tracking-widest bg-purple-50 px-6 py-3.5 rounded-2xl transition-all active:scale-95 whitespace-nowrap"
+                                onClick={() => setSelectedFundingYear('2026')}
+                                className={`flex-1 lg:flex-none text-[10px] font-black uppercase tracking-widest px-6 py-3.5 rounded-2xl transition-all active:scale-95 whitespace-nowrap ${selectedFundingYear === '2026' ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'}`}
                             >
-                                Reset All Filters
+                                2026 Projects
                             </button>
-                        )}
+                            {(selectedRegion || selectedDivision || selectedAgency || selectedFundingYear || selectedDonated !== 'All' || selectedDocStatus !== 'All') && (
+                                <button
+                                    onClick={handleClearFilters}
+                                    className="flex-1 lg:flex-none text-[10px] font-black text-purple-600 hover:text-purple-700 uppercase tracking-widest bg-purple-50 px-6 py-3.5 rounded-2xl transition-all active:scale-95 whitespace-nowrap"
+                                >
+                                    Reset All
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 

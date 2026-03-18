@@ -527,7 +527,7 @@ const EFDMonitoring = () => {
                                     onChange={(e) => setSelectedCategory(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="">All Project Categories</option>
+                                    <option value="">All Categories</option>
                                     {categories.map(cat => (
                                         <option key={cat} value={cat}>{cat}</option>
                                     ))}
@@ -540,7 +540,7 @@ const EFDMonitoring = () => {
                                     onChange={(e) => setSelectedFundingYear(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="">All Funding Years</option>
+                                    <option value="">All Years</option>
                                     {fundingYears.map(year => (
                                         <option key={year} value={year}>{year}</option>
                                     ))}
@@ -553,9 +553,9 @@ const EFDMonitoring = () => {
                                     onChange={(e) => setSelectedDonated(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="All">All Projects</option>
-                                    <option value="Donated">Donated Projects</option>
-                                    <option value="Non-Donated">Not Donated Projects</option>
+                                    <option value="All">All Donated/Non</option>
+                                    <option value="Donated">Donated</option>
+                                    <option value="Non-Donated">Non-Donated</option>
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -565,11 +565,11 @@ const EFDMonitoring = () => {
                                     onChange={(e) => setSelectedDocStatus(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="All">All Document Statuses</option>
-                                    <option value="Complete">Complete (Has MOA & RTA)</option>
-                                    <option value="Missing RTA">Has MOA but Missing RTA</option>
-                                    <option value="Missing MOA">Has RTA but Missing MOA</option>
-                                    <option value="Missing Both">Missing Both MOA & RTA</option>
+                                    <option value="All">All Doc Status</option>
+                                    <option value="Complete">Complete (MOA/RTA)</option>
+                                    <option value="Missing RTA">Missing RTA</option>
+                                    <option value="Missing MOA">Missing MOA</option>
+                                    <option value="Missing Both">Missing Both</option>
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -595,9 +595,9 @@ const EFDMonitoring = () => {
                                 <thead>
                                     <tr className="bg-slate-50/50 border-b border-slate-100">
                                         <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] pl-8">Project Details</th>
-                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Status & Progress</th>
-                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Financials</th>
-                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Assignment</th>
+                                        <th className="hidden lg:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Status & Progress</th>
+                                        <th className="hidden md:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Financials</th>
+                                        <th className="hidden sm:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Assignment</th>
                                         <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] text-center pr-8">Actions</th>
                                     </tr>
                                 </thead>

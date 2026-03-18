@@ -146,7 +146,7 @@ const SuperUserSelector = () => {
                     navigate('/psip');
                     break;
                 case 'EFD':
-                    navigate('/beff-dashboard');
+                    navigate('/efd-dashboard');
                     break;
                 case 'Finance':
                     navigate('/finance-dashboard');
@@ -189,7 +189,7 @@ const SuperUserSelector = () => {
 
             <div className="relative z-10 max-w-6xl w-full">
                 <div className="text-center mb-10">
-                    <h1 className="text-4xl font-extrabold text-slate-800 tracking-tight">Super User Access</h1>
+                    <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-800 tracking-tight">Super User Access</h1>
                     <p className="text-slate-500 mt-2 font-medium">Select a role to impersonate or view.</p>
                 </div>
 
@@ -197,10 +197,10 @@ const SuperUserSelector = () => {
                     {/* SECTION: General Access */}
                     <section>
                         <div className="flex items-center gap-4 mb-8">
-                            <h2 className="text-xl font-bold text-slate-700 whitespace-nowrap">General Access</h2>
+                            <h2 className="text-lg sm:text-xl font-bold text-slate-700 whitespace-nowrap">General Access</h2>
                             <div className="h-px bg-slate-200 w-full"></div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                             {/* CARD 1: Central Office */}
                             <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
                                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4 text-blue-600">
@@ -353,10 +353,10 @@ const SuperUserSelector = () => {
                     {/* SECTION: Infrastructure Monitoring */}
                     <section>
                         <div className="flex items-center gap-4 mb-8">
-                            <h2 className="text-xl font-bold text-slate-700 whitespace-nowrap">Infrastructure Monitoring</h2>
+                            <h2 className="text-lg sm:text-xl font-bold text-slate-700 whitespace-nowrap">Infrastructure Monitoring</h2>
                             <div className="h-px bg-slate-200 w-full"></div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                             {/* CARD: 2026 Infrastructure Priorities */}
                             <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center col-span-1 min-h-[300px]">
                                 <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mb-4 text-pink-600">
