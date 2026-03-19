@@ -29,30 +29,28 @@ const AUTHORIZATION_CODES = {
     'Central Office': '8XK2-M9P4',
     'Regional Office': 'H7V3-L5N1',
     'School Division Office': 'Q9D2-R4J6',
-    'DepEd Engineer': 'E5T8-B2W3',
+    'Division Engineer': 'E5T8-B2W3',
     'Non-DepEd Engineer': 'E5T8-B2W3',
     'Local Government Unit': 'L2G7-X4Z9',
     'Central Office Finance': '8XK2-M9P4', // Same as Central Office
     'Super User': 'SUP3R-US3R', // Added for testing
     // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
     'Admin': 'A3M6-Y1K8',
-    'EFD': 'EFD8-C1D9',
+    'EFD Engineer': 'EFD8-C1D9',
     'Implementing Agency': 'AG5N-K9L2'
 };
 
 import locationData from './locations.json';
 
 const getDashboardPath = (role, accountCategory) => {
-    // DepEd Engineer redirect depends on their account category
-    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
+    // Division/Non-DepEd Engineer redirect depends on their account category
+    if (role === 'Division Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
         return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
             ? '/non-deped-dashboard'
             : '/engineer-dashboard';
     }
     const roleMap = {
-        'EFD': '/efd-dashboard',
-        'HRODI Engineer': '/efd-dashboard',
-        'HRODI': '/efd-dashboard',
+        'EFD Engineer': '/efd-dashboard',
         'Local Government Unit': '/lgu-dashboard',
         'School Head': '/my-activity',
         'Human Resource': '/hr-dashboard',
@@ -442,8 +440,8 @@ const Register = () => {
             return;
         }
 
-        // Division/DepEd/Non-DepEd Engineer Specific Validations
-        if (formData.role === 'DepEd Engineer' || formData.role === 'Non-DepEd Engineer') {
+        // Engineer (Division/EFD) Specific Validations
+        if (formData.role === 'Division Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD Engineer') {
             if (formData.contactNumber.length !== 11) {
                 alert("Please enter a valid 11-digit mobile number.");
                 return;
@@ -671,10 +669,10 @@ const Register = () => {
                 // Save accountCategory so other components can read it
                 if (formData.accountCategory) {
                     localStorage.setItem('accountCategory', formData.accountCategory);
-                } else if (formData.role === 'EFD' || formData.role === 'HRODI' || formData.role === 'HRODI Engineer') {
+                } else if (formData.role === 'EFD Engineer') {
                     localStorage.setItem('accountCategory', 'EFD Engineer');
                 }
-                const destPath = getDashboardPath(formData.role, formData.accountCategory || ( (formData.role === 'EFD' || formData.role === 'HRODI') ? 'EFD Engineer' : '' ));
+                const destPath = getDashboardPath(formData.role, formData.accountCategory || ( (formData.role === 'EFD Engineer') ? 'EFD Engineer' : '' ));
                 navigate(destPath);
             }
 
@@ -750,9 +748,9 @@ const Register = () => {
                                         <option value="Regional Office">RO Personnel</option>
                                         <option value="School Division Office">SDO Personnel</option>
                                         <option value="School Head">School Head</option>
-                                        <option value="DepEd Engineer">DepEd Engineer (Division)</option>
-                                        <option value="Non-DepEd Engineer">Non-DepEd Engineer</option>
-                                        <option value="HRODI Engineer">HRODI Engineer (Human Resource and Organizational Development)</option>
+                                        <option value="Division Engineer">Division Engineer</option>
+                                        {/*<option value="Non-DepEd Engineer">Non-DepEd Engineer</option>*/}
+                                        <option value="EFD Engineer">EFD Engineer </option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         <option value="Central Office Finance">Central Office Finance</option>
                                         {/* <option value="Super User" hidden>Super User</option> */}
@@ -1303,18 +1301,22 @@ const Register = () => {
 
 
                                     {/* ENGINEER & EFD FIELDS */}
-                                    {(formData.role === 'DepEd Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD') && (
+                                    {(formData.role === 'Division Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD Engineer') && (
                                         <div className="space-y-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
                                             <h3 className="text-sm font-bold text-teal-800 uppercase flex items-center gap-2">
                                                 <span className="bg-teal-100 text-teal-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>
-                                                Assignment & Contact
+                                                {formData.role === 'EFD Engineer' ? 'Position & Contact' : 'Assignment & Contact'}
                                             </h3>
 
-                                            {/* ASSIGNMENT */}
+                                            {/* ASSIGNMENT / POSITION */}
                                             <div className="space-y-3">
-                                                <label className="text-xs font-bold text-teal-700 uppercase">Assignment</label>
+                                                {formData.role !== 'EFD Engineer' ? (
+                                                    <label className="text-xs font-bold text-teal-700 uppercase">Assignment</label>
+                                                ) : (
+                                                    <label className="text-xs font-bold text-teal-700 uppercase">Position</label>
+                                                )}
 
-                                                {formData.role !== 'EFD' && (
+                                                {formData.role !== 'EFD Engineer' && (
                                                     <>
                                                         <select
                                                             name="region"

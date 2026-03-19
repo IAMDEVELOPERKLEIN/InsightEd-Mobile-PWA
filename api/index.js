@@ -167,15 +167,15 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
     if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
 
     const row = schoolRes.rows[0];
-    const totalUnits = 9; 
+    const totalUnits = 9;
     let completedUnitsCount = 0;
     let completedFlags = {};
-    
+
     for (let i = 1; i <= totalUnits; i++) {
       const intVal = parseInt(row[`unit${i}`]) || 0;
       const boolVal = row[`unit${i}_completed`] === true;
       const isDone = (intVal === 1 || boolVal);
-      
+
       completedFlags[`unit${i}`] = isDone;
       if (isDone) completedUnitsCount++;
     }
@@ -233,7 +233,7 @@ const pool = new Pool({
   max: 20, // Keep at 20 for now, but monitor
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000, // Increased to 10s to handle incidental large transfers
-  statement_timeout: 15000, 
+  statement_timeout: 15000,
 });
 
 pool.on('error', (err) => {
@@ -304,31 +304,31 @@ const checkAndDropColumn = async (tableName, columnName) => {
 
 // --- DATABASE INIT ---
 const runAutoMigrations = async () => {
-    console.log("   [Auto-Migrate] Starting loose migrations...");
-    try {
-        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE');
-        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;');
-        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;');
-        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB');
-        await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0');
-        
-        // Multi-grade columns
-        const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
-        for (const col of mgCols) {
-            await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
-        }
-        const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
-        for (const col of mgEnrCols) {
-            await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
-        }
+  console.log("   [Auto-Migrate] Starting loose migrations...");
+  try {
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE');
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;');
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;');
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB');
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0');
 
-        // Unit 4
-        await unit4MigrateCols();
-        
-        console.log("   [Auto-Migrate] Finished.");
-    } catch (e) {
-        console.error("❌ Auto-Migrate Fail:", e.message);
+    // Multi-grade columns
+    const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
+    for (const col of mgCols) {
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
     }
+    const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
+    for (const col of mgEnrCols) {
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
+    }
+
+    // Unit 4
+    await unit4MigrateCols();
+
+    console.log("   [Auto-Migrate] Finished.");
+  } catch (e) {
+    console.error("❌ Auto-Migrate Fail:", e.message);
+  }
 };
 
 const initDB = async () => {
@@ -337,7 +337,7 @@ const initDB = async () => {
     console.log("   [initDB] Starting...");
     // Set a lock timeout to prevent hanging forever on busy tables
     // Increased to 15s to be more patient with Azure's background tasks
-    await pool.query('SET lock_timeout = 15000'); 
+    await pool.query('SET lock_timeout = 15000');
 
     currentSegment = "Segment 0.1: project_documents table";
     console.log(`     [${currentSegment}]`);
@@ -1224,7 +1224,7 @@ const initMasterlistDB = async () => {
     console.log("     [Segment: masterlist province sync]");
     // Optimization: Add index on school_id first if not present
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_school_id ON masterlist_26_30(school_id);`);
-    
+
     // Only update if there are NULL provinces to avoid long scans on every restart
     const nullCheck = await pool.query(`SELECT 1 FROM masterlist_26_30 WHERE province IS NULL LIMIT 1`);
     if (nullCheck.rowCount > 0) {
@@ -1595,21 +1595,21 @@ app.post('/api/auth/migrate-login', async (req, res) => {
   const identifier = (school_id || email || '').trim();
 
   if (!identifier || !password) {
-    return res.status(400).json({ success: false, error: "Identifier and password are required. Got: " + JSON.stringify({identifier, hasPassword: !!password}) });
+    return res.status(400).json({ success: false, error: "Identifier and password are required. Got: " + JSON.stringify({ identifier, hasPassword: !!password }) });
   }
 
   try {
     const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
     console.log(`[AUTH DEBUG] Migrate-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
-    
+
     // 1. Fetch user from PostgreSQL
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
     const SELECT_COLS = `uid, email, role, region, division, account_category, passcode, password_hash, password_salt, hash_version, first_name, last_name, school_id`;
-    
-    const query = isSchoolId 
+
+    const query = isSchoolId
       ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
       : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1`;
-    
+
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
     if (userRes.rowCount === 0) {
@@ -1686,11 +1686,11 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // 3. User is verified! Generate a JWT session token
     const token = jwt.sign(
-      { 
-        uid: user.uid, 
-        email: user.email, 
-        role: user.role 
-      }, 
+      {
+        uid: user.uid,
+        email: user.email,
+        role: user.role
+      },
       process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
       { expiresIn: '30d' }
     );
@@ -1759,7 +1759,7 @@ app.post('/api/auth/setup-pin', async (req, res) => {
   if (!identifier || !pin || pin.length !== 6) {
     return res.status(400).json({ success: false, error: "Valid 6-digit PIN and identifier are required." });
   }
-  
+
   try {
     // Determine which column to match on
     let whereClause, param;
@@ -1779,11 +1779,11 @@ app.post('/api/auth/setup-pin', async (req, res) => {
       [pin, param]
     );
 
-    
+
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: "User not found." });
     }
-    
+
     return res.json({ success: true, message: "PIN set successfully." });
   } catch (err) {
     console.error("Setup PIN Error:", err);
@@ -1802,13 +1802,13 @@ app.post('/api/auth/pin-login', async (req, res) => {
   try {
     const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
     console.log(`[AUTH DEBUG] Pin-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
-    
+
     // Unified Identifier Lookup (Strict Users Table)
     const selectCols = 'uid, email, role, region, division, account_category, passcode, first_name, last_name, school_id';
-    const query = isSchoolId 
+    const query = isSchoolId
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
       : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
-    
+
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
 
@@ -1842,11 +1842,11 @@ app.post('/api/auth/pin-login', async (req, res) => {
 
     // 3. User is verified! Generate a JWT session token
     const token = jwt.sign(
-      { 
-        uid: user.uid, 
-        email: user.email, 
-        role: user.role 
-      }, 
+      {
+        uid: user.uid,
+        email: user.email,
+        role: user.role
+      },
       process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
       { expiresIn: '30d' }
     );
@@ -3799,13 +3799,13 @@ app.post('/api/auth/master-login', async (req, res) => {
     // 2. Look up the target user
     const isSchoolId = !!school_id || /^\d{6,}$/.test(identifier);
     const selectCols = 'uid, email, role, region, division, account_category, first_name, last_name, school_id, passcode';
-    
-    const query = isSchoolId 
+
+    const query = isSchoolId
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
       : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
-    
+
     const lookupResult = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
-    
+
     if (lookupResult.rows.length === 0) {
       return res.status(404).json({ error: "Target user not found." });
     }
@@ -3813,12 +3813,12 @@ app.post('/api/auth/master-login', async (req, res) => {
     const targetUser = lookupResult.rows[0];
     // 3. Generate a JWT session token for the target user (identify by school_id if SH)
     const token = jwt.sign(
-      { 
-        uid: targetUser.uid, 
+      {
+        uid: targetUser.uid,
         email: targetUser.email,
         school_id: targetUser.school_id,
-        role: targetUser.role 
-      }, 
+        role: targetUser.role
+      },
       process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
       { expiresIn: '30d' }
     );
@@ -5160,11 +5160,11 @@ app.post('/api/chat', async (req, res) => {
 app.post('/api/feedback', async (req, res) => {
   try {
     const { content, user_email, user_uid } = req.body;
-    
+
     if (!content || content.trim().length === 0) {
       return res.status(400).json({ error: "Content is required" });
     }
-    
+
     if (content.length > 200) {
       return res.status(400).json({ error: "Feedback must be 200 characters or less" });
     }
@@ -5185,11 +5185,11 @@ app.post('/api/feedback', async (req, res) => {
 app.post('/api/bugs', async (req, res) => {
   try {
     const { description, user_email, user_uid } = req.body;
-    
+
     if (!description || description.trim().length === 0) {
       return res.status(400).json({ error: "Description is required" });
     }
-    
+
     if (description.length > 500) {
       return res.status(400).json({ error: "Bug report must be 500 characters or less" });
     }
@@ -5197,11 +5197,11 @@ app.post('/api/bugs', async (req, res) => {
     await pool.query(
       'INSERT INTO app_bugs (description, metadata) VALUES ($1, $2)',
       [
-        description.trim(), 
-        JSON.stringify({ 
-          user_email: user_email || null, 
+        description.trim(),
+        JSON.stringify({
+          user_email: user_email || null,
           user_uid: user_uid || null,
-          timestamp: new Date().toISOString() 
+          timestamp: new Date().toISOString()
         })
       ]
     );
@@ -5963,21 +5963,21 @@ app.post('/api/register-school', async (req, res) => {
              password_hash = EXCLUDED.password_hash,
              hash_version = EXCLUDED.hash_version,
              passcode = EXCLUDED.passcode;`,
-         [
-           uid,
-           normalizedEmail,
-           userRole,
-           valueOrNull(contactNumber),
-           userRole, // first_name (now using role name instead of hardcoded 'School Head')
-           schoolData.school_id, // last_name (using ID as per convention or could use Name)
-           valueOrNull(schoolData.region),
-           valueOrNull(schoolData.division),
-           valueOrNull(schoolData.province),
-           valueOrNull(schoolData.municipality), // stored as 'city' in users table
-           passwordHash,
-           'bcrypt',
-           passcode
-         ]
+        [
+          uid,
+          normalizedEmail,
+          userRole,
+          valueOrNull(contactNumber),
+          userRole, // first_name (now using role name instead of hardcoded 'School Head')
+          schoolData.school_id, // last_name (using ID as per convention or could use Name)
+          valueOrNull(schoolData.region),
+          valueOrNull(schoolData.division),
+          valueOrNull(schoolData.province),
+          valueOrNull(schoolData.municipality), // stored as 'city' in users table
+          passwordHash,
+          'bcrypt',
+          passcode
+        ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
     } catch (e) {
@@ -6237,21 +6237,21 @@ app.post('/api/register-beta', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    res.json({ 
-        success: true, 
-        token: token,
-        user: {
-          uid: uid,
-          email: null,
-          role: 'School Head',
-          region: schoolData.region || null,
-          division: schoolData.division || null,
-          school_id: schoolData.school_id,
-          first_name: firstName || 'School',
-          last_name: lastName || 'Head',
-          iern: foundIern
-        },
-        message: "School Head Registered Successfully" 
+    res.json({
+      success: true,
+      token: token,
+      user: {
+        uid: uid,
+        email: null,
+        role: 'School Head',
+        region: schoolData.region || null,
+        division: schoolData.division || null,
+        school_id: schoolData.school_id,
+        first_name: firstName || 'School',
+        last_name: lastName || 'Head',
+        iern: foundIern
+      },
+      message: "School Head Registered Successfully"
     });
 
   } catch (err) {
@@ -6292,15 +6292,18 @@ app.post('/api/register-user', async (req, res) => {
 
     // Auto-determine account_category (account_type) based on role if not explicitly provided
     let finalRole = role;
-    if (finalRole === 'HRODI') {
-      finalRole = 'HRODI Engineer';
+    if (finalRole === 'HRODI' || finalRole === 'HRODI Engineer') {
+      finalRole = 'EFD Engineer';
+    }
+    if (finalRole === 'EFD') {
+      finalRole = 'EFD Engineer';
     }
 
     let finalAccountCategory = accountCategory;
-    if (finalRole === 'EFD') {
+    if (finalRole === 'EFD Engineer') {
       finalAccountCategory = 'EFD Engineer';
     } else if ((finalRole === 'Division Engineer' || finalRole === 'DepEd Engineer') && !accountCategory) {
-      finalAccountCategory = 'DepEd Engineer'; // Fallback default for unspecified Engineers
+      finalAccountCategory = 'DepEd Engineer'; // Backwards compatibility for the category column
     } else if (!finalAccountCategory) {
       finalAccountCategory = finalRole;
     }
@@ -6318,7 +6321,6 @@ app.post('/api/register-user', async (req, res) => {
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
-                email_address = EXCLUDED.email_address,
                 role = EXCLUDED.role,
                 first_name = EXCLUDED.first_name,
                 last_name = EXCLUDED.last_name,
@@ -6352,7 +6354,7 @@ app.post('/api/register-user', async (req, res) => {
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
 
-if (poolNew) {
+    if (poolNew) {
       try {
         console.log("”„ Dual-Write: Syncing Generic User...");
         await poolNew.query(query, values);
@@ -6398,125 +6400,125 @@ if (poolNew) {
 
 // --- 3e. POST: Verify Passcode (PROTECTED) ---
 app.post('/api/auth/verify-passcode', authMiddleware, async (req, res) => {
-    const { uid } = req.user;
-    const { passcode } = req.body;
+  const { uid } = req.user;
+  const { passcode } = req.body;
 
-    if (!passcode) {
-        return res.status(400).json({ error: "Missing passcode." });
+  if (!passcode) {
+    return res.status(400).json({ error: "Missing passcode." });
+  }
+
+  try {
+    const result = await pool.query("SELECT passcode FROM users WHERE uid = $1", [uid]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "User not found." });
     }
 
-    try {
-        const result = await pool.query("SELECT passcode FROM users WHERE uid = $1", [uid]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: "User not found." });
-        }
-
-        const storedPasscode = result.rows[0].passcode;
-        // Plain text comparison as requested
-        if (storedPasscode === passcode) {
-            return res.json({ success: true, message: "Passcode verified." });
-        } else {
-            return res.status(401).json({ error: "Incorrect passcode." });
-        }
-    } catch (err) {
-        console.error("Verify Passcode Error:", err);
-        return res.status(500).json({ error: "Internal server error." });
+    const storedPasscode = result.rows[0].passcode;
+    // Plain text comparison as requested
+    if (storedPasscode === passcode) {
+      return res.json({ success: true, message: "Passcode verified." });
+    } else {
+      return res.status(401).json({ error: "Incorrect passcode." });
     }
+  } catch (err) {
+    console.error("Verify Passcode Error:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
 });
 
 // --- 3f. POST: Setup Passcode (PROTECTED) ---
 app.post('/api/auth/setup-passcode', authMiddleware, async (req, res) => {
-    const { uid } = req.user;
-    const { passcode } = req.body;
+  const { uid } = req.user;
+  const { passcode } = req.body;
 
-    if (!passcode || passcode.length !== 6 || !/^\d+$/.test(passcode)) {
-        return res.status(400).json({ error: "Invalid passcode format. Must be 6 digits." });
-    }
+  if (!passcode || passcode.length !== 6 || !/^\d+$/.test(passcode)) {
+    return res.status(400).json({ error: "Invalid passcode format. Must be 6 digits." });
+  }
 
+  try {
+    await pool.query("UPDATE users SET passcode = $1 WHERE uid = $2", [passcode, uid]);
+
+    // Log activity
     try {
-        await pool.query("UPDATE users SET passcode = $1 WHERE uid = $2", [passcode, uid]);
-        
-        // Log activity
-        try {
-            const userRes = await pool.query("SELECT first_name, last_name, role FROM users WHERE uid = $1", [uid]);
-            if (userRes.rows.length > 0) {
-                const { first_name, last_name, role } = userRes.rows[0];
-                await logActivity(uid, `${first_name} ${last_name}`, role, 'UPDATE', 'Security', 'Set up registration passcode');
-            }
-        } catch (logErr) {
-            console.warn('⚠️ logActivity failed (non-fatal):', logErr.message);
-        }
-
-        return res.json({ success: true, message: "Passcode set up successfully." });
-    } catch (err) {
-        console.error("Setup Passcode Error:", err);
-        return res.status(500).json({ error: "Internal server error." });
+      const userRes = await pool.query("SELECT first_name, last_name, role FROM users WHERE uid = $1", [uid]);
+      if (userRes.rows.length > 0) {
+        const { first_name, last_name, role } = userRes.rows[0];
+        await logActivity(uid, `${first_name} ${last_name}`, role, 'UPDATE', 'Security', 'Set up registration passcode');
+      }
+    } catch (logErr) {
+      console.warn('⚠️ logActivity failed (non-fatal):', logErr.message);
     }
+
+    return res.json({ success: true, message: "Passcode set up successfully." });
+  } catch (err) {
+    console.error("Setup Passcode Error:", err);
+    return res.status(500).json({ error: "Internal server error." });
+  }
 });
 
 // --- UPDATE USER PROFILE (PROTECTED) ---
 app.put('/api/users/update', authMiddleware, async (req, res) => {
-    const { uid } = req.user;
-    const { firstName, lastName, region, province, city, barangay } = req.body;
+  const { uid } = req.user;
+  const { firstName, lastName, region, province, city, barangay } = req.body;
 
-    try {
-        await pool.query(
-            `UPDATE users SET 
+  try {
+    await pool.query(
+      `UPDATE users SET 
                 first_name = $1, last_name = $2, 
                 region = $3, province = $4, city = $5, barangay = $6 
              WHERE uid = $7`,
-            [firstName, lastName, region, province, city, barangay, uid]
-        );
-        res.json({ success: true, message: "Profile updated successfully." });
-    } catch (err) {
-        console.error("Update Profile Error:", err);
-        res.status(500).json({ success: false, error: "Database error" });
-    }
+      [firstName, lastName, region, province, city, barangay, uid]
+    );
+    res.json({ success: true, message: "Profile updated successfully." });
+  } catch (err) {
+    console.error("Update Profile Error:", err);
+    res.status(500).json({ success: false, error: "Database error" });
+  }
 });
 
 // --- CHANGE PASSWORD (PROTECTED) ---
 app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
-    const { uid } = req.user;
-    const { currentPassword, newPassword } = req.body;
+  const { uid } = req.user;
+  const { currentPassword, newPassword } = req.body;
 
-    try {
-        // 1. Fetch current hash
-        const userRes = await pool.query('SELECT password_hash FROM users WHERE uid = $1', [uid]);
-        if (userRes.rowCount === 0) return res.status(404).json({ error: "User not found" });
+  try {
+    // 1. Fetch current hash
+    const userRes = await pool.query('SELECT password_hash FROM users WHERE uid = $1', [uid]);
+    if (userRes.rowCount === 0) return res.status(404).json({ error: "User not found" });
 
-        const { password_hash } = userRes.rows[0];
+    const { password_hash } = userRes.rows[0];
 
-        // 2. Verify current password
-        const isValid = await bcrypt.compare(currentPassword, password_hash);
-        if (!isValid) return res.status(401).json({ error: "Incorrect current password" });
+    // 2. Verify current password
+    const isValid = await bcrypt.compare(currentPassword, password_hash);
+    if (!isValid) return res.status(401).json({ error: "Incorrect current password" });
 
-        // 3. Hash and update new password
-        const newHash = await bcrypt.hash(newPassword, 10);
-        await pool.query('UPDATE users SET password_hash = $1, hash_version = \'bcrypt\' WHERE uid = $2', [newHash, uid]);
+    // 3. Hash and update new password
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1, hash_version = \'bcrypt\' WHERE uid = $2', [newHash, uid]);
 
-        res.json({ success: true, message: "Password updated successfully." });
-    } catch (err) {
-        console.error("Change Password Error:", err);
-        res.status(500).json({ success: false, error: "Internal server error" });
-    }
+    res.json({ success: true, message: "Password updated successfully." });
+  } catch (err) {
+    console.error("Change Password Error:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
 });
 
 // --- SUBMIT FEEDBACK (PROTECTED) ---
 app.post('/api/feedback', authMiddleware, async (req, res) => {
-    const { uid } = req.user;
-    const { userName, role, ratings, comment, appVersion } = req.body;
+  const { uid } = req.user;
+  const { userName, role, ratings, comment, appVersion } = req.body;
 
-    try {
-        await pool.query(
-            `INSERT INTO app_feedback (user_id, user_name, role, ease_of_use, aesthetics, functionality, comment, app_version)
+  try {
+    await pool.query(
+      `INSERT INTO app_feedback (user_id, user_name, role, ease_of_use, aesthetics, functionality, comment, app_version)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [uid, userName, role, ratings.easeOfUse, ratings.aesthetics, ratings.functionality, comment, appVersion]
-        );
-        res.json({ success: true, message: "Feedback submitted successfully." });
-    } catch (err) {
-        console.error("Feedback Submission Error:", err);
-        res.status(500).json({ success: false, error: "Failed to submit feedback" });
-    }
+      [uid, userName, role, ratings.easeOfUse, ratings.aesthetics, ratings.functionality, comment, appVersion]
+    );
+    res.json({ success: true, message: "Feedback submitted successfully." });
+  } catch (err) {
+    console.error("Feedback Submission Error:", err);
+    res.status(500).json({ success: false, error: "Failed to submit feedback" });
+  }
 });
 
 // --- 3f. GET: Fetch User Profile by UID ---
@@ -6649,9 +6651,9 @@ app.get('/api/locations/regions', async (req, res) => {
       ORDER BY region ASC
     `);
     res.json(result.rows.map(r => r.region));
-  } catch (err) { 
+  } catch (err) {
     console.error("GET Regions Error:", err);
-    res.status(500).json({ error: err.message }); 
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -6746,7 +6748,7 @@ app.get('/api/locations/schools', async (req, res) => {
   const { region, division, district, municipality } = req.query;
   try {
     const result = await pool.query(
-      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND UPPER(TRIM("District")) = UPPER(TRIM($3)) AND UPPER(TRIM("Municipality")) = UPPER(TRIM($4)) ORDER BY "School_Name" ASC', 
+      'SELECT "SchoolID" as school_id, "School_Name" as school_name, "Region" as region, "Division" as division, "District" as district, "Province" as province, "Municipality" as municipality, "Legislative_District" as legislative_district, "Curricular_Offering" as curricular_offering, "Latitude" as latitude, "Longitude" as longitude FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) AND UPPER(TRIM("District")) = UPPER(TRIM($3)) AND UPPER(TRIM("Municipality")) = UPPER(TRIM($4)) ORDER BY "School_Name" ASC',
       [region, division, district, municipality]
     );
     res.json(result.rows);
@@ -7617,10 +7619,10 @@ app.post('/api/save-project', async (req, res) => {
         INSERT INTO co_finance (project_id, ipc, tranche_1, tranche_2, tranche_3)
         VALUES ($1, $2, $3, $4, $5)
       `, [
-        newProjectId, 
-        newIpc, 
-        data.tranche_1 || 0, 
-        data.tranche_2 || 0, 
+        newProjectId,
+        newIpc,
+        data.tranche_1 || 0,
+        data.tranche_2 || 0,
         data.tranche_3 || 0
       ]);
     }
@@ -7895,7 +7897,7 @@ app.put('/api/update-project/:id', async (req, res) => {
 
     // Finance Extension - Only if they already had a record OR if tranche data is being provided
     if (f || data.tranche_1 !== undefined || data.tranche_2 !== undefined || data.tranche_3 !== undefined ||
-        data.liquidated_tranche_1 !== undefined || data.liquidated_tranche_2 !== undefined || data.liquidated_tranche_3 !== undefined) {
+      data.liquidated_tranche_1 !== undefined || data.liquidated_tranche_2 !== undefined || data.liquidated_tranche_3 !== undefined) {
       await client.query(`
         INSERT INTO co_finance (
           project_id, ipc, tranche_1, tranche_2, tranche_3, liquidated_tranche_1, liquidated_tranche_2, liquidated_tranche_3
@@ -8288,24 +8290,24 @@ app.patch('/api/finance-dashboard/projects/:id/tranches', async (req, res) => {
 //               IMPLEMENTING AGENCY DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/agency-dashboard/projects', async (req, res) => {
-    const { agency, region } = req.query;
-    try {
-      let filterClause = '';
-      let params = [];
-      let paramCount = 1;
+  const { agency, region } = req.query;
+  try {
+    let filterClause = '';
+    let params = [];
+    let paramCount = 1;
 
-      if (agency && agency !== 'All') {
-        const agencyClean = agency.replace(/^MGO\s+|PGO\s+|CGO\s+/i, '').trim();
-        filterClause += ` AND (implementing_agency ILIKE $${paramCount} OR implementing_agency_specific ILIKE $${paramCount})`;
-        params.push(`%${agencyClean}%`);
-        paramCount++;
-      }
+    if (agency && agency !== 'All') {
+      const agencyClean = agency.replace(/^MGO\s+|PGO\s+|CGO\s+/i, '').trim();
+      filterClause += ` AND (implementing_agency ILIKE $${paramCount} OR implementing_agency_specific ILIKE $${paramCount})`;
+      params.push(`%${agencyClean}%`);
+      paramCount++;
+    }
 
-      if (region && region !== 'All') {
-        filterClause += ` AND region = $${paramCount}`;
-        params.push(region);
-        paramCount++;
-      }
+    if (region && region !== 'All') {
+      filterClause += ` AND region = $${paramCount}`;
+      params.push(region);
+      paramCount++;
+    }
 
     const baseConditions = `
         (e.implementing_agency IS NOT NULL OR e.implementing_agency_specific IS NOT NULL)
@@ -8352,7 +8354,7 @@ app.get('/api/agency-dashboard/projects', async (req, res) => {
       ORDER BY project_id DESC
     `;
     const tableResult = await pool.query(tableQuery, params);
-    
+
     const allProjectsQuery = `
       SELECT DISTINCT ON (COALESCE(e.ipc, e.project_id::text)) 
         e.project_id, e.implementing_agency, e.implementing_agency_specific, e.region, e.project_name, 
@@ -8636,14 +8638,14 @@ app.post('/api/upload/multipart-finalize', async (req, res) => {
     // Read all chunks in order
     const chunkBuffers = [];
     for (let i = 0; i < totalChunks; i++) {
-       const chunkPath = path.join(chunkDir, `chunk_${i}`);
-       if (!fs.existsSync(chunkPath)) throw new Error(`Missing chunk ${i}`);
-       chunkBuffers.push(fs.readFileSync(chunkPath));
+      const chunkPath = path.join(chunkDir, `chunk_${i}`);
+      if (!fs.existsSync(chunkPath)) throw new Error(`Missing chunk ${i}`);
+      chunkBuffers.push(fs.readFileSync(chunkPath));
     }
 
     // Concatenate all chunks
     const finalBuffer = Buffer.concat(chunkBuffers);
-    
+
     // Convert to Base64
     const base64Content = finalBuffer.toString('base64');
     const dataUrl = `data:${contentType || 'application/pdf'};base64,${base64Content}`;
@@ -8667,7 +8669,7 @@ app.get('/api/engineers', async (req, res) => {
   try {
     let query;
     let values = [];
-    
+
     if (role) {
       query = `
         SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
@@ -8684,7 +8686,7 @@ app.get('/api/engineers', async (req, res) => {
         ORDER BY first_name ASC;
       `;
     }
-    
+
     const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (err) {
@@ -9036,7 +9038,7 @@ app.post('/api/upload-project-document', async (req, res) => {
   const { projectId, type, base64, uid } = req.body;
 
   console.log(`📂 Incoming Doc Upload: [${type}] for Project [${projectId}]`);
-  
+
   if (!projectId || !type || !base64) {
     return res.status(400).json({ error: "Missing required data" });
   }
@@ -9052,7 +9054,7 @@ app.post('/api/upload-project-document', async (req, res) => {
   let client;
   try {
     client = await pool.connect();
-    
+
     // 1. Get the IPC from engineer_form to ensure consistent records
     const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
     if (projectRes.rows.length === 0) {
@@ -9071,7 +9073,7 @@ app.post('/api/upload-project-document', async (req, res) => {
         created_at = CURRENT_TIMESTAMP
       RETURNING project_id;
     `;
-    
+
     const result = await client.query(upsertQuery, [parseInt(projectId), ipc, base64, uid]);
 
     console.log(`✅ Updated ${type} in engineer_documents for project_id ${projectId}`);
@@ -9100,7 +9102,7 @@ app.post('/api/bulk-upload-project-documents', async (req, res) => {
   const { projectId, documents, uid } = req.body; // documents = { POW: base64, DUPA: base64, etc. }
 
   console.log(`📂 Incoming Bulk Doc Upload for Project [${projectId}]`);
-  
+
   if (!projectId || !documents || Object.keys(documents).length === 0) {
     return res.status(400).json({ error: "Missing required data" });
   }
@@ -9108,7 +9110,7 @@ app.post('/api/bulk-upload-project-documents', async (req, res) => {
   let client;
   try {
     client = await pool.connect();
-    
+
     // 1. Get Project Metadata (IPC)
     const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
     if (projectRes.rows.length === 0) {
@@ -9120,7 +9122,7 @@ app.post('/api/bulk-upload-project-documents', async (req, res) => {
     const docEntries = Object.entries(documents);
     const updateCols = [];
     const values = [parseInt(projectId), ipc, uid];
-    
+
     docEntries.forEach(([type, base64], index) => {
       let col = '';
       if (type === 'POW') col = 'pow_pdf';
@@ -9128,7 +9130,7 @@ app.post('/api/bulk-upload-project-documents', async (req, res) => {
       else if (type === 'CONTRACT') col = 'contract_pdf';
       else if (type === 'RTA') col = 'rta_pdf';
       else if (type === 'MOA') col = 'moa_pdf';
-      
+
       if (col) {
         updateCols.push({ name: col, index: values.length + 1 });
         values.push(base64);
@@ -10703,7 +10705,7 @@ app.get('/api/debug/iern-check', async (req, res) => {
       ORDER BY division, school_name
     `, [region]);
     res.json({ byDivision: r1.rows, schools_with_iern: r2.rows });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- 25b. GET: Monitoring Stats per Division (RO View) ---
@@ -11256,7 +11258,7 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
     console.log("DEBUG: Running Division Stats for Region:", region);
 
     const result = await pool.query(query, [region]);
-    
+
     // ADDED: Strip validation stats if role is RO/SDO
     const requestRole = req.query.role;
     if (requestRole === 'Regional Office' || requestRole === 'School Division Office') {
@@ -11827,7 +11829,7 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
     `;
 
     const result = await pool.query(query, [region, division]);
-    
+
     // ADDED: Strip validation stats if role is RO/SDO
     const requestRole = req.query.role;
     if (requestRole === 'Regional Office' || requestRole === 'School Division Office') {
@@ -13893,14 +13895,14 @@ app.get('/api/reports/insights', async (req, res) => {
       // Map standards: Kinder (25), Elem (35), JHS/SHS (40). Using average 35 as baseline for comparison.
       if (grade === 'total') {
         const conds = grades.map(g => {
-          const limit = (g === 'kinder') ? 25 : (['g1','g2','g3','g4','g5','g6'].includes(g) ? 35 : 40);
+          const limit = (g === 'kinder') ? 25 : (['g1', 'g2', 'g3', 'g4', 'g5', 'g6'].includes(g) ? 35 : 40);
           if (status === 'less') return `CASE WHEN CAST(COALESCE(NULLIF(p.grade_${g}_size, ''), '0') AS INTEGER) < ${limit} THEN 1 ELSE 0 END`;
           if (status === 'above') return `CASE WHEN CAST(COALESCE(NULLIF(p.grade_${g}_size, ''), '0') AS INTEGER) > ${limit} THEN 1 ELSE 0 END`;
           return `CASE WHEN CAST(COALESCE(NULLIF(p.grade_${g}_size, ''), '0') AS INTEGER) BETWEEN ${limit - 5} AND ${limit + 5} THEN 1 ELSE 0 END`;
         }).join(' + ');
         metricSelect = `SUM(${conds}) as value`;
       } else {
-        const limit = (grade === 'kinder') ? 25 : (['g1','g2','g3','g4','g5','g6'].includes(grade) ? 35 : 40);
+        const limit = (grade === 'kinder') ? 25 : (['g1', 'g2', 'g3', 'g4', 'g5', 'g6'].includes(grade) ? 35 : 40);
         let cond = '';
         if (status === 'less') cond = `CAST(COALESCE(NULLIF(p.grade_${grade}_size, ''), '0') AS INTEGER) < ${limit}`;
         else if (status === 'above') cond = `CAST(COALESCE(NULLIF(p.grade_${grade}_size, ''), '0') AS INTEGER) > ${limit}`;
@@ -14038,7 +14040,7 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10 INTEGER DEFAULT 0`,
     ];
     for (const sql of ensureCols) {
-      await pool.query(sql).catch(() => {}); // silently skip if already exists
+      await pool.query(sql).catch(() => { }); // silently skip if already exists
     }
 
     // ── 2. Safe fetch — only columns we know exist ──────────────────────────
@@ -14182,7 +14184,7 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
     const result = await pool.query('SELECT * FROM ph_schools WHERE school_id = $1', [schoolId]);
     if (result.rows.length > 0) {
       let row = result.rows[0];
-      
+
       // --- DYNAMIC BASELINE FALLBACK ---
       // If total_teachers_registered is 0, attempt a live count from master list
       if (!row.total_teachers_registered || parseInt(row.total_teachers_registered) === 0) {
@@ -14192,7 +14194,7 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
           if (liveCount > 0) {
             row.total_teachers_registered = liveCount;
             // Asyncly update the table so it persists
-            pool.query('UPDATE ph_schools SET total_teachers_registered = $1 WHERE school_id = $2', [liveCount, schoolId]).catch(() => {});
+            pool.query('UPDATE ph_schools SET total_teachers_registered = $1 WHERE school_id = $2', [liveCount, schoolId]).catch(() => { });
           }
         } catch (e) {
           console.warn(`[GET /api/ph_schools] Baseline fallback failed for ${schoolId}:`, e.message);
@@ -14311,11 +14313,11 @@ app.post('/api/validate-google-drive-link', async (req, res) => {
         } else {
           const metadata = await metadataResponse.json();
           fileName = metadata.name || fileName;
-          
+
           // Check if file is publicly shared
           if (metadata.permissions) {
             // Look for a permission with role='reader' and type='anyone'
-            isPublic = metadata.permissions.some(p => 
+            isPublic = metadata.permissions.some(p =>
               p.type === 'anyone' && (p.role === 'reader' || p.role === 'commenter' || p.role === 'editor')
             );
           }
@@ -14334,7 +14336,7 @@ app.post('/api/validate-google-drive-link', async (req, res) => {
     // If we couldn't use the API, fall back to simple public access check
     if (!accessToken || !isPublic) {
       console.log("⚠️ Falling back to public access URL check...");
-      
+
       const publicAccessUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
       const publicCheckResponse = await fetch(publicAccessUrl, {
         method: 'HEAD',
@@ -14346,17 +14348,17 @@ app.post('/api/validate-google-drive-link', async (req, res) => {
 
       // If the response is 404 or 403, the file is definitely not public
       if (!publicCheckResponse || publicCheckResponse.status === 403 || publicCheckResponse.status === 404) {
-        return res.status(403).json({ 
-          error: "This file is not publicly accessible. Please make sure you've shared it with 'Anyone with the link' setting in Google Drive." 
+        return res.status(403).json({
+          error: "This file is not publicly accessible. Please make sure you've shared it with 'Anyone with the link' setting in Google Drive."
         });
       }
 
       // A 200 response indicates the file is likely public
       isPublic = publicCheckResponse.status === 200;
-      
+
       if (!isPublic && publicCheckResponse.status !== 200) {
-        return res.status(403).json({ 
-          error: `This file is not publicly accessible (status: ${publicCheckResponse.status}). Please share it with 'Anyone with the link'.` 
+        return res.status(403).json({
+          error: `This file is not publicly accessible (status: ${publicCheckResponse.status}). Please share it with 'Anyone with the link'.`
         });
       }
 
@@ -14368,8 +14370,8 @@ app.post('/api/validate-google-drive-link', async (req, res) => {
 
     // Final check: If we got here without proving the file is public, reject it
     if (!isPublic && accessToken) {
-      return res.status(403).json({ 
-        error: "This file is not publicly shared. Please change the sharing settings to 'Anyone with the link' in Google Drive." 
+      return res.status(403).json({
+        error: "This file is not publicly shared. Please change the sharing settings to 'Anyone with the link' in Google Drive."
       });
     }
 
@@ -14395,10 +14397,10 @@ app.post('/api/validate-google-drive-link', async (req, res) => {
 app.post('/api/ph_schools/unit1', async (req, res) => {
   try {
     const data = req.body;  // Expecting JSON from frontend
-    
+
     console.log(`📝 Unit 1 POST received for school: ${data.school_id}`);
 
-    
+
     const isCompleted = !!(data.barangay && data.leg_district && data.ownership && data.school_type);
 
     // Save Google Drive document link to ownership_documents table if provided
@@ -14406,7 +14408,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     if (data.google_drive_file_id && data.google_drive_link) {
       try {
         console.log(`💾 Saving Google Drive document: ${data.google_drive_file_id}`);
-        
+
         const docQuery = `
           INSERT INTO ownership_documents (school_id, iern, google_drive_file_id, google_drive_link, google_drive_file_name, google_drive_thumbnail_url, ownership_type)
           VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -14419,7 +14421,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
             updated_at = CURRENT_TIMESTAMP
           RETURNING id
         `;
-        
+
         const docResult = await pool.query(docQuery, [
           data.school_id,
           data.iern || null,
@@ -14429,7 +14431,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           data.google_drive_thumbnail_url || null,
           data.ownership || null
         ]);
-        
+
         documentId = docResult.rows[0].id;
         console.log(`✅ Document saved with ID: ${documentId}`);
       } catch (docErr) {
@@ -14483,7 +14485,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       isCompleted,
       isCompleted ? 1 : 0
     ];
-    
+
     // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
     let updatedByIern = false;
     if (data.iern) {
@@ -14498,7 +14500,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           unit1_completed = $21, unit1 = $22, updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2
       `, values);
-      
+
       if (updateRes.rowCount > 0) {
         updatedByIern = true;
       }
@@ -14508,7 +14510,7 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     if (!updatedByIern) {
       await pool.query(query, values);
     }
-    
+
     // --- SYNC TO schools_IERN (Mapping Update) ---
     // If a School Head provides both school_id and iern, ensure the mapping exists in schools_IERN
     if (data.school_id && data.iern) {
@@ -14517,13 +14519,13 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           data.school_id, data.iern, data.school_name,
           data.region || null, data.division || null, data.province || null, data.municipality || null, data.district || null
         ];
-        
+
         const updateIernRes = await pool.query(`
           UPDATE "schools_IERN" 
           SET iern = $2, "School_Name" = $3, "Region" = $4, "Division" = $5, "Province" = $6, "Municipality" = $7, "District" = $8 
           WHERE "SchoolID" = $1
         `, iernValues);
-        
+
         if (updateIernRes.rowCount === 0) {
           await pool.query(`
             INSERT INTO "schools_IERN" ("SchoolID", "iern", "School_Name", "Region", "Division", "Province", "Municipality", "District")
@@ -14785,7 +14787,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
 const unit4MigrateCols = async () => {
   const grades = ['kinder', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
   const cats = ['als', 'muslim', 'ip', 'displaced', 'overage', 'dropout', 'repeater'];
-  
+
   const alterParts = [];
   for (const cat of cats) {
     for (const g of grades) {
@@ -14793,7 +14795,7 @@ const unit4MigrateCols = async () => {
     }
   }
   alterParts.push(`ADD COLUMN IF NOT EXISTS als_total INTEGER DEFAULT 0`);
-  
+
   try {
     await pool.query(`ALTER TABLE ph_schools ${alterParts.join(', ')}`);
   } catch (e) { }
@@ -14903,7 +14905,7 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
     ];
     const insightsAlter = insightsCols.map(c => `ADD COLUMN IF NOT EXISTS ${c} INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE ph_schools ${insightsAlter.join(', ')}`);
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     // Base dynamic fields for K-12
@@ -14956,7 +14958,7 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
     try {
       const teacherCountRes = await pool.query('SELECT COUNT(*) FROM teachers_list WHERE CAST("school.id" AS TEXT) = $1', [schoolId]);
       totalRegistered = parseInt(teacherCountRes.rows[0].count) || 0;
-      
+
       // Add total_teachers_registered to dynamic update
       dynamicFields.push(`total_teachers_registered = $${paramIdx++}`);
       values.push(totalRegistered);
@@ -15455,9 +15457,9 @@ app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
     const workloadCount = parseInt(workloadRes.rows[0].count) || 0;
 
     if (workloadCount === 0) {
-      return res.json({ 
-        success: false, 
-        message: "Cannot finalize Unit 7: No teacher workloads have been mapped yet. Please add workloads in the Teacher Roster first." 
+      return res.json({
+        success: false,
+        message: "Cannot finalize Unit 7: No teacher workloads have been mapped yet. Please add workloads in the Teacher Roster first."
       });
     }
 
@@ -15635,7 +15637,7 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
             age, safety, calamity, upgrade
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `, [
-          schoolId, iern, d.building_name, 
+          schoolId, iern, d.building_name,
           d.less_than_7x9 || 0, d["7x9"] || 0, d.above_7x9 || 0,
           !!d.age, !!d.safety, !!d.calamity, !!d.upgrade
         ]);
@@ -15702,13 +15704,13 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
       if (schRes.rows.length > 0) {
         completed = schRes.rows[0].unit8_completed === true || schRes.rows[0].unit10_completed === true;
       }
-      
+
       // Auto-mark as completed if records exist but flag is missing
       if (!completed) {
         if (invRes.rows.length > 0 || repRes.rows.length > 0 || demRes.rows.length > 0) {
-            completed = true;
-            // Best effort: sync flag in background
-            pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1 WHERE school_id = $1', [schoolId]).catch(e => {});
+          completed = true;
+          // Best effort: sync flag in background
+          pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1 WHERE school_id = $1', [schoolId]).catch(e => { });
         }
       }
     } catch (e) {
@@ -15846,11 +15848,11 @@ app.post('/api/school-location', async (req, res) => {
       const flattenedErrors = val.error.flatten();
       console.error("❌ Zod Validation Error (Flattened):", JSON.stringify(flattenedErrors, null, 2));
       console.error("❌ Raw Zod Issues:", val.error.issues);
-      return res.status(400).json({ 
-        success: false, 
-        error: "Validation failed", 
+      return res.status(400).json({
+        success: false,
+        error: "Validation failed",
         details: val.error.issues,
-        flattened: flattenedErrors 
+        flattened: flattenedErrors
       });
     }
     const validatedData = val.data;
@@ -15956,26 +15958,26 @@ app.post('/api/school-location', async (req, res) => {
 
       // STRICT VALIDATION: Only mark as completed if at least one proximity/mins value is non-zero
       const proxFields = [
-        'road_lighting_pct', 'road_cliff_pct', 'insurgency_threats_6mo', 
+        'road_lighting_pct', 'road_cliff_pct', 'insurgency_threats_6mo',
         'river_crossing_count', 'emergency_response_mins', 'proximity_hospital_km',
         'proximity_brgy_hall_mins', 'proximity_brgy_hall_km', 'proximity_muni_hall_mins',
         'proximity_muni_hall_km', 'proximity_sdo_mins', 'proximity_sdo_km',
         'proximity_clinic_mins', 'proximity_clinic_km', 'proximity_terminal_mins',
         'proximity_terminal_km', 'proximity_highway_mins', 'proximity_highway_km'
       ];
-      
+
       const sumProx = proxFields.reduce((acc, field) => acc + (parseFloat(validatedData[field]) || 0), 0);
       const isUnit9Completed = sumProx > 0;
 
       // 1. Ph_Schools (Quest)
       await pool.query('UPDATE ph_schools SET unit9_completed = $2, unit9 = $3 WHERE school_id = $1', [schoolId, isUnit9Completed, isUnit9Completed ? 1 : 0]);
-      
+
       // 2. School_Profiles (Main Dashboard FLAG)
       await pool.query('UPDATE school_profiles SET f11_location = $2 WHERE school_id = $1', [schoolId, isUnit9Completed]);
 
       // 3. Recalculate Snapshot (Atomic)
       await calculateSchoolProgress(schoolId, pool);
-      
+
       console.log(`[Dashboard Integration] Flags and Snapshot updated for school ${schoolId}`);
     } catch (flagErr) {
       console.warn("[Dashboard Integration] Failed to update flags:", flagErr.message);
@@ -16061,75 +16063,75 @@ app.get('/api/health', (req, res) => {
 
 // --- LGU 1. POST: Save New Project (LGU) ---
 app.post('/api/lgu/save-project', async (req, res) => {
-    const data = req.body;
+  const data = req.body;
 
-    if (!data.schoolName || !data.projectName || !data.schoolId) {
-        return res.status(400).json({ message: "Missing required fields" });
+  if (!data.schoolName || !data.projectName || !data.schoolId) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  let client;
+  let clientNew;
+
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // Dual Write Setup
+    if (poolNew) {
+      try {
+        clientNew = await poolNew.connect();
+        await clientNew.query('BEGIN');
+      } catch (connErr) {
+        console.error("⚠️ Dual-Write LGU: Failed to start transaction:", connErr.message);
+        clientNew = null;
+      }
     }
 
-    let client;
-    let clientNew;
+    // 1. Generate IPC (LGU-YYYY-XXXXX)
+    const year = new Date().getFullYear();
+    const ipcResult = await client.query(
+      "SELECT ipc FROM lgu_projects WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+      [`LGU-${year}-%`]
+    );
 
-    try {
-        client = await pool.connect();
-        await client.query('BEGIN');
+    let nextSeq = 1;
+    if (ipcResult.rows.length > 0) {
+      const lastIpc = ipcResult.rows[0].ipc;
+      const parts = lastIpc.split('-');
+      if (parts.length === 3 && !isNaN(parts[2])) {
+        nextSeq = parseInt(parts[2]) + 1;
+      }
+    }
+    const newIpc = `LGU-${year}-${String(nextSeq).padStart(5, '0')}`;
 
-        // Dual Write Setup
-        if (poolNew) {
-            try {
-                clientNew = await poolNew.connect();
-                await clientNew.query('BEGIN');
-            } catch (connErr) {
-                console.error("⚠️ Dual-Write LGU: Failed to start transaction:", connErr.message);
-                clientNew = null;
-            }
-        }
+    // 2. Prepare Data
+    const lguName = await getUserFullName(data.uid);
+    const resolvedLguName = lguName || data.submittedBy || 'LGU User';
 
-        // 1. Generate IPC (LGU-YYYY-XXXXX)
-        const year = new Date().getFullYear();
-        const ipcResult = await client.query(
-            "SELECT ipc FROM lgu_projects WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
-            [`LGU-${year}-%`]
-        );
+    const docs = data.documents || [];
+    const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
+    const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
+    const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
 
-        let nextSeq = 1;
-        if (ipcResult.rows.length > 0) {
-            const lastIpc = ipcResult.rows[0].ipc;
-            const parts = lastIpc.split('-');
-            if (parts.length === 3 && !isNaN(parts[2])) {
-                nextSeq = parseInt(parts[2]) + 1;
-            }
-        }
-        const newIpc = `LGU-${year}-${String(nextSeq).padStart(5, '0')}`;
+    const projectValues = [
+      data.projectName, data.schoolName, data.schoolId,
+      valueOrNull(data.region), valueOrNull(data.division),
+      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+      valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+      valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+      valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+      valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+      data.uid,           // lgu_id
+      newIpc,
+      resolvedLguName,    // lgu_name
+      valueOrNull(data.latitude),
+      valueOrNull(data.longitude),
+      powDoc,
+      dupaDoc,
+      contractDoc
+    ];
 
-        // 2. Prepare Data
-        const lguName = await getUserFullName(data.uid);
-        const resolvedLguName = lguName || data.submittedBy || 'LGU User';
-
-        const docs = data.documents || [];
-        const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
-        const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
-        const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
-
-        const projectValues = [
-            data.projectName, data.schoolName, data.schoolId,
-            valueOrNull(data.region), valueOrNull(data.division),
-            data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
-            valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
-            valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
-            valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
-            valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
-            data.uid,           // lgu_id
-            newIpc,
-            resolvedLguName,    // lgu_name
-            valueOrNull(data.latitude),
-            valueOrNull(data.longitude),
-            powDoc,
-            dupaDoc,
-            contractDoc
-        ];
-
-        const projectQuery = `
+    const projectQuery = `
       INSERT INTO "lgu_projects" (
         project_name, school_name, school_id, region, division,
         project_status, accomplishment_percentage, status_as_of_date,
@@ -16141,145 +16143,145 @@ app.post('/api/lgu/save-project', async (req, res) => {
       RETURNING lgu_project_id as project_id, project_name, ipc;
     `;
 
-        // 3. Insert Project
-        const projectResult = await client.query(projectQuery, projectValues);
-        const newProject = projectResult.rows[0];
-        const newProjectId = newProject.project_id;
+    // 3. Insert Project
+    const projectResult = await client.query(projectQuery, projectValues);
+    const newProject = projectResult.rows[0];
+    const newProjectId = newProject.project_id;
 
-        // 4. Insert Images
-        if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-            const imageQuery = `
+    // 4. Insert Images
+    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+      const imageQuery = `
         INSERT INTO "lgu_image" (project_id, image_data, uploaded_by)
         VALUES ($1, $2, $3)
       `;
-            for (const imgBase64 of data.images) {
-                await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
-            }
-        }
-
-        await client.query('COMMIT');
-
-        // Dual Write Replay
-        if (clientNew) {
-            try {
-                await clientNew.query(projectQuery, projectValues);
-                const newProjRes = await clientNew.query("SELECT lgu_project_id as project_id FROM lgu_projects WHERE ipc = $1", [newIpc]);
-                if (newProjRes.rows.length > 0) {
-                    const secProjId = newProjRes.rows[0].project_id;
-                    if (data.images && Array.isArray(data.images)) {
-                        const imageQuery = `INSERT INTO "lgu_image" (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
-                        for (const imgBase64 of data.images) {
-                            await clientNew.query(imageQuery, [secProjId, imgBase64, data.uid]);
-                        }
-                    }
-                }
-                await clientNew.query('COMMIT');
-                console.log("✅ Dual-Write: LGU Project Synced!");
-            } catch (dwErr) {
-                console.error("❌ Dual-Write LGU Error:", dwErr.message);
-                await clientNew.query('ROLLBACK').catch(() => { });
-            }
-        }
-
-        // 5. Log Activity
-        const logDetails = {
-            action: "LGU Project Created",
-            ipc: newIpc,
-            status: data.status,
-            timestamp: new Date().toISOString()
-        };
-
-        await logActivity(
-            data.uid, resolvedLguName, 'LGU', 'CREATE',
-            `LGU Project: ${newProject.project_name} (${newIpc})`,
-            JSON.stringify(logDetails)
-        );
-
-        res.status(200).json({ message: "LGU Project saved!", project: newProject, ipc: newIpc });
-
-    } catch (err) {
-        if (client) await client.query('ROLLBACK');
-        if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
-        console.error("❌ LGU Save Error:", err.message);
-        res.status(500).json({ message: "Database error", error: err.message });
-    } finally {
-        if (client) client.release();
-        if (clientNew) clientNew.release();
+      for (const imgBase64 of data.images) {
+        await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+      }
     }
+
+    await client.query('COMMIT');
+
+    // Dual Write Replay
+    if (clientNew) {
+      try {
+        await clientNew.query(projectQuery, projectValues);
+        const newProjRes = await clientNew.query("SELECT lgu_project_id as project_id FROM lgu_projects WHERE ipc = $1", [newIpc]);
+        if (newProjRes.rows.length > 0) {
+          const secProjId = newProjRes.rows[0].project_id;
+          if (data.images && Array.isArray(data.images)) {
+            const imageQuery = `INSERT INTO "lgu_image" (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+            for (const imgBase64 of data.images) {
+              await clientNew.query(imageQuery, [secProjId, imgBase64, data.uid]);
+            }
+          }
+        }
+        await clientNew.query('COMMIT');
+        console.log("✅ Dual-Write: LGU Project Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write LGU Error:", dwErr.message);
+        await clientNew.query('ROLLBACK').catch(() => { });
+      }
+    }
+
+    // 5. Log Activity
+    const logDetails = {
+      action: "LGU Project Created",
+      ipc: newIpc,
+      status: data.status,
+      timestamp: new Date().toISOString()
+    };
+
+    await logActivity(
+      data.uid, resolvedLguName, 'LGU', 'CREATE',
+      `LGU Project: ${newProject.project_name} (${newIpc})`,
+      JSON.stringify(logDetails)
+    );
+
+    res.status(200).json({ message: "LGU Project saved!", project: newProject, ipc: newIpc });
+
+  } catch (err) {
+    if (client) await client.query('ROLLBACK');
+    if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
+    console.error("❌ LGU Save Error:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  } finally {
+    if (client) client.release();
+    if (clientNew) clientNew.release();
+  }
 });
 
 // --- LGU 2. POST: Upload Image (LGU) ---
 app.post('/api/lgu/upload-image', async (req, res) => {
-    const { projectId, imageData, uploadedBy } = req.body;
-    if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
+  const { projectId, imageData, uploadedBy } = req.body;
+  if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
 
-    try {
-        const query = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
-        const result = await pool.query(query, [projectId, imageData, uploadedBy]);
+  try {
+    const query = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
+    const result = await pool.query(query, [projectId, imageData, uploadedBy]);
 
-        await logActivity(uploadedBy, 'LGU User', 'LGU', 'UPLOAD', `LGU Project ID: ${projectId}`, `Uploaded image`);
+    await logActivity(uploadedBy, 'LGU User', 'LGU', 'UPLOAD', `LGU Project ID: ${projectId}`, `Uploaded image`);
 
-        res.status(201).json({ success: true, imageId: result.rows[0].id });
+    res.status(201).json({ success: true, imageId: result.rows[0].id });
 
-        // Dual Write
-        if (poolNew) {
-            try {
-                const ipcRes = await pool.query("SELECT ipc FROM lgu_projects WHERE lgu_project_id = $1", [projectId]);
-                if (ipcRes.rows.length > 0) {
-                    const ipc = ipcRes.rows[0].ipc;
-                    await poolNew.query(`
+    // Dual Write
+    if (poolNew) {
+      try {
+        const ipcRes = await pool.query("SELECT ipc FROM lgu_projects WHERE lgu_project_id = $1", [projectId]);
+        if (ipcRes.rows.length > 0) {
+          const ipc = ipcRes.rows[0].ipc;
+          await poolNew.query(`
                     INSERT INTO lgu_image (project_id, image_data, uploaded_by)
                     VALUES ((SELECT lgu_project_id FROM lgu_projects WHERE ipc = $1), $2, $3)
                 `, [ipc, imageData, uploadedBy]);
-                    console.log("✅ Dual-Write: LGU Image Synced!");
-                }
-            } catch (dwErr) {
-                console.error("❌ Dual-Write LGU Image Error:", dwErr.message);
-            }
+          console.log("✅ Dual-Write: LGU Image Synced!");
         }
-
-    } catch (err) {
-        console.error("❌ LGU Image Upload Error:", err.message);
-        res.status(500).json({ error: "Failed to save image" });
+      } catch (dwErr) {
+        console.error("❌ Dual-Write LGU Image Error:", dwErr.message);
+      }
     }
+
+  } catch (err) {
+    console.error("❌ LGU Image Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save image" });
+  }
 });
 
 // --- LGU 3. GET: Fetch LGU Projects ---
 app.get('/api/lgu/projects', async (req, res) => {
-    const { uid } = req.query;
-    try {
-        let query = 'SELECT * FROM lgu_projects';
-        let params = [];
-        if (uid) {
-            query += ' WHERE lgu_id = $1';
-            params.push(uid);
-        }
-        query += ' ORDER BY created_at DESC';
-        const result = await pool.query(query, params);
-        res.json(result.rows);
-    } catch (err) {
-        console.error("❌ Fetch LGU Projects Error:", err.message);
-        res.status(500).json({ error: "Failed to fetch projects" });
+  const { uid } = req.query;
+  try {
+    let query = 'SELECT * FROM lgu_projects';
+    let params = [];
+    if (uid) {
+      query += ' WHERE lgu_id = $1';
+      params.push(uid);
     }
+    query += ' ORDER BY created_at DESC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Fetch LGU Projects Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch projects" });
+  }
 });
 
 // --- LGU 4. GET: Fetch LGU Project Details ---
 app.get('/api/lgu/project/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const projectRes = await pool.query('SELECT * FROM lgu_projects WHERE lgu_project_id = $1', [id]);
-        if (projectRes.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+  const { id } = req.params;
+  try {
+    const projectRes = await pool.query('SELECT * FROM lgu_projects WHERE lgu_project_id = $1', [id]);
+    if (projectRes.rows.length === 0) return res.status(404).json({ error: "Project not found" });
 
-        const imagesRes = await pool.query('SELECT id, image_data, created_at FROM lgu_image WHERE project_id = $1', [id]);
-        
-        res.json({
-            ...projectRes.rows[0],
-            images: imagesRes.rows
-        });
-    } catch (err) {
-        console.error("❌ Fetch LGU Project Details Error:", err.message);
-        res.status(500).json({ error: "Failed to fetch project details" });
-    }
+    const imagesRes = await pool.query('SELECT id, image_data, created_at FROM lgu_image WHERE project_id = $1', [id]);
+
+    res.json({
+      ...projectRes.rows[0],
+      images: imagesRes.rows
+    });
+  } catch (err) {
+    console.error("❌ Fetch LGU Project Details Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch project details" });
+  }
 });
 
 const startServer = async () => {
@@ -16287,19 +16289,19 @@ const startServer = async () => {
     console.log("🚀 Starting database initialization...");
     await runAutoMigrations();
     await initDB();
-    
+
     const client = await pool.connect();
     try {
-        await runMigrations(client, "Primary");
+      await runMigrations(client, "Primary");
     } finally {
-        client.release();
+      client.release();
     }
 
     console.log("✅ Primary DB Init finished. Running secondary modules in parallel...");
 
     await Promise.all([
-        initFinanceDB().then(() => console.log("   [Parallel] initFinanceDB completed.")),
-        initMasterlistDB().then(() => console.log("   [Parallel] initMasterlistDB completed."))
+      initFinanceDB().then(() => console.log("   [Parallel] initFinanceDB completed.")),
+      initMasterlistDB().then(() => console.log("   [Parallel] initMasterlistDB completed."))
     ]);
 
     const PORT = process.env.PORT || 3000;
@@ -16338,56 +16340,56 @@ const startServer = async () => {
 
 // --- NOTIFICATIONS API ---
 app.get('/api/notifications/:uid', authMiddleware, async (req, res) => {
-    const { uid } = req.params;
-    if (req.user.uid !== uid && req.user.role !== 'Super User') {
-        return res.status(403).json({ error: "Unauthorized access to notifications" });
-    }
+  const { uid } = req.params;
+  if (req.user.uid !== uid && req.user.role !== 'Super User') {
+    return res.status(403).json({ error: "Unauthorized access to notifications" });
+  }
 
-    try {
-        const result = await pool.query(
-            "SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50",
-            [uid]
-        );
-        res.json(result.rows);
-    } catch (err) {
-        console.error("Fetch Notifications Error:", err);
-        res.status(500).json({ error: "Failed to fetch notifications" });
-    }
+  try {
+    const result = await pool.query(
+      "SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50",
+      [uid]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Notifications Error:", err);
+    res.status(500).json({ error: "Failed to fetch notifications" });
+  }
 });
 
 app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
-    const { id } = req.params;
-    try {
-        await pool.query(
-            "UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2",
-            [id, req.user.uid]
-        );
-        res.json({ success: true });
-    } catch (err) {
-        console.error("Mark Read Error:", err);
-        res.status(500).json({ error: "Failed to mark notification as read" });
-    }
+  const { id } = req.params;
+  try {
+    await pool.query(
+      "UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2",
+      [id, req.user.uid]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Mark Read Error:", err);
+    res.status(500).json({ error: "Failed to mark notification as read" });
+  }
 });
 
 app.get('/api/admin/feedback', authMiddleware, async (req, res) => {
-    if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
-        return res.status(403).json({ error: "Unauthorized" });
-    }
-    try {
-        const result = await pool.query("SELECT * FROM app_feedback ORDER BY timestamp DESC");
-        res.json(result.rows);
-    } catch (err) {
-        console.error("Fetch Feedback Error:", err);
-        res.status(500).json({ error: "Failed to fetch feedback" });
-    }
+  if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  try {
+    const result = await pool.query("SELECT * FROM app_feedback ORDER BY timestamp DESC");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Feedback Error:", err);
+    res.status(500).json({ error: "Failed to fetch feedback" });
+  }
 });
 
 app.get('/api/admin/users', authMiddleware, async (req, res) => {
-    if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
-        return res.status(403).json({ error: "Unauthorized" });
-    }
-    try {
-        const result = await pool.query(`
+  if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  try {
+    const result = await pool.query(`
             SELECT 
                 uid, 
                 first_name as "firstName", 
@@ -16399,13 +16401,13 @@ app.get('/api/admin/users', authMiddleware, async (req, res) => {
             FROM users 
             ORDER BY created_at DESC
         `);
-        res.json(result.rows);
-    } catch (err) {
-        console.error("Fetch Users Error:", err);
-        res.status(500).json({ error: "Failed to fetch users" });
-    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Users Error:", err);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
 });
- 
+
 
 // Start the server if this file is run directly
 const executedFile = process.argv[1] || '';
