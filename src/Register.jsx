@@ -517,7 +517,7 @@ const Register = () => {
                 // selectedSchool now contains the updated latitude/longitude from the map drag
                 const finalSchoolData = {
                     ...selectedSchool,
-                    curricularOffering: selectedSchool.curricular_offering
+                    curricularOffering: ""
                 };
 
                 console.log("SENDING FINAL REGISTRATION DATA:", finalSchoolData);

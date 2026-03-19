@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import LocationPickerMap from "../LocationPickerMap";
 import locationData from "../../locations.json";
-import useReadOnly from "../../hooks/useReadOnly"; // Added
+import useReadOnly from "../../hooks/useReadOnly";
+import { normalizeOffering } from "../../utils/dataNormalization";
 
 const TOTAL_STEPS = 6;
 
@@ -146,7 +147,7 @@ const Unit1SchoolIdentity = () => {
                     division:            d.division || iernRow?.Division || "",
                     district:            d.district || iernRow?.District || "",
                     leg_district:        d.leg_district || iernRow?.Legislative_District || "",
-                    curricular_offering: d.curricular_offering || iernRow?.Curricular_Offering || "",
+                    curricular_offering: normalizeOffering(d.curricular_offering) || "",
                     latitude:            d.latitude || iernRow?.Latitude || "",
                     longitude:           d.longitude || iernRow?.Longitude || "",
                     school_head:         d.school_head || "",
@@ -211,7 +212,7 @@ const Unit1SchoolIdentity = () => {
                         division:            iernRow.Division || prev.division,
                         district:            iernRow.District || prev.district,
                         leg_district:        iernRow.Legislative_District || prev.leg_district,
-                        curricular_offering: iernRow.Curricular_Offering || prev.curricular_offering,
+                        curricular_offering: prev.curricular_offering,
                         latitude:            iernRow.Latitude || prev.latitude,
                         longitude:           iernRow.Longitude || prev.longitude,
                         iern:                iernRow.iern || prev.iern,
@@ -362,11 +363,21 @@ const Unit1SchoolIdentity = () => {
                 if (r?.ok) { const j = await r.json(); if (j.exists && j.data?.iern) finalIern = j.data.iern; }
             }
             // STRICT VALIDATION WARNING (Frontend)
-            if (!formData.barangay || !formData.leg_district) {
-                const missing = [];
-                if (!formData.barangay) missing.push("Barangay");
-                if (!formData.leg_district) missing.push("Legislative District");
-                
+            const requiredFields = [
+                { key: 'barangay', label: 'Barangay' },
+                { key: 'leg_district', label: 'Legislative District' },
+                { key: 'ownership', label: 'Ownership Type' },
+                { key: 'school_type', label: 'School Classification' },
+                { key: 'curricular_offering', label: 'Curricular Offering' },
+                { key: 'latitude', label: 'Map Pin (Latitude)' },
+                { key: 'longitude', label: 'Map Pin (Longitude)' },
+                { key: 'school_name', label: 'School Name' },
+                { key: 'google_drive_file_id', label: 'Ownership Document' }
+            ];
+
+            const missing = requiredFields.filter(f => !formData[f.key]).map(f => f.label);
+            
+            if (missing.length > 0) {
                 const proceed = window.confirm(
                     `Warning: The following fields are missing: ${missing.join(", ")}.\n\n` +
                     "While you can save your progress, this unit will NOT be marked as 'Accomplished' on your dashboard until these fields are provided. Do you want to proceed?"
@@ -420,7 +431,7 @@ const Unit1SchoolIdentity = () => {
             const stored = localStorage.getItem("quest_progress");
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             
-            const isCompleted = !!(formData.barangay && formData.leg_district);
+            const isCompleted = missing.length === 0;
             if (isCompleted && !progress.completedUnits.includes(1)) { 
                 progress.completedUnits.push(1); 
                 progress.xp += 150; 

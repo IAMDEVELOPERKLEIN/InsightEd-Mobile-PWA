@@ -6194,8 +6194,8 @@ app.post('/api/register-beta', async (req, res) => {
     // 3. HYDRATE PH_SCHOOLS ONLY (Skip school_profiles)
     const insertQuery = `
       INSERT INTO ph_schools (
-        school_id, school_name, region, province, municipality, division, district, leg_district, curricular_offering, latitude, longitude, barangay, iern, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+        school_id, school_name, region, province, municipality, division, district, leg_district, curricular_offering, latitude, longitude, barangay, iern, updated_at, unit1, unit1_completed
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, 0, FALSE)
       ON CONFLICT (school_id) DO UPDATE SET
         school_name = EXCLUDED.school_name,
         region = EXCLUDED.region,
@@ -6209,6 +6209,8 @@ app.post('/api/register-beta', async (req, res) => {
         longitude = EXCLUDED.longitude,
         barangay = EXCLUDED.barangay,
         iern = EXCLUDED.iern,
+        unit1 = 0,
+        unit1_completed = FALSE,
         updated_at = CURRENT_TIMESTAMP
     `;
     const valuesList = [
@@ -6220,7 +6222,7 @@ app.post('/api/register-beta', async (req, res) => {
       schoolData.division || null,
       schoolData.district || iernData.District || null,
       schoolData.legislative_district || schoolData.legislative || iernData.LegLegDistrict || iernData.LegDistrict || null,
-      schoolData.curricular_offering || iernData.Curricular_Offering || null,
+      null, // Curricular offering defaulted to blank on registration
       iernData.Latitude || null,
       iernData.Longitude || null,
       iernData.Barangay || null,
@@ -14079,7 +14081,6 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
 
       // ── Unit 1: School Identity ─────────────────────────────────────────
       let u1 = row.unit1_completed;
-      if (!u1 && row.school_name) { u1 = true; backfillClauses.push(`unit1_completed = TRUE, unit1 = 1`); }
       if (u1) { completedUnits.push(1); xp += 150; } else if (row.unit1 === 2) { incompleteUnits.push(1); }
 
       // ── Unit 2: Enrollment ──────────────────────────────────────────────
@@ -14413,7 +14414,17 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     console.log(`📝 Unit 1 POST received for school: ${data.school_id}`);
 
 
-    const isCompleted = !!(data.barangay && data.leg_district && data.ownership && data.school_type);
+    const isCompleted = !!(
+      data.barangay && 
+      data.leg_district && 
+      data.ownership && 
+      data.school_type &&
+      data.curricular_offering &&
+      data.latitude &&
+      data.longitude &&
+      data.school_name &&
+      data.google_drive_file_id
+    );
 
     // Save Google Drive document link to ownership_documents table if provided
     let documentId = null;
