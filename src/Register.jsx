@@ -610,7 +610,7 @@ const Register = () => {
                     localStorage.setItem('schoolId', selectedSchool.school_id);
                 }
                 
-                // Set user email and uid for subsequent steps (like PinSetup)
+                // Set user email and uid for subsequent steps (like PasscodeSetupPrompt)
                 localStorage.setItem('userEmail', contactEmail);
                 if (regData?.user?.uid) {
                     localStorage.setItem('uid', regData.user.uid);
@@ -1602,11 +1602,7 @@ const Register = () => {
 
                             <button
                                 onClick={() => {
-                                    if (localStorage.getItem('needs_pin_setup') === 'true') {
-                                        navigate('/setup-pin');
-                                    } else {
-                                        navigate(getDashboardPath(formData.role));
-                                    }
+                                    navigate(getDashboardPath(formData.role, formData.accountCategory));
                                 }}
                                 className="w-full py-4 rounded-xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
                             >
