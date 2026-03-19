@@ -145,7 +145,7 @@ const BottomNav = ({ userRole: propRole }) => {
                     <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        onClick={() => window.dispatchEvent(new CustomEvent('toggle-chatbot'))}
+                        onClick={() => navigate('/chat')}
                         className="w-16 h-16 bg-[#10346B] text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-900/40 border-4 border-white"
                     >
                         <FiMessageSquare size={32} />

@@ -27,7 +27,13 @@ const NexusDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [isNavigating, setIsNavigating] = useState(false);
     const [showEdWelcome, setShowEdWelcome] = useState(false);
+    const [currentTime, setCurrentTime] = useState(new Date());
     const [esf7Status, setEsf7Status] = useState('NOT_STARTED');
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
+        return () => clearInterval(timer);
+    }, []);
 
     useEffect(() => {
         const loadCommonData = async () => {
@@ -126,7 +132,7 @@ const NexusDashboard = () => {
         {
             id: 'esf7',
             title: 'ESF7 Hub',
-            subtitle: 'Facilities',
+            subtitle: 'Teacher workload',
             emoji: '🛡️',
             icon: <TbReportAnalytics className="w-8 h-8" />,
             color: esf7Status === 'VERIFIED' ? 'from-emerald-500 to-teal-600' : 'from-indigo-500 to-indigo-700',
@@ -190,9 +196,19 @@ const NexusDashboard = () => {
                 </div>
 
                 {/* --- WELCOME GREETING --- */}
-                <div className="px-6 pt-2 pb-6">
-                    <h1 className="text-3xl font-black text-slate-900">Hi {user?.name?.split(' ')[0] || 'Jenifer'}!</h1>
-                    <p className="text-slate-400 font-medium">{getGreeting()}</p>
+                <div className="px-6 pt-2 pb-6 flex justify-between items-start">
+                    <div>
+                        <h1 className="text-5xl font-black text-slate-900 tracking-tight">Hi {user?.name?.split(' ')[0] || 'Jenifer'}!</h1>
+                        <p className="text-slate-500 font-bold text-xl mt-1">{getGreeting()}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-sm font-black text-slate-900 uppercase tracking-tighter">
+                            {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                            {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </p>
+                    </div>
                 </div>
 
                 {/* --- SEARCH BAR --- */}
@@ -209,10 +225,10 @@ const NexusDashboard = () => {
 
                 {/* --- WELCOME BANNER --- */}
                 <div className="px-6 mb-10">
-                    <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 flex justify-between items-center shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
-                        <div className="relative z-10">
-                            <h2 className="text-xl font-black text-slate-800 mb-1">Welcome!</h2>
-                            <p className="text-sm font-bold text-slate-400">Let's track your <br />school units</p>
+                    <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 flex justify-between items-center shadow-[0_12px_35px_rgba(0,0,0,0.06)] border-b-8 border-slate-100 relative overflow-hidden group hover:shadow-lg transition-all active:translate-y-1">
+                        <div className="relative z-10 w-2/3">
+                            <h2 className="text-3xl font-black text-slate-900 mb-2">Welcome!</h2>
+                            <p className="text-lg font-bold text-slate-500 leading-snug">Let's track your <br />school units</p>
                         </div>
                         <div className="w-32 h-32 relative z-10 flex items-center justify-center">
                             <div className="absolute inset-0 bg-blue-50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500"></div>
@@ -225,8 +241,8 @@ const NexusDashboard = () => {
 
                 {/* --- SECTION TITLE --- */}
                 <div className="px-6 mb-6 flex justify-between items-end">
-                    <h3 className="text-lg font-black text-slate-900">Unit Quests</h3>
-                    <button className="text-slate-300 text-[10px] font-black uppercase tracking-widest hover:text-blue-600 transition-colors">view all</button>
+                    <h3 className="text-xl font-black text-slate-900">Unit Quests</h3>
+                    <button className="text-blue-600 text-xs font-black uppercase tracking-widest hover:text-blue-800 transition-colors">view all</button>
                 </div>
 
                 {/* --- 2X2 GRID MATCHING REFERENCE --- */}
@@ -241,29 +257,28 @@ const NexusDashboard = () => {
                                 transition={{ delay: idx * 0.1 }}
                                 onClick={() => handleCardClick(mod.route, mod.id)}
                                 className={`
-                                    flex flex-col p-5 rounded-[2rem] cursor-pointer shadow-sm relative transition-all duration-300 active:scale-95
-                                    ${isPrimary ? 'bg-[#10346B] text-white shadow-xl shadow-blue-900/20' : 'bg-slate-50/50 border border-slate-100 text-slate-900'}
+                                    flex flex-col p-6 rounded-[2.5rem] cursor-pointer relative transition-all duration-300 active:scale-95 active:translate-y-1
+                                    ${isPrimary 
+                                        ? 'bg-[#10346B] text-white shadow-xl shadow-blue-900/40 border-b-4 border-blue-950' 
+                                        : 'bg-white border border-slate-100 text-slate-900 shadow-[0_10px_25px_rgba(0,0,0,0.08)] border-b-4 border-slate-200'}
                                 `}
                             >
-                                <div className="flex justify-between items-start mb-6">
-                                    <span className={`text-[8px] font-black uppercase tracking-widest ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>
-                                        {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                    </span>
+                                <div className="flex justify-end items-start mb-6">
                                     <FiMoreVertical className={isPrimary ? 'text-blue-200' : 'text-slate-400'} />
                                 </div>
 
                                 <div className="mb-4">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${isPrimary ? 'bg-white/10 text-white' : 'bg-white border border-slate-100 shadow-sm text-slate-800'}`}>
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 ${isPrimary ? 'bg-white/10 text-white' : 'bg-white border border-slate-100 shadow-sm text-slate-800'}`}>
                                         {mod.icon}
                                     </div>
-                                    <h4 className="text-sm font-black leading-tight mb-0.5">{mod.title}</h4>
-                                    <p className={`text-[10px] font-bold uppercase tracking-widest ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>{mod.subtitle}</p>
+                                    <h4 className={`font-black leading-tight mb-1 ${isPrimary ? 'text-xl' : 'text-lg'}`}>{mod.title}</h4>
+                                    <p className={`text-sm font-bold uppercase tracking-widest ${isPrimary ? 'text-blue-200' : 'text-slate-500'}`}>{mod.subtitle}</p>
                                 </div>
 
                                 <div className="mt-auto">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className={`text-[8px] font-black uppercase tracking-widest ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>Progress</span>
-                                        <span className={`text-[9px] font-black ${isPrimary ? 'text-white' : 'text-slate-800'}`}>{mod.progress}%</span>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <span className={`text-xs font-black uppercase tracking-widest ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>Progress</span>
+                                        <span className={`text-base font-black ${isPrimary ? 'text-white' : 'text-slate-900'}`}>{mod.progress}%</span>
                                     </div>
                                     <div className={`h-1.5 w-full rounded-full overflow-hidden ${isPrimary ? 'bg-white/10' : 'bg-slate-200/50'}`}>
                                         <motion.div 

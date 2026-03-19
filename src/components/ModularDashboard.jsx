@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from "react";
-<<<<<<< Updated upstream
-import { useNavigate, useLocation } from "react-router-dom";
-=======
-import { useNavigate, useSearchParams } from "react-router-dom";
->>>>>>> Stashed changes
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
@@ -58,17 +54,13 @@ const getRank = (xp) => {
 
 const ModularDashboard = () => {
     const navigate = useNavigate();
-<<<<<<< Updated upstream
     const location = useLocation();
+    const [searchParams] = useSearchParams();
     const { user } = useAuth();
     
-    // Parse UID from query params for Super User impersonation
-    const queryParams = new URLSearchParams(location.search);
-    const impersonatedUid = queryParams.get('uid');
-=======
-    const [searchParams] = useSearchParams();
+    // Parse UID and Mode from query params
+    const impersonatedUid = searchParams.get('uid');
     const mode = searchParams.get('mode');
->>>>>>> Stashed changes
 
     const [hasDraft, setHasDraft] = useState(false);
     const [questProgress, setQuestProgress] = useState(() => {
