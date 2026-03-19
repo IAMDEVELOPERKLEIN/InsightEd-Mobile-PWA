@@ -1608,7 +1608,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     
     const query = isSchoolId 
       ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
-      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+      : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1`;
     
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
@@ -1770,7 +1770,7 @@ app.post('/api/auth/setup-pin', async (req, res) => {
       whereClause = 'school_id = $2';
       param = school_id.trim();
     } else {
-      whereClause = '(LOWER(email_address) = $2 OR LOWER(email) = $2)';
+      whereClause = 'LOWER(email) = $2';
       param = email.trim().toLowerCase();
     }
 
@@ -1807,7 +1807,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
     const selectCols = 'uid, email, role, region, division, account_category, passcode, first_name, last_name, school_id';
     const query = isSchoolId 
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
-      : `SELECT ${selectCols} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
     
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
@@ -3722,61 +3722,7 @@ const initOtpTable_OLD = async () => {
 
 // --- DATABASE CONNECTION ---
 // Auto-connect and initialize
-const runLegacyMigrations = async () => {
-  let client;
-  try {
-    client = await pool.connect();
-    try {
-      // Core remaining migrations
-      await client.query(`CREATE TABLE IF NOT EXISTS notifications(id SERIAL PRIMARY KEY, recipient_uid TEXT NOT NULL, sender_uid TEXT, sender_name TEXT, title TEXT NOT NULL, message TEXT NOT NULL, type TEXT DEFAULT 'alert', is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-      await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS email TEXT;`);
-      await client.query(`CREATE TABLE IF NOT EXISTS user_device_tokens(uid TEXT PRIMARY KEY, fcm_token TEXT NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-      await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS created_by_uid TEXT;`);
-      await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS curricular_offering TEXT;`);
-      await client.query(`CREATE TABLE IF NOT EXISTS users(uid TEXT PRIMARY KEY, email TEXT, role TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, first_name TEXT, last_name TEXT, region TEXT, division TEXT, province TEXT, city TEXT, barangay TEXT, office TEXT, position TEXT, disabled BOOLEAN DEFAULT FALSE);`);
-      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT, ADD COLUMN IF NOT EXISTS last_name TEXT, ADD COLUMN IF NOT EXISTS region TEXT, ADD COLUMN IF NOT EXISTS division TEXT, ADD COLUMN IF NOT EXISTS province TEXT, ADD COLUMN IF NOT EXISTS city TEXT, ADD COLUMN IF NOT EXISTS barangay TEXT, ADD COLUMN IF NOT EXISTS office TEXT, ADD COLUMN IF NOT EXISTS position TEXT, ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;`);
-      await client.query(`
-        ALTER TABLE users 
-        ADD COLUMN IF NOT EXISTS school_id TEXT,
-        ADD COLUMN IF NOT EXISTS email_address TEXT,
-        ADD COLUMN IF NOT EXISTS passcode TEXT,
-        ADD COLUMN IF NOT EXISTS contact_number TEXT,
-        ADD COLUMN IF NOT EXISTS iern TEXT,
-        ADD COLUMN IF NOT EXISTS registrant_type TEXT,
-        ADD COLUMN IF NOT EXISTS account_category TEXT,
-        ADD COLUMN IF NOT EXISTS password_hash TEXT,
-        ADD COLUMN IF NOT EXISTS password_salt TEXT,
-        ADD COLUMN IF NOT EXISTS hash_version TEXT DEFAULT 'bcrypt',
-        ADD COLUMN IF NOT EXISTS alt_email TEXT;
-      `);
-      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_school_id ON users(school_id) WHERE school_id IS NOT NULL;`);
-      await client.query(`CREATE TABLE IF NOT EXISTS ecart_batches(id SERIAL PRIMARY KEY, school_id TEXT NOT NULL, batch_no VARCHAR(100), year_received INTEGER, source_fund VARCHAR(100), ecart_qty_laptops INTEGER DEFAULT 0, ecart_condition_laptops VARCHAR(50), ecart_has_smart_tv BOOLEAN DEFAULT false, ecart_tv_size VARCHAR(50), ecart_condition_tv VARCHAR(50), ecart_condition_charging VARCHAR(50), ecart_condition_cabinet VARCHAR(100), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-      await client.query(`CREATE TABLE IF NOT EXISTS system_settings(setting_key TEXT PRIMARY KEY, setting_value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_by TEXT);`);
-      
-      // Data Migration: Backfill school_id from legacy emails
-      await client.query(`
-        UPDATE users 
-        SET school_id = split_part(email, '@', 1)
-        WHERE email LIKE '%@insighted.app' 
-          AND school_id IS NULL 
-          AND split_part(email, '@', 1) ~ '^\\d+$'
-      `);
-
-      // Data Migration: Backfill email_address from email for all others
-      await client.query(`
-        UPDATE users 
-        SET email_address = email 
-        WHERE email_address IS NULL 
-          AND email IS NOT NULL 
-          AND email NOT LIKE '%@insighted.app'
-      `);
-    } catch (migErr) {
-      console.error("Migration Error:", migErr.message);
-    }
-  } finally {
-    if (client) client.release();
-  }
-};
+// --- END OF LEGACY MIGRATIONS (REMOVED) ---
 
 // --- NEW DATABASE INITIALIZATION ---
 /* Moved to awaited startup
@@ -3856,7 +3802,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     
     const query = isSchoolId 
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
-      : `SELECT ${selectCols} FROM users WHERE LOWER(email_address) = $1 OR LOWER(email) = $1`;
+      : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
     
     const lookupResult = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
     
