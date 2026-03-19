@@ -11,7 +11,6 @@ import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 // Auth
 import Login from './Login';
 import Register from './Register';
-import PinSetup from './components/PinSetup';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Dashboards
@@ -167,7 +166,6 @@ const AnimatedRoutes = () => {
       {/* Authentication */}
       <Route path="/" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/setup-pin" element={<PinSetup />} />
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />

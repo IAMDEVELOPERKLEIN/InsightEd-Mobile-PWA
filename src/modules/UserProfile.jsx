@@ -9,7 +9,7 @@ import { useTheme } from '../context/ThemeContext'; // Import Hook
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import SW Hook
 
 // Icons
-import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool } from "react-icons/fi"; // Added FiTool
+import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool, FiShield } from "react-icons/fi"; // Added FiShield
 import { TbAlertTriangle } from "react-icons/tb";
 
 const FAQ_DATA = [
@@ -796,17 +796,19 @@ const UserProfile = () => {
                     <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
                 </button>
                 
-                <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => navigate('/setup-pin')}>
+                <div className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent">
                     <div className="flex items-center gap-4">
                         <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                            </svg>
+                            <FiShield size={20} />
                         </div>
-                        <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Set Up Passcode</span>
+                        <div>
+                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">Passcode Protection</span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-widest leading-none">
+                                {user?.passcode ? 'Active' : 'Prompt Required'}
+                            </span>
+                        </div>
                     </div>
-                    <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
-                </button>
+                </div>
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl py-2 mb-5 shadow-sm overflow-hidden transition-colors border border-transparent dark:border-slate-700">
