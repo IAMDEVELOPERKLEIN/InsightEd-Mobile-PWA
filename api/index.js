@@ -694,6 +694,7 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'number_of_sites', 'INTEGER DEFAULT 1');
     await checkAndAddColumn('engineer_form', 'number_of_storeys', 'INTEGER DEFAULT 0');
     await checkAndAddColumn('engineer_form', 'funds_utilized', 'NUMERIC DEFAULT 0');
+    await checkAndAddColumn('engineer_form', 'program_type', 'TEXT');
 
     currentSegment = "Segment 10: lgu_projects columns";
     console.log(`     [${currentSegment}]`);
@@ -7543,50 +7544,51 @@ app.post('/api/save-project', async (req, res) => {
     const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
 
     const projectValues = [
-      data.projectName, data.schoolName, data.schoolId,
-      valueOrNull(data.region), valueOrNull(data.division),
-      data.statusOfConstructionPhase || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
-      valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
-      valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
-      valueOrNull(data.contractorName), parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation),
-      parseNumberOrNull(data.contract_amount),
-      valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
-      data.uid,
+      data.projectName, data.schoolName, data.schoolId, // $1, $2, $3
+      valueOrNull(data.region), valueOrNull(data.division), // $4, $5
+      data.statusOfConstructionPhase || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage), // $6, $7
+      valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate), // $8, $9
+      valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed), // $10, $11
+      valueOrNull(data.contractorName), parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation), // $12, $13
+      parseNumberOrNull(data.contract_amount), // $14
+      valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks), // $15, $16
+      data.uid, // $17
       newIpc, // $18
       resolvedEngineerName, // $19
       valueOrNull(data.latitude), // $20
       valueOrNull(data.longitude), // $21
-      valueOrNull(data.constructionStartDate), // $25
-      valueOrNull(data.projectCategory), // $26
-      valueOrNull(data.scopeOfWork), // $27
-      parseIntOrNull(data.numberOfClassrooms), // $28
-      parseIntOrNull(data.numberOfSites), // $29
-      parseIntOrNull(data.numberOfStoreys), // $30
-      parseNumberOrNull(data.fundsUtilized), // $31
-      'Newly Created', // $32
-      parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation) - parseNumberOrNull(data.contract_amount), // $33 (Savings)
-      valueOrNull(data.statusDesignPhase), // $34
-      valueOrNull(data.contractId), // $35
-      valueOrNull(data.dateNoticeOfAward), // $36
-      valueOrNull(data.issuanceOfInvitationToBid), // $37
-      valueOrNull(data.preBidConference), // $38
-      valueOrNull(data.openingOfTechnicalProposal), // $39
-      valueOrNull(data.openingOfFinancialProposal), // $40
-      valueOrNull(data.requestForQuotation), // $41
-      valueOrNull(data.negotiation), // $42
-      valueOrNull(data.openingOfQuotation), // $43
-      parseIntOrNull(data.fundingYear), // $44
-      null, // $45: funding_year_justification (not needed for new projects)
-      data.delay_reason || null, // $46
-      valueOrNull(data.revised_target_completion_date) || null, // $47
-      parseIntOrNull(data.time_lapsed_days || data.time_lapsed) || null, // $48
-      valueOrNull(data.time_lapsed_percentage) || null, // $49
-      data.is_donated || false, // $50
-      data.uploader_type || null, // $51
-      (data.implementingAgency || data.implementingAgencySpecific) ? 'MOA' : (data.mode_of_project || 'Direct'), // $52
-      valueOrNull(data.implementingAgency), // $53
-      valueOrNull(data.implementingAgencySpecific), // $54
-      parseIntOrNull(data.numberOfUnits) || 0 // $55
+      valueOrNull(data.constructionStartDate), // $22
+      valueOrNull(data.projectCategory), // $23
+      valueOrNull(data.scopeOfWork), // $24
+      parseIntOrNull(data.numberOfClassrooms), // $25
+      parseIntOrNull(data.numberOfSites), // $26
+      parseIntOrNull(data.numberOfStoreys), // $27
+      parseNumberOrNull(data.fundsUtilized), // $28
+      'Newly Created', // $29
+      parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation) - parseNumberOrNull(data.contract_amount), // $30
+      valueOrNull(data.statusDesignPhase), // $31
+      valueOrNull(data.contractId), // $32
+      valueOrNull(data.dateNoticeOfAward), // $33
+      valueOrNull(data.issuanceOfInvitationToBid), // $34
+      valueOrNull(data.preBidConference), // $35
+      valueOrNull(data.openingOfTechnicalProposal), // $36
+      valueOrNull(data.openingOfFinancialProposal), // $37
+      valueOrNull(data.requestForQuotation), // $38
+      valueOrNull(data.negotiation), // $39
+      valueOrNull(data.openingOfQuotation), // $40
+      parseIntOrNull(data.fundingYear), // $41
+      null, // $42
+      data.delay_reason || null, // $43
+      valueOrNull(data.revised_target_completion_date) || null, // $44
+      parseIntOrNull(data.time_lapsed_days || data.time_lapsed) || null, // $45
+      valueOrNull(data.time_lapsed_percentage) || null, // $46
+      data.is_donated || false, // $47
+      data.uploader_type || null, // $48
+      (data.implementingAgency || data.implementingAgencySpecific) ? 'MOA' : (data.mode_of_project || 'Direct'), // $49
+      valueOrNull(data.implementingAgency), // $50
+      valueOrNull(data.implementingAgencySpecific), // $51
+      parseIntOrNull(data.numberOfUnits) || 0, // $52
+      data.program_type || (data.is_donated ? 'Donated' : 'BEFF') // $53
     ];
 
     const projectQuery = `
@@ -7604,8 +7606,8 @@ app.post('/api/save-project', async (req, res) => {
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
-        mode_of_project, implementing_agency, implementing_agency_specific, no_of_units
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52)
+        mode_of_project, implementing_agency, implementing_agency_specific, no_of_units, program_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -7859,7 +7861,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       valueOrNull(data.implementingAgency) || oldData.implementing_agency,
       valueOrNull(data.implementingAgencySpecific) || oldData.implementing_agency_specific,
       ((data.moa_pdf || data.rta_pdf) ? data.uid : oldData.uploader_id_moa_rta),
-      parseIntOrNull(data.numberOfUnits) || oldData.no_of_units || 0
+      parseIntOrNull(data.numberOfUnits) || oldData.no_of_units || 0,
+      data.program_type || (data.isDonated === true || data.is_donated === true ? 'Donated' : (data.isDonated === false || data.is_donated === false ? 'BEFF' : oldData.program_type || 'BEFF'))
     ];
 
     const insertQuery = `
@@ -7878,8 +7881,8 @@ app.put('/api/update-project/:id', async (req, res) => {
         funding_year, funding_year_justification,
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
         mode_of_project, assigned_engineer_id, assigned_engineer_name,
-        implementing_agency, implementing_agency_specific, uploader_id_moa_rta, no_of_units
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55)
+        implementing_agency, implementing_agency_specific, uploader_id_moa_rta, no_of_units, program_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56)
       RETURNING *;
     `;
 
@@ -8440,7 +8443,7 @@ app.get('/api/projects', async (req, res) => {
             e.status_as_of, e.target_completion_date, e.actual_completion_date, e.notice_to_proceed, e.latitude, e.longitude,
             e.construction_start_date, e.project_category, e.scope_of_work,
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
-            e.actions, e.savings, e.funding_year, e.funding_year_justification, e.is_donated, e.status_design_phase,
+            e.is_donated, e.program_type, e.status_design_phase, e.actions, e.savings, e.funding_year, e.funding_year_justification,
             (NULLIF(d.moa_pdf, '') IS NOT NULL) AS has_moa,
             (NULLIF(d.rta_pdf, '') IS NOT NULL) AS has_rta,
             (NULLIF(d.pow_pdf, '') IS NOT NULL) AS has_pow,
@@ -8483,6 +8486,8 @@ app.get('/api/projects', async (req, res) => {
         p.funding_year_justification AS "fundingYearJustification",
         p.is_donated AS "isDonated",
         p.is_donated AS "is_donated",
+        p.program_type AS "programType",
+        p.program_type AS "program_type",
         p.has_moa AS "hasMoa",
         p.has_rta AS "hasRta",
         p.has_pow AS "hasPow",
@@ -8529,14 +8534,14 @@ app.get('/api/projects', async (req, res) => {
       whereClauses.push(`sp.municipality = $${queryParams.length}`);
     }
 
-    // NEW: Donated Filter
+    // NEW: Program Type (Donated/BEFF) Filter
     if (is_donated !== undefined && is_donated !== null && is_donated !== '' && is_donated !== 'All') {
       if (is_donated === 'Donated' || is_donated === 'true' || is_donated === true) {
-        queryParams.push(true);
-        whereClauses.push(`p.is_donated = $${queryParams.length}`);
-      } else if (is_donated === 'Non-Donated' || is_donated === 'false' || is_donated === false) {
-        queryParams.push(false);
-        whereClauses.push(`p.is_donated = $${queryParams.length}`);
+        queryParams.push('Donated');
+        whereClauses.push(`p.program_type = $${queryParams.length}`);
+      } else if (is_donated === 'Non-Donated' || is_donated === 'false' || is_donated === false || is_donated === 'BEFF') {
+        queryParams.push('BEFF');
+        whereClauses.push(`p.program_type = $${queryParams.length}`);
       }
     }
 

@@ -191,8 +191,8 @@ const EFDHome = () => {
             const matchesFundingYear = selectedYears.length === 0 || 
                 selectedYears.some(year => year.toString() === p.fundingYear?.toString());
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
@@ -202,8 +202,8 @@ const EFDHome = () => {
                 p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && (p.is_donated === true || p.isDonated === true)) ||
-                                (selectedSource === 'BEFF' && (p.is_donated === false && p.isDonated === false));
+                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
+                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
             return matchesRegions && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
         });
 
@@ -255,8 +255,8 @@ const EFDHome = () => {
             const matchesFundingYear = selectedYears.length === 0 || 
                 selectedYears.some(year => year.toString() === p.fundingYear?.toString());
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
@@ -266,8 +266,8 @@ const EFDHome = () => {
                 p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && (p.is_donated === true || p.isDonated === true)) ||
-                                (selectedSource === 'BEFF' && (p.is_donated === false && p.isDonated === false));
+                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
+                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
             return matchesRegions && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
         });
 
@@ -298,8 +298,8 @@ const EFDHome = () => {
             const matchesFundingYear = selectedYears.length === 0 || 
                 selectedYears.some(year => year.toString() === p.fundingYear?.toString());
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
@@ -309,8 +309,8 @@ const EFDHome = () => {
                 p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && (p.is_donated === true || p.isDonated === true)) ||
-                                (selectedSource === 'BEFF' && (p.is_donated === false && p.isDonated === false));
+                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
+                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
             return matchesRegions && matchesDivision && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
         });
 
@@ -331,8 +331,8 @@ const EFDHome = () => {
             const matchesCategory = selectedCategories.length === 0 || 
                 selectedCategories.some(cat => normalize(cat) === normalize(p.projectCategory));
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
@@ -342,8 +342,8 @@ const EFDHome = () => {
                 p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && (p.is_donated === true || p.isDonated === true)) ||
-                                (selectedSource === 'BEFF' && (p.is_donated === false && p.isDonated === false));
+                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
+                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
             return matchesRegions && matchesDivision && matchesCategory && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
         });
 
@@ -371,8 +371,8 @@ const EFDHome = () => {
             const matchesFundingYear = selectedYears.length === 0 || 
                 selectedYears.some(year => year.toString() === p.fundingYear?.toString());
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
@@ -384,8 +384,8 @@ const EFDHome = () => {
                 p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 p.schoolId?.toString().includes(searchQuery);
             const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && (p.is_donated === true || p.isDonated === true)) ||
-                                (selectedSource === 'BEFF' && (p.is_donated === false && p.isDonated === false));
+                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
+                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
             return matchesRegions && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesBeff && matchesSearch && matchesSource;
         });
     }, [projects, selectedRegions, selectedDivision, selectedCategories, selectedYears, searchQuery, selectedDonated, selectedDocStatus, isBeffMode, selectedSource]);
