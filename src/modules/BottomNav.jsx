@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 // Icons 
-import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar } from "react-icons/tb";
+import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar, TbFileCheck } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList } from "react-icons/fi"; // Added FiMessageSquare, FiHome, FiUser, FiList
 
@@ -112,6 +112,7 @@ const BottomNav = ({ userRole: propRole }) => {
         'EFD Engineer': [
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
+            { label: 'Mother MOA', path: '/efd-mother-moa', icon: TbFileCheck },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },

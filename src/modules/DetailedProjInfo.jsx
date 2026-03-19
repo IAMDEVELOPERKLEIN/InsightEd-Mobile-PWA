@@ -486,7 +486,7 @@ const DetailedProjInfo = () => {
             } else {
                 return cat !== 'external' && cat !== 'default';
             }
-        });
+        }).sort((a, b) => new Date(b.uploaded_at || b.created_at || 0) - new Date(a.uploaded_at || a.created_at || 0));
     };
 
 
@@ -1362,16 +1362,16 @@ const DetailedProjInfo = () => {
                                 {/* EXTERNAL (First) */}
                                 {getFilteredImages('External').length > 0 && (
                                     <div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos (Latest)</h4>
-                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                            {getFilteredImages('External').slice(0, 4).map((img, idx) => (
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photo (Latest)</h4>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {getFilteredImages('External').slice(0, 1).map((img, idx) => (
                                                 <div 
                                                     key={idx} 
                                                     onClick={() => {
                                                         setSelectedZoomImage({ ...img, src: getImageSrc(img) });
                                                         setActiveCategory('External');
                                                     }}
-                                                    className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group cursor-zoom-in active:scale-95 transition-transform"
+                                                    className="relative aspect-video rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group cursor-zoom-in active:scale-95 transition-transform"
                                                 >
                                                     <img
                                                         src={getImageSrc(img)}
@@ -1382,6 +1382,11 @@ const DetailedProjInfo = () => {
                                                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                         <span className="text-white text-[10px] font-bold uppercase tracking-widest bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm">View</span>
                                                     </div>
+                                                    {getFilteredImages('External').length > 1 && (
+                                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                                            +{getFilteredImages('External').length - 1} more in Gallery
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -1391,12 +1396,12 @@ const DetailedProjInfo = () => {
                                 {/* INTERNAL (Second) */}
                                 {getFilteredImages('Internal').length > 0 && (
                                     <div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos (Latest)</h4>
-                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                            {getFilteredImages('Internal').slice(0, 4).map((img, idx) => (
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photo (Latest)</h4>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            {getFilteredImages('Internal').slice(0, 1).map((img, idx) => (
                                                 <div
                                                     key={idx}
-                                                    className="aspect-square bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer relative group"
+                                                    className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm active:scale-95 transition-transform cursor-pointer relative group"
                                                     onClick={() => {
                                                         setSelectedZoomImage({ ...img, src: getImageSrc(img) });
                                                         setActiveCategory('Internal');
@@ -1411,6 +1416,11 @@ const DetailedProjInfo = () => {
                                                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                         <span className="text-white text-[10px] font-bold uppercase tracking-widest bg-black/40 px-2 py-1 rounded-full backdrop-blur-sm">View</span>
                                                     </div>
+                                                    {getFilteredImages('Internal').length > 1 && (
+                                                        <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                                            +{getFilteredImages('Internal').length - 1} more in Gallery
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

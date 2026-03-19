@@ -48,6 +48,7 @@ import PasscodeSetupPrompt from './components/PasscodeSetupPrompt'; // <--- IMPO
 import EFDHome from './modules/EFDHome';
 import EFDMonitoring from './modules/EFDMonitoring';
 import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
+import EFDMotherMoa from './modules/EFDMotherMoa';
 import BEFFDashboard from './modules/BEFFDashboard';
 import ChatModule from './modules/ChatModule';
 
@@ -201,6 +202,7 @@ const AnimatedRoutes = () => {
       <Route path="/efd-monitoring" element={<EFDMonitoring />} />
       <Route path="/beff-dashboard" element={<BEFFDashboard />} />
       <Route path="/efd-newcon-monitoring" element={<EFDNewconMonitoring />} />
+      <Route path="/efd-mother-moa" element={<EFDMotherMoa />} />
       <Route path="/school-management" element={<SchoolManagement />} />
       <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
       <Route path="/school-audit" element={<SchoolAuditView />} />
