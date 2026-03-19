@@ -98,9 +98,7 @@ const Register = () => {
 
     // --- REGISTRATION STAGES ---
     const [registrationStage, setRegistrationStage] = useState('form'); // 'form' | 'passcode' | 'confirm'
-    const [tempPasscode, setTempPasscode] = useState('');
-    const [confirmPasscode, setConfirmPasscode] = useState('');
-    const [passcodeError, setPasscodeError] = useState('');
+
 
     // --- OTP STATE --- (REMOVED)
 
@@ -465,52 +463,12 @@ const Register = () => {
         //     return;
         // }
 
-        // Instead of triggering API, we move to Passcode Stage
-        setRegistrationStage('passcode');
+        // Bypass Passcode Stage and go straight to Final Submission
+        handleSubmitFinal();
     };
 
-    const handlePasscodeKeyPress = (num) => {
-        setPasscodeError('');
-        const current = registrationStage === 'passcode' ? tempPasscode : confirmPasscode;
-        if (current.length < 6) {
-            if (registrationStage === 'passcode') setTempPasscode(prev => prev + num);
-            else setConfirmPasscode(prev => prev + num);
-        }
-    };
 
-    const handlePasscodeDelete = () => {
-        setPasscodeError('');
-        if (registrationStage === 'passcode') setTempPasscode(prev => prev.slice(0, -1));
-        else setConfirmPasscode(prev => prev.slice(0, -1));
-    };
-
-    const handlePasscodeNext = () => {
-        if (tempPasscode.length === 6) {
-            setRegistrationStage('confirm');
-        } else {
-            setPasscodeError('Please enter a 6-digit passcode');
-        }
-    };
-
-    const handlePasscodeConfirm = () => {
-        if (confirmPasscode.length !== 6) {
-            setPasscodeError('Please re-enter your 6-digit passcode');
-            return;
-        }
-        if (tempPasscode !== confirmPasscode) {
-            setPasscodeError('Passcodes do not match. Try again.');
-            setTempPasscode('');
-            setConfirmPasscode('');
-            setRegistrationStage('passcode');
-            return;
-        }
-        
-        // Match! Update formData and trigger final submission
-        setFormData(prev => ({ ...prev, passcode: tempPasscode }));
-        handleSubmitFinal(tempPasscode);
-    };
-
-    const handleSubmitFinal = async (finalPasscode) => {
+    const handleSubmitFinal = async () => {
         const contactDigits = (formData.contactNumber || '').replace(/\D/g, '');
         const identifier = (formData.role === 'School Head')
             ? selectedSchool.school_id
@@ -573,8 +531,7 @@ const Register = () => {
                         contactNumber: contactDigits,
                         firstName: formData.firstName,
                         lastName: formData.lastName,
-                        schoolData: finalSchoolData,
-                        passcode: finalPasscode
+                        schoolData: finalSchoolData
                     })
                 });
 
@@ -618,8 +575,7 @@ const Register = () => {
                         position: formData.position,
                         contactNumber: formData.contactNumber,
                         altEmail: formData.altEmail,
-                        accountCategory: formData.accountCategory,
-                        passcode: finalPasscode
+                        accountCategory: formData.accountCategory
                     })
                 });
 
@@ -639,6 +595,7 @@ const Register = () => {
                 }
 
                 alert("✅ Account created successfully!");
+                localStorage.setItem('needs_pin_setup', 'true');
                 const destPath = getDashboardPath(formData.role, formData.accountCategory);
                 navigate(destPath);
                 return;
@@ -659,8 +616,8 @@ const Register = () => {
                     localStorage.setItem('uid', regData.user.uid);
                 }
 
-                // Mark for PIN setup as false since they just set it up in the multi-step flow
-                localStorage.setItem('needs_pin_setup', 'false');
+                // Mark for PIN setup as TRUE so the global modal triggers on dashboard
+                localStorage.setItem('needs_pin_setup', 'true');
 
                 setShowSuccessModal(true);
             } else {
@@ -1615,93 +1572,6 @@ const Register = () => {
                                 </button>
                             )}
 
-                            {/* PASSCODE SETUP STAGE */}
-                            {registrationStage !== 'form' && (
-                                <div className="bg-white/90 backdrop-blur-xl p-2 rounded-2xl animate-in zoom-in-95 duration-300">
-                                    <h3 className="text-xl font-bold text-slate-800 mb-1">
-                                        {registrationStage === 'passcode' ? 'Set Up Passcode' : 'Confirm Passcode'}
-                                    </h3>
-                                    <p className="text-slate-500 mb-6 text-xs font-medium">
-                                        {registrationStage === 'passcode' 
-                                            ? 'Create a 6-digit passcode for sensitive actions' 
-                                            : 'Re-enter your passcode to confirm'}
-                                    </p>
-
-                                    <div className="flex justify-center gap-3 mb-6">
-                                        {[...Array(6)].map((_, i) => (
-                                            <div 
-                                                key={i} 
-                                                className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-200 ${
-                                                    (registrationStage === 'passcode' ? tempPasscode : confirmPasscode).length > i 
-                                                        ? 'bg-blue-600 border-blue-600 scale-110' 
-                                                        : 'bg-transparent border-slate-300'
-                                                }`}
-                                            />
-                                        ))}
-                                    </div>
-
-                                    <div className="h-6 mb-4">
-                                        {passcodeError && <p className="text-red-500 text-xs font-bold animate-pulse">{passcodeError}</p>}
-                                    </div>
-
-                                    <div className="grid grid-cols-3 gap-y-4 gap-x-2 mb-6">
-                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                                            <button
-                                                key={num}
-                                                type="button"
-                                                onClick={() => handlePasscodeKeyPress(num.toString())}
-                                                className="w-14 h-14 rounded-full bg-slate-50 hover:bg-slate-200 active:bg-slate-300 text-xl font-bold mx-auto flex items-center justify-center transition-colors focus:outline-none text-slate-700"
-                                            >
-                                                {num}
-                                            </button>
-                                        ))}
-                                        <div className="col-start-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => handlePasscodeKeyPress('0')}
-                                                className="w-14 h-14 rounded-full bg-slate-50 hover:bg-slate-200 active:bg-slate-300 text-xl font-bold mx-auto flex items-center justify-center transition-colors focus:outline-none text-slate-700"
-                                            >
-                                                0
-                                            </button>
-                                        </div>
-                                        <div className="col-start-3 flex items-center justify-center">
-                                            <button
-                                                type="button"
-                                                onClick={handlePasscodeDelete}
-                                                className="w-14 h-14 rounded-full hover:bg-slate-100 active:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors focus:outline-none"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-col gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={registrationStage === 'passcode' ? handlePasscodeNext : handlePasscodeConfirm}
-                                            disabled={loading || (registrationStage === 'passcode' ? tempPasscode : confirmPasscode).length !== 6}
-                                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl py-4 font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {loading ? 'Processing...' : registrationStage === 'passcode' ? 'Next →' : 'Confirm & Register'}
-                                        </button>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setRegistrationStage('form');
-                                                setTempPasscode('');
-                                                setConfirmPasscode('');
-                                                setPasscodeError('');
-                                            }}
-                                            className="w-full text-slate-400 font-bold py-2 hover:text-slate-600 text-xs transition-colors"
-                                        >
-                                            ← Back to Edit Form
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
 
                         </form>
 
