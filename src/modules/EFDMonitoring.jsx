@@ -152,8 +152,8 @@ const EFDMonitoring = () => {
             const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
             const matchesDonated = selectedDonated === 'All' || 
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||

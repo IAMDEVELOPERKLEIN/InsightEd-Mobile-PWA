@@ -117,8 +117,8 @@ const BEFFDashboard = () => {
             const matchesAgency = !selectedAgency || normalize(p.implementingAgency) === normalize(selectedAgency);
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
@@ -169,8 +169,8 @@ const BEFFDashboard = () => {
             const matchesAgency = !selectedAgency || normalize(p.implementingAgency) === normalize(selectedAgency);
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
@@ -242,8 +242,8 @@ const BEFFDashboard = () => {
             const matchesAgency = !selectedAgency || normalize(p.implementingAgency) === normalize(selectedAgency);
             const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
             const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && (!!p.isDonated || !!p.is_donated)) ||
-                (selectedDonated === 'Non-Donated' && (!p.isDonated && !p.is_donated));
+                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
+                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
             const matchesDocStatus = selectedDocStatus === 'All' ||
                 (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
                 (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
