@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const ChatWidget = ({ showFloatingButton = true }) => {
-    const [isOpen, setIsOpen] = useState(false);
+const ChatWidget = ({ showFloatingButton = true, fullScreen = false }) => {
+    const [isOpen, setIsOpen] = useState(fullScreen);
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState([
         { role: 'assistant', text: "Hello! I'm your InsightED Assistant. How can I help you today?" }
@@ -34,11 +34,6 @@ const ChatWidget = ({ showFloatingButton = true }) => {
         if (isOpen) scrollToBottom();
     }, [messages, isOpen]);
 
-    useEffect(() => {
-        const handleToggle = () => setIsOpen(prev => !prev);
-        window.addEventListener('toggle-chatbot', handleToggle);
-        return () => window.removeEventListener('toggle-chatbot', handleToggle);
-    }, []);
 
     useEffect(() => {
         let interval;
@@ -156,56 +151,80 @@ const ChatWidget = ({ showFloatingButton = true }) => {
     const isLoginScreen = window.location.hash === '#/' || window.location.pathname === '/';
 
     return (
-        <div className={`fixed ${isLoginScreen ? 'top-6 right-6' : 'bottom-6 right-6'} z-[9999] flex flex-col items-end gap-4 pointer-events-none`}>
-            <AnimatePresence>
+        <div className={fullScreen ? "w-full h-full flex flex-col bg-white" : `fixed ${isLoginScreen ? 'top-6 right-6' : 'bottom-6 right-6'} z-[9999] flex flex-col items-end gap-4 pointer-events-none`}>
+            <AnimatePresence mode="wait">
                 {isOpen && (
                     <motion.div
-                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                        initial={fullScreen ? { opacity: 1 } : { opacity: 0, y: 20, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                        className="w-80 sm:w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden pointer-events-auto"
+                        exit={fullScreen ? { opacity: 1 } : { opacity: 0, y: 20, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                        className={fullScreen 
+                            ? "flex-1 w-full bg-white flex flex-col overflow-hidden pointer-events-auto"
+                            : "w-80 sm:w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden pointer-events-auto"
+                        }
                     >
-                        {/* Header */}
-                        <div className="bg-[#004A99] p-4 text-white flex items-center justify-between shadow-lg">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                                    <TbRobot size={20} />
+                        <div className={`bg-[#004A99] ${fullScreen ? 'p-6 pb-2' : 'p-4 pb-2'} text-white flex flex-col gap-4 shadow-lg shrink-0`}>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className={`${fullScreen ? 'w-10 h-10' : 'w-8 h-8'} bg-white/20 rounded-lg flex items-center justify-center`}>
+                                        <TbRobot size={fullScreen ? 24 : 20} />
+                                    </div>
+                                    <div>
+                                        <h4 className={`${fullScreen ? 'text-lg' : 'text-sm'} font-bold m-0`}>InsightED Assistant</h4>
+                                        <p className={`${fullScreen ? 'text-xs' : 'text-[10px]'} text-blue-200 m-0`}>App Support & Feedback</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h4 className="text-sm font-bold m-0">InsightED Assistant</h4>
-                                    <p className="text-[10px] text-blue-200 m-0">Ask anything about the app</p>
+                                <div className="flex items-center gap-2">
+                                    {!fullScreen && (
+                                        <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
+                                            <FiMinus size={18} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button 
-                                    onClick={() => {
-                                        setMode(mode === 'suggestion' ? 'chat' : 'suggestion');
-                                        setFeedbackStatus(null);
-                                    }}
-                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+
+                            {/* Box-Style Mode Switcher */}
+                            <div className="grid grid-cols-3 gap-3 p-1">
+                                <motion.button 
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => { setMode('chat'); setFeedbackStatus(null); }}
+                                    className={`flex flex-col items-center justify-center gap-2 p-3 rounded-2xl transition-all ${
+                                        mode === 'chat' 
+                                        ? 'bg-white text-blue-900 shadow-xl border-b-4 border-blue-600' 
+                                        : 'bg-blue-900/30 text-blue-100 border border-blue-400/20 hover:bg-blue-900/50'
+                                    }`}
+                                >
+                                    <FiMessageSquare size={fullScreen ? 32 : 24} className={mode === 'chat' ? 'text-blue-600' : ''} />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Chat</span>
+                                </motion.button>
+                                <motion.button 
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => { setMode('suggestion'); setFeedbackStatus(null); }}
+                                    className={`flex flex-col items-center justify-center gap-2 p-3 rounded-2xl transition-all ${
                                         mode === 'suggestion' 
-                                        ? 'bg-yellow-400 text-blue-900 shadow-inner' 
-                                        : 'bg-white/10 hover:bg-white/20 text-white'
+                                        ? 'bg-white text-blue-900 shadow-xl border-b-4 border-yellow-500' 
+                                        : 'bg-blue-900/30 text-blue-100 border border-blue-400/20 hover:bg-blue-900/50'
                                     }`}
                                 >
-                                    {mode === 'suggestion' ? 'Chat' : 'Suggest'}
-                                </button>
-                                <button 
-                                    onClick={() => {
-                                        setMode(mode === 'bug' ? 'chat' : 'bug');
-                                        setFeedbackStatus(null);
-                                    }}
-                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                                    <FiSend size={fullScreen ? 32 : 24} className={mode === 'suggestion' ? 'text-yellow-500' : ''} />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Suggest</span>
+                                </motion.button>
+                                <motion.button 
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => { setMode('bug'); setFeedbackStatus(null); }}
+                                    className={`flex flex-col items-center justify-center gap-2 p-3 rounded-2xl transition-all ${
                                         mode === 'bug' 
-                                        ? 'bg-red-500 text-white shadow-inner' 
-                                        : 'bg-white/10 hover:bg-white/20 text-white'
+                                        ? 'bg-white text-blue-900 shadow-xl border-b-4 border-red-500' 
+                                        : 'bg-blue-900/30 text-blue-100 border border-blue-400/20 hover:bg-blue-900/50'
                                     }`}
                                 >
-                                    {mode === 'bug' ? 'Chat' : 'Report Bug'}
-                                </button>
-                                <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
-                                    <FiMinus size={18} />
-                                </button>
+                                    <FiAlertCircle size={fullScreen ? 32 : 24} className={mode === 'bug' ? 'text-red-500' : ''} />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Bug</span>
+                                </motion.button>
                             </div>
                         </div>
 
@@ -215,9 +234,9 @@ const ChatWidget = ({ showFloatingButton = true }) => {
                                 <>
                                     {messages.map((msg, idx) => (
                                         <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[80%] p-3 rounded-2xl text-[11px] leading-relaxed ${msg.role === 'user'
-                                                    ? 'bg-[#004A99] text-white rounded-tr-none shadow-md'
-                                                    : 'bg-white text-gray-700 border border-gray-100 rounded-tl-none shadow-sm'
+                                            <div className={`max-w-[85%] ${fullScreen ? 'p-4 text-sm' : 'p-3 text-[11px]'} leading-relaxed ${msg.role === 'user'
+                                                    ? 'bg-[#004A99] text-white rounded-2xl rounded-tr-none shadow-md'
+                                                    : 'bg-white text-gray-700 border border-gray-100 rounded-2xl rounded-tl-none shadow-sm'
                                                 }`}>
                                                 {msg.role === 'assistant' ? (
                                                     <div className="prose prose-sm max-w-none">
@@ -342,11 +361,11 @@ const ChatWidget = ({ showFloatingButton = true }) => {
 
                         {/* Input Area (Only in Chat Mode) */}
                         {mode === 'chat' && (
-                            <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100 flex items-center gap-2">
+                            <form onSubmit={handleSend} className={`${fullScreen ? 'p-5' : 'p-3'} bg-white border-t border-gray-100 flex items-center gap-3 shrink-0`}>
                                 <input
                                     autoFocus
                                     type="text"
-                                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-inner"
                                     placeholder="Type your question..."
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
@@ -354,9 +373,9 @@ const ChatWidget = ({ showFloatingButton = true }) => {
                                 <button
                                     type="submit"
                                     disabled={!input.trim() || loading}
-                                    className="w-8 h-8 bg-[#004A99] text-white rounded-lg flex items-center justify-center hover:bg-blue-800 disabled:opacity-50 transition-all shadow-md shadow-blue-900/10"
+                                    className={`${fullScreen ? 'w-12 h-12' : 'w-8 h-8'} bg-[#004A99] text-white rounded-xl flex items-center justify-center hover:bg-blue-800 disabled:opacity-50 transition-all shadow-lg shadow-blue-900/10`}
                                 >
-                                    <FiSend size={14} />
+                                    <FiSend size={fullScreen ? 18 : 14} />
                                 </button>
                             </form>
                         )}
