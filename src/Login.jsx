@@ -256,13 +256,15 @@ const Login = () => {
             if (input.length >= 6 && !input.includes('@') && /^\d+$/.test(input)) {
                 try {
                     const res = await fetch(`/api/lookup-masked-email/${input}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.found) {
-                            setVerificationEmail(data.maskedEmail);
-                            setIsSchoolIdFlow(true);
-                            return;
-                        }
+                    const data = await res.json();
+                    if (res.ok && data.found) {
+                        setVerificationEmail(data.maskedEmail);
+                        setIsSchoolIdFlow(true);
+                        return;
+                    } else if (res.status === 404) {
+                        setVerificationEmail('NOT_FOUND'); // Sentinel for missing email
+                        setIsSchoolIdFlow(false);
+                        return;
                     }
                 } catch (e) { console.error("Lookup failed", e); }
             }
@@ -285,6 +287,12 @@ const Login = () => {
         // CHECK STRATEGY: Is it a School ID (no @)?
         if (!input.includes('@')) {
             // --- SCHOOL ID FLOW ---
+
+            if (verificationEmail === 'NOT_FOUND') {
+                alert("No email address is registered for this School ID in our system. Please contact your Division ICT Coordinator or System Administrator to update your account details.");
+                setResetLoading(false);
+                return;
+            }
 
             // If we haven't found the email via lookup yet, block
             if (!isSchoolIdFlow && !verificationEmail) {

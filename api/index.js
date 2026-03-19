@@ -6100,12 +6100,12 @@ app.post('/api/register-beta', async (req, res) => {
   const { email, password, schoolData, contactNumber, firstName, lastName, passcode } = req.body;
 
   // School Heads no longer require an email field in registration as they use school_id for auth.
-  if (!password || !schoolData || !schoolData.school_id || !passcode) {
-    return res.status(400).json({ error: "Missing required registration data (password, schoolData, passcode)." });
+  if (!password || !schoolData || !schoolData.school_id) {
+    return res.status(400).json({ error: "Missing required registration data (password, schoolData)." });
   }
 
-  if (passcode.length !== 6 || !/^\d+$/.test(passcode)) {
-    return res.status(400).json({ error: "Passcode must be exactly 6 digits." });
+  if (passcode && (passcode.length !== 6 || !/^\d+$/.test(passcode))) {
+    return res.status(400).json({ error: "Passcode must be exactly 6 digits if provided." });
   }
 
   console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
@@ -6182,7 +6182,7 @@ app.post('/api/register-beta', async (req, res) => {
           foundIern,
           schoolData.school_id,
           'School Head',
-          passcode
+          passcode || null
         ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
@@ -6249,7 +6249,8 @@ app.post('/api/register-beta', async (req, res) => {
         school_id: schoolData.school_id,
         first_name: firstName || 'School',
         last_name: lastName || 'Head',
-        iern: foundIern
+        iern: foundIern,
+        passcode: passcode
       },
       message: "School Head Registered Successfully"
     });
@@ -6267,13 +6268,13 @@ app.post('/api/register-beta', async (req, res) => {
 app.post('/api/register-user', async (req, res) => {
   const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory, passcode } = req.body;
 
-  if (!email || !password || !role || !passcode) {
-    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role, passcode: !!passcode });
-    return res.status(400).json({ error: "Missing required fields (email, password, role, passcode)" });
+  if (!email || !password || !role) {
+    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role });
+    return res.status(400).json({ error: "Missing required fields (email, password, role)" });
   }
 
-  if (passcode.length !== 6 || !/^\d+$/.test(passcode)) {
-    return res.status(400).json({ error: "Passcode must be exactly 6 digits." });
+  if (passcode && (passcode.length !== 6 || !/^\d+$/.test(passcode))) {
+    return res.status(400).json({ error: "Passcode must be exactly 6 digits if provided." });
   }
   console.log(`🚀 Registration request for ${email} (${role})`);
 
@@ -6346,7 +6347,7 @@ app.post('/api/register-user', async (req, res) => {
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
       valueOrNull(office), valueOrNull(position),
       valueOrNull(contactNumber), valueOrNull(altEmail),
-      finalAccountCategory, passwordHash, 'bcrypt', passcode
+      finalAccountCategory, passwordHash, 'bcrypt', passcode || null
     ];
 
     await pool.query(query, values);
@@ -6388,7 +6389,8 @@ app.post('/api/register-user', async (req, res) => {
         division: division,
         account_category: finalAccountCategory,
         first_name: firstName,
-        last_name: lastName
+        last_name: lastName,
+        passcode: passcode
       },
       message: "User registered and logged in successfully"
     });
@@ -6614,11 +6616,16 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
     }
 
     const email = result.rows[0].email;
+    if (!email) {
+      console.warn(`[AUTH] Masked Lookup: No email registered for school_id ${schoolId}`);
+      return res.status(404).json({ found: false, error: "No email address registered for this School ID." });
+    }
+
     const [username, domain] = email.split('@');
     const maskedEmail = username[0] + '*'.repeat(username.length - 1) + '@' + domain;
     res.json({ found: true, maskedEmail });
   } catch (err) {
-    console.error("Lookup Masked Email Error:", err);
+    console.error("Lookup Masked Email Error:", err.message);
     res.status(500).json({ error: "Server Error" });
   }
 });
@@ -6632,10 +6639,15 @@ app.post('/api/forgot-password', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: "No user found with this School ID." });
 
     const email = result.rows[0].email;
+    if (!email) {
+      console.warn(`[AUTH] Forgot Password: No email for school_id ${schoolId}`);
+      return res.status(404).json({ error: "No email address registered for this School ID. Please contact an administrator." });
+    }
+
     console.log(`[STUB] Password reset sent to ${email} for School ID ${schoolId}`);
     res.json({ success: true, message: `Reset link sent to registered email: ${email[0]}***@${email.split('@')[1]}` });
   } catch (err) {
-    console.error("Forgot Password Error:", err);
+    console.error("Forgot Password Error:", err.message);
     res.status(500).json({ error: "Server Error" });
   }
 });
