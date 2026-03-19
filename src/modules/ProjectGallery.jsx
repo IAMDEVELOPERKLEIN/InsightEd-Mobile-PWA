@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import BottomNav from './BottomNav';
@@ -170,7 +171,7 @@ const ProjectGallery = () => {
                 </div>
 
                 {/* FULLSCREEN IMAGE PREVIEW MODAL */}
-                {selectedImage && (
+                {selectedImage && createPortal(
                     <div
                         className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
                         onClick={() => setSelectedImage(null)}
@@ -208,7 +209,8 @@ const ProjectGallery = () => {
                                 {new Date(selectedImage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
                         </div>
-                    </div>
+                    </div>,
+                    document.body
                 )}
 
                 <BottomNav userRole={user?.role || "Engineer"} />

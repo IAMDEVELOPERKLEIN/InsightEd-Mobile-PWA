@@ -336,127 +336,172 @@ const initDB = async () => {
   let currentSegment = "Start";
   try {
     console.log("   [initDB] Starting...");
-    // Set a lock timeout to prevent hanging forever on busy tables
-    // Increased to 15s to be more patient with Azure's background tasks
-    await pool.query('SET lock_timeout = 15000');
 
-    currentSegment = "Segment 0.1: project_documents table";
-    console.log(`     [${currentSegment}]`);
+    const poolsToInit = [pool];
+    if (poolNew) poolsToInit.push(poolNew);
+
+    for (const targetPool of poolsToInit) {
+      const dbLabel = targetPool === pool ? "Primary" : "Secondary";
+      try {
+        console.log(`     -> Initializing ${dbLabel} Database...`);
+        // Set a lock timeout to prevent hanging forever on busy tables
+        await targetPool.query('SET lock_timeout = 15000').catch(() => {});
+
+        currentSegment = `${dbLabel} Seg 0.1: project_documents table`;
+        await targetPool.query(`
+          CREATE TABLE IF NOT EXISTS project_documents (
+            id SERIAL PRIMARY KEY,
+            project_id INT, 
+            doc_type TEXT NOT NULL,
+            file_data TEXT, 
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          CREATE TABLE IF NOT EXISTS engineer_documents (
+            doc_id SERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL,
+            ipc TEXT,
+            pow_pdf TEXT,
+            dupa_pdf TEXT,
+            contract_pdf TEXT,
+            rta_pdf TEXT,
+            moa_pdf TEXT,
+            uploader_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT unique_project_docs_${dbLabel} UNIQUE(project_id)
+          );
+
+          CREATE TABLE IF NOT EXISTS engineer_mother_moa (
+            id SERIAL PRIMARY KEY,
+            region TEXT,
+            province TEXT,
+            municipality_city TEXT,
+            lgu_type TEXT NOT NULL,
+            lgu_name TEXT NOT NULL,
+            moa_pdf TEXT,
+            uploaded_by TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+
+        currentSegment = `${dbLabel} Seg 0.2: engineer_form schema updates`;
+        await targetPool.query(`
+          CREATE TABLE IF NOT EXISTS co_finance (
+            finance_id SERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL,
+            ipc TEXT,
+            tranche_1 NUMERIC DEFAULT 0,
+            tranche_2 NUMERIC DEFAULT 0,
+            tranche_3 NUMERIC DEFAULT 0,
+            liquidated_tranche_1 NUMERIC DEFAULT 0,
+            liquidated_tranche_2 NUMERIC DEFAULT 0,
+            liquidated_tranche_3 NUMERIC DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT unique_project_finance_${dbLabel} UNIQUE(project_id)
+          );
+
+          ALTER TABLE engineer_form
+          DROP COLUMN IF EXISTS tranche_1,
+          DROP COLUMN IF EXISTS tranche_2,
+          DROP COLUMN IF EXISTS tranche_3,
+          DROP COLUMN IF EXISTS liquidated_tranche_1,
+          DROP COLUMN IF EXISTS liquidated_tranche_2,
+          DROP COLUMN IF EXISTS liquidated_tranche_3,
+          DROP COLUMN IF EXISTS implementing_agencies,
+          DROP COLUMN IF EXISTS rta,
+          DROP COLUMN IF EXISTS moa,
+          DROP COLUMN IF EXISTS pow_pdf,
+          DROP COLUMN IF EXISTS dupa_pdf,
+          DROP COLUMN IF EXISTS contract_pdf,
+          DROP COLUMN IF EXISTS rta_pdf,
+          DROP COLUMN IF EXISTS moa_pdf;
+        `).catch(() => {});
+
+        await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'implementing_agency_specific', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'uploader_id_moa_rta', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'assigned_engineer_id', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'assigned_engineer_name', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'date_assigned', 'TIMESTAMP', targetPool);
+        await checkAndAddColumn('engineer_form', 'actions', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'province', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'city', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'municipality', 'TEXT', targetPool);
+
+        await targetPool.query(`
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS status_design_phase TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS contract_id VARCHAR(255);
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year INTEGER;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS mode_of_project VARCHAR(50);
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS no_of_units INTEGER DEFAULT 0;
+        `).catch(() => {});
+
+        currentSegment = `${dbLabel} Seg 5: variation_orders table`;
+        await targetPool.query(`
+          CREATE TABLE IF NOT EXISTS variation_orders (
+              id SERIAL PRIMARY KEY,
+              project_id INTEGER NOT NULL,
+              ipc TEXT,
+              vo_number TEXT,
+              vo_sequence_no INTEGER,
+              vo_type TEXT,
+              requested_date DATE,
+              requested_by TEXT,
+              original_contract_amount NUMERIC,
+              additive_amount NUMERIC DEFAULT 0,
+              deductive_amount NUMERIC DEFAULT 0,
+              net_vo_amount NUMERIC DEFAULT 0,
+              revised_contract_amount NUMERIC,
+              original_target_completion_date DATE,
+              revised_target_completion_date DATE,
+              time_extension_days INTEGER DEFAULT 0,
+              revised_expiry_date DATE,
+              justification TEXT,
+              caf_reference TEXT,
+              status_of_construction_phase TEXT DEFAULT 'Pending',
+              revised_pow_pdf TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              created_by TEXT
+          );
+        `);
+
+        await checkAndAddColumn('variation_orders', 'justification_category', 'TEXT', targetPool);
+        await checkAndAddColumn('variation_orders', 'justification_details', 'TEXT', targetPool);
+        await checkAndAddColumn('variation_orders', 'previous_vo_total', 'NUMERIC DEFAULT 0', targetPool);
+        await checkAndAddColumn('variation_orders', 'original_expiry_date', 'DATE', targetPool);
+
+        currentSegment = `${dbLabel} Seg 6: realignments table`;
+        await targetPool.query(`
+          CREATE TABLE IF NOT EXISTS realignments (
+              id SERIAL PRIMARY KEY,
+              source_project_id INTEGER,
+              target_project_id INTEGER,
+              source_ipc TEXT,
+              target_ipc TEXT,
+              realignment_amount NUMERIC,
+              request_date DATE,
+              justification TEXT,
+              approving_authority TEXT,
+              status TEXT DEFAULT 'Pending',
+              document_url TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              created_by TEXT
+          );
+        `).catch(() => {});
+
+      } catch (poolErr) {
+        console.error(`❌ [initDB] ${dbLabel} Initialization Failed at [${currentSegment}]:`, poolErr.message);
+        if (dbLabel === "Primary") throw poolErr; 
+      }
+    }
+
+    console.log("   [initDB] Completed dual-sync initialization. Finalizing primary database...");
+
+    currentSegment = "Segment 8: backfill time_lapsed_days";
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS project_documents (
-        id SERIAL PRIMARY KEY,
-        project_id INT REFERENCES engineer_form(project_id),
-        doc_type TEXT NOT NULL,
-        file_data TEXT, 
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS engineer_documents (
-        doc_id SERIAL PRIMARY KEY,
-        project_id INTEGER NOT NULL REFERENCES engineer_form(project_id) ON DELETE CASCADE,
-        ipc TEXT,
-        pow_pdf TEXT,
-        dupa_pdf TEXT,
-        contract_pdf TEXT,
-        rta_pdf TEXT,
-        moa_pdf TEXT,
-        uploader_id TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT unique_project_docs UNIQUE(project_id)
-      );
-    `);
-
-    currentSegment = "Segment 0.2: engineer_form PDF columns and new tables";
-    console.log(`     [${currentSegment}]`);
-
-    // 1. Extension Tables
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS co_finance (
-        finance_id SERIAL PRIMARY KEY,
-        project_id INTEGER NOT NULL REFERENCES engineer_form(project_id) ON DELETE CASCADE,
-        ipc TEXT,
-        tranche_1 NUMERIC DEFAULT 0,
-        tranche_2 NUMERIC DEFAULT 0,
-        tranche_3 NUMERIC DEFAULT 0,
-        liquidated_tranche_1 NUMERIC DEFAULT 0,
-        liquidated_tranche_2 NUMERIC DEFAULT 0,
-        liquidated_tranche_3 NUMERIC DEFAULT 0,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT unique_project_finance UNIQUE(project_id)
-      );
-
-      -- Cleanup legacy tranche and PDF columns from engineer_form
-      ALTER TABLE engineer_form
-      DROP COLUMN IF EXISTS tranche_1,
-      DROP COLUMN IF EXISTS tranche_2,
-      DROP COLUMN IF EXISTS tranche_3,
-      DROP COLUMN IF EXISTS liquidated_tranche_1,
-      DROP COLUMN IF EXISTS liquidated_tranche_2,
-      DROP COLUMN IF EXISTS liquidated_tranche_3,
-      DROP COLUMN IF EXISTS implementing_agencies,
-      DROP COLUMN IF EXISTS rta,
-      DROP COLUMN IF EXISTS moa,
-      DROP COLUMN IF EXISTS pow_pdf,
-      DROP COLUMN IF EXISTS dupa_pdf,
-      DROP COLUMN IF EXISTS contract_pdf,
-      DROP COLUMN IF EXISTS rta_pdf,
-      DROP COLUMN IF EXISTS moa_pdf;
-    `);
-
-    await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'implementing_agency_specific', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'uploader_id_moa_rta', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'assigned_engineer_id', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'assigned_engineer_name', 'TEXT');
-    await checkAndAddColumn('engineer_form', 'date_assigned', 'TIMESTAMP');
-    await checkAndAddColumn('engineer_form', 'actions', 'TEXT');
-
-    // 2. Drop legacy PDF columns from engineer_form - Handled in SQL above for efficiency
-
-    await pool.query(`
-      -- Cleanup redundant VO columns
-      ALTER TABLE engineer_form
-      DROP COLUMN IF EXISTS has_variation_order,
-      DROP COLUMN IF EXISTS variation_order_amount,
-      DROP COLUMN IF EXISTS variation_order_remarks,
-      DROP COLUMN IF EXISTS variation_order_no,
-      DROP COLUMN IF EXISTS variation_order_date,
-      DROP COLUMN IF EXISTS vo_approved_by,
-      DROP COLUMN IF EXISTS variation_order_pdf,
-      DROP COLUMN IF EXISTS vo_number,
-      DROP COLUMN IF EXISTS vo_requested_date,
-      DROP COLUMN IF EXISTS vo_requested_by;
-      
-      -- Ensure funds_utilized exists since it was accidentally dropped
-      ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
-      
-      -- Add savings column
-      ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
-
-      -- Column 'status' is already correct.
-
-      ALTER TABLE engineer_form 
-      ADD COLUMN IF NOT EXISTS status_design_phase TEXT,
-      ADD COLUMN IF NOT EXISTS contract_id VARCHAR(255),
-      ADD COLUMN IF NOT EXISTS date_notice_of_award DATE,
-      ADD COLUMN IF NOT EXISTS issuance_of_invitation_to_bid DATE,
-      ADD COLUMN IF NOT EXISTS pre_bid_conference DATE,
-      ADD COLUMN IF NOT EXISTS opening_of_technical_proposal DATE,
-      ADD COLUMN IF NOT EXISTS opening_of_financial_proposal DATE,
-      ADD COLUMN IF NOT EXISTS request_for_quotation DATE,
-      ADD COLUMN IF NOT EXISTS negotiation DATE,
-      ADD COLUMN IF NOT EXISTS opening_of_quotation DATE,
-      ADD COLUMN IF NOT EXISTS funding_year INTEGER,
-      ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
-      ADD COLUMN IF NOT EXISTS delay_reason TEXT,
-      ADD COLUMN IF NOT EXISTS revised_target_completion_date DATE,
-      ADD COLUMN IF NOT EXISTS time_lapsed_days INTEGER,
-      ADD COLUMN IF NOT EXISTS time_lapsed_percentage NUMERIC,
-      ADD COLUMN IF NOT EXISTS mode_of_project VARCHAR(50),
-      ADD COLUMN IF NOT EXISTS no_of_units INTEGER DEFAULT 0;
-
-      -- Backfill time_lapsed_days and drop old column
       DO $$
       BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='time_lapsed') THEN
@@ -464,266 +509,15 @@ const initDB = async () => {
           ALTER TABLE engineer_form DROP COLUMN time_lapsed;
         END IF;
       END $$;
-    `);
-
-    currentSegment = "Segment 5: variation_orders table";
-    console.log(`     [${currentSegment}]`);
-    await pool.query(`
-      DO $$ 
-      BEGIN 
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='update_type') THEN
-          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='actions') THEN
-            ALTER TABLE engineer_form RENAME COLUMN update_type TO actions;
-          ELSE
-            ALTER TABLE engineer_form DROP COLUMN update_type;
-          END IF;
-        END IF;
-      END $$;
-
-      CREATE TABLE IF NOT EXISTS variation_orders (
-          id SERIAL PRIMARY KEY,
-          project_id INTEGER NOT NULL,
-          ipc TEXT,
-          vo_number TEXT,
-          vo_sequence_no INTEGER,
-          vo_type TEXT,
-          requested_date DATE,
-          requested_by TEXT,
-          original_contract_amount NUMERIC,
-          additive_amount NUMERIC,
-          deductive_amount NUMERIC,
-          net_vo_amount NUMERIC,
-          revised_contract_amount NUMERIC,
-          original_target_completion_date DATE,
-          revised_target_completion_date DATE,
-          time_extension_days INTEGER,
-          revised_expiry_date DATE,
-          justification TEXT,
-          justification_category TEXT,
-          justification_details TEXT,
-          previous_vo_total NUMERIC DEFAULT 0,
-          original_expiry_date DATE,
-          caf_reference TEXT,
-          status TEXT DEFAULT 'Pending',
-          revised_pow_pdf TEXT,
-          revised_dupa_pdf TEXT,
-          revised_contract_pdf TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          created_by TEXT
-      );
-    `);
-
-    currentSegment = "Segment 5.5: variation_orders justification migration";
-    console.log(`     [${currentSegment}]`);
-    await checkAndAddColumn('variation_orders', 'justification_category', 'TEXT');
-    await checkAndAddColumn('variation_orders', 'justification_details', 'TEXT');
-    await checkAndAddColumn('variation_orders', 'previous_vo_total', 'NUMERIC DEFAULT 0');
-    await checkAndAddColumn('variation_orders', 'original_expiry_date', 'DATE');
-
-    currentSegment = "Segment 6: realignments table";
-    console.log(`     [${currentSegment}]`);
-    // Migration for existing variation_orders table if needed
-    await pool.query(`
-      DO $$ 
-      BEGIN 
-        IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'variation_orders') THEN
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS vo_sequence_no INTEGER;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS vo_type TEXT;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS additive_amount NUMERIC;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS deductive_amount NUMERIC;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS net_vo_amount NUMERIC;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS time_extension_days INTEGER;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_expiry_date DATE;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS caf_reference TEXT;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_pow_pdf TEXT;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_dupa_pdf TEXT;
-          ALTER TABLE variation_orders ADD COLUMN IF NOT EXISTS revised_contract_pdf TEXT;
-        END IF;
-      END $$;
-
-      CREATE TABLE IF NOT EXISTS realignments (
-          id SERIAL PRIMARY KEY,
-          source_project_id INTEGER,
-          target_project_id INTEGER,
-          source_ipc TEXT,
-          target_ipc TEXT,
-          realignment_amount NUMERIC,
-          request_date DATE,
-          justification TEXT,
-          approving_authority TEXT,
-          status TEXT DEFAULT 'Pending',
-          document_url TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          created_by TEXT
-      );
-    `);
-
-    currentSegment = "Segment 7: school_profiles removals";
-    console.log(`     [${currentSegment}]`);
-    // await checkAndAddColumn('school_profiles', 'school_head_validation', 'BOOLEAN DEFAULT FALSE');
-    // await checkAndAddColumn('school_profiles', 'multigrade_classes', "JSONB DEFAULT '[]'::jsonb");
-    // await checkAndDropColumn('school_profiles', 'data_health_score');
-    // await checkAndDropColumn('school_profiles', 'data_health_description');
-    // await checkAndDropColumn('school_profiles', 'forms_to_recheck');
-
-    console.log("   [initDB] Completed.");
-
-
-
-
-    // --- MIGRATION: LGU FORMS AND IMAGES (REMOVED) ---
-    /*
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS lgu_forms (
-        project_id SERIAL PRIMARY KEY,
-        finance_id INT, -- Link to CO Finance if applicable
-        total_funds NUMERIC,
-        fund_released NUMERIC,
-        date_of_release DATE,
-        school_id TEXT,
-        school_name TEXT,
-        project_name TEXT,
-        region TEXT,
-        division TEXT, 
-        district TEXT,
-        legislative_district TEXT,
-        status TEXT,
-        
-        -- Liquidation Columns
-        liquidated_amount NUMERIC DEFAULT 0,
-        liquidation_date TIMESTAMP,
-        percentage_liquidated NUMERIC DEFAULT 0,
-
-        lgu_id TEXT, -- To track which LGU user owns this
-        
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    try {
-      await pool.query(`
-          ALTER TABLE lgu_forms
-          ADD COLUMN IF NOT EXISTS moa_date TIMESTAMP,
-          ADD COLUMN IF NOT EXISTS tranches_count INTEGER,
-          ADD COLUMN IF NOT EXISTS tranche_amount NUMERIC,
-          ADD COLUMN IF NOT EXISTS fund_source TEXT,
-          ADD COLUMN IF NOT EXISTS province TEXT,
-          ADD COLUMN IF NOT EXISTS city TEXT,
-          ADD COLUMN IF NOT EXISTS municipality TEXT,
-          ADD COLUMN IF NOT EXISTS legislative_district TEXT,
-          ADD COLUMN IF NOT EXISTS scope_of_works TEXT,
-          ADD COLUMN IF NOT EXISTS contract_amount NUMERIC,
-          ADD COLUMN IF NOT EXISTS bid_opening_date TIMESTAMP,
-          ADD COLUMN IF NOT EXISTS resolution_award_date TIMESTAMP,
-          ADD COLUMN IF NOT EXISTS procurement_stage TEXT,
-          ADD COLUMN IF NOT EXISTS bidding_date TIMESTAMP,
-          ADD COLUMN IF NOT EXISTS awarding_date TIMESTAMP,
-          ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
-          ADD COLUMN IF NOT EXISTS funds_downloaded NUMERIC,
-          ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC,
-          ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE;
-      `);
-    } catch(err) {
-      console.log("⚠️ DB Init Notice: lgu_forms update skipped (table may not exist).");
-    }
-
-    try {
-      await pool.query(`
-          ALTER TABLE lgu_forms
-          ADD COLUMN IF NOT EXISTS source_agency TEXT,
-          ADD COLUMN IF NOT EXISTS lsb_resolution_no TEXT,
-          ADD COLUMN IF NOT EXISTS moa_ref_no TEXT,
-          ADD COLUMN IF NOT EXISTS validity_period TEXT,
-          ADD COLUMN IF NOT EXISTS contract_duration TEXT,
-          ADD COLUMN IF NOT EXISTS date_approved_pow DATE,
-          ADD COLUMN IF NOT EXISTS fund_release_schedule TEXT,
-          ADD COLUMN IF NOT EXISTS mode_of_procurement TEXT,
-          ADD COLUMN IF NOT EXISTS philgeps_ref_no TEXT,
-          ADD COLUMN IF NOT EXISTS pcab_license_no TEXT,
-          ADD COLUMN IF NOT EXISTS date_contract_signing DATE,
-          ADD COLUMN IF NOT EXISTS bid_amount NUMERIC,
-          ADD COLUMN IF NOT EXISTS nature_of_delay TEXT,
-          ADD COLUMN IF NOT EXISTS date_notice_of_award DATE;
-      `);
-    } catch(err) {
-      // Already logged above
-    }
-
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS lgu_image (
-            id SERIAL PRIMARY KEY,
-            project_id INT REFERENCES lgu_forms(project_id),
-            image_data TEXT,
-            uploaded_by TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    `);
-    console.log("✅ DB Init: LGU Schema SKIPPED (Removed in cleanup).");
-    */
-
-    // Role Renaming Migration (2026-03-18)
-    currentSegment = "Segment: Rename Roles";
-    console.log(`     [${currentSegment}]`);
-    await pool.query("UPDATE users SET role = 'Division Engineer' WHERE role = 'DepEd Engineer' OR role = 'deped_engineer'");
-    await pool.query("UPDATE users SET role = 'EFD Engineer' WHERE role = 'HRODI Engineer' OR role = 'hrodi_engineer'");
-    await pool.query("UPDATE users SET account_category = 'Division Engineer' WHERE account_category = 'DepEd Engineer'");
-    await pool.query("UPDATE users SET account_category = 'EFD Engineer' WHERE account_category = 'HRODI Engineer'");
-    await pool.query("UPDATE engineer_form SET uploader_type = 'Division Engineer' WHERE uploader_type = 'DepEd Engineer'");
-    await pool.query("UPDATE engineer_form SET uploader_type = 'EFD Engineer' WHERE uploader_type = 'HRODI Engineer'");
-
-    // Segment 8: engineer_image
-    currentSegment = "Segment 8: engineer_image";
-    console.log(`     [${currentSegment}]`);
-    await checkAndAddColumn('engineer_image', 'ipc', 'TEXT');
-
-    /* 
-    // Backfill IPC in engineer_image - Commented out to speed up startup
-    await pool.query(`
-      UPDATE engineer_image ei
-      SET ipc = ef.ipc
-      FROM engineer_form ef
-      WHERE ei.project_id = ef.project_id
-      AND ei.ipc IS NULL;
-    `);
-    */
-
-    // LGU Forms is handled in initFinanceDB (dropped as obsolete)
+    `).catch(() => {});
 
     currentSegment = "Segment 9: engineer_form extra columns";
-    console.log(`     [${currentSegment}]`);
     await checkAndAddColumn('engineer_form', 'number_of_classrooms', 'INTEGER DEFAULT 0');
     await checkAndAddColumn('engineer_form', 'number_of_sites', 'INTEGER DEFAULT 1');
     await checkAndAddColumn('engineer_form', 'number_of_storeys', 'INTEGER DEFAULT 0');
-    await checkAndAddColumn('engineer_form', 'funds_utilized', 'NUMERIC DEFAULT 0');
     await checkAndAddColumn('engineer_form', 'program_type', 'TEXT');
 
-    currentSegment = "Segment 10: lgu_projects columns";
-    console.log(`     [${currentSegment}]`);
-    if (await tableExists('lgu_projects')) {
-      await checkAndAddColumn('lgu_projects', 'project_category', 'TEXT');
-      await checkAndAddColumn('lgu_projects', 'number_of_classrooms', 'INTEGER DEFAULT 0');
-      await checkAndAddColumn('lgu_projects', 'number_of_storeys', 'INTEGER DEFAULT 0');
-      await checkAndAddColumn('lgu_projects', 'number_of_sites', 'INTEGER DEFAULT 1');
-    }
-
-    currentSegment = "Segment 11: secondary DB sync";
-    console.log(`     [${currentSegment}]`);
-    if (poolNew) {
-      try {
-        await poolNew.query(`
-          ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year INTEGER;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year_justification TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS actions TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS uploader_id_update_moa_rta TEXT;
-        `);
-      } catch (err) {
-        console.error("⚠️ Secondary DB Schema Sync Error:", err.message);
-      }
-    }
-
     currentSegment = "Segment 12: buildable_spaces and facility tables";
-    console.log(`     [${currentSegment}]`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS buildable_spaces (
         space_id SERIAL PRIMARY KEY,
@@ -738,22 +532,7 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await checkAndAddColumn('buildable_spaces', 'iern', 'TEXT');
-    await checkAndAddColumn('buildable_spaces', 'space_number', 'INTEGER');
     await checkAndAddColumn('school_profiles', 'has_buildable_space', 'BOOLEAN');
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS school_documents (
-        id SERIAL PRIMARY KEY,
-        school_id TEXT,
-        pending_id INT, 
-        doc_type TEXT NOT NULL, 
-        file_data TEXT, 
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_school_documents_school_id ON school_documents(school_id);
-      CREATE INDEX IF NOT EXISTS idx_school_documents_pending_id ON school_documents(pending_id);
-    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_repairs (
@@ -761,58 +540,16 @@ const initDB = async () => {
         school_id TEXT REFERENCES school_profiles(school_id),
         iern TEXT,
         building_no TEXT,
-        repair_roofing BOOLEAN DEFAULT FALSE,
-        repair_ceiling_ext BOOLEAN DEFAULT FALSE,
-        repair_ceiling_int BOOLEAN DEFAULT FALSE,
-        repair_wall_ext BOOLEAN DEFAULT FALSE,
-        repair_partition BOOLEAN DEFAULT FALSE,
-        repair_door BOOLEAN DEFAULT FALSE,
-        repair_windows BOOLEAN DEFAULT FALSE,
-        repair_flooring BOOLEAN DEFAULT FALSE,
-        repair_structural BOOLEAN DEFAULT FALSE,
         remarks TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_facility_repairs_iern ON facility_repairs(iern);
-    `);
-
-    // Ensure facility_repair_details columns exist
-    await checkAndAddColumn('facility_repair_details', 'oms', 'TEXT');
-    await checkAndAddColumn('facility_repair_details', 'demo_justification', 'TEXT');
-
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_demolitions (
         demolition_id SERIAL PRIMARY KEY,
         school_id TEXT REFERENCES school_profiles(school_id),
         iern TEXT,
         building_no TEXT,
-        reason_age BOOLEAN DEFAULT FALSE,
-        reason_safety BOOLEAN DEFAULT FALSE,
-        reason_calamity BOOLEAN DEFAULT FALSE,
-        reason_upgrade BOOLEAN DEFAULT FALSE,
-        less_than_7x9 INTEGER DEFAULT 0,
-        "7x9" INTEGER DEFAULT 0,
-        above_7x9 INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_facility_demolitions_iern ON facility_demolitions(iern);
-    `);
-
-    // Ensure facility_demolitions has dimension categories
-    await checkAndAddColumn('facility_demolitions', 'less_than_7x9', 'INTEGER DEFAULT 0');
-    await checkAndAddColumn('facility_demolitions', '7x9', 'INTEGER DEFAULT 0');
-    await checkAndAddColumn('facility_demolitions', 'above_7x9', 'INTEGER DEFAULT 0');
-
-    // Ensure ph_buildings_demolition has dimension categories
-    await checkAndAddColumn('ph_buildings_demolition', 'less_than_7x9', 'INTEGER DEFAULT 0');
-    await checkAndAddColumn('ph_buildings_demolition', '7x9', 'INTEGER DEFAULT 0');
-    await checkAndAddColumn('ph_buildings_demolition', 'above_7x9', 'INTEGER DEFAULT 0');
-    await checkAndAddColumn('ph_buildings_demolition', 'room_name', 'TEXT');
-
-    // Ensure ph_buildings_inventory has room_name
-    await checkAndAddColumn('ph_buildings_inventory', 'room_name', 'TEXT');
-
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS facility_inventory(
         id SERIAL PRIMARY KEY,
         school_id TEXT,
@@ -820,206 +557,45 @@ const initDB = async () => {
         building_name TEXT NOT NULL,
         category TEXT NOT NULL,
         status TEXT NOT NULL,
-        no_of_storeys INTEGER DEFAULT 1,
-        no_of_classrooms INTEGER NOT NULL,
-        year_completed INTEGER,
-        remarks TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      CREATE INDEX IF NOT EXISTS idx_facility_inventory_iern ON facility_inventory(iern);
     `);
 
     currentSegment = "Segment 13: teaching_personnel tables";
-    console.log(`     [${currentSegment}]`);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS teaching_personnel (
         school_id TEXT PRIMARY KEY,
-        fund_deped INT DEFAULT 0,
-        fund_lgu INT DEFAULT 0,
-        fund_others INT DEFAULT 0,
-        deploy_kinder INT DEFAULT 0,
-        deploy_elem INT DEFAULT 0,
-        deploy_jhs INT DEFAULT 0,
-        deploy_shs INT DEFAULT 0,
-        deploy_sned INT DEFAULT 0,
-        non_advisory INT DEFAULT 0,
-        mg_1_2 INT DEFAULT 0,
-        mg_3_4 INT DEFAULT 0,
-        mg_5_6 INT DEFAULT 0,
-        mg_has_3_plus BOOLEAN DEFAULT FALSE,
-        mg_3_plus_count INT DEFAULT 0,
-        dept_english INT DEFAULT 0,
-        dept_filipino INT DEFAULT 0,
-        dept_science INT DEFAULT 0,
-        dept_math INT DEFAULT 0,
-        dept_ap INT DEFAULT 0,
-        dept_mapeh INT DEFAULT 0,
-        dept_tle INT DEFAULT 0,
-        dept_values INT DEFAULT 0,
-        dept_gened INT DEFAULT 0,
-        dept_ece INT DEFAULT 0,
-        dept_others INT DEFAULT 0,
-        exp_0_1 INT DEFAULT 0,
-        exp_2_5 INT DEFAULT 0,
-        exp_6_10 INT DEFAULT 0,
-        exp_11_15 INT DEFAULT 0,
-        exp_16_20 INT DEFAULT 0,
-        exp_21_25 INT DEFAULT 0,
-        exp_26_30 INT DEFAULT 0,
-        exp_31_35 INT DEFAULT 0,
-        exp_36_40 INT DEFAULT 0,
-        exp_40_45 INT DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
-
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS ph_teachers_list (
         id SERIAL PRIMARY KEY,
-        iern VARCHAR(50),
         school_id VARCHAR(50),
         first_name VARCHAR(100),
-        middle_name VARCHAR(100),
         last_name VARCHAR(100),
-        position VARCHAR(100),
-        specialization TEXT,
-        sex TEXT,
-        experience_bracket TEXT,
-        funding_source TEXT,
-        role_designation TEXT,
-        monday_mins INTEGER DEFAULT 0,
-        tuesday_mins INTEGER DEFAULT 0,
-        wednesday_mins INTEGER DEFAULT 0,
-        thursday_mins INTEGER DEFAULT 0,
-        friday_mins INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS ph_teachers_workload (
-        id SERIAL PRIMARY KEY,
-        teacher_id INTEGER REFERENCES ph_teachers_list(id) ON DELETE CASCADE,
-        school_id VARCHAR(50),
-        grade_level TEXT,
-        subject_name TEXT,
-        subject_code TEXT,
-        duration_minutes INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("✅ DB Init: Teachers List schema verified.");
 
-    // --- New: Workload columns (Simplified) ---
-    const workloadCols = ['workload_hrs', 'workload_mins'];
-    for (const col of workloadCols) {
-      await pool.query(`ALTER TABLE ph_teachers_list ADD COLUMN IF NOT EXISTS ${col} INT DEFAULT 0;`);
-    }
-
-    // Migration: Rename old instructional columns to workload if they exist
-    try {
-      await pool.query(`ALTER TABLE ph_teachers_list RENAME COLUMN instructional_hrs TO workload_hrs;`);
-      console.log("Renamed instructional_hrs to workload_hrs");
-    } catch (e) { /* already renamed or doesn't exist */ }
-
-    try {
-      await pool.query(`ALTER TABLE ph_teachers_list RENAME COLUMN instructional_mins TO workload_mins;`);
-      console.log("Renamed instructional_mins to workload_mins");
-    } catch (e) { /* already renamed or doesn't exist */ }
-
-    // Drop defunct columns if they exist
-    const defunctCols = ['ancillary_hrs', 'ancillary_mins'];
-    for (const col of defunctCols) {
-      try {
-        await pool.query(`ALTER TABLE ph_teachers_list DROP COLUMN IF EXISTS ${col};`);
-      } catch (e) { /* already dropped or busy */ }
-    }
-    console.log("✅ DB Init: Workload columns simplified on ph_teachers_list.");
-
-    // --- Add individual grade deployment columns to teaching_personnel ---
-    const gradeDeployCols = [
-      'deploy_k', 'deploy_g1', 'deploy_g2', 'deploy_g3', 'deploy_g4', 'deploy_g5', 'deploy_g6',
-      'deploy_g7', 'deploy_g8', 'deploy_g9', 'deploy_g10', 'deploy_g11', 'deploy_g12'
-    ];
-    for (const col of gradeDeployCols) {
-      await pool.query(`ALTER TABLE teaching_personnel ADD COLUMN IF NOT EXISTS ${col} INT DEFAULT 0;`);
-    }
-    console.log("✅ DB Init: Grade-level deploy columns verified on teaching_personnel.");
-
-    // --- Ensure Unit 5 Shifting & Modality columns exist on ph_schools ---
-    const shiftModeCols = [
-      'has_standard_shifting BOOLEAN DEFAULT FALSE',
-      'adm_mdl BOOLEAN DEFAULT FALSE', 'adm_odl BOOLEAN DEFAULT FALSE',
-      'adm_tvi BOOLEAN DEFAULT FALSE', 'adm_blended BOOLEAN DEFAULT FALSE',
-    ];
+    // Ensure Unit 5 Shifting & Modality columns exist on ph_schools
     const levels = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
     for (const lvl of levels) {
       await checkAndAddColumn('ph_schools', `shift_${lvl}`, 'TEXT');
       await checkAndAddColumn('ph_schools', `mode_${lvl}`, 'TEXT');
     }
 
-    await checkAndAddColumn('ph_schools', 'unit7_completed', 'BOOLEAN DEFAULT FALSE');
-
-    // --- New: My Activity Dashboard Logs ---
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS ph_performance_logs (
-        id SERIAL PRIMARY KEY,
-        school_id TEXT,
-        unit_id INTEGER,
-        duration_seconds INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log("✅ DB Init: ph_performance_logs schema verified.");
-
     // --- New: Integer-based Unit Completion Tracking ---
     const unitCols = ['unit1', 'unit2', 'unit3', 'unit4', 'unit5', 'unit6', 'unit7', 'unit8'];
     for (const col of unitCols) {
       await checkAndAddColumn('ph_schools', col, 'SMALLINT DEFAULT 0');
     }
-    // Generated column for auto-calculated completion percentage
-    // PostgreSQL 12+ supports GENERATED ALWAYS AS ... STORED
-    try {
-      await pool.query(`
-        ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit_completion NUMERIC
-          GENERATED ALWAYS AS (
-            (COALESCE(unit1,0) + COALESCE(unit2,0) + COALESCE(unit3,0) + COALESCE(unit4,0) +
-             COALESCE(unit5,0) + COALESCE(unit6,0) + COALESCE(unit7,0) + COALESCE(unit8,0)
-            ) / 8.0 * 100.0
-          ) STORED;
-      `);
-    } catch (genErr) {
-      // Column may already exist or DB version may not support generated columns
-      if (!genErr.message.includes('already exists')) {
-        console.warn('unit_completion generated column warning:', genErr.message);
-      }
-    }
-    console.log("✅ DB Init: unit1-unit8 + unit_completion columns verified.");
 
-    // --- Backfill: Sync existing boolean flags into new integer columns ---
-    try {
-      for (let i = 1; i <= 8; i++) {
-        await pool.query(`
-          UPDATE ph_schools SET unit${i} = 1
-          WHERE unit${i}_completed = TRUE AND COALESCE(unit${i}, 0) = 0;
-        `);
-      }
-      console.log("✅ DB Init: Backfilled unit1-unit8 from boolean flags.");
-    } catch (bfErr) {
-      console.warn("Backfill warning (non-fatal):", bfErr.message);
-    }
-
-    console.log("✅ DB Init: All primary migrations completed successfully.");
+    console.log("✅ DB Init: All migrations completed successfully.");
 
   } catch (err) {
-    // Note: currentSegment is not defined in this snippet, assuming it's defined elsewhere or intended as a placeholder.
-    // For this change, I will add it as requested, but be aware it might be undefined if not set globally or within the function.
-    const currentSegment = "initDB"; // Placeholder for current segment
     console.error(`❌ DB Init Error in segment [${currentSegment}]:`, err.message);
-    if (err.detail) console.error("   Detail:", err.detail);
-    if (err.hint) console.error("   Hint:", err.hint);
-    // Continue even if migration fails, but log it
   }
 };
+
 // initDB(); // Moved to awaited startup
 
 // --- DATABASE INIT (EXTENDED FOR FINANCE) ---
@@ -4310,6 +3886,69 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
 //                        CORE ROUTES
 // ==================================================================
 
+// --- ENGINEER MOTHER MOA ENDPOINTS ---
+
+// --- NEW: FETCH MOTHER MOA LOCATIONS ---
+app.get('/api/reference/mother-moa-locations', async (req, res) => {
+  try {
+    const query = `
+      SELECT DISTINCT region, province, municipality, city
+      FROM engineer_form 
+      WHERE region IS NOT NULL
+      ORDER BY region, province, municipality, city
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch MOA Locations Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/engineer-mother-moas
+app.get('/api/engineer-mother-moas', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT m.*, u.first_name, u.last_name 
+      FROM engineer_mother_moa m
+      LEFT JOIN users u ON m.uploaded_by = u.uid
+      ORDER BY m.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Mother MOA Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /api/upload-engineer-mother-moa
+app.post('/api/upload-engineer-mother-moa', async (req, res) => {
+  const { region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uid } = req.body;
+  
+  if (!lgu_type || !lgu_name || !moa_pdf || !uid) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    await pool.query(`
+      INSERT INTO engineer_mother_moa (region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uploaded_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uid]);
+
+    // Activity logging
+    const uName = await getUserFullName(uid);
+    await pool.query(`
+      INSERT INTO activities (uid, user_name, activity_type, details)
+      VALUES ($1, $2, $3, $4)
+    `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Mother MOA for ${lgu_name} (${lgu_type})`]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Upload Mother MOA Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- 1. GET: Fetch Recent Activities ---
 // --- 1. GET: Fetch Recent Activities ---
 app.get('/api/activities', async (req, res) => {
@@ -7593,7 +7232,10 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.implementingAgency), // $50
       valueOrNull(data.implementingAgencySpecific), // $51
       parseIntOrNull(data.numberOfUnits) || 0, // $52
-      data.program_type || (data.is_donated ? 'Donated' : 'BEFF') // $53
+      data.program_type || (data.is_donated ? 'Donated' : 'BEFF'), // $53
+      valueOrNull(data.province), // $54
+      valueOrNull(data.city), // $55
+      valueOrNull(data.municipality) // $56
     ];
 
     const projectQuery = `
@@ -7611,8 +7253,9 @@ app.post('/api/save-project', async (req, res) => {
         opening_of_financial_proposal, request_for_quotation, negotiation, opening_of_quotation,
         funding_year, funding_year_justification,
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
-        mode_of_project, implementing_agency, implementing_agency_specific, no_of_units, program_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53)
+        mode_of_project, implementing_agency, implementing_agency_specific, no_of_units, program_type,
+        province, city, municipality
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -7865,9 +7508,12 @@ app.put('/api/update-project/:id', async (req, res) => {
       oldData.assigned_engineer_name,
       valueOrNull(data.implementingAgency) || oldData.implementing_agency,
       valueOrNull(data.implementingAgencySpecific) || oldData.implementing_agency_specific,
-      ((data.moa_pdf || data.rta_pdf) ? data.uid : oldData.uploader_id_moa_rta),
+      oldData.uploader_id_moa_rta,
       parseIntOrNull(data.numberOfUnits) || oldData.no_of_units || 0,
-      data.program_type || (data.isDonated === true || data.is_donated === true ? 'Donated' : (data.isDonated === false || data.is_donated === false ? 'BEFF' : oldData.program_type || 'BEFF'))
+      data.program_type || (data.isDonated === true || data.is_donated === true ? 'Donated' : (data.isDonated === false || data.is_donated === false ? 'BEFF' : oldData.program_type || 'BEFF')),
+      valueOrNull(data.province) || oldData.province,
+      valueOrNull(data.city) || oldData.city,
+      valueOrNull(data.municipality) || oldData.municipality
     ];
 
     const insertQuery = `
@@ -7886,8 +7532,9 @@ app.put('/api/update-project/:id', async (req, res) => {
         funding_year, funding_year_justification,
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
         mode_of_project, assigned_engineer_id, assigned_engineer_name,
-        implementing_agency, implementing_agency_specific, uploader_id_moa_rta, no_of_units, program_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56)
+        implementing_agency, implementing_agency_specific, uploader_id_moa_rta, no_of_units, program_type,
+        province, city, municipality
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59)
       RETURNING *;
     `;
 

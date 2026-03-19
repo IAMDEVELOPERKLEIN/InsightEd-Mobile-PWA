@@ -37,6 +37,8 @@ const SectionHeader = ({ title, icon }) => (
 
 const NewProjects = () => {
     const { user, token } = useAuth();
+    const userRole = user?.role || '';
+    const accountCategory = user?.account_category || '';
     const navigate = useNavigate();
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
@@ -1020,8 +1022,8 @@ const NewProjects = () => {
 
                         </div>
 
-                        {/* --- IMPLEMENTING AGENCY SECTION (HRODI Engineer only) --- */}
-                        {(userRole === 'HRODI Engineer' || userRole === 'HRODI' || userRole === 'EFD' || accountCategory === 'HRODI Engineer' || accountCategory === 'EFD') && (
+                        {/* --- IMPLEMENTING AGENCY SECTION (EFD / HRODI Engineer) --- */}
+                        {(userRole === 'HRODI Engineer' || userRole === 'HRODI' || userRole === 'EFD' || userRole === 'EFD Engineer' || accountCategory === 'HRODI Engineer' || accountCategory === 'EFD' || accountCategory === 'EFD Engineer') && (
                             <>
                                 <SectionHeader title="Implementing Agency" icon="🏛️" />
                                 <div className="space-y-4">

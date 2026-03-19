@@ -1,12 +1,56 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2, FiImage } from 'react-icons/fi';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2, FiImage, FiLayers, FiList, FiCheckSquare } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { uploadFileInChunks } from '../utils/chunkedUploader';
 import EditProjectModal from '../components/EditProjectModal';
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
+
+const MultiSelectDropdown = ({ label, options, selected, onChange, icon: Icon }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+        <div className="relative group flex-1 min-w-[160px]">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 border-none rounded-xl text-[11px] font-bold text-slate-700 hover:bg-slate-100 transition-all text-left"
+            >
+                <div className="flex items-center gap-2 truncate">
+                    {Icon && <Icon size={13} className="text-blue-500 shrink-0" />}
+                    <span className="truncate">{selected.length > 0 ? `${label} (${selected.length})` : `All ${label}`}</span>
+                </div>
+                <FiChevronDown className={`shrink-0 transition-transform duration-300 text-slate-400 ${isOpen ? 'rotate-180' : ''}`} size={13} />
+            </button>
+            {isOpen && (
+                <>
+                    <div className="fixed inset-0 z-[100]" onClick={() => setIsOpen(false)}></div>
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[101] py-2 max-h-[300px] overflow-y-auto">
+                        <div onClick={() => onChange([])} className="px-4 py-2 hover:bg-blue-50 text-[10px] font-black text-blue-600 uppercase tracking-widest cursor-pointer border-b border-slate-50 mb-1">
+                            Reset {label}
+                        </div>
+                        {options.map(option => (
+                            <div
+                                key={option}
+                                onClick={() => {
+                                    const next = selected.includes(option)
+                                        ? selected.filter(s => s !== option)
+                                        : [...selected, option];
+                                    onChange(next);
+                                }}
+                                className="px-4 py-2 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                            >
+                                <span className={`text-[11px] ${selected.includes(option) ? 'text-blue-600 font-bold' : 'text-slate-600 font-medium'}`}>{option}</span>
+                                {selected.includes(option) && <FiCheckSquare size={13} className="text-blue-500" />}
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
 
 const EFDMonitoring = () => {
     const { user, token } = useAuth();
@@ -16,10 +60,10 @@ const EFDMonitoring = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [efdLocations, setEfdLocations] = useState([]);
-    const [selectedRegion, setSelectedRegion] = useState('');
+    const [selectedRegions, setSelectedRegions] = useState([]);
     const [selectedDivision, setSelectedDivision] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
-    const [selectedFundingYear, setSelectedFundingYear] = useState('');
+    const [selectedCategories, setSelectedCategories] = useState([]);
+    const [selectedFundingYears, setSelectedFundingYears] = useState([]);
     const [selectedDonated, setSelectedDonated] = useState('All'); // 'All', 'Donated', 'Non-Donated'
     const [selectedDocStatus, setSelectedDocStatus] = useState('All'); // 'All', 'Complete', 'Missing RTA', 'Missing MOA', 'Missing Both'
     const [fundingYears, setFundingYears] = useState([]);
@@ -48,11 +92,6 @@ const EFDMonitoring = () => {
     const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
     const userRole = user?.role === 'hrodi_engineer' ? 'HRODI Engineer' : (user?.role || '');
     
-    // New State for Document Uploads
-    const [selectedProjectForDocs, setSelectedProjectForDocs] = useState(null);
-    const [uploadDocs, setUploadDocs] = useState({ RTA: null, MOA: null });
-    const [isUploadingDocs, setIsUploadingDocs] = useState(false);
-
     // Edit Modal State
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [selectedProjectForEdit, setSelectedProjectForEdit] = useState(null);
@@ -71,10 +110,10 @@ const EFDMonitoring = () => {
     const cameraInputRef = React.useRef(null);
 
     const handleClearFilters = () => {
-        setSelectedRegion('');
+        setSelectedRegions([]);
         setSelectedDivision('');
-        setSelectedCategory('');
-        setSelectedFundingYear('');
+        setSelectedCategories([]);
+        setSelectedFundingYears([]);
         setSelectedDonated('All');
         setSelectedDocStatus('All');
         setSearchTerm('');
@@ -124,33 +163,34 @@ const EFDMonitoring = () => {
     }, [efdLocations]);
 
     const allDivisions = useMemo(() => {
-        if (!selectedRegion) return [];
+        if (selectedRegions.length !== 1) return [];
         const divisions = new Set();
         efdLocations
-            .filter(loc => loc.region?.trim().toUpperCase() === selectedRegion.toUpperCase())
+            .filter(loc => loc.region?.trim().toUpperCase() === selectedRegions[0].toUpperCase())
             .forEach(loc => {
                 if (loc.division) divisions.add(loc.division.trim().toUpperCase());
             });
         return Array.from(divisions).sort();
-    }, [efdLocations, selectedRegion]);
+    }, [efdLocations, selectedRegions]);
 
     const divisionData = useMemo(() => {
-        if (!selectedRegion) return [];
+        if (selectedRegions.length !== 1) return [];
         const counts = {};
-        projects.filter(p => normalize(p.region) === normalize(selectedRegion)).forEach(p => {
+        projects.filter(p => normalize(p.region) === normalize(selectedRegions[0])).forEach(p => {
             const div = normalize(p.division);
             counts[div] = (counts[div] || 0) + 1;
         });
         return Object.entries(counts).map(([name, count]) => ({ name, value: count }))
             .sort((a, b) => b.value - a.value);
-    }, [projects, selectedRegion]);
+    }, [projects, selectedRegions]);
+
 
     const filteredProjects = useMemo(() => {
         return projects.filter(p => {
-            const matchesRegion = !selectedRegion || normalize(p.region) === normalize(selectedRegion);
+            const matchesRegion = selectedRegions.length === 0 || selectedRegions.some(r => normalize(p.region) === normalize(r));
             const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
-            const matchesCategory = !selectedCategory || p.projectCategory === selectedCategory;
-            const matchesFundingYear = !selectedFundingYear || p.fundingYear?.toString() === selectedFundingYear.toString();
+            const matchesCategory = selectedCategories.length === 0 || selectedCategories.some(c => p.projectCategory?.toLowerCase() === c.toLowerCase());
+            const matchesFundingYear = selectedFundingYears.length === 0 || selectedFundingYears.some(y => p.fundingYear?.toString() === y.toString());
             const matchesDonated = selectedDonated === 'All' || 
                 (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
                 (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
@@ -171,7 +211,7 @@ const EFDMonitoring = () => {
                 
             return matchesRegion && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && isUnassignedOnly && matchesSearch;
         });
-    }, [projects, searchTerm, showUnassignedOnly, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, selectedDonated, selectedDocStatus]);
+    }, [projects, searchTerm, showUnassignedOnly, selectedRegions, selectedDivision, selectedCategories, selectedFundingYears, selectedDonated, selectedDocStatus]);
 
     // Pagination Logic
     const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
@@ -183,7 +223,7 @@ const EFDMonitoring = () => {
     // Reset page on filter change
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedRegion, selectedDivision, selectedCategory, selectedFundingYear, selectedDonated, selectedDocStatus, showUnassignedOnly]);
+    }, [searchTerm, selectedRegions, selectedDivision, selectedCategories, selectedFundingYears, selectedDonated, selectedDocStatus, showUnassignedOnly]);
 
     const handleAssign = async () => {
         if (!selectedProject || !selectedEngineer) return;
@@ -231,68 +271,6 @@ const EFDMonitoring = () => {
             reader.onload = () => resolve(reader.result); // Resolve full data URL
             reader.onerror = (error) => reject(error);
         });
-    };
-
-    const handleUploadDocuments = async () => {
-        if (!selectedProjectForDocs) return;
-        if (!uploadDocs.RTA && !uploadDocs.MOA) {
-            setMessage({ text: "Please select at least one document to upload", type: 'error' });
-            return;
-        }
-
-        console.log(`🚀 Starting bulk upload for project: ${selectedProjectForDocs.id}`);
-        setIsUploadingDocs(true);
-        try {
-            const documents = {};
-            
-            if (uploadDocs.RTA) {
-                console.log(`   - Uploading RTA via chunks...`);
-                documents.RTA = await uploadFileInChunks(uploadDocs.RTA);
-            }
-            if (uploadDocs.MOA) {
-                console.log(`   - Uploading MOA via chunks...`);
-                documents.MOA = await uploadFileInChunks(uploadDocs.MOA);
-            }
-
-            console.log(`   - Sending document URLs to API...`);
-            const response = await fetch('/api/bulk-upload-project-documents', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectId: selectedProjectForDocs.id,
-                    documents: documents,
-                    uid: user.uid
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || "Failed to upload documents");
-            }
-            
-            console.log(`   - ✅ Bulk upload successful.`);
-
-            // Update local state so UI reflects the new documents immediately
-            setProjects(prevProjects => prevProjects.map(p => {
-                if (p.id === selectedProjectForDocs.id) {
-                    return {
-                        ...p,
-                        hasMoa: documents.MOA ? true : p.hasMoa,
-                        hasRta: documents.RTA ? true : p.hasRta,
-                    };
-                }
-                return p;
-            }));
-
-            setMessage({ text: "Documents uploaded successfully!", type: 'success' });
-            setSelectedProjectForDocs(null);
-            setUploadDocs({ RTA: null, MOA: null });
-        } catch (error) {
-            console.error("❌ Upload error:", error);
-            setMessage({ text: error.message || "Failed to upload documents", type: 'error' });
-        } finally {
-            setIsUploadingDocs(false);
-        }
     };
 
     const handleCameraClick = (category) => {
@@ -483,7 +461,7 @@ const EFDMonitoring = () => {
                                 >
                                     {showUnassignedOnly ? 'Showing Unassigned' : 'Filter Unassigned'}
                                 </button>
-                                {(selectedRegion || selectedDivision || selectedCategory || selectedFundingYear || selectedDonated !== 'All' || selectedDocStatus !== 'All' || searchTerm || showUnassignedOnly) && (
+                                {(selectedRegions.length > 0 || selectedDivision || selectedCategories.length > 0 || selectedFundingYears.length > 0 || selectedDonated !== 'All' || selectedDocStatus !== 'All' || searchTerm || showUnassignedOnly) && (
                                     <button 
                                         onClick={handleClearFilters}
                                         className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full transition-all active:scale-95"
@@ -494,53 +472,42 @@ const EFDMonitoring = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <div className="relative">
-                                <select 
-                                    value={selectedRegion}
-                                    onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
-                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
-                                >
-                                    <option value="">All Regions</option>
-                                    {allRegions.map(r => <option key={r} value={r}>{r}</option>)}
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-                            </div>
+                        {/* Multi-select row */}
+                        <div className="flex flex-wrap gap-3">
+                            <MultiSelectDropdown
+                                label="Regions"
+                                options={allRegions}
+                                selected={selectedRegions}
+                                onChange={(val) => { setSelectedRegions(val); setSelectedDivision(''); }}
+                                icon={FiMapPin}
+                            />
+                            <MultiSelectDropdown
+                                label="Categories"
+                                options={categories}
+                                selected={selectedCategories}
+                                onChange={setSelectedCategories}
+                                icon={FiLayers}
+                            />
+                            <MultiSelectDropdown
+                                label="Funding Years"
+                                options={fundingYears.map(String)}
+                                selected={selectedFundingYears.map(String)}
+                                onChange={setSelectedFundingYears}
+                                icon={FiList}
+                            />
+                        </div>
+
+                        {/* Single-select row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             <div className="relative">
                                 <select 
                                     value={selectedDivision}
                                     onChange={(e) => setSelectedDivision(e.target.value)}
-                                    disabled={!selectedRegion}
+                                    disabled={selectedRegions.length !== 1}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all disabled:opacity-40"
                                 >
-                                    <option value="">All Divisions</option>
+                                    <option value="">{selectedRegions.length === 1 ? 'All Divisions' : 'Select 1 Region'}</option>
                                     {allDivisions.map(d => <option key={d} value={d}>{d}</option>)}
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-                            </div>
-                            <div className="relative sm:col-span-2 lg:col-span-1">
-                                <select 
-                                    value={selectedCategory}
-                                    onChange={(e) => setSelectedCategory(e.target.value)}
-                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
-                                >
-                                    <option value="">All Categories</option>
-                                    {categories.map(cat => (
-                                        <option key={cat} value={cat}>{cat}</option>
-                                    ))}
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-                            </div>
-                            <div className="relative">
-                                <select 
-                                    value={selectedFundingYear}
-                                    onChange={(e) => setSelectedFundingYear(e.target.value)}
-                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
-                                >
-                                    <option value="">All Years</option>
-                                    {fundingYears.map(year => (
-                                        <option key={year} value={year}>{year}</option>
-                                    ))}
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -550,9 +517,9 @@ const EFDMonitoring = () => {
                                     onChange={(e) => setSelectedDonated(e.target.value)}
                                     className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
                                 >
-                                    <option value="All">All Donated/Non</option>
+                                    <option value="All">All Sources</option>
                                     <option value="Donated">Donated</option>
-                                    <option value="Non-Donated">Non-Donated</option>
+                                    <option value="Non-Donated">BEFF (Gov)</option>
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
@@ -570,6 +537,12 @@ const EFDMonitoring = () => {
                                 </select>
                                 <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
                             </div>
+                            <button 
+                                onClick={handleClearFilters}
+                                className="flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+                            >
+                                <FiFilter size={12} /> Reset Filters
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -697,23 +670,6 @@ const EFDMonitoring = () => {
                                                             title="Update Project"
                                                         >
                                                             <FiEdit2 size={18} />
-                                                        </button>
-                                                        <button 
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation();
-                                                                setSelectedProjectForDocs(p);
-                                                                try {
-                                                                    const res = await fetch(`/api/projects/${p.id}`);
-                                                                    if (res.ok) {
-                                                                        const fullData = await res.json();
-                                                                        setSelectedProjectForDocs(prev => prev && prev.id === p.id ? { ...prev, ...fullData } : prev);
-                                                                    }
-                                                                } catch (err) { console.warn("Background fetch failed:", err); }
-                                                            }}
-                                                            className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white hover:shadow-lg transition-all"
-                                                            title="Upload RTA/MOA"
-                                                        >
-                                                            <FiFileText size={18} />
                                                         </button>
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
@@ -869,104 +825,6 @@ const EFDMonitoring = () => {
                                     className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
                                 >
                                     {isAssigning ? 'Updating...' : 'Confirm Assignment'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>,
-                    document.body
-                )}
-
-                {/* Document Upload Modal */}
-                {selectedProjectForDocs && createPortal(
-                    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 px-4">
-                        <div className="bg-white w-full max-w-xl rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 max-h-[90vh] flex flex-col relative px-4 sm:px-8">
-                            <button 
-                                onClick={() => setSelectedProjectForDocs(null)}
-                                className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
-                            >
-                                <FiX size={20} />
-                            </button>
-                            
-                            <div className="mb-6 pr-10">
-                                <h2 className="text-xl font-black text-slate-800">Project Documents</h2>
-                                <p className="text-xs text-slate-400 font-medium truncate">Upload for: <span className="text-blue-600 font-bold">{selectedProjectForDocs.projectName}</span></p>
-                            </div>
-
-                            <div className="space-y-6 mb-8 overflow-y-auto pr-2 custom-scrollbar">
-                                {/* RTA Upload */}
-                                <div className="space-y-2">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Resolution to Award (RTA)</label>
-                                    <div className={`p-4 rounded-2xl border-2 border-dashed transition-all ${uploadDocs.RTA ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
-                                        <input 
-                                            type="file" 
-                                            accept="application/pdf"
-                                            onChange={(e) => setUploadDocs(prev => ({ ...prev, RTA: e.target.files[0] }))}
-                                            className="hidden" 
-                                            id="rta-upload"
-                                        />
-                                        <label htmlFor="rta-upload" className="flex flex-col items-center justify-center cursor-pointer">
-                                            {uploadDocs.RTA ? (
-                                                <div className="flex items-center gap-2 text-emerald-600">
-                                                    <FiCheck size={20} />
-                                                    <span className="text-xs font-bold truncate max-w-[200px]">{uploadDocs.RTA.name}</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center gap-2 text-slate-400">
-                                                    <FiFileText size={24} />
-                                                    <span className="text-[10px] font-bold uppercase">Select RTA PDF</span>
-                                                </div>
-                                            )}
-                                        </label>
-                                    </div>
-                                    {selectedProjectForDocs.rta_pdf && !uploadDocs.RTA && (
-                                        <p className="text-[9px] text-blue-500 font-bold ml-1 italic">✓ Existing RTA File Available</p>
-                                    )}
-                                </div>
-
-                                {/* MOA Upload */}
-                                <div className="space-y-2">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Memorandum of Agreement (MOA)</label>
-                                    <div className={`p-4 rounded-2xl border-2 border-dashed transition-all ${uploadDocs.MOA ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
-                                        <input 
-                                            type="file" 
-                                            accept="application/pdf"
-                                            onChange={(e) => setUploadDocs(prev => ({ ...prev, MOA: e.target.files[0] }))}
-                                            className="hidden" 
-                                            id="moa-upload"
-                                        />
-                                        <label htmlFor="moa-upload" className="flex flex-col items-center justify-center cursor-pointer">
-                                            {uploadDocs.MOA ? (
-                                                <div className="flex items-center gap-2 text-emerald-600">
-                                                    <FiCheck size={20} />
-                                                    <span className="text-xs font-bold truncate max-w-[200px]">{uploadDocs.MOA.name}</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center gap-2 text-slate-400">
-                                                    <FiFileText size={24} />
-                                                    <span className="text-[10px] font-bold uppercase">Select MOA PDF</span>
-                                                </div>
-                                            )}
-                                        </label>
-                                    </div>
-                                    {selectedProjectForDocs.moa_pdf && !uploadDocs.MOA && (
-                                        <p className="text-[9px] text-blue-500 font-bold ml-1 italic">✓ Existing MOA File Available</p>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row gap-3 mt-auto">
-                                <button 
-                                    onClick={() => setSelectedProjectForDocs(null)}
-                                    className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button 
-                                    onClick={handleUploadDocuments}
-                                    disabled={(!uploadDocs.RTA && !uploadDocs.MOA) || isUploadingDocs}
-                                    className="w-full py-4 rounded-2xl bg-emerald-600 text-white font-bold text-sm shadow-xl shadow-emerald-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
-                                >
-                                    {isUploadingDocs ? 'Uploading...' : 'Save Documents'}
                                 </button>
                             </div>
                         </div>

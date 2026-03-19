@@ -15,9 +15,7 @@ const ProjectStatus = {
 const DOC_TYPES = {
     POW: "Program of Works / Progress of Work",
     DUPA: "DUPA",
-    CONTRACT: "Signed Contract",
-    RTA: "Resolution to Award (RTA)",
-    MOA: "Memorandum of Agreement (MOA)"
+    CONTRACT: "Signed Contract"
 };
 
 const PROJECT_CATEGORIES = [
@@ -95,8 +93,7 @@ const EditProjectModal = ({
     const [formData, setFormData] = useState(null);
     const [documents, setDocuments] = useState({
         POW: null, DUPA: null, CONTRACT: null, VO: null,
-        RevisedPOW: null, RevisedDUPA: null, RevisedContract: null,
-        RTA: null, MOA: null
+        RevisedPOW: null, RevisedDUPA: null, RevisedContract: null
     });
     const [isFundingYearLocked, setIsFundingYearLocked] = useState(true);
     const [showJustificationPrompt, setShowJustificationPrompt] = useState(false);
@@ -132,6 +129,9 @@ const EditProjectModal = ({
                         schoolId: project.schoolId || '',
                         schoolName: project.schoolName || '',
                         region: project.region || '',
+                        province: project.province || '',
+                        city: project.city || '',
+                        municipality: project.municipality || '',
                         division: project.division || '',
                         targetCompletionDate: project.targetCompletionDate || '',
                         noticeToProceed: project.noticeToProceed || '',
@@ -255,7 +255,7 @@ const EditProjectModal = ({
             let newData = { ...prev, [name]: value };
 
             // Force Uppercase for Scope of Work & Batch of Funds
-            if (['scopeOfWork', 'batchOfFunds'].includes(name)) {
+            if (['scopeOfWork', 'batchOfFunds', 'province', 'city', 'municipality'].includes(name)) {
                 newData[name] = value.toUpperCase();
             }
 
@@ -503,6 +503,22 @@ const EditProjectModal = ({
                 <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sites</label>
                     <input type="text" name="numberOfSites" value={formatWithCommas(formData.numberOfSites)} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+            </div>
+
+            {/* Location Info (Editable) */}
+            <div className="grid grid-cols-3 gap-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Province</label>
+                    <input name="province" value={formData.province} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" placeholder="Province" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">City</label>
+                    <input name="city" value={formData.city} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" placeholder="City" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Municipality</label>
+                    <input name="municipality" value={formData.municipality} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" placeholder="Municipality" />
                 </div>
             </div>
 
@@ -1283,12 +1299,6 @@ const EditProjectModal = ({
 
             <div className="space-y-2">
                 {Object.entries(DOC_TYPES)
-                    .filter(([key]) => {
-                        if (['RTA', 'MOA'].includes(key)) {
-                            return userRole === 'EFD';
-                        }
-                        return true;
-                    })
                     .map(([key, label]) => (
                         <div key={key} className={`p-3 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
                             <div className="flex justify-between items-center">
