@@ -78,8 +78,13 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('uid');
         localStorage.removeItem('userId');
         localStorage.removeItem('userRole');
+        localStorage.removeItem('schoolId');
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('accountCategory');
+        localStorage.removeItem('remembered_user');
         setUser(null);
     };
 

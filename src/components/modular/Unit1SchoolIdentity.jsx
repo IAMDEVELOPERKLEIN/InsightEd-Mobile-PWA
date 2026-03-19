@@ -45,7 +45,7 @@ const SkeletonWizard = () => (
 // ── Main Component ───────────────────────────────────────────────────────────
 const Unit1SchoolIdentity = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -97,11 +97,13 @@ const Unit1SchoolIdentity = () => {
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
     useEffect(() => {
+        if (authLoading) return; // Wait for AuthContext to resolve the actual user session
+
         const init = async () => {
             const storedId = user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
                 const draft = await getUnit1Draft("draft_unit_1");
-                if (draft) {
+                if (draft && draft.formData) {
                     setFormData(prev => ({ ...prev, ...draft.formData }));
                     setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                     setShowWelcomeBack(true);
@@ -193,12 +195,17 @@ const Unit1SchoolIdentity = () => {
 
             // Not yet completed — check draft or auto-fill
             const draft = await getUnit1Draft("draft_unit_1");
-            if (draft) {
+            // SECURITY: Only restore draft if it belongs to the current school ID
+            if (draft && draft.formData && draft.formData.school_id === storedId) {
                 setFormData(prev => ({ ...prev, ...draft.formData }));
                 setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
             } else {
+                if (draft) {
+                    console.log("🗑️ Clearing stale draft from another school session.");
+                    await clearUnit1Draft("draft_unit_1");
+                }
                 setFormData(prev => ({ ...prev, school_id: storedId }));
                 if (iernRow) {
                     setFormData(prev => ({
