@@ -11,7 +11,6 @@ export const DASHBOARD_METADATA = {
         { id: 6, title: "Teaching Personnel", icon: FiUsers, emoji: '👩‍🏫', path: "/modular/unit-6", xp: 400 },
         { id: 7, title: "School Resources", icon: FiBookOpen, emoji: '🧰', path: "/modular/unit-7", xp: 450 },
         { id: 8, title: "Physical Facilities", icon: FiBookOpen, emoji: '🏗️', path: "/modular/unit-8", xp: 500 },
-        { id: 9, title: "School Location", icon: FiMapPin, emoji: '📍', path: "/modular/unit-9", xp: 550 },
     ],
     forms: [
         { id: 1, name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600", flag: "f1_profile", unit: 1 },
@@ -24,6 +23,6 @@ export const DASHBOARD_METADATA = {
         { id: 8, name: "Specialization", route: "/teacher-specialization", icon: FiLayers, color: "bg-lime-100 text-lime-600", flag: "f6_specialization", unit: 6 },
         { id: 9, name: "School Resources", route: "/school-resources", icon: FiBox, color: "bg-emerald-100 text-emerald-600", flag: "f7_resources", unit: 7 },
         { id: 10, name: "Physical Facilities", route: "/physical-facilities", icon: FiLayers, color: "bg-amber-100 text-amber-600", flag: "f8_facilities", unit: 8 },
-        { id: 11, name: "School Location", route: "/modular/unit-9", icon: FiMapPin, color: "bg-rose-100 text-rose-600", flag: "f11_location", unit: 9 },
+        { id: 11, name: "Special Hardship (SHA)", route: "/modular/unit-9", icon: FiMapPin, color: "bg-rose-100 text-rose-600", flag: "f11_location", unit: 9 },
     ]
 };

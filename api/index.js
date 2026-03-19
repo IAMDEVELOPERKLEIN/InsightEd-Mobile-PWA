@@ -26,6 +26,7 @@ import { calculateRiskIndex } from './utils/safetyScore.js';
 import { z } from 'zod'; // For validation
 import jwt from 'jsonwebtoken';
 import authMiddleware from './middleware/authMiddleware.js';
+import XLSX from 'xlsx';
 
 
 // Load environment variables
@@ -3725,6 +3726,7 @@ const initOtpTable_OLD = async () => {
 // Auto-connect and initialize
 // --- END OF LEGACY MIGRATIONS (REMOVED) ---
 
+
 // --- NEW DATABASE INITIALIZATION ---
 /* Moved to awaited startup
 (async () => {
@@ -6153,6 +6155,7 @@ app.post('/api/register-beta', async (req, res) => {
             password_hash, hash_version, iern, school_id, registrant_type, passcode
          ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (uid) DO UPDATE SET 
+            email = EXCLUDED.email,
             role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
             first_name = EXCLUDED.first_name,
@@ -6169,7 +6172,7 @@ app.post('/api/register-beta', async (req, res) => {
             passcode = EXCLUDED.passcode;`,
         [
           uid,
-          null, // Legacy identifier
+          null, // School Heads use school_id, not email
           'School Head',
           contactNumber || null,
           firstName || 'School',
@@ -8241,12 +8244,10 @@ app.get('/api/finance-dashboard/projects', async (req, res) => {
         e.status_of_construction_phase AS status,
         e.mode_of_project, f.tranche_1, f.tranche_2, f.tranche_3,
         e.ipc, e.assigned_engineer_name as assigned_engineer,
-        (NULLIF(e.moa_pdf, '') IS NOT NULL) AS has_moa,
-        (NULLIF(e.rta_pdf, '') IS NOT NULL) AS has_rta
+        (NULLIF(e.moa_pdf, '') IS NOT NULL) AS has_moa
       FROM engineer_form e
       LEFT JOIN co_finance f ON e.project_id = f.project_id
       WHERE NULLIF(e.moa_pdf, '') IS NOT NULL
-        AND NULLIF(e.rta_pdf, '') IS NOT NULL
       ORDER BY COALESCE(e.ipc, e.project_id::text), e.project_id DESC
     `;
 
@@ -12043,10 +12044,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
       WITH LatestProjects AS (
          SELECT DISTINCT ON (COALESCE(e.ipc, e.project_id::text)) 
             e.project_id, e.project_name, e.school_id, e.school_name, e.accomplishment_percentage, e.status_of_construction_phase AS status, 
-            e.approved_budget_for_contract, e.contract_amount, e.validation_status, e.status_as_of, e.region, e.division, e.created_at,
-            -- Metadata flags from main table
-            (NULLIF(e.rta_pdf, '') IS NOT NULL) AS has_rta,
-            (NULLIF(e.moa_pdf, '') IS NOT NULL) AS has_moa
+            e.approved_budget_for_contract, e.contract_amount, e.validation_status, e.status_as_of, e.region, e.division, e.created_at
          FROM engineer_form e
 
          ORDER BY COALESCE(e.ipc, e.project_id::text), e.created_at DESC
@@ -12102,9 +12100,7 @@ app.get('/api/monitoring/school-projects/:schoolId', async (req, res) => {
     const query = `
 SELECT 
   e.project_id, e.project_name, e.school_id, e.school_name, e.status_of_construction_phase, e.accomplishment_percentage,
-  e.approved_budget_for_contract, e.contract_amount, e.status_as_of, e.created_at,
-  (NULLIF(h.rta_pdf, '') IS NOT NULL) AS has_rta,
-  (NULLIF(h.moa_pdf, '') IS NOT NULL) AS has_moa
+  e.approved_budget_for_contract, e.contract_amount, e.status_as_of, e.created_at
 FROM engineer_form e
 
 WHERE school_id = $1 
@@ -13235,9 +13231,7 @@ app.get('/api/lgu/projects', async (req, res) => {
     // Group by root_project_id and take the one with the latest created_at.
     let query = `
       SELECT DISTINCT ON (root_project_id) 
-        lgu_project_id, root_project_id, school_id, school_name, project_name, municipality, project_status, created_at,
-        (NULLIF(moa_pdf, '') IS NOT NULL) AS "hasMoa",
-        (NULLIF(rta_pdf, '') IS NOT NULL) AS "hasRta"
+        lgu_project_id, root_project_id, school_id, school_name, project_name, municipality, project_status, created_at
       FROM lgu_projects
     `;
     const params = [];
@@ -16433,6 +16427,373 @@ app.get('/api/admin/users', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("Fetch Users Error:", err);
     res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// ==================================================================
+//               ESF7 IMPLEMENTATION & MONITORING
+// ==================================================================
+
+// POST /api/esf7/extract-preview (Backend extraction to bypass CORS)
+app.post('/api/esf7/extract-preview', async (req, res) => {
+  const { driveLink } = req.body;
+  if (!driveLink) return res.status(400).json({ error: "Missing driveLink" });
+
+  try {
+    // 1. Extract File ID
+    let fileId = '';
+    if (driveLink.includes('/d/')) {
+        fileId = driveLink.split('/d/')[1].split('/')[0];
+    } else if (driveLink.includes('id=')) {
+        fileId = driveLink.split('id=')[1].split('&')[0];
+    }
+    if (!fileId) throw new Error("Could not extract File ID from link.");
+
+    // 2. Fetch Binary Data from Node (No CORS issues)
+    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    const response = await fetch(downloadUrl);
+    
+    // Google Drive might require a confirmation for large files, but for standard ESF7 it should be direct.
+    if (!response.ok) throw new Error("Google Drive refused the download. Is the file shared as 'Anyone with the link can view'?");
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const data = new Uint8Array(arrayBuffer);
+
+    // 3. Parse with SheetJS
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = 'DB_USER';
+    const worksheet = workbook.Sheets[sheetName];
+
+    if (!worksheet) {
+        throw new Error("Missing 'DB_USER' sheet in the workbook. Please ensure the file follows the ESF7 standard.");
+    }
+
+    // 4. Convert to JSON (Full sheet)
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+    if (jsonData.length < 1) throw new Error("The 'DB_USER' sheet is completely empty.");
+
+    // Find where the actual data starts (looking for common headers like 'ID' or 'School')
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(jsonData.length, 25); i++) {
+        const row = jsonData[i];
+        if (row && row.some(cell => {
+          const val = String(cell).toLowerCase();
+          return val.includes('school') || val.includes('id') || val.includes('first');
+        })) {
+          headerRowIdx = i;
+          break;
+        }
+    }
+
+    const headers = jsonData[headerRowIdx];
+    // Capture ALL rows starting from the detected header row
+    const rows = jsonData.slice(headerRowIdx + 1).filter(row => row.some(cell => String(cell).trim() !== ""));
+
+    const records = rows.map(row => {
+        const record = {};
+        const headerCounts = {};
+        headers.forEach((h, i) => {
+            if (h) {
+                const headerRaw = String(h).trim();
+                const headerLower = headerRaw.toLowerCase();
+                
+                // Skip QA-QE columns as requested
+                if (['qa', 'qb', 'qc', 'qd', 'qe'].includes(headerLower)) return;
+                
+                // Handle duplicate headers by appending a suffix (matches DB: first is name, second is name_2, third is name_3...)
+                let key = headerRaw;
+                if (headerCounts[headerRaw]) {
+                    headerCounts[headerRaw]++;
+                    key = `${headerRaw}_${headerCounts[headerRaw]}`;
+                } else {
+                    headerCounts[headerRaw] = 1;
+                }
+                
+                record[key] = row[i];
+            }
+        });
+        return record;
+    });
+
+    res.json({
+        success: true,
+        data: {
+            records,
+            headers,
+            totalRows: records.length,
+            sample: rows.slice(0, 5)
+        }
+    });
+
+  } catch (err) {
+    console.error("Backend Extraction Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/esf7/stage
+app.post('/api/esf7/stage', async (req, res) => {
+  const { school_id, records } = req.body;
+  if (!school_id || !records || !Array.isArray(records)) {
+    return res.status(400).json({ error: "Missing school_id or records array" });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // Clear existing records for this school to prevent duplicates (Draft, Pending, or Verified)
+    await client.query('DELETE FROM ESF7_Database WHERE school_id = $1', [school_id]);
+
+    // 1. Fetch valid columns once
+    const columnRes = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'esf7_database'
+    `);
+    const validColumns = new Set(columnRes.rows.map(r => r.column_name.toLowerCase()));
+
+    // 2. Prepare bulk insert
+    // We need to identify all unique sanitized keys across the entire set to build the column list
+    const allSanitizedKeys = new Set();
+    const mappedRecords = records.map(record => {
+        const sanitized = {};
+        const counts = {};
+        Object.keys(record).forEach(k => {
+            let name = k.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+            if (/^\d/.test(name)) name = 'col_' + name;
+            if (!name) name = 'col';
+            let finalKey = counts[name] ? `${name}_${++counts[name]}` : (counts[name] = 1, name);
+            if (validColumns.has(finalKey)) {
+                sanitized[finalKey] = record[k];
+                allSanitizedKeys.add(finalKey);
+            }
+        });
+        return sanitized;
+    });
+
+    const columnList = Array.from(allSanitizedKeys);
+    if (columnList.length === 0) throw new Error("No valid columns found in the records matching the database schema.");
+
+    // 3. Build the Multi-row INSERT
+    const fullColumns = ['school_id', 'status', 'updated_at', ...columnList.map(k => `"${k}"`)];
+    const valuePlaceholders = [];
+    const flatValues = [];
+    let pIdx = 1;
+
+    // PostgreSQL parameter limit is ~65535. For 400 columns, we can do ~150 rows per batch.
+    // Given ESF7 size, we'll process in one or two batches if needed.
+    for (const row of mappedRecords) {
+        const rowPlaceholders = [
+          `$${pIdx++}`, // school_id
+          `$${pIdx++}`, // status
+          `$${pIdx++}`, // updated_at
+          ...columnList.map(() => `$${pIdx++}`) // Dynamic columns
+        ];
+        valuePlaceholders.push(`(${rowPlaceholders.join(', ')})`);
+        
+        flatValues.push(school_id, 'PENDING_SDO', new Date());
+        columnList.forEach(col => flatValues.push(row[col] || null));
+    }
+
+    const sql = `INSERT INTO ESF7_Database (${fullColumns.join(', ')}) VALUES ${valuePlaceholders.join(', ')}`;
+    await client.query(sql, flatValues);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: `Successfully staged ${records.length} records in bulk.` });
+
+  } catch (err) {
+    if (client) await client.query('ROLLBACK');
+    console.error("ESF7 Bulk Staging Error:", err.message);
+    res.status(500).json({ error: err.message || "Bulk staging failed." });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// GET /api/esf7/pending
+app.get('/api/esf7/pending', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    let query = `
+      SELECT e.school_id, s.school_name, e.status, MAX(e.updated_at) as updated_at 
+      FROM ESF7_Database e
+      JOIN ph_schools s ON e.school_id = s.school_id
+      WHERE (e.status = 'DRAFT' OR e.status = 'PENDING_SDO' OR e.status = 'REJECTED')
+    `;
+    const params = [];
+    if (region && region !== 'All') {
+      params.push(region);
+      query += ` AND s.region = $${params.length}`;
+    }
+    if (division && division !== 'All Divisions') {
+      params.push(division);
+      query += ` AND s.division = $${params.length}`;
+    }
+    query += ` GROUP BY e.school_id, e.status ORDER BY updated_at DESC`;
+
+    const result = await pool.query(query, params);
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Fetch Pending ESF7 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET /api/esf7/status/:school_id
+app.get('/api/esf7/status/:school_id', async (req, res) => {
+  const { school_id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT status FROM ESF7_Database WHERE school_id = $1 LIMIT 1',
+      [school_id]
+    );
+    if (result.rows.length === 0) {
+      return res.json({ success: true, status: 'NOT_STARTED' });
+    }
+    res.json({ success: true, status: result.rows[0].status });
+  } catch (err) {
+    console.error("Fetch ESF7 Status Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET /api/esf7/records/:school_id
+app.get('/api/esf7/records/:school_id', async (req, res) => {
+  const { school_id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM ESF7_Database WHERE school_id = $1',
+      [school_id]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Fetch ESF7 Records Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET /api/esf7/stats
+app.get('/api/esf7/stats', async (req, res) => {
+  const { region, division, district } = req.query;
+  try {
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+    if (region && region !== 'All') {
+      params.push(region);
+      whereClause += ` AND s.region = $${params.length}`;
+    }
+    if (division && division !== 'All Divisions') {
+      params.push(division);
+      whereClause += ` AND s.division = $${params.length}`;
+    }
+    if (district && district !== 'All') {
+      params.push(district);
+      whereClause += ` AND s.district = $${params.length}`;
+    }
+
+    const query = `
+      SELECT 
+        COUNT(DISTINCT s.school_id)::int as total_registered,
+        COUNT(DISTINCT CASE WHEN e.status = 'PENDING_SDO' THEN s.school_id END)::int as pending_sdo,
+        COUNT(DISTINCT CASE WHEN e.status = 'VERIFIED' THEN s.school_id END)::int as verified,
+        COUNT(DISTINCT CASE WHEN e.status = 'REJECTED' THEN s.school_id END)::int as rejected,
+        COUNT(DISTINCT s.school_id) - COUNT(DISTINCT e.school_id)::int as missing_esf7
+      FROM ph_schools s
+      LEFT JOIN ESF7_Database e ON s.school_id = e.school_id
+      ${whereClause}
+    `;
+
+    const result = await pool.query(query, params);
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error("Fetch ESF7 Stats Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET /api/esf7/all-schools
+app.get('/api/esf7/all-schools', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    let query = `
+      SELECT 
+        s.school_id, 
+        s.school_name, 
+        COALESCE(e.status, 'NOT_STARTED') as status, 
+        COALESCE(MAX(e.updated_at), s.updated_at) as updated_at
+      FROM ph_schools s
+      LEFT JOIN ESF7_Database e ON s.school_id = e.school_id
+      WHERE 1=1
+    `;
+    const params = [];
+    if (region && region !== 'All') {
+      params.push(region);
+      query += ` AND s.region = $${params.length}`;
+    }
+    if (division && division !== 'All Divisions') {
+      params.push(division);
+      query += ` AND s.division = $${params.length}`;
+    }
+
+    query += ` GROUP BY s.school_id, s.school_name, e.status ORDER BY s.school_name ASC`;
+
+    const result = await pool.query(query, params);
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error("Fetch All Schools ESF7 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /api/esf7/return
+app.post('/api/esf7/return', async (req, res) => {
+  const { school_id } = req.body;
+  try {
+    await pool.query(
+      "UPDATE ESF7_Database SET status = 'REJECTED' WHERE school_id = $1",
+      [school_id]
+    );
+
+    // Sync with Monitoring Dashboard (f7_resources = 0)
+    await pool.query(`
+      UPDATE school_profiles 
+      SET f7_resources = 0,
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE school_id = $1
+    `, [school_id]);
+
+    res.json({ success: true, message: "ESF7 submission returned for correction." });
+  } catch (err) {
+    console.error("Return ESF7 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /api/esf7/approve
+app.post('/api/esf7/approve', async (req, res) => {
+  const { school_id } = req.body;
+  try {
+    await pool.query(
+      "UPDATE ESF7_Database SET status = 'VERIFIED' WHERE school_id = $1",
+      [school_id]
+    );
+
+    // Sync with Monitoring Dashboard (f7_resources)
+    await pool.query(`
+      UPDATE school_profiles 
+      SET f7_resources = 1,
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE school_id = $1
+    `, [school_id]);
+
+    // Optional: Recalculate completion percentage if a trigger/function exists, 
+    // but usually setting the f-column is enough for the dashboard to pick up.
+
+    res.json({ success: true, message: "ESF7 submission verified and committed." });
+  } catch (err) {
+    console.error("Approve ESF7 Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 

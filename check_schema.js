@@ -1,29 +1,24 @@
 
-import dotenv from 'dotenv';
 import pg from 'pg';
 const { Pool } = pg;
 
-dotenv.config();
-
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: 'postgres://Administrator1:pRZTbQ2T1JD7@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd',
   ssl: { rejectUnauthorized: false }
 });
 
-async function checkSchema() {
+async function check() {
   try {
-    const res = await pool.query(`SHOW search_path`);
-    console.log("Search Path:", res.rows[0].search_path);
-
-    const res2 = await pool.query(`SELECT table_schema, table_name FROM information_schema.tables WHERE table_name = 'engineer_form'`);
-    console.log("Table Locations:");
-    console.log(JSON.stringify(res2.rows, null, 2));
-
+    const res1 = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'engineer_form'");
+    console.log('Columns in engineer_form:', res1.rows.map(r => r.column_name).join(', '));
+    
+    const res2 = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'lgu_projects'");
+    console.log('Columns in lgu_projects:', res2.rows.map(r => r.column_name).join(', '));
   } catch (err) {
-    console.error("Query failed:", err);
+    console.error('Error checking schema:', err);
   } finally {
     await pool.end();
   }
 }
 
-checkSchema();
+check();

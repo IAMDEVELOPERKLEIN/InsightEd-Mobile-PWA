@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiPieChart } from 'react-icons/fi';
+import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiPieChart, FiEye } from 'react-icons/fi';
 import { TbTrophy, TbSchool, TbChartBar, TbFileDownload } from 'react-icons/tb';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
 
@@ -61,6 +61,7 @@ const MonitoringDashboard = () => {
     const [divisionStats, setDivisionStats] = useState([]); // Per-division stats for RO
     const [districtStats, setDistrictStats] = useState([]); // Per-district stats for SDO
     const [districtSchools, setDistrictSchools] = useState([]); // Schools for Drill-down
+    const [esf7Stats, setEsf7Stats] = useState({ total_started: 0, pending_sdo: 0 }); // NEW: ESF7 Stats
     const [loadingDistrict, setLoadingDistrict] = useState(false);
     const [schoolSort, setSchoolSort] = useState('pct-desc'); // Sort state for schools
     const [schoolSearch, setSchoolSearch] = useState(''); // NEW: Search state
@@ -832,37 +833,8 @@ const MonitoringDashboard = () => {
                 // Use statsParams for the main stats (Top Card)
                 fetch(`/api/monitoring/stats?${statsParams.toString()}`),
                 fetch(`/api/monitoring/engineer-stats?${statsParams.toString()}`),
-                // Projects List should probably respect the FILTER (Drill Down) or the CARD (Overview)?
-                // "freeze the jurisdiction overview cards"
-                // Usually the cards show "Completed Forms: X/Y". 
-                // The list below shows "Accomplishment Rate per School/District".
-                // The `engineer-projects` endpoint is for the project list? NO, it's for infra stats? 
-                // Wait, `engineer-projects` returns a list. `engineer-stats` returns summary.
-                // `jurisdictionProjects` state is set from `engineer-projects`. 
-                // If we want the *list* to filter, we should use `params`. 
-                // If we want the *cards* (Infra Matrix?) to freeze, we use `statsParams`.
-                // "Infra Projects Matrix" is a table. "Jurisdiction Overview" is the top card.
-                // Let's assume `engineer-projects` is for the matrix/list and should filter?
-                // Actually `engineer-projects` seems to be used for the textual stats or matrix?
-                // Let's look at usage. `engStats` used in "Infra Projects" card. 
-                // `jurisdictionProjects`... is it used? 
-                // Line 253: `setJurisdictionProjects`. 
-                // Usage search: It's NOT USED in the rendered JSX in the snippet I read? 
-                // Ah, wait. `engineer-projects` endpoint returns list of projects. 
-                // `fetching` logic in `fetchData`:
-                // `fetch('/api/monitoring/engineer-projects?${statsParams.toString()}')`
-                // If "Jurisdiction Overview" includes Infra stats, then `engineer-stats` needs `statsParams`.
-                // `engineer-projects`... might be heavy if getting all? 
-                // Let's keep `engineer-projects` on `statsParams` if it feeds the "Infra Projects" card counts. 
-                // If it feeds a list, it should be `params`.
-                // Logic check: "Infra Projects Matrix" (Section 2) iterates `regionalStats` (from `/api/monitoring/regions`?). No.
-                // Section 2 code (Line 826): Uses `regionalStats`. 
-                // Where is `engStats` used? Line 745 (Delayed), Line 1169 (Infra Projects Card).
-                // So `engStats` is for the CARD. It should be FROZEN. -> statsParams.
-                // `jurisdictionProjects`... not seeing explicit usage in the cards? 
-                // Let's stick to `statsParams` for `engineer-projects` to be safe/consistent with `engineer-stats`.
-
-                fetch(`/api/monitoring/engineer-projects?${statsParams.toString()}`)
+                fetch(`/api/monitoring/engineer-projects?${statsParams.toString()}`),
+                fetch(`/api/esf7/stats?${statsParams.toString()}`)
             ];
 
             // Fetch Division Stats for Regional Office OR Central Office (when drilling down to a region)
@@ -895,6 +867,7 @@ const MonitoringDashboard = () => {
             const statsRes = results[0];
             const engStatsRes = results[1];
             const projectsRes = results[2];
+            const esf7Res = results[3];
 
             const divStatsRes = divisionStatsIndex !== -1 ? results[divisionStatsIndex] : null;
             const distStatsRes = districtStatsIndex !== -1 ? results[districtStatsIndex] : null;
@@ -902,6 +875,10 @@ const MonitoringDashboard = () => {
             if (statsRes.ok) setStats(await statsRes.json());
             if (engStatsRes.ok) setEngStats(await engStatsRes.json());
             if (projectsRes.ok) setJurisdictionProjects(await projectsRes.json());
+            if (esf7Res && esf7Res.ok) {
+                const esf7Data = await esf7Res.json();
+                setEsf7Stats(esf7Data.data);
+            }
             if (divStatsRes && divStatsRes.ok) setDivisionStats(await divStatsRes.json());
             if (distStatsRes && distStatsRes.ok) setDistrictStats(await distStatsRes.json());
 
@@ -1784,6 +1761,21 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                 </button>
 
+                                                                <button 
+                                                                    onClick={() => navigate('/esf7/review')}
+                                                                    className={`w-full text-left p-2.5 rounded-lg group transition-colors flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50`}
+                                                                >
+                                                                    <div className="mt-0.5">
+                                                                        <TbFileDownload className="text-slate-400 group-hover:text-amber-500" size={14} />
+                                                                    </div>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white leading-tight">
+                                                                            ESF7 Review Center
+                                                                        </span>
+                                                                        <span className="text-[10px] text-slate-400 mt-1 font-normal leading-tight">Audit and verify school submissions.</span>
+                                                                    </div>
+                                                                </button>
+
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1833,10 +1825,10 @@ const MonitoringDashboard = () => {
                         <>
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
-                                <div className={`grid grid-cols-1 md:grid-cols-2 ${effectiveRole !== 'Regional Office' && effectiveRole !== 'School Division Office' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4`}>
+                                <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4`}>
                                     {/* Account Registration Card (from users table) */}
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className={`p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50 ${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? 'col-span-1 lg:col-span-1 md:col-span-2' : 'col-span-1'}`}>
+                                        <div className={`p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800/50 col-span-1`}>
                                             {(() => {
                                                 const displayTotal = jurisdictionTotal;
                                                 const accountsCount = parseInt(stats?.accounts_count || 0);
@@ -1862,7 +1854,7 @@ const MonitoringDashboard = () => {
 
                                     {/* Completion Card */}
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className={`p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/50 ${(effectiveRole === 'Regional Office' || effectiveRole === 'School Division Office') ? 'col-span-1 lg:col-span-1 md:col-span-2' : 'col-span-1'}`}>
+                                        <div className={`p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800/50 col-span-1`}>
                                             {(() => {
                                                 const displayTotal = jurisdictionTotal;
                                                 const completedCount = parseInt(stats?.completed_schools_count || 0);
@@ -1880,6 +1872,39 @@ const MonitoringDashboard = () => {
                                                             </p>
                                                         </div>
                                                         <FiCheckCircle size={32} className="text-blue-200" />
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+
+                                    {/* ESF7 Submitted Card */}
+                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
+                                        <div className={`p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-800/50 col-span-1`}>
+                                            {(() => {
+                                                const displayTotal = jurisdictionTotal;
+                                                const submittedCount = parseInt(esf7Stats?.pending_sdo || 0);
+                                                const percentage = displayTotal > 0 ? ((submittedCount / displayTotal) * 100).toFixed(1) : 0;
+
+                                                return (
+                                                    <div className="flex items-center justify-between h-full">
+                                                        <div>
+                                                            <span className="text-3xl font-black text-amber-600 dark:text-amber-400">
+                                                                {percentage}%
+                                                            </span>
+                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
+                                                                ESF7 Submitted <br />
+                                                                <span className="text-amber-600 dark:text-amber-300">({submittedCount} / {displayTotal})</span>
+                                                            </p>
+                                                            <button 
+                                                                onClick={() => navigate('/esf7/review')}
+                                                                className="mt-4 flex items-center justify-center gap-2 py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-600/20 active:scale-95 whitespace-nowrap"
+                                                            >
+                                                                <FiEye size={14} />
+                                                                Review Center
+                                                            </button>
+                                                        </div>
+                                                        <FiFileText size={32} className="text-amber-200" />
                                                     </div>
                                                 );
                                             })()}

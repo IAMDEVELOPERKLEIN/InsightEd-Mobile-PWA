@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
+<<<<<<< Updated upstream
 import { useNavigate, useLocation } from "react-router-dom";
+=======
+import { useNavigate, useSearchParams } from "react-router-dom";
+>>>>>>> Stashed changes
 import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnit1Draft } from "../db";
@@ -54,12 +58,17 @@ const getRank = (xp) => {
 
 const ModularDashboard = () => {
     const navigate = useNavigate();
+<<<<<<< Updated upstream
     const location = useLocation();
     const { user } = useAuth();
     
     // Parse UID from query params for Super User impersonation
     const queryParams = new URLSearchParams(location.search);
     const impersonatedUid = queryParams.get('uid');
+=======
+    const [searchParams] = useSearchParams();
+    const mode = searchParams.get('mode');
+>>>>>>> Stashed changes
 
     const [hasDraft, setHasDraft] = useState(false);
     const [questProgress, setQuestProgress] = useState(() => {
@@ -137,7 +146,12 @@ const ModularDashboard = () => {
                               offering.includes('10') || offering.includes('11') || offering.includes('12') || 
                               offering.includes('high school');
 
-        return DASHBOARD_METADATA.units.map(u => {
+        let units = DASHBOARD_METADATA.units;
+        
+        // Filter out Unit 9 as it's isolated to the SHA Nexus Card
+        units = units.filter(u => u.id <= 8);
+
+        return units.map(u => {
             let title = u.title;
             if (u.dynamicTitle) {
                 if (u.id === 2) title = hasHighSchool ? "JHS/SHS Enrollment" : "Enrollment";
@@ -154,7 +168,7 @@ const ModularDashboard = () => {
                 locked: false // Logic for locking can be added here if needed
             };
         });
-    }, [curricularOffering, questProgress.completedUnits]);
+    }, [curricularOffering, questProgress.completedUnits, mode]);
 
     const handleModuleClick = (mod) => {
         if (mod.locked) return;
@@ -175,8 +189,7 @@ const ModularDashboard = () => {
         if (completed === 5) return "Keep it going! Update your Teaching Personnel. 👨‍🏫";
         if (completed === 6) return "Great! Tell us about teacher specializations. 🎓";
         if (completed === 7) return "You're doing amazing! Check your School Resources. 📦";
-        if (completed === 8) return "Almost at the finish line! Physical Facilities next! 🏫";
-        if (completed === 9) return "One last step! Let's secure the School Location! 📍";
+        if (completed === 8) return "Phenomenal! You've conquered all core modules! 🏆";
         if (completed === total) return "Phenomenal! You've conquered all modules! 🏆";
         return "Keep up the great work! ✨";
     };
@@ -316,8 +329,9 @@ const ModularDashboard = () => {
 
                 <motion.div 
                     whileHover={{ scale: 1.05, rotate: [-2, 2, 0] }}
+                    className="text-6xl drop-shadow-md cursor-pointer select-none"
                 >
-                    <BarongMascot className="w-16 h-16 drop-shadow-md" />
+                    🦁
                 </motion.div>
             </motion.div>
 

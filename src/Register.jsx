@@ -52,7 +52,7 @@ const getDashboardPath = (role, accountCategory) => {
     const roleMap = {
         'EFD Engineer': '/efd-dashboard',
         'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/my-activity',
+        'School Head': '/nexus-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/super-user-selector',
         'Central Office': '/monitoring-dashboard',
@@ -588,6 +588,7 @@ const Register = () => {
                 }
 
                 console.log("✅ Registration Successful! Setting session...");
+                localStorage.setItem('isNewUser', 'true'); // Flag for Nexus Welcome
                 if (regData.token) {
                     login(regData.user, regData.token);
                 } else {

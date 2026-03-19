@@ -9,7 +9,7 @@ const Unit9SchoolLocation = () => {
     const navigate = useNavigate();
 
     const handleBack = () => {
-        navigate('/modular-dashboard');
+        navigate('/nexus-dashboard');
     };
 
     const handleSaveSuccess = () => {
@@ -21,7 +21,7 @@ const Unit9SchoolLocation = () => {
             progress.xp = (progress.xp || 0) + 500;
         }
         localStorage.setItem('quest_progress', JSON.stringify(progress));
-        navigate('/modular-dashboard');
+        navigate('/nexus-dashboard');
     };
 
     return (
@@ -42,9 +42,9 @@ const Unit9SchoolLocation = () => {
 
                     <div className="flex flex-col items-center absolute left-1/2 -translate-x-1/2 pointer-events-none">
                         <h1 className="text-lg font-black text-[#004A99] tracking-tight">
-                            Unit 9: <span className="text-[#FDB913]">Location</span>
+                            Unit 9: <span className="text-[#FDB913]">SHA Hub</span>
                         </h1>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">School Geography & Safety</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Special Hardship Allowance</p>
                     </div>
 
                     <div className="w-10" />

@@ -6,7 +6,8 @@ import { useAuth } from '../context/AuthContext';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList } from "react-icons/fi"; // Added FiMessageSquare, FiHome, FiUser, FiList
+import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign } from "react-icons/fi";
+import { motion } from 'framer-motion';
 
 const BottomNav = ({ userRole: propRole }) => {
     const { user, logout, confirmLogout } = useAuth();
@@ -55,11 +56,12 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
-            { label: 'Home', path: '/my-activity', icon: TbHomeEdit },
-            { label: 'Modules', path: '/modular-dashboard', icon: LuCompass },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
-            { label: 'Settings', path: '/profile', icon: FiSettings },
+            { label: 'Home', path: '/nexus-dashboard', icon: FiHome },
+            { label: 'Units', path: '/modular-dashboard', icon: LuCompass },
+            { label: 'History', path: '/my-activity', icon: FiList },
+            { label: 'Profile', path: '/profile', icon: FiUser },
         ],
+
         'Division Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
@@ -133,47 +135,65 @@ const BottomNav = ({ userRole: propRole }) => {
     // If role exists but not in config (unexpected), don't show anything or show safe fallback
     if (!finalNavItems) return null;
 
+    const isSchoolHead = effectiveRole === 'School Head';
+
     return createPortal(
-        <div className="fixed bottom-0 left-0 w-full h-[70px] z-[1000] bg-white border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] flex items-center">
-            <div className="w-full h-full flex justify-around items-center px-1 sm:px-2">
-                {finalNavItems.map((item) => {
-                    const isActive = location.pathname === item.path &&
-                        (!item.state || location.state?.activeTab === item.state.activeTab || (!location.state?.activeTab && (item.state.activeTab === 'all' || item.state.activeTab === 'home')));
+        <div className="fixed bottom-0 left-0 w-full z-[1000]">
+            {/* FAB Button for School Head */}
+            {isSchoolHead && (
+                <div className="absolute left-1/2 -top-8 -translate-x-1/2 z-[1001]">
+                    <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => window.dispatchEvent(new CustomEvent('toggle-chatbot'))}
+                        className="w-16 h-16 bg-[#10346B] text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-900/40 border-4 border-white"
+                    >
+                        <FiMessageSquare size={32} />
+                    </motion.button>
+                </div>
+            )}
 
-                    const Icon = item.icon;
+            <div className="h-[85px] bg-white border-t border-slate-100 shadow-[0_-4px_24px_rgba(0,0,0,0.04)] flex items-center px-4">
+                <div className="w-full flex justify-between items-center max-w-md mx-auto">
+                    {finalNavItems.map((item, idx) => {
+                        const isActive = location.pathname === item.path;
+                        const Icon = item.icon;
 
-                    return (
-                        <button
-                            key={item.label}
-                            className="flex-1 flex flex-col items-center justify-center h-full bg-transparent border-none cursor-pointer group transition-all"
-                            onClick={() => {
-                                if (item.logout) {
-                                    confirmLogout();
-                                    return;
-                                }
-                                
-                                // Preserve impersonation UID if present
-                                let targetPath = item.path;
-                                if (user?.role === 'Super User') {
-                                    const impUid = sessionStorage.getItem('impersonatedUid');
-                                    if (impUid && targetPath && !targetPath.includes('uid=')) {
-                                        targetPath += (targetPath.includes('?') ? '&' : '?') + `uid=${impUid}`;
-                                    }
-                                }
-                                
-                                navigate(targetPath, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });
-                            }}
-                        >
-                            <Icon
-                                size={20}
-                                className={`mb-1 transition-colors ${isActive ? 'text-[#004A99] scale-110' : 'text-slate-400 group-hover:text-slate-600'}`}
-                            />
-                            <span className={`text-[7px] sm:text-[9px] font-bold uppercase tracking-wider transition-colors text-center px-1 ${isActive ? 'text-[#004A99]' : 'text-slate-400 group-hover:text-slate-600'}`}>
-                                {item.label}
-                            </span>
-                        </button>
-                    );
-                })}
+                        return (
+                            <React.Fragment key={item.label}>
+                                {isSchoolHead && idx === 2 && <div className="w-16" />} {/* Gap for FAB */}
+                                <button
+                                    className="flex-1 flex flex-col items-center justify-center h-full bg-transparent border-none cursor-pointer group transition-all"
+                                    onClick={() => {
+                                        if (item.logout) {
+                                            confirmLogout();
+                                            return;
+                                        }
+                                        
+                                        // Preserve impersonation UID if present
+                                        let targetPath = item.path;
+                                        if (user?.role === 'Super User') {
+                                            const impUid = sessionStorage.getItem('impersonatedUid');
+                                            if (impUid && targetPath && !targetPath.includes('uid=')) {
+                                                targetPath += (targetPath.includes('?') ? '&' : '?') + `uid=${impUid}`;
+                                            }
+                                        }
+                                        
+                                        navigate(targetPath, { state: { ...(item.state || {}), refreshTrigger: Date.now() } });
+                                    }}
+                                >
+                                    <Icon
+                                        size={22}
+                                        className={`mb-1 transition-all duration-300 ${isActive ? 'text-[#10346B] scale-110 drop-shadow-sm' : 'text-slate-300 group-hover:text-slate-500'}`}
+                                    />
+                                    <span className={`text-[10px] font-bold transition-colors ${isActive ? 'text-[#10346B]' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                                        {item.label}
+                                    </span>
+                                </button>
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
             </div>
         </div>,
         document.body

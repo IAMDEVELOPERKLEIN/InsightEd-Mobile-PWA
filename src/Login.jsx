@@ -16,7 +16,7 @@ const getDashboardPath = (role, accountCategory) => {
     }
     const roleMap = {
         'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/my-activity',
+        'School Head': '/nexus-dashboard',
         'Human Resource': '/hr-dashboard',
         'Regional Office': '/monitoring-dashboard',
         'School Division Office': '/monitoring-dashboard',

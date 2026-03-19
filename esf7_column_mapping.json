@@ -1,0 +1,1694 @@
+[
+  {
+    "original": "IERN",
+    "sanitized": "iern"
+  },
+  {
+    "original": "ID",
+    "sanitized": "id"
+  },
+  {
+    "original": "Schoool id",
+    "sanitized": "schoool_id"
+  },
+  {
+    "original": "school name",
+    "sanitized": "school_name"
+  },
+  {
+    "original": "region",
+    "sanitized": "region"
+  },
+  {
+    "original": "muncipality",
+    "sanitized": "muncipality"
+  },
+  {
+    "original": "division",
+    "sanitized": "division"
+  },
+  {
+    "original": "district",
+    "sanitized": "district"
+  },
+  {
+    "original": "TIN",
+    "sanitized": "tin"
+  },
+  {
+    "original": "FIRST",
+    "sanitized": "first"
+  },
+  {
+    "original": "MIDDLE ",
+    "sanitized": "middle"
+  },
+  {
+    "original": "LAST",
+    "sanitized": "last"
+  },
+  {
+    "original": "GENDER",
+    "sanitized": "gender"
+  },
+  {
+    "original": "FUND SOURCE",
+    "sanitized": "fund_source"
+  },
+  {
+    "original": "POSITION",
+    "sanitized": "position"
+  },
+  {
+    "original": "NATURE OF APPOINTMENT",
+    "sanitized": "nature_of_appointment"
+  },
+  {
+    "original": "DEGREE FINISHED/ BACCALAUREATE",
+    "sanitized": "degree_finished_baccalaureate"
+  },
+  {
+    "original": "MAJOR/ SPECIALIZATION",
+    "sanitized": "major_specialization"
+  },
+  {
+    "original": "MINOR",
+    "sanitized": "minor"
+  },
+  {
+    "original": "POST-GRADUATE/ DEGREE",
+    "sanitized": "post_graduate_degree"
+  },
+  {
+    "original": "EMPLOYEE NO",
+    "sanitized": "employee_no"
+  },
+  {
+    "original": "HIRING ARRANGEMENT",
+    "sanitized": "hiring_arrangement"
+  },
+  {
+    "original": "RELIGION",
+    "sanitized": "religion"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_1"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_1"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_1"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_1"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_1"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_1"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_1"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_1"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_1"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_1"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_1"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_1"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_1"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_1"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_1"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_2"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_2"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_2"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_2"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_2"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_2"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_2"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_2"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_2"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_2"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_2"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_2"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_2"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_2"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_2"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_3"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_3"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_3"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_3"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_3"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_3"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_3"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_3"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_3"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_3"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_3"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_3"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_3"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_3"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_3"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_4"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_4"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_4"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_4"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_4"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_4"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_4"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_4"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_4"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_4"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_4"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_4"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_4"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_4"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_4"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_5"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_5"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_5"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_5"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_5"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_5"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_5"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_5"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_5"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_5"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_5"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_5"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_5"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_5"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_5"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_6"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_6"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_6"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_6"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_6"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_6"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_6"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_6"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_6"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_6"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_6"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_6"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_6"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_6"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_6"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_7"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_7"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_7"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_7"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_7"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_7"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_7"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_7"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_7"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_7"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_7"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_7"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_7"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_7"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_7"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_8"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_8"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_8"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_8"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_8"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_8"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_8"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_8"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_8"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_8"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_8"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_8"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_8"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_8"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_8"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_9"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_9"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_9"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_9"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_9"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_9"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_9"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_9"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_9"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_9"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_9"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_9"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_9"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_9"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_9"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_10"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_10"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_10"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_10"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_10"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_10"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_10"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_10"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_10"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_10"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_10"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_10"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_10"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_10"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_10"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_11"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_11"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_11"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_11"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_11"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_11"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_11"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_11"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_11"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_11"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_11"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_11"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_11"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_11"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_11"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_12"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_12"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_12"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_12"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_12"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_12"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_12"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_12"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_12"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_12"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_12"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_12"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_12"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_12"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_12"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_13"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_13"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_13"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_13"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_13"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_13"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_13"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_13"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_13"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_13"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_13"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_13"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_13"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_13"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_13"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_14"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_14"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_14"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_14"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_14"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_14"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_14"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_14"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_14"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_14"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_14"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_14"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_14"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_14"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_14"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_15"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_15"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_15"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_15"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_15"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_15"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_15"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_15"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_15"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_15"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_15"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_15"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_15"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_15"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_15"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_16"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_16"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_16"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_16"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_16"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_16"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_16"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_16"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_16"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_16"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_16"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_16"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_16"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_16"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_16"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_17"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_17"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_17"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_17"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_17"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_17"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_17"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_17"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_17"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_17"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_17"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_17"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_17"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_17"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_17"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_18"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_18"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_18"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_18"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_18"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_18"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_18"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_18"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_18"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_18"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_18"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_18"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_18"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_18"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_18"
+  },
+  {
+    "original": "DEPARTMENT_1",
+    "sanitized": "department_1_19"
+  },
+  {
+    "original": "Subject_1",
+    "sanitized": "subject_1_19"
+  },
+  {
+    "original": "Lvl_1",
+    "sanitized": "lvl_1_19"
+  },
+  {
+    "original": "Section_1",
+    "sanitized": "section_1_19"
+  },
+  {
+    "original": "D1_1",
+    "sanitized": "d1_1_19"
+  },
+  {
+    "original": "D2_1",
+    "sanitized": "d2_1_19"
+  },
+  {
+    "original": "D3_1",
+    "sanitized": "d3_1_19"
+  },
+  {
+    "original": "D4_1",
+    "sanitized": "d4_1_19"
+  },
+  {
+    "original": "D5_1",
+    "sanitized": "d5_1_19"
+  },
+  {
+    "original": "D6_1",
+    "sanitized": "d6_1_19"
+  },
+  {
+    "original": "D7_1",
+    "sanitized": "d7_1_19"
+  },
+  {
+    "original": "FROM_1",
+    "sanitized": "from_1_19"
+  },
+  {
+    "original": "TO_1",
+    "sanitized": "to_1_19"
+  },
+  {
+    "original": "DEPARTMENT_2",
+    "sanitized": "department_2_19"
+  },
+  {
+    "original": "CATEG_1",
+    "sanitized": "categ_1_19"
+  },
+  {
+    "original": "EHTINIC GROUP",
+    "sanitized": "ehtinic_group"
+  },
+  {
+    "original": "STATUS (ITEM)",
+    "sanitized": "status_item"
+  },
+  {
+    "original": "LAST FIRST",
+    "sanitized": "last_first"
+  },
+  {
+    "original": "number of loads",
+    "sanitized": "number_of_loads"
+  },
+  {
+    "original": "position value",
+    "sanitized": "position_value"
+  },
+  {
+    "original": "rank position",
+    "sanitized": "rank_position"
+  },
+  {
+    "original": "SEARCH AND SORT",
+    "sanitized": "search_and_sort"
+  },
+  {
+    "original": "Filipino",
+    "sanitized": "filipino"
+  },
+  {
+    "original": "English",
+    "sanitized": "english"
+  },
+  {
+    "original": "Mathematics",
+    "sanitized": "mathematics"
+  },
+  {
+    "original": "Science",
+    "sanitized": "science"
+  },
+  {
+    "original": "Araling Panlipunan",
+    "sanitized": "araling_panlipunan"
+  },
+  {
+    "original": "TLE/EPP",
+    "sanitized": "tle_epp"
+  },
+  {
+    "original": "MAPEH",
+    "sanitized": "mapeh"
+  },
+  {
+    "original": "EsP",
+    "sanitized": "esp"
+  },
+  {
+    "original": "MTB",
+    "sanitized": "mtb"
+  },
+  {
+    "original": "SHS-CORE SUBJECTS",
+    "sanitized": "shs_core_subjects"
+  },
+  {
+    "original": "SHS-APPLIED SUBJECTS",
+    "sanitized": "shs_applied_subjects"
+  },
+  {
+    "original": "SHS-SPECIALIZED SUBJECTS",
+    "sanitized": "shs_specialized_subjects"
+  },
+  {
+    "original": "Ancillary-Curriculum",
+    "sanitized": "ancillary_curriculum"
+  },
+  {
+    "original": "Ancillary-Admin/Management",
+    "sanitized": "ancillary_admin_management"
+  },
+  {
+    "original": "Ancillary-Professional Development",
+    "sanitized": "ancillary_professional_development"
+  },
+  {
+    "original": "Ancillary-Program/ Project",
+    "sanitized": "ancillary_program_project"
+  },
+  {
+    "original": "Ancillary-Inter/ Agency",
+    "sanitized": "ancillary_inter_agency"
+  },
+  {
+    "original": "Advisory",
+    "sanitized": "advisory"
+  },
+  {
+    "original": "Related Tasks",
+    "sanitized": "related_tasks"
+  },
+  {
+    "original": "Administrative",
+    "sanitized": "administrative"
+  },
+  {
+    "original": "Home Guidance",
+    "sanitized": "home_guidance"
+  },
+  {
+    "original": "gmrc",
+    "sanitized": "gmrc"
+  },
+  {
+    "original": "major",
+    "sanitized": "major"
+  },
+  {
+    "original": "non major",
+    "sanitized": "non_major"
+  },
+  {
+    "original": "GRANDTOTAL LOAD",
+    "sanitized": "grandtotal_load"
+  },
+  {
+    "original": "time major",
+    "sanitized": "time_major"
+  },
+  {
+    "original": "time nonmajor",
+    "sanitized": "time_nonmajor"
+  },
+  {
+    "original": "time Ancillary-Curriculum",
+    "sanitized": "time_ancillary_curriculum"
+  },
+  {
+    "original": "time Ancillary-Admin/Management",
+    "sanitized": "time_ancillary_admin_management"
+  },
+  {
+    "original": "time Ancillary-Professional Development",
+    "sanitized": "time_ancillary_professional_development"
+  },
+  {
+    "original": "time Ancillary-Program/ Project",
+    "sanitized": "time_ancillary_program_project"
+  },
+  {
+    "original": "time Ancillary-Inter/ Agency",
+    "sanitized": "time_ancillary_inter_agency"
+  },
+  {
+    "original": "time Advisory",
+    "sanitized": "time_advisory"
+  },
+  {
+    "original": "time Related Tasks",
+    "sanitized": "time_related_tasks"
+  },
+  {
+    "original": "time Administrative ",
+    "sanitized": "time_administrative"
+  },
+  {
+    "original": "time home guidance",
+    "sanitized": "time_home_guidance"
+  },
+  {
+    "original": "time gmrc",
+    "sanitized": "time_gmrc"
+  },
+  {
+    "original": "TRAINING_1",
+    "sanitized": "training_1"
+  },
+  {
+    "original": "TRAINING_2",
+    "sanitized": "training_2"
+  },
+  {
+    "original": "TRAINING_3",
+    "sanitized": "training_3"
+  },
+  {
+    "original": "TRAINING_4",
+    "sanitized": "training_4"
+  },
+  {
+    "original": "TRAINING_5",
+    "sanitized": "training_5"
+  },
+  {
+    "original": "TRAINING_6",
+    "sanitized": "training_6"
+  },
+  {
+    "original": "TRAINING_7",
+    "sanitized": "training_7"
+  },
+  {
+    "original": "TRAINING_8",
+    "sanitized": "training_8"
+  },
+  {
+    "original": "TRAINING_9",
+    "sanitized": "training_9"
+  },
+  {
+    "original": "TRAINING_10",
+    "sanitized": "training_10"
+  },
+  {
+    "original": "TRAINING_11",
+    "sanitized": "training_11"
+  },
+  {
+    "original": "TRAINING_12",
+    "sanitized": "training_12"
+  },
+  {
+    "original": "TRAINING_13",
+    "sanitized": "training_13"
+  },
+  {
+    "original": "TRAINING_14",
+    "sanitized": "training_14"
+  },
+  {
+    "original": "TRAINING_15",
+    "sanitized": "training_15"
+  },
+  {
+    "original": "TRAINING_16",
+    "sanitized": "training_16"
+  },
+  {
+    "original": "TRAINING_17",
+    "sanitized": "training_17"
+  },
+  {
+    "original": "TRAINING_18",
+    "sanitized": "training_18"
+  },
+  {
+    "original": "TRAINING_19",
+    "sanitized": "training_19"
+  },
+  {
+    "original": "TRAINING_20",
+    "sanitized": "training_20"
+  },
+  {
+    "original": "TOTAL TRAININGS",
+    "sanitized": "total_trainings"
+  },
+  {
+    "original": "BIRTHDAY_MM",
+    "sanitized": "birthday_mm"
+  },
+  {
+    "original": "BIRTHDAY_DD",
+    "sanitized": "birthday_dd"
+  },
+  {
+    "original": "BIRTHDAY_YYYY",
+    "sanitized": "birthday_yyyy"
+  },
+  {
+    "original": "APPT_MM",
+    "sanitized": "appt_mm"
+  },
+  {
+    "original": 1,
+    "sanitized": "col_1"
+  },
+  {
+    "original": null,
+    "sanitized": "column_393"
+  },
+  {
+    "original": "SCHOOL_OTHER_INFO_A",
+    "sanitized": "school_other_info_a"
+  },
+  {
+    "original": "SCHOOL_OTHER_INFO_B",
+    "sanitized": "school_other_info_b"
+  },
+  {
+    "original": "phylsys_num",
+    "sanitized": "phylsys_num"
+  },
+  {
+    "original": "eligibility",
+    "sanitized": "eligibility"
+  },
+  {
+    "original": "STATION_MM",
+    "sanitized": "station_mm"
+  },
+  {
+    "original": "STATION_DD",
+    "sanitized": "station_dd"
+  },
+  {
+    "original": "STATION_YYYY",
+    "sanitized": "station_yyyy"
+  },
+  {
+    "original": "CIVIL STATUS",
+    "sanitized": "civil_status"
+  },
+  {
+    "original": null,
+    "sanitized": "column_402"
+  },
+  {
+    "original": null,
+    "sanitized": "column_403"
+  },
+  {
+    "original": null,
+    "sanitized": "column_404"
+  },
+  {
+    "original": null,
+    "sanitized": "column_405"
+  },
+  {
+    "original": null,
+    "sanitized": "column_406"
+  },
+  {
+    "original": null,
+    "sanitized": "column_407"
+  },
+  {
+    "original": null,
+    "sanitized": "column_408"
+  },
+  {
+    "original": null,
+    "sanitized": "column_409"
+  },
+  {
+    "original": null,
+    "sanitized": "column_410"
+  },
+  {
+    "original": null,
+    "sanitized": "column_411"
+  },
+  {
+    "original": null,
+    "sanitized": "column_412"
+  },
+  {
+    "original": null,
+    "sanitized": "column_413"
+  },
+  {
+    "original": null,
+    "sanitized": "column_414"
+  },
+  {
+    "original": null,
+    "sanitized": "column_415"
+  },
+  {
+    "original": null,
+    "sanitized": "column_416"
+  },
+  {
+    "original": null,
+    "sanitized": "column_417"
+  },
+  {
+    "original": null,
+    "sanitized": "column_418"
+  },
+  {
+    "original": null,
+    "sanitized": "column_419"
+  },
+  {
+    "original": null,
+    "sanitized": "column_420"
+  },
+  {
+    "original": null,
+    "sanitized": "column_421"
+  },
+  {
+    "original": "ALL TIME",
+    "sanitized": "all_time"
+  }
+]

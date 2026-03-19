@@ -91,6 +91,12 @@ import Unit7SchoolResources from './components/modular/Unit7SchoolResources';
 import Unit8PhysicalFacilities from './components/modular/Unit8PhysicalFacilities';
 import Unit9SchoolLocation from './components/modular/Unit9SchoolLocation';
 
+// Nexus & Drafts
+import NexusDashboard from './modules/NexusDashboard';
+import ESF7Draft from './forms/ESF7Draft';
+import NSPPDraft from './forms/NSPPDraft';
+import ESF7Review from './modules/ESF7Review';
+
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
 const AnimatedRoutes = () => {
@@ -202,6 +208,8 @@ const AnimatedRoutes = () => {
       <Route path="/school-management" element={<SchoolManagement />} />
       <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
       <Route path="/school-audit" element={<SchoolAuditView />} />
+      <Route path="/esf7-review" element={<Navigate to="/esf7/review" replace />} />
+      <Route path="/esf7/review" element={<ProtectedRoute allowedRoles={['Division Engineer', 'Admin', 'Super User', 'Regional Office', 'School Division Office']}><ESF7Review /></ProtectedRoute>} />
       <Route path="/dummy-forms" element={<DummyDashboard />} />
 
       <Route path="/dummy-forms" element={<DummyDashboard />} />
@@ -229,6 +237,30 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
               <MyActivityDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/nexus-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['School Head']}>
+              <NexusDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/draft/esf7"
+          element={
+            <ProtectedRoute allowedRoles={['School Head']}>
+              <ESF7Draft />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/draft/nspp"
+          element={
+            <ProtectedRoute allowedRoles={['School Head']}>
+              <NSPPDraft />
             </ProtectedRoute>
           }
         />
