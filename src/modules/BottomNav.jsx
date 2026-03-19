@@ -46,66 +46,66 @@ const BottomNav = ({ userRole: propRole }) => {
         'Non-DepEd Engineer': [
             { label: 'Home', path: '/non-deped-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Local Government Unit': [
             { label: 'Projects', path: '/lgu-dashboard', icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: TbHomeEdit },
             { label: 'Modules', path: '/modular-dashboard', icon: LuCompass },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Division Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
             { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
             { label: 'Home', path: '/hr-dashboard', icon: TbHomeEdit },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
             { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
             { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office Finance': [
             { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
 
         'Masterlist': [
             { label: 'Home', path: '/psip', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Data', path: '/psip', state: { activeTab: 'data' }, icon: TbChartBar },
-            { label: 'Chat', id: 'chatbot-toggle', icon: FiMessageSquare },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/psip', state: { activeTab: 'settings' }, icon: FiSettings },
         ],
 
@@ -113,11 +113,13 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Implementing Agency': [
             { label: 'Home', path: '/agency-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Deployment', path: '/agency-dashboard', state: { activeTab: 'deployment' }, icon: TbClipboardList },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
     };
@@ -145,10 +147,6 @@ const BottomNav = ({ userRole: propRole }) => {
                             key={item.label}
                             className="flex-1 flex flex-col items-center justify-center h-full bg-transparent border-none cursor-pointer group transition-all"
                             onClick={() => {
-                                if (item.id === 'chatbot-toggle') {
-                                    window.dispatchEvent(new CustomEvent('toggle-chatbot'));
-                                    return;
-                                }
                                 if (item.logout) {
                                     confirmLogout();
                                     return;

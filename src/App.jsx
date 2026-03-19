@@ -49,6 +49,7 @@ import EFDHome from './modules/EFDHome';
 import EFDMonitoring from './modules/EFDMonitoring';
 import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
 import BEFFDashboard from './modules/BEFFDashboard';
+import ChatModule from './modules/ChatModule';
 
 
 
@@ -160,8 +161,6 @@ const AnimatedRoutes = () => {
   // if (maintenanceMode && isProtected && !isAdmin) {
   //   return <MaintenanceScreen />;
   // }
-
-  const showChatFloating = location.pathname === '/' || location.pathname === '/adminlogin';
 
   return (
     <Routes>
@@ -307,6 +306,7 @@ const AnimatedRoutes = () => {
             </ProtectedRoute>
           }
         />
+        <Route path="/chat" element={<ChatModule />} />
 
       {/* Menus */}
       <Route path="/school-forms" element={<SchoolForms />} />
@@ -365,7 +365,7 @@ function App() {
 
 const AppContent = () => {
   const location = useLocation();
-  const showChatFloating = location.pathname === '/' || location.pathname === '/adminlogin';
+  const showChatFloating = (location.pathname === '/' || location.pathname === '/adminlogin') && location.pathname !== '/chat';
 
   return (
     <>
