@@ -130,6 +130,8 @@ const runMigrations = async (client, dbLabel) => {
                 disabled BOOLEAN DEFAULT FALSE
             );
         `);
+
+        // Consolidate all extensions into a single idempotent block
         await client.query(`
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS first_name TEXT,
@@ -143,7 +145,7 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS position TEXT,
             ADD COLUMN IF NOT EXISTS contact_number TEXT,
             ADD COLUMN IF NOT EXISTS alt_email TEXT,
-            ADD COLUMN IF NOT EXISTS account_category TEXT, -- DepEd vs Non-DepEd
+            ADD COLUMN IF NOT EXISTS account_category TEXT,
             ADD COLUMN IF NOT EXISTS iern TEXT,
             ADD COLUMN IF NOT EXISTS school_id TEXT,
             ADD COLUMN IF NOT EXISTS registrant_type TEXT,
@@ -153,10 +155,22 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS passcode TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
-        // Ensure passcode is TEXT to support bcrypt hashes (previously might have been VARCHAR(6))
+
+        // Clean up redundant columns
+        await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS registrar_type;`);
+        await client.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_address;`);
+        
+        // Ensure passcode is TEXT
         await client.query(`ALTER TABLE users ALTER COLUMN passcode TYPE TEXT;`);
-        console.log(`✅ [${dbLabel}] Passcode column altered to TEXT`);
-        console.log(`✅ [${dbLabel}] Users Table Schema Updated`);
+
+        // Create UNIQUE INDEX on school_id (only for non-null values)
+        await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_users_school_id 
+            ON users(school_id) 
+            WHERE school_id IS NOT NULL;
+        `);
+
+        console.log(`✅ [${dbLabel}] Users Table Schema Updated & Indexed`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate users table:`, migErr.message);
     }
