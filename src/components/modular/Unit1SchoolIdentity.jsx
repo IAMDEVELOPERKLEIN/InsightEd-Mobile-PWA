@@ -10,7 +10,7 @@ import locationData from "../../locations.json";
 import useReadOnly from "../../hooks/useReadOnly";
 import { normalizeOffering } from "../../utils/dataNormalization";
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 const chunkyInput = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm placeholder:text-gray-300";
 const chunkySelect = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:24px] bg-[right_1rem_center] bg-no-repeat disabled:opacity-50 disabled:bg-gray-50";
@@ -81,6 +81,13 @@ const Unit1SchoolIdentity = () => {
         mother_school_id: "",
         extension_mother_school_name: "",
         ownership_document_type: "",
+        head_first_name: "",
+        head_middle_name: "",
+        head_last_name: "",
+        head_sex: "",
+        head_position_title: "",
+        head_date_of_birth: "",
+        head_date_hired: "",
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -185,6 +192,13 @@ const Unit1SchoolIdentity = () => {
                     mother_school_id: d.mother_school_id || merged.mother_school_id,
                     extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
                     ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
+                    head_first_name: d.head_first_name || merged.head_first_name,
+                    head_middle_name: d.head_middle_name || merged.head_middle_name,
+                    head_last_name: d.head_last_name || merged.head_last_name,
+                    head_sex: d.head_sex || merged.head_sex,
+                    head_position_title: d.head_position_title || merged.head_position_title,
+                    head_date_of_birth: (d.head_date_of_birth) ? d.head_date_of_birth.split('T')[0] : merged.head_date_of_birth,
+                    head_date_hired: (d.head_date_hired) ? d.head_date_hired.split('T')[0] : merged.head_date_hired,
                 };
             }
 
@@ -444,6 +458,13 @@ const Unit1SchoolIdentity = () => {
                 mother_school_id: formData.mother_school_id,
                 extension_mother_school_name: formData.extension_mother_school_name,
                 ownership_document_type: formData.ownership_document_type,
+                head_first_name: formData.head_first_name,
+                head_middle_name: formData.head_middle_name,
+                head_last_name: formData.head_last_name,
+                head_sex: formData.head_sex,
+                head_position_title: formData.head_position_title,
+                head_date_of_birth: formData.head_date_of_birth,
+                head_date_hired: formData.head_date_hired,
             };
             
             const res = await fetch("/api/ph_schools/unit1", {
@@ -504,6 +525,7 @@ const Unit1SchoolIdentity = () => {
         { q: "Confirm the school name", sub: "Is this the official name of the institution?" },
         { q: "Where is the school located?", sub: "Select the specific region, division, and district details." },
         { q: "What does the school offer?", sub: "Choose the curricular levels provided by the school." },
+        { q: "School Head Information", sub: "Please provide the details of the school's primary administrator." },
         { q: "Pin the school 📍", sub: "Confirm the coordinates to update the school's map registry." },
         { q: "School Ownership & Classification", sub: "Provide ownership details and school classification." },
     ];
@@ -512,8 +534,9 @@ const Unit1SchoolIdentity = () => {
     const isStep1Valid = formData.school_name.trim().length > 3;
     const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
     const isStep3Valid = formData.curricular_offering !== "";
-    const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
-    const isStep5Valid = formData.ownership && formData.ownership_document_type && formData.google_drive_file_id && formData.school_type && (
+    const isStep4Valid = formData.head_first_name !== "" && formData.head_last_name !== "" && formData.head_position_title !== "" && formData.head_date_hired !== "";
+    const isStep5Valid = formData.latitude !== "" && formData.longitude !== "";
+    const isStep6Valid = formData.ownership && formData.ownership_document_type && formData.google_drive_file_id && formData.school_type && (
         (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
         (formData.school_type === "without_annex") ||
         (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound))
@@ -525,6 +548,7 @@ const Unit1SchoolIdentity = () => {
         if (currentStep === 3) return isStep3Valid;
         if (currentStep === 4) return isStep4Valid;
         if (currentStep === 5) return isStep5Valid;
+        if (currentStep === 6) return isStep6Valid;
         return false;
     };
 
@@ -619,6 +643,31 @@ const Unit1SchoolIdentity = () => {
                                             </div>
                                             <div className="bg-indigo-50 px-3 py-2 rounded-xl">
                                                 <span className="font-black text-indigo-700 text-sm">{formData.region || "Req"}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section>
+                                    <div className="flex items-center gap-2 mb-4 ml-2 mt-8">
+                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">School Head</h3>
+                                    </div>
+                                    <div className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm space-y-4">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Full Name</span>
+                                            <p className="text-xl font-black text-slate-800">
+                                                {[formData.head_first_name, formData.head_middle_name, formData.head_last_name].filter(Boolean).join(' ')}
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Position</span>
+                                                <p className="font-bold text-slate-700">{formData.head_position_title || "N/A"}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Assigned</span>
+                                                <p className="font-bold text-slate-700">{formData.head_date_hired || "N/A"}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -764,7 +813,109 @@ const Unit1SchoolIdentity = () => {
                                     </div>
                                 )}
 
-                                { currentStep === 4 && (
+                                {currentStep === 4 && (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 gap-4">
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">First Name</label>
+                                                <input
+                                                    type="text"
+                                                    name="head_first_name"
+                                                    value={formData.head_first_name}
+                                                    onChange={handleChange}
+                                                    placeholder="First Name"
+                                                    className={chunkyInput}
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Middle Name</label>
+                                                    <input
+                                                        type="text"
+                                                        name="head_middle_name"
+                                                        value={formData.head_middle_name}
+                                                        onChange={handleChange}
+                                                        placeholder="Middle (Optional)"
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Last Name</label>
+                                                    <input
+                                                        type="text"
+                                                        name="head_last_name"
+                                                        value={formData.head_last_name}
+                                                        onChange={handleChange}
+                                                        placeholder="Last Name"
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Sex</label>
+                                                <select
+                                                    name="head_sex"
+                                                    value={formData.head_sex}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="">Select Sex</option>
+                                                    <option value="Male">Male</option>
+                                                    <option value="Female">Female</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Position Title</label>
+                                                <select
+                                                    name="head_position_title"
+                                                    value={formData.head_position_title}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="">Select Position</option>
+                                                    <option value="Teacher I">Teacher I</option>
+                                                    <option value="Teacher II">Teacher II</option>
+                                                    <option value="Teacher III">Teacher III</option>
+                                                    <option value="Master Teacher I">Master Teacher I</option>
+                                                    <option value="Master Teacher II">Master Teacher II</option>
+                                                    <option value="Head Teacher I">Head Teacher I</option>
+                                                    <option value="Head Teacher II">Head Teacher II</option>
+                                                    <option value="Head Teacher III">Head Teacher III</option>
+                                                    <option value="School Principal I">School Principal I</option>
+                                                    <option value="School Principal II">School Principal II</option>
+                                                    <option value="School Principal III">School Principal III</option>
+                                                    <option value="School Principal IV">School Principal IV</option>
+                                                    <option value="Assistant School Principal I">Assistant School Principal I</option>
+                                                    <option value="Assistant School Principal II">Assistant School Principal II</option>
+                                                </select>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date of Birth</label>
+                                                    <input
+                                                        type="date"
+                                                        name="head_date_of_birth"
+                                                        value={formData.head_date_of_birth}
+                                                        onChange={handleChange}
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date Assigned</label>
+                                                    <input
+                                                        type="date"
+                                                        name="head_date_hired"
+                                                        value={formData.head_date_hired}
+                                                        onChange={handleChange}
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {currentStep === 5 && (
                                     <div className="space-y-4 pb-20">
                                         
                                         <div className="h-48 rounded-[2rem] overflow-hidden border-2 border-gray-100 shadow-inner relative mt-4">
@@ -782,7 +933,7 @@ const Unit1SchoolIdentity = () => {
                                     </div>
                                 )}
 
-                                        {currentStep === 5 && (
+                                        {currentStep === 6 && (
                                     <div className="space-y-6 pb-20">
                                         {/* Ownership Question */}
                                         <div>

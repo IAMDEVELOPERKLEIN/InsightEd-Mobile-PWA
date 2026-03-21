@@ -3,16 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     FiArrowRight, 
-    FiArrowLeft,
     FiBookOpen, 
-    FiHeart, 
-    FiTrendingUp,
     FiAward,
-    FiZap,
-    FiSearch,
-    FiBell,
-    FiGrid,
-    FiMoreVertical
+    FiMoreVertical,
+    FiLock
 } from 'react-icons/fi';
 import { TbReportAnalytics, TbTarget } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
@@ -27,13 +21,9 @@ const NexusDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [isNavigating, setIsNavigating] = useState(false);
     const [showEdWelcome, setShowEdWelcome] = useState(false);
-    const [currentTime, setCurrentTime] = useState(new Date());
     const [esf7Status, setEsf7Status] = useState('NOT_STARTED');
+    const [dynamicLocks, setDynamicLocks] = useState({});
 
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
-        return () => clearInterval(timer);
-    }, []);
 
     useEffect(() => {
         const loadCommonData = async () => {
@@ -56,6 +46,19 @@ const NexusDashboard = () => {
                     if (esf7Res.ok) {
                         const esf7Data = await esf7Res.json();
                         if (esf7Data.success) setEsf7Status(esf7Data.status);
+                    }
+
+                    // Fetch Dynamic Module Locks
+                    const locksRes = await fetch('/api/settings/nexus_module_locks');
+                    if (locksRes.ok) {
+                        const locksData = await locksRes.json();
+                        if (locksData && locksData.value) {
+                            try {
+                                setDynamicLocks(JSON.parse(locksData.value));
+                            } catch (e) {
+                                console.error("Failed to parse nexus locks", e);
+                            }
+                        }
                     }
                 } catch (err) {
                     console.error("Failed to sync progress", err);
@@ -112,22 +115,10 @@ const NexusDashboard = () => {
             color: 'from-blue-500 to-blue-700',
             textColor: 'text-blue-600',
             bgLight: 'bg-blue-50',
-            progress: calculateProgress([1, 2, 3, 4, 5, 6, 7, 8]),
+            progress: calculateProgress([1, 2, 3, 4, 5, 6, 7, 8, 9]),
             route: '/my-activity',
-            description: 'Core Identity'
-        },
-        {
-            id: 'sha',
-            title: 'Special Hardship',
-            subtitle: 'SHA Dashboard',
-            emoji: '🛡️',
-            icon: <FiAward className="w-8 h-8" />,
-            color: 'from-rose-500 to-rose-700',
-            textColor: 'text-rose-600',
-            bgLight: 'bg-rose-50',
-            progress: calculateProgress([9]),
-            route: '/modular/unit-9',
-            description: 'Hardship Allowance'
+            description: 'School Profile will look into getting to know more about a school.',
+            isLocked: dynamicLocks['school-info'] || false,
         },
         {
             id: 'esf7',
@@ -141,7 +132,8 @@ const NexusDashboard = () => {
             progress: esf7Status === 'VERIFIED' ? 100 : (esf7Status === 'DRAFT' || esf7Status === 'PENDING_SDO' ? 50 : 0),
             route: '/draft/esf7',
             badge: esf7Status === 'VERIFIED' ? 'VERIFIED' : (esf7Status === 'NOT_STARTED' ? 'BETA' : 'STAGED'),
-            description: 'Resource Sync'
+            description: 'eSF7 will know about teacher and staff loading.',
+            isLocked: dynamicLocks['esf7'] || false,
         },
         {
             id: 'nspp',
@@ -155,16 +147,11 @@ const NexusDashboard = () => {
             progress: 0,
             route: '/draft/nspp',
             badge: 'COMING SOON',
-            description: 'Targeted Goals'
+            description: 'NSPP deployment will monitor the deployment of administrative staff in schools.',
+            isLocked: dynamicLocks.hasOwnProperty('nspp') ? dynamicLocks['nspp'] : true, // Default to true if not set
         }
     ];
 
-    const getGreeting = () => {
-        const hour = new Date().getHours();
-        if (hour < 12) return "Good Morning";
-        if (hour < 18) return "Good Afternoon";
-        return "Good Evening";
-    };
 
     if (loading) {
         return (
@@ -180,73 +167,14 @@ const NexusDashboard = () => {
         <PageTransition>
             <div className="min-h-screen bg-white pb-32 font-sans text-slate-900 overflow-y-auto">
                 
-                {/* --- TOP HEADER --- */}
-                <div className="px-6 pt-8 pb-4 flex justify-between items-center">
-                    <button 
-                        onClick={() => navigate(-1)}
-                        className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-50 rounded-full transition-colors"
-                    >
-                        <FiArrowLeft className="w-6 h-6" />
-                    </button>
-                    <h2 className="text-lg font-bold text-slate-800">Home</h2>
-                    <div className="relative">
-                        <FiBell className="w-6 h-6 text-slate-800" />
-                        <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full"></span>
-                    </div>
-                </div>
-
-                {/* --- WELCOME GREETING --- */}
-                <div className="px-6 pt-2 pb-6 flex justify-between items-start">
-                    <div>
-                        <h1 className="text-5xl font-black text-slate-900 tracking-tight">Hi {user?.name?.split(' ')[0] || 'Jenifer'}!</h1>
-                        <p className="text-slate-500 font-bold text-xl mt-1">{getGreeting()}</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-sm font-black text-slate-900 uppercase tracking-tighter">
-                            {currentTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                            {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                        </p>
-                    </div>
-                </div>
-
-                {/* --- SEARCH BAR --- */}
-                <div className="px-6 mb-8">
-                    <div className="relative group">
-                        <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 transition-colors group-focus-within:text-blue-600" />
-                        <input 
-                            type="text" 
-                            placeholder="Search"
-                            className="w-full bg-slate-50 border-0 rounded-3xl py-4 pl-12 pr-4 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-500/20 transition-all placeholder:text-slate-300"
-                        />
-                    </div>
-                </div>
-
-                {/* --- WELCOME BANNER --- */}
-                <div className="px-6 mb-10">
-                    <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 flex justify-between items-center shadow-[0_12px_35px_rgba(0,0,0,0.06)] border-b-8 border-slate-100 relative overflow-hidden group hover:shadow-lg transition-all active:translate-y-1">
-                        <div className="relative z-10 w-2/3">
-                            <h2 className="text-3xl font-black text-slate-900 mb-2">Welcome!</h2>
-                            <p className="text-lg font-bold text-slate-500 leading-snug">Let's track your <br />school units</p>
-                        </div>
-                        <div className="w-32 h-32 relative z-10 flex items-center justify-center">
-                            <div className="absolute inset-0 bg-blue-50 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500"></div>
-                            <span className="text-6xl relative z-10 drop-shadow-md select-none">🦁</span>
-                        </div>
-                        {/* Decorative background circle */}
-                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-50/30 rounded-full blur-2xl"></div>
-                    </div>
-                </div>
-
-                {/* --- SECTION TITLE --- */}
-                <div className="px-6 mb-6 flex justify-between items-end">
-                    <h3 className="text-xl font-black text-slate-900">Unit Quests</h3>
-                    <button className="text-blue-600 text-xs font-black uppercase tracking-widest hover:text-blue-800 transition-colors">view all</button>
+                <div className="px-8 pt-12 pb-10">
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tight">
+                        Welcome to <span className="text-[#10346B]">InsightED Nexus</span>
+                    </h1>
                 </div>
 
                 {/* --- 2X2 GRID MATCHING REFERENCE --- */}
-                <div className="px-6 grid grid-cols-2 gap-4">
+                <div className="px-6 grid grid-cols-1 gap-6">
                     {modules.map((mod, idx) => {
                         const isPrimary = mod.id === 'esf7' && esf7Status !== 'VERIFIED';
                         return (
@@ -255,37 +183,63 @@ const NexusDashboard = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: idx * 0.1 }}
-                                onClick={() => handleCardClick(mod.route, mod.id)}
+                                onClick={() => !mod.isLocked && handleCardClick(mod.route, mod.id)}
                                 className={`
-                                    flex flex-col p-6 rounded-[2.5rem] cursor-pointer relative transition-all duration-300 active:scale-95 active:translate-y-1
+                                    flex flex-col p-8 rounded-[3rem] cursor-pointer relative transition-all duration-300 active:scale-95 active:translate-y-1
+                                    ${mod.isLocked ? 'grayscale opacity-60 pointer-events-none' : ''}
                                     ${isPrimary 
-                                        ? 'bg-[#10346B] text-white shadow-xl shadow-blue-900/40 border-b-4 border-blue-950' 
-                                        : 'bg-white border border-slate-100 text-slate-900 shadow-[0_10px_25px_rgba(0,0,0,0.08)] border-b-4 border-slate-200'}
+                                        ? 'bg-[#10346B] text-white shadow-2xl shadow-blue-900/40 border-b-8 border-blue-950' 
+                                        : 'bg-white border border-slate-100 text-slate-900 shadow-[0_15px_35px_rgba(0,0,0,0.1)] border-b-8 border-slate-200'}
                                 `}
                             >
-                                <div className="flex justify-end items-start mb-6">
-                                    <FiMoreVertical className={isPrimary ? 'text-blue-200' : 'text-slate-400'} />
+                                <div className="flex justify-between items-start mb-8">
+                                    <div className="flex flex-col">
+                                        <h4 className={`font-black leading-tight mb-1 ${isPrimary ? 'text-2xl' : 'text-xl'}`}>{mod.title}</h4>
+                                        <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>{mod.subtitle}</p>
+                                    </div>
+                                    {mod.isLocked ? (
+                                        <div className={`p-2 rounded-xl ${isPrimary ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                            <FiLock size={18} />
+                                        </div>
+                                    ) : (
+                                        <FiMoreVertical className={isPrimary ? 'text-blue-200/50' : 'text-slate-300'} />
+                                    )}
                                 </div>
 
-                                <div className="mb-4">
-                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 ${isPrimary ? 'bg-white/10 text-white' : 'bg-white border border-slate-100 shadow-sm text-slate-800'}`}>
-                                        {mod.icon}
+                                <div className="flex items-center gap-6 mb-8">
+                                    <motion.div 
+                                        animate={{ y: [0, -5, 0] }}
+                                        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                                        className={`w-20 h-20 rounded-[2rem] flex items-center justify-center shrink-0 shadow-lg ${isPrimary ? 'bg-white/10 text-white' : 'bg-slate-50 border border-slate-100 text-slate-800'}`}
+                                    >
+                                        {React.cloneElement(mod.icon, { className: "w-10 h-10" })}
+                                    </motion.div>
+                                    
+                                    <div className="flex-1">
+                                        <p className={`text-sm font-bold leading-relaxed ${isPrimary ? 'text-blue-100' : 'text-slate-500'}`}>
+                                            {mod.description}
+                                        </p>
                                     </div>
-                                    <h4 className={`font-black leading-tight mb-1 ${isPrimary ? 'text-xl' : 'text-lg'}`}>{mod.title}</h4>
-                                    <p className={`text-sm font-bold uppercase tracking-widest ${isPrimary ? 'text-blue-200' : 'text-slate-500'}`}>{mod.subtitle}</p>
                                 </div>
 
                                 <div className="mt-auto">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <span className={`text-xs font-black uppercase tracking-widest ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>Progress</span>
-                                        <span className={`text-base font-black ${isPrimary ? 'text-white' : 'text-slate-900'}`}>{mod.progress}%</span>
+                                    <div className="flex justify-between items-end mb-3">
+                                        <div className="flex flex-col">
+                                            <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isPrimary ? 'text-blue-200/60' : 'text-slate-400'}`}>Completion</span>
+                                            <span className={`text-2xl font-black ${isPrimary ? 'text-white' : 'text-slate-900'}`}>{mod.progress}%</span>
+                                        </div>
+                                        {mod.badge && (
+                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest ${mod.isLocked ? 'bg-slate-800 text-white' : (isPrimary ? 'bg-white/20 text-white border border-white/10' : 'bg-[#10346B] text-white')}`}>
+                                                {mod.isLocked ? 'LOCKED' : mod.badge}
+                                            </span>
+                                        )}
                                     </div>
-                                    <div className={`h-1.5 w-full rounded-full overflow-hidden ${isPrimary ? 'bg-white/10' : 'bg-slate-200/50'}`}>
+                                    <div className={`h-2.5 w-full rounded-full overflow-hidden ${isPrimary ? 'bg-white/10' : 'bg-slate-100'}`}>
                                         <motion.div 
                                             initial={{ width: 0 }}
                                             animate={{ width: `${mod.progress}%` }}
-                                            transition={{ duration: 1, delay: 0.5 }}
-                                            className={`h-full rounded-full ${isPrimary ? 'bg-white' : 'bg-[#10346B]'}`}
+                                            transition={{ duration: 1.5, ease: "easeOut", delay: 0.5 + (idx * 0.1) }}
+                                            className={`h-full rounded-full ${isPrimary ? 'bg-white shadow-[0_0_15px_rgba(255,255,255,0.5)]' : 'bg-[#10346B]'}`}
                                         />
                                     </div>
                                 </div>
@@ -294,27 +248,6 @@ const NexusDashboard = () => {
                     })}
                 </div>
 
-                {/* --- DAILY QUEST BANNER --- */}
-                <div className="mt-8 px-6">
-                    <motion.div 
-                        whileHover={{ scale: 1.02 }}
-                        className="bg-white border-2 border-amber-100/50 rounded-[2.5rem] p-6 flex items-center justify-between relative overflow-hidden shadow-xl shadow-amber-500/5 cursor-pointer"
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center border border-amber-100 shadow-inner">
-                                <FiAward className="text-amber-500 w-6 h-6" />
-                            </div>
-                            <div>
-                                <h4 className="text-xs font-black text-amber-700 uppercase tracking-tighter">Daily Streak: 5 Days! 🔥</h4>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Finish ESF7 to Level Up</p>
-                            </div>
-                        </div>
-                        <FiArrowRight className="text-slate-300 w-5 h-5 group-hover:translate-x-1" />
-                        
-                        {/* Decorative background element */}
-                        <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-amber-100/20 rounded-full blur-2xl"></div>
-                    </motion.div>
-                </div>
 
                 <BottomNav userRole="School Head" />
             </div>

@@ -1,9 +1,9 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/insighted/', // Ensure the slashes are there
+  base: '/insighted/', // Default for production. Overridden by staging scripts via --base
   plugins: [
     react(),
     VitePWA({
@@ -11,8 +11,8 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       registerType: 'autoUpdate',
-      injectRegister: null, // <--- Disable auto injection to use manual registration in Context
-      manifestFilename: 'manifest.json', // Set the output filename
+      injectRegister: null,
+      manifestFilename: 'manifest.json',
       devOptions: {
         enabled: true,
         type: 'module',
@@ -30,13 +30,13 @@ export default defineConfig({
         scope: './',
         icons: [
           {
-            src: 'insighted_app.png', // Relative path
-            sizes: '192x192', // Ensure your file is high res enough
+            src: 'insighted_app.png',
+            sizes: '192x192',
             type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: 'insighted_app.png', // Relative path
+            src: 'insighted_app.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
@@ -44,8 +44,11 @@ export default defineConfig({
         ]
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'], // Excluded csv
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
+      workbox: {
+        cacheId: 'insighted-v1.0.1'
       }
     })
   ],
@@ -58,4 +61,4 @@ export default defineConfig({
       },
     },
   },
-})
+});

@@ -26,7 +26,7 @@ if %errorlevel% neq 0 (
     
     if not exist "!RSYNC_PATH!" (
         echo [INFO] 'rsync' not found. Falling back to 'scp' (built-in Windows tool)...
-        scp -r ./api ./src ./public ./index.html ./package.json %SSH_USER%@%SERVER_IP%:%SERVER_DIR%/
+        scp -r ./api ./src ./public ./index.html ./package.json ./vite.config.js ./tailwind.config.js ./postcss.config.js %SSH_USER%@%SERVER_IP%:%SERVER_DIR%/
         if %errorlevel% neq 0 (
             echo [ERROR] Deployment failed.
             pause
