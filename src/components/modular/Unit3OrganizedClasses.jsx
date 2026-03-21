@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-slate-200 rounded-2xl text-xl font-black text-slate-700 text-center focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 hover:border-slate-300 transition-colors shadow-sm disabled:opacity-50 disabled:bg-slate-100";
@@ -28,19 +29,19 @@ const getClassSizeOptions = (className) => {
     const name = (className || "").toLowerCase().trim();
     
     if (name.includes("&") || name.includes("joined") || name.includes("multigrade")) {
-        return ["< 25", "25", "> 25"];
+        return ["< 25 learners", "25 learners", "> 25 learners"];
     }
     if (name.includes("kinder")) {
-        return ["< 25", "25-30", "> 30"];
+        return ["< 25 learners", "25-30 learners", "> 30 learners"];
     }
     if (name === "grade 1" || name === "grade 2" || name === "grade 3") {
-        return ["< 30", "30-35", "> 35"];
+        return ["< 30 learners", "30-35 learners", "> 35 learners"];
     }
     if (name === "grade 11" || name === "grade 12") {
-        return ["< 45", "45", "> 45"];
+        return ["< 45 learners", "45 learners", "> 45 learners"];
     }
     // Default for Grades 4-10
-    return ["< 40", "40-45", "> 45"];
+    return ["< 40 learners", "40-45 learners", "> 45 learners"];
 };
 
 const Unit3OrganizedClasses = () => {
@@ -49,6 +50,8 @@ const Unit3OrganizedClasses = () => {
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [showDraftModal, setShowDraftModal] = useState(false);
 
     const [isFetching, setIsFetching] = useState(true);
     const [fetchError, setFetchError] = useState(null);
@@ -211,6 +214,9 @@ const Unit3OrganizedClasses = () => {
             setSchoolId(storedId);
 
             try {
+                // Check for Draft First
+                const draft = await getUnitDraft(3, storedId);
+
                 const res = await fetch(`/api/ph_schools/${storedId}`);
                 if (!res.ok) {
                     throw new Error("Failed to fetch. Please check your connection.");
@@ -223,12 +229,6 @@ const Unit3OrganizedClasses = () => {
                     
                     // --- New Fixed-Column Hydration ---
                     const { activeClasses, parsedData, isActuallySaved } = parseClassStructure(d);
-                    
-                    // Note: If no fixed columns are filled, it will fall back to reading curricular_offering 
-                    // from the legacy logic just to populate the wizard (omitted for brevity in this specific fix, 
-                    // but the activeClasses parsing creates the exact data shape needed for read-only view).
-
-                    // Set Hydrated State
                     setAvailableGrades(activeClasses);
 
                     // If unit3 counts are saved, restore them into sectionData
@@ -264,16 +264,24 @@ const Unit3OrganizedClasses = () => {
                         };
                     });
 
-                    setSectionData(mergedData);
-                    
-                    if (isActuallySaved) {
-                        setIsReadOnly(true);
-                        setCurrentStep(1);
+                    // MASTER DATA PRECEDENCE: Draft > Database
+                    if (draft) {
+                        setSectionData(draft.sectionData || mergedData);
+                        setCurrentStep(draft.step !== undefined ? draft.step : 1);
+                        setIsReadOnly(false); // Force edit mode for drafts
+                        setShowWelcomeBack(true);
+                        setTimeout(() => setShowWelcomeBack(false), 3000);
                     } else {
-                        setIsReadOnly(false);
-                        setCurrentStep(1);
-                        if (activeClasses.length === 0) {
-                            setFetchError("No active classes found. Please complete Unit 2.");
+                        setSectionData(mergedData);
+                        if (isActuallySaved || d.unit3_completed) {
+                            setIsReadOnly(true);
+                            setCurrentStep(1);
+                        } else {
+                            setIsReadOnly(false);
+                            setCurrentStep(1);
+                            if (activeClasses.length === 0) {
+                                setFetchError("No active classes found. Please complete Unit 2.");
+                            }
                         }
                     }
                     
@@ -334,6 +342,12 @@ const Unit3OrganizedClasses = () => {
             // If we are on the last grade, move to Step N+1 (Confirmation)
             setCurrentStep(prev => prev + 1);
         }
+    };
+
+    const handleSaveDraftAndExit = async () => {
+        if (!schoolId) return;
+        await saveUnitDraft(3, schoolId, { sectionData, step: currentStep });
+        navigate("/modular-dashboard");
     };
 
     const handleFinalSubmit = async () => {
@@ -409,6 +423,7 @@ const Unit3OrganizedClasses = () => {
             }
             localStorage.setItem('quest_progress', JSON.stringify(progress));
 
+            await clearUnitDraft(3, schoolId);
             setShowSuccess(true);
             setTimeout(() => {
                 setShowSuccess(false);
@@ -539,12 +554,25 @@ const Unit3OrganizedClasses = () => {
                 {showSuccess && <SuccessModal title="Data Saved!" message="Section Counts updated." />}
             </AnimatePresence>
 
+            {/* Welcome Back Toast */}
+            <AnimatePresence>
+                {showWelcomeBack && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-[13px] font-bold flex items-center gap-2 z-[60]">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                        Recovered your draft!
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Header */}
             <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
                 <div className="max-w-md mx-auto px-5 py-4 flex items-center justify-between relative">
-                    <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-50 transition-colors z-10">
-                        <FiX className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2 z-10">
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-50 transition-colors">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                    </div>
                     <div className="absolute left-0 right-0 text-center pointer-events-none">
                         <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 3</div>
                         <h1 className="text-sm font-black text-gray-800">Section Registry</h1>
@@ -739,14 +767,7 @@ const Unit3OrganizedClasses = () => {
                             </div>
                         </div>
 
-                        <div className="flex gap-4">
-                            <button onClick={() => setCurrentStep(1)} className="flex-1 py-4 rounded-2xl font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-                                No, Edit Again
-                            </button>
-                            <button onClick={handleFinalSubmit} disabled={loading} className="flex-[2] py-4 rounded-2xl bg-indigo-600 text-white font-black shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50">
-                                {loading ? "Saving..." : "Yes, Save Registry"}
-                            </button>
-                        </div>
+                        <div className="h-10" />
                     </motion.div>
                 )}
                 </>
@@ -754,32 +775,80 @@ const Unit3OrganizedClasses = () => {
             </main>
 
             {/* Stepper Navigation */}
-            {(!isReadOnly && currentStep <= totalSteps) && (
+            {!isReadOnly && (
                 <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-100 flex justify-center z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] px-5 py-6 pb-safe">
                     <div className="w-full max-w-md flex items-center justify-between gap-4">
                         
-                        {/* Back Button */}
-                        {canGoBack ? (
+                        {/* Back / Edit Button */}
+                        {currentStep > totalSteps ? (
                             <button 
-                                onClick={handleBack} 
+                                onClick={() => setCurrentStep(1)} 
                                 disabled={loading}
-                                className="p-4 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-2xl font-bold border-2 border-slate-200 transition-all active:scale-95 flex items-center justify-center shrink-0 w-16 h-16"
+                                className="p-4 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-2xl font-bold border-2 border-slate-200 transition-all active:scale-95 flex items-center justify-center shrink-0 w-16 h-16 outline-none"
                             >
-                                <FiChevronLeft className="w-6 h-6" />
+                                <FiArrowLeft className="w-6 h-6" />
                             </button>
-                        ) : ( <div className="w-16 h-16 shrink-0" /> )}
+                        ) : currentStep === 0 ? (
+                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                                <FiSave className="w-6 h-6" />
+                            </button>
+                        ) : (
+                            <div className="flex gap-2">
+                                <button onClick={handleBack} disabled={loading}
+                                    className="p-4 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-2xl font-bold border-2 border-slate-200 transition-all active:scale-95 flex items-center justify-center shrink-0 w-16 h-16 outline-none"
+                                >
+                                    <FiArrowLeft className="w-6 h-6" />
+                                </button>
+                                <button onClick={() => setShowDraftModal(true)}
+                                    className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
+                                >
+                                    <FiSave className="w-6 h-6" />
+                                </button>
+                            </div>
+                        )}
                     
-                    {/* Next Button */}
+                    {/* Next / Submit Button */}
                         <button 
-                            disabled={loading || !isCurrentStepValid} 
-                            onClick={handleNext} 
-                            className={`flex-1 h-16 rounded-2xl text-white font-black text-lg text-center transition-all disabled:opacity-50 disabled:bg-slate-300 disabled:border-slate-400 disabled:text-slate-500 disabled:translate-y-0 shadow-lg flex items-center justify-center gap-2 bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px]`}
+                            disabled={loading || (currentStep <= totalSteps && !isCurrentStepValid)} 
+                            onClick={currentStep > totalSteps ? handleFinalSubmit : handleNext} 
+                            className={`flex-1 h-16 rounded-2xl text-white font-black text-lg text-center transition-all disabled:opacity-50 disabled:bg-slate-300 disabled:border-slate-400 disabled:text-slate-500 disabled:translate-y-0 shadow-lg flex items-center justify-center gap-2 ${currentStep > totalSteps ? 'bg-emerald-500 border-emerald-700' : 'bg-indigo-500 border-indigo-700'} border-b-[5px] active:border-b-0 active:translate-y-[5px]`}
                         >
-                            Next Step <FiChevronRight className="w-5 h-5" />
+                            {currentStep > totalSteps ? (
+                                loading ? "Saving..." : "Yes, Save Registry"
+                            ) : (
+                                <>Next Step <FiChevronRight className="w-5 h-5" /></>
+                            )}
                         </button>
                     </div>
                 </div>
             )}
+
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

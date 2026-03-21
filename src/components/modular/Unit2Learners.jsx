@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock } from 'react-icons/fi';
+import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import SuccessModal from '../SuccessModal';
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from '../../db';
+import { useAuth } from "../../context/AuthContext";
 
 // --- Shared Styles ---
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-gray-200 rounded-2xl text-2xl font-black text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors shadow-sm text-center";
@@ -36,6 +38,11 @@ const Unit2Learners = () => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [isReadOnly, setIsReadOnly] = useState(false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
+
+    const { user } = useAuth();
+    const [isReviewMode, setIsReviewMode] = useState(false); 
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [showDraftModal, setShowDraftModal] = useState(false);
 
     // --- Wizard State ---
     const [currentStep, setCurrentStep] = useState(1);
@@ -140,91 +147,135 @@ const Unit2Learners = () => {
                     const data = await res.json();
                     if (data.exists && data.data) {
                         const d = data.data;
+                        
+                        // Check for Drafts
+                        const [draft2, draft1] = await Promise.all([
+                            getUnitDraft(2, storedId),
+                            getUnitDraft(1, storedId)
+                        ]);
 
-                        // 1. Determine Available Grades via Unit 1
-                        const offering = d.curricular_offering || localStorage.getItem('schoolOffering') || "";
-                        setSchoolOffering(offering);
+                        // Prioritization: Unit 1 Draft Cache (nested in formData) -> localStorage -> Database
+                        const storedOffering = draft1?.formData?.curricular_offering 
+                            || localStorage.getItem('schoolOffering') 
+                            || d.curricular_offering
+                            || "";
+                        
+                        setSchoolOffering(storedOffering);
 
-                        const text = offering.toLowerCase();
+                        if (draft2) {
+                            setKinderEnrollment(draft2.kinderEnrollment || "");
+                            setOrgType(draft2.orgType || null);
+                            setMgCombinations(draft2.mgCombinations || []);
+                            setGradeTotals(draft2.gradeTotals || {});
+                            setGradeAvailability(draft2.gradeAvailability || {});
+                            setHasSnedSelfContained(draft2.hasSnedSelfContained);
+                            setSnedSelfContainedCount(draft2.sned_self_contained_count || "");
+                            setHasAralMath(draft2.hasAralMath);
+                            setAralMath(draft2.aralMath || {});
+                            setHasAralReading(draft2.hasAralReading);
+                            setAralReading(draft2.aralReading || {});
+                            setHasAralScience(draft2.hasAralScience);
+                            setAralScience(draft2.aralScience || {});
+                            setGenderTotals(draft2.genderTotals || { male: "", female: "" });
+                            setCurrentStep(draft2.step || 1);
+                            setCurrentGradeIndex(draft2.currentGradeIndex || 0);
+                            
+                            setShowWelcomeBack(true);
+                            setTimeout(() => setShowWelcomeBack(false), 3000);
+                        }
+
+                        // --- Calculate Available Grades based on Offering ---
+                        const text = storedOffering.toLowerCase();
                         let filteredIds = [];
 
-                        if (text.includes("integrated") || text.includes("k-12") || text.includes("k to 12") || text.includes("k-10") || text.includes("k to 10")) {
+                        if (text.includes("integrated") || text.includes("k-12") || text.includes("k to 12") || text.includes("k-10") || text.includes("k to 10") || text.includes("comprehensive")) {
                             filteredIds = ALL_GRADES.map(g => g.id);
                         } else {
-                            if (text.includes("elementary") || text.includes("primary")) {
+                            if (text.includes("elementary") || text.includes("primary") || text.includes("grade")) {
                                 filteredIds.push('kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
                             }
-                            if (text.includes("jhs") || text.includes("junior high")) {
+                            if (text.includes("jhs") || text.includes("junior") || text.includes("secondary") || text.includes("high school")) {
                                 filteredIds.push('g7', 'g8', 'g9', 'g10');
                             }
-                            if (text.includes("shs") || text.includes("senior high")) {
+                            if (text.includes("shs") || text.includes("senior") || text.includes("secondary")) {
                                 filteredIds.push('g11', 'g12');
                             }
+                        }
+
+                        // Fallback safety
+                        if (filteredIds.length === 0 && text.trim().length > 0) {
+                            filteredIds = ALL_GRADES.map(g => g.id);
                         }
 
                         filteredIds = [...new Set(filteredIds)];
                         const uniqueObj = ALL_GRADES.filter(g => filteredIds.includes(g.id));
                         
                         setAvailableGrades(uniqueObj);
-                        setHasKinder(uniqueObj.some(g => g.id === 'kinder'));
-                        const hasElem = uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder');
-                        setHasElementary(hasElem);
+                        const hasK = uniqueObj.some(g => g.id === 'kinder');
+                        const hasE = uniqueObj.some(g => g.type === 'elem' && g.id !== 'kinder');
+                        setHasKinder(hasK);
+                        setHasElementary(hasE);
 
-                        // 2. Auto-advance if Kinder/Elementary is not offered
-                        if (!uniqueObj.some(g => g.id === 'kinder')) {
-                            if (hasElem) {
-                                setCurrentStep(2);
-                            } else {
-                                setOrgType('nano');
-                                setCurrentStep(4);
+                        // 2. Auto-advance if Kinder/Elementary is not offered AND no draft exists
+                        if (!draft2) {
+                            if (!hasK) {
+                                if (hasE) {
+                                    setCurrentStep(2);
+                                } else if (uniqueObj.length > 0) {
+                                    setOrgType('nano');
+                                    setCurrentStep(4);
+                                }
+                            }
+                        } else {
+                            // Ensure the restored grade index is still valid
+                            const lockedG = new Set();
+                            (draft2.mgCombinations || []).forEach(c => c.grades.forEach(gg => lockedG.add(gg)));
+                            const monogrades = uniqueObj.filter(g => g.id !== 'kinder' && !lockedG.has(g.id));
+                            
+                            if (draft2.step === 4 && monogrades.length > 0) {
+                                const clampedIndex = Math.min(draft2.currentGradeIndex || 0, monogrades.length - 1);
+                                setCurrentGradeIndex(clampedIndex);
+                            } else if (draft2.step === 4 && monogrades.length === 0) {
+                                setCurrentStep(5); 
                             }
                         }
 
+                        // 3. Restore Backend Data if finalized
                         if (d.unit2_simplified_enrollment) {
                             setHasSubmitted(true);
-                            setIsReadOnly(true);
-                            try {
-                                const parsed = typeof d.unit2_simplified_enrollment === 'string' 
-                                    ? JSON.parse(d.unit2_simplified_enrollment) 
-                                    : d.unit2_simplified_enrollment;
-                                
-                                // In the new schema, we store an object wrapping both the downstream array and the raw questionnaire data
-                                if (parsed.questionnaire) {
-                                    const q = parsed.questionnaire;
-                                    setKinderEnrollment(q.kinderEnrollment || "");
-                                    setGradeTotals(q.gradeTotals || {});
-                                    setGradeAvailability(q.gradeAvailability || {});
+                            
+                            // If no draft exists, we load the backend data as the starting point in Read Only mode.
+                            // If a draft DOES exist, we skip this so the fresh draft (loaded above) isn't overwritten, 
+                            // and we ensure the form is in Edit Mode.
+                            if (!draft2) {
+                                setIsReadOnly(true);
+                                try {
+                                    const parsed = typeof d.unit2_simplified_enrollment === 'string' 
+                                        ? JSON.parse(d.unit2_simplified_enrollment) 
+                                        : d.unit2_simplified_enrollment;
                                     
-                                    setHasSnedSelfContained(q.hasSnedSelfContained);
-                                    setSnedSelfContainedCount(q.sned_self_contained_count || "");
-
-                                    setHasAralMath(q.hasAralMath);
-                                    setAralMath(q.aralMath || {});
-                                    setHasAralReading(q.hasAralReading);
-                                    setAralReading(q.aralReading || {});
-                                    setHasAralScience(q.hasAralScience);
-                                    setAralScience(q.aralScience || {});
-
-                                    setGenderTotals(q.genderTotals || { male: "", female: "" });
-
-                                    if (q.orgType) setOrgType(q.orgType);
-                                    if (q.mgCombinations) setMgCombinations(q.mgCombinations);
-                                } else if (Array.isArray(parsed)) {
-                                    // Fallback: migrate from the intermediate master-controller array format
-                                    const totals = {};
-                                    const availability = {};
-                                    let gMale = 0; let gFemale = 0;
-                                    parsed.forEach(item => {
-                                        totals[item.grade_level] = item.total || 0;
-                                        availability[item.grade_level] = item.is_active !== false;
-                                        gMale += item.male || 0;
-                                        gFemale += item.female || 0;
-                                    });
-                                    setGradeTotals(totals);
-                                    setGradeAvailability(availability);
-                                    setGenderTotals({ male: gMale, female: gFemale });
-                                }
-                            } catch (e) { console.warn("Parse error", e); }
+                                    if (parsed.questionnaire) {
+                                        const q = parsed.questionnaire;
+                                        setKinderEnrollment(q.kinderEnrollment || "");
+                                        setGradeTotals(q.gradeTotals || {});
+                                        setGradeAvailability(q.gradeAvailability || {});
+                                        setHasSnedSelfContained(q.hasSnedSelfContained);
+                                        setSnedSelfContainedCount(q.sned_self_contained_count || "");
+                                        setHasAralMath(q.hasAralMath);
+                                        setAralMath(q.aralMath || {});
+                                        setHasAralReading(q.hasAralReading);
+                                        setAralReading(q.aralReading || {});
+                                        setHasAralScience(q.hasAralScience);
+                                        setAralScience(q.aralScience || {});
+                                        setGenderTotals(q.genderTotals || { male: "", female: "" });
+                                        if (q.orgType) setOrgType(q.orgType);
+                                        if (q.mgCombinations) setMgCombinations(q.mgCombinations);
+                                    }
+                                } catch (e) { console.warn("Parse error", e); }
+                            } else {
+                                // Draft exists: strictly ensure we are in edit mode
+                                setIsReadOnly(false);
+                            }
                         }
                     }
                 }
@@ -236,6 +287,17 @@ const Unit2Learners = () => {
         };
         initData();
     }, []);
+
+    // ── Safety Guard: Ensure currentGradeIndex stays in bounds ──────────────────
+    useEffect(() => {
+        if (!loading && currentStep === 4) {
+            if (activeMonogrades.length === 0) {
+                setCurrentStep(5);
+            } else if (currentGradeIndex >= activeMonogrades.length) {
+                setCurrentGradeIndex(activeMonogrades.length - 1);
+            }
+        }
+    }, [activeMonogrades.length, currentStep, loading, currentGradeIndex]);
 
     // --- Handlers ---
     const handleGradeChange = (gradeId, val) => {
@@ -364,10 +426,12 @@ const Unit2Learners = () => {
                 setCurrentGradeIndex(prev => prev - 1);
             } else {
                 if (hasElementary) {
+                    // If we came from MG Builder (pure_mg is impossible at step 4, but mixed is)
                     setCurrentStep(orgType === 'mixed' ? 3 : 2);
                 } else if (hasKinder) {
                     setCurrentStep(1);
                 } else {
+                    // Truly the first step for JHS/SHS only schools
                     navigate("/modular-dashboard");
                 }
             }
@@ -379,14 +443,13 @@ const Unit2Learners = () => {
             if (activeMonogrades.length > 0) {
                 setCurrentGradeIndex(activeMonogrades.length - 1);
                 setCurrentStep(4);
+            } else if (hasElementary) {
+                // Skip Step 4 if monogrades empty
+                setCurrentStep(orgType === 'pure_mg' ? 3 : 2);
+            } else if (hasKinder) {
+                setCurrentStep(1);
             } else {
-                if (hasElementary) {
-                    setCurrentStep(orgType === 'pure_mg' ? 3 : 2);
-                } else if (hasKinder) {
-                    setCurrentStep(1);
-                } else {
-                    navigate("/modular-dashboard");
-                }
+                navigate("/modular-dashboard");
             }
             return;
         }
@@ -408,6 +471,30 @@ const Unit2Learners = () => {
         }
 
         setCurrentStep(prev => prev - 1);
+    };
+
+    const handleSaveDraftAndExit = async () => {
+        const storedId = localStorage.getItem('schoolId');
+        if (!storedId) return;
+        
+        const draftData = {
+            kinderEnrollment,
+            orgType,
+            mgCombinations,
+            gradeTotals,
+            gradeAvailability,
+            hasSnedSelfContained,
+            sned_self_contained_count,
+            hasAralMath, aralMath,
+            hasAralReading, aralReading,
+            hasAralScience, aralScience,
+            genderTotals,
+            step: currentStep,
+            currentGradeIndex
+        };
+        
+        await saveUnitDraft(2, storedId, draftData);
+        navigate("/modular-dashboard");
     };
 
     const handleSave = async () => {
@@ -522,6 +609,7 @@ const Unit2Learners = () => {
                 setHasSubmitted(true);
                 setIsReadOnly(true);
                 setShowSuccess(true);
+                await clearUnitDraft(2, storedId);
             } else {
                 alert("Failed to save enrollment. Please try again.");
             }
@@ -694,39 +782,72 @@ const Unit2Learners = () => {
 
     if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8"><div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div></div>;
 
+    // --- Centralized Validation Logic ---
+    const canContinue = (() => {
+        if (currentStep === 1) {
+            const isAvailable = gradeAvailability.kinder !== false;
+            return !isAvailable || (kinderEnrollment && parseInt(kinderEnrollment) > 0);
+        }
+        if (currentStep === 2) return !!orgType;
+        if (currentStep === 3) {
+            return mgCombinations.length > 0 && mgCombinations.every(c => 
+                c.grades.length > 0 && 
+                c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) > 0
+            );
+        }
+        if (currentStep === 4) {
+            const g = activeMonogrades[currentGradeIndex];
+            if (!g) return true;
+            const isAvailable = gradeAvailability[g.id] !== false;
+            return !isAvailable || (gradeTotals[g.id] && parseInt(gradeTotals[g.id]) > 0);
+        }
+        if (currentStep === 5) {
+            return hasSnedSelfContained === false || (hasSnedSelfContained === true && sned_self_contained_count);
+        }
+        if (currentStep === 6) {
+            return (hasAralMath !== null && hasAralReading !== null && hasAralScience !== null) &&
+                !(hasAralMath === true && (Object.values(aralMath).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralMath[lvl]) || 0) > (gradeCapacities[lvl] || 0)))) &&
+                !(hasAralReading === true && (Object.values(aralReading).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralReading[lvl]) || 0) > (gradeCapacities[lvl] || 0)))) &&
+                !(hasAralScience === true && (Object.values(aralScience).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralScience[lvl]) || 0) > (gradeCapacities[lvl] || 0))));
+        }
+        if (currentStep === 7) return isMathPerfect;
+        return true;
+    })();
+
     return (
-        <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-gray-100 font-sans text-slate-800 pb-32">
+        <div className={`min-h-screen ${isReadOnly ? 'bg-slate-50' : 'bg-[#fcfdff]'} relative pb-32`}>
             
             {/* Header */}
-            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md shadow-sm px-4 py-4 mb-8">
+            <div className="pt-8 pb-4 px-6 sticky top-0 bg-white/80 backdrop-blur-xl z-20 border-b border-gray-100/50">
                 <div className="max-w-xl mx-auto flex items-center justify-between">
-                     <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400">
-                        <FiChevronLeft className="w-8 h-8" />
+                    <button onClick={handleBack} className="p-3 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all active:scale-95 group">
+                        <FiChevronLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
                     </button>
-                    <div className="flex-1 px-6">
-                        <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
-                            {/* Calculate total sub-steps: Org + GradeCount + Special + (ARAL?) + Gender + Confirm */}
-                            {(() => {
-                                const totalProg = 8;
-                                let currentProg = currentStep;
-                                if (currentStep === 4) {
-                                    // Sub-steps for grades
-                                    const gradeWeight = 1 / (activeMonogrades.length || 1);
-                                    currentProg = 3 + (currentGradeIndex + 1) * gradeWeight;
-                                }
+                    <div className="flex flex-col items-center">
+                        <div className="flex gap-1.5 mb-2">
+                            {[1, 2, 3, 4, 5, 6, 7].map(s => (
+                                <div key={s} className={`h-1.5 rounded-full transition-all duration-500 ${currentStep === s ? 'w-8 bg-indigo-600 shadow-sm shadow-indigo-100' : 'w-2 bg-slate-200'}`} />
+                            ))}
+                        </div>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Module Status</span>
+                    </div>
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center border-2 border-indigo-100 shadow-inner">
+                        <span className="text-xl font-black text-indigo-600">{currentStep}</span>
+                    </div>
+                </div>
+            </div>
 
-                                return Array.from({ length: totalProg }).map((_, i) => (
-                                    <div 
-                                        key={i} 
-                                        className={`h-full transition-all duration-500 ease-out border-r-2 border-white last:border-0 ${currentProg >= i + 1 ? 'bg-indigo-500' : 'bg-transparent'}`} 
-                                        style={{ width: `${100 / totalProg}%` }} 
-                                    />
-                                ));
-                            })()}
+            {showWelcomeBack && (
+                <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs animate-in slide-in-from-top duration-500">
+                    <div className="bg-slate-900/90 backdrop-blur-xl text-white px-6 py-4 rounded-3xl shadow-2xl border border-white/20 flex items-center gap-4">
+                        <div className="w-10 h-10 bg-indigo-500 rounded-2xl flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30">✨</div>
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-widest text-indigo-300 mb-0.5">Welcome Back</p>
+                            <p className="text-sm font-bold text-slate-100 leading-tight">Your draft has been restored!</p>
                         </div>
                     </div>
                 </div>
-            </header>
+            )}
 
             <main className="max-w-xl mx-auto px-4">
                 {isReadOnly ? (
@@ -800,14 +921,6 @@ const Unit2Learners = () => {
                                                 </p>
                                             </div>
                                         </div>
-
-                                        <button 
-                                            onClick={handleNext} 
-                                            disabled={isAvailable && (!kinderEnrollment || parseInt(kinderEnrollment) === 0)}
-                                            className="w-full h-20 py-5 rounded-[2.5rem] bg-indigo-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(79,70,229,0.3)] hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-700 disabled:cursor-not-allowed"
-                                        >
-                                            Continue <FiArrowRight className="w-8 h-8" />
-                                        </button>
                                     </>
                                 );
                             })()}
@@ -849,14 +962,6 @@ const Unit2Learners = () => {
                                     </button>
                                 ))}
                             </div>
-
-                            <button 
-                                onClick={handleNext} 
-                                disabled={!orgType}
-                                className="w-full h-20 py-5 rounded-[2.5rem] bg-indigo-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(79,70,229,0.3)] hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                            >
-                                Continue <FiArrowRight className="w-8 h-8" />
-                            </button>
                         </motion.div>
                     )}
 
@@ -959,20 +1064,6 @@ const Unit2Learners = () => {
                                     ))}
                                 </div>
                             </div>
-
-                            <button 
-                                onClick={handleNext} 
-                                disabled={
-                                    mgCombinations.length === 0 || 
-                                    mgCombinations.some(c => 
-                                        c.grades.length === 0 || 
-                                        c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) === 0
-                                    )
-                                }
-                                className="w-full h-20 py-5 rounded-[2.5rem] bg-indigo-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(79,70,229,0.3)] hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                            >
-                                Continue <FiArrowRight className="w-8 h-8" />
-                            </button>
                         </motion.div>
                     )}
                     {/* STEP 4: Grade-by-Grade Enrollment */}
@@ -1039,13 +1130,6 @@ const Unit2Learners = () => {
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cumulative Enrollment</span>
                                                 <span className="text-3xl font-black">{grandTotal}</span>
                                             </div>
-                                            <button 
-                                                onClick={handleNext} 
-                                                disabled={isAvailable && (!gradeTotals[g.id] || parseInt(gradeTotals[g.id]) === 0)}
-                                                className="h-16 px-10 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-black text-lg transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:bg-slate-700 disabled:cursor-not-allowed"
-                                            >
-                                                Next <FiArrowRight className="w-6 h-6" />
-                                            </button>
                                         </div>
                                     </div>
                                 );
@@ -1141,22 +1225,6 @@ const Unit2Learners = () => {
                                     )}
                                 </AnimatePresence>
                             </div>
-
-                            <div className="mt-8 flex gap-4">
-                                <button
-                                    onClick={handleBack}
-                                    className="flex-1 h-18 py-5 rounded-[2rem] bg-white border-4 border-slate-100 text-slate-400 font-black text-lg transition-all hover:bg-slate-50 flex items-center justify-center gap-2"
-                                >
-                                    <FiChevronLeft className="w-6 h-6" /> Back
-                                </button>
-                                <button 
-                                    onClick={handleNext} 
-                                    disabled={hasSnedSelfContained === null || (hasSnedSelfContained === true && !sned_self_contained_count)}
-                                    className="flex-[2] h-18 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-lg shadow-[0_10px_30px_rgba(79,70,229,0.3)] hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2"
-                                >
-                                    Continue <FiArrowRight className="w-6 h-6" />
-                                </button>
-                            </div>
                         </motion.div>
                     )}
 
@@ -1169,146 +1237,135 @@ const Unit2Learners = () => {
                                 <p className="text-slate-500 font-medium">Record learners under the Academic Recovery and Acceleration Program (G1-G6).</p>
                             </div>
 
-                            {/* Math */}
-                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-6">
-                                <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Mathematics?</h3>
-                                <div className="flex gap-3 mb-4">
-                                    <button onClick={() => setHasAralMath(true)} className={`${toggleBtnBase} ${hasAralMath === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
-                                    <button onClick={() => { setHasAralMath(false); setAralMath({}); }} className={`${toggleBtnBase} ${hasAralMath === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                            <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border-4 border-indigo-100/50 mb-8">
+                                <div className="space-y-6">
+                                    {/* Math */}
+                                    <div className="bg-slate-50 rounded-3xl p-6 border-2 border-slate-100 mb-6">
+                                        <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Mathematics?</h3>
+                                        <div className="flex gap-3 mb-4">
+                                            <button onClick={() => setHasAralMath(true)} className={`${toggleBtnBase} ${hasAralMath === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
+                                            <button onClick={() => { setHasAralMath(false); setAralMath({}); }} className={`${toggleBtnBase} ${hasAralMath === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                                        </div>
+                                        <AnimatePresence>
+                                            {hasAralMath && (
+                                                <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
+                                                    {ELEM_GRADES.map(lvl => {
+                                                        const isAvailable = gradeAvailability[lvl] !== false;
+                                                        const capacity = gradeCapacities[lvl] || 0;
+                                                        const currentVal = parseInt(aralMath[lvl]) || 0;
+                                                        const isExceeded = currentVal > capacity;
+
+                                                        return (
+                                                            <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
+                                                                <input 
+                                                                    type="number" 
+                                                                    min="0" 
+                                                                    max={capacity}
+                                                                    placeholder="0" 
+                                                                    disabled={!isAvailable}
+                                                                    value={aralMath[lvl] || ""} 
+                                                                    onChange={(e) => handleAralChange('math', lvl, e.target.value)} 
+                                                                    className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
+                                                                />
+                                                                {isAvailable && (
+                                                                    <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                        Max: {capacity}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+
+                                    {/* Reading */}
+                                    <div className="bg-slate-50 rounded-3xl p-6 border-2 border-slate-100 mb-6">
+                                        <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Reading?</h3>
+                                        <div className="flex gap-3 mb-4">
+                                            <button onClick={() => setHasAralReading(true)} className={`${toggleBtnBase} ${hasAralReading === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
+                                            <button onClick={() => { setHasAralReading(false); setAralReading({}); }} className={`${toggleBtnBase} ${hasAralReading === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                                        </div>
+                                        <AnimatePresence>
+                                            {hasAralReading && (
+                                                <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
+                                                    {ELEM_GRADES.map(lvl => {
+                                                        const isAvailable = gradeAvailability[lvl] !== false;
+                                                        const capacity = gradeCapacities[lvl] || 0;
+                                                        const currentVal = parseInt(aralReading[lvl]) || 0;
+                                                        const isExceeded = currentVal > capacity;
+
+                                                        return (
+                                                            <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
+                                                                <input 
+                                                                    type="number" 
+                                                                    min="0" 
+                                                                    max={capacity}
+                                                                    placeholder="0" 
+                                                                    disabled={!isAvailable}
+                                                                    value={aralReading[lvl] || ""} 
+                                                                    onChange={(e) => handleAralChange('reading', lvl, e.target.value)} 
+                                                                    className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
+                                                                />
+                                                                {isAvailable && (
+                                                                    <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                        Max: {capacity}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+
+                                    {/* Science */}
+                                    <div className="bg-slate-50 rounded-3xl p-6 border-2 border-slate-100 mb-4">
+                                        <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Science?</h3>
+                                        <div className="flex gap-3 mb-4">
+                                            <button onClick={() => setHasAralScience(true)} className={`${toggleBtnBase} ${hasAralScience === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
+                                            <button onClick={() => { setHasAralScience(false); setAralScience({}); }} className={`${toggleBtnBase} ${hasAralScience === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
+                                        </div>
+                                        <AnimatePresence>
+                                            {hasAralScience && (
+                                                <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
+                                                    {ELEM_GRADES.map(lvl => {
+                                                        const isAvailable = gradeAvailability[lvl] !== false;
+                                                        const capacity = gradeCapacities[lvl] || 0;
+                                                        const currentVal = parseInt(aralScience[lvl]) || 0;
+                                                        const isExceeded = currentVal > capacity;
+
+                                                        return (
+                                                            <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
+                                                                <input 
+                                                                    type="number" 
+                                                                    min="0" 
+                                                                    max={capacity}
+                                                                    placeholder="0" 
+                                                                    disabled={!isAvailable}
+                                                                    value={aralScience[lvl] || ""} 
+                                                                    onChange={(e) => handleAralChange('science', lvl, e.target.value)} 
+                                                                    className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
+                                                                />
+                                                                {isAvailable && (
+                                                                    <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
+                                                                        Max: {capacity}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
                                 </div>
-                                <AnimatePresence>
-                                    {hasAralMath && (
-                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
-                                            {ELEM_GRADES.map(lvl => {
-                                                const isAvailable = gradeAvailability[lvl] !== false;
-                                                const capacity = gradeCapacities[lvl] || 0;
-                                                const currentVal = parseInt(aralMath[lvl]) || 0;
-                                                const isExceeded = currentVal > capacity;
-
-                                                return (
-                                                    <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
-                                                        <input 
-                                                            type="number" 
-                                                            min="0" 
-                                                            max={capacity}
-                                                            placeholder="0" 
-                                                            disabled={!isAvailable}
-                                                            value={aralMath[lvl] || ""} 
-                                                            onChange={(e) => handleAralChange('math', lvl, e.target.value)} 
-                                                            className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
-                                                        />
-                                                        {isAvailable && (
-                                                            <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
-                                                                Max: {capacity}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
                             </div>
-
-                            {/* Reading */}
-                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-6">
-                                <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Reading?</h3>
-                                <div className="flex gap-3 mb-4">
-                                    <button onClick={() => setHasAralReading(true)} className={`${toggleBtnBase} ${hasAralReading === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
-                                    <button onClick={() => { setHasAralReading(false); setAralReading({}); }} className={`${toggleBtnBase} ${hasAralReading === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
-                                </div>
-                                <AnimatePresence>
-                                    {hasAralReading && (
-                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
-                                            {ELEM_GRADES.map(lvl => {
-                                                const isAvailable = gradeAvailability[lvl] !== false;
-                                                const capacity = gradeCapacities[lvl] || 0;
-                                                const currentVal = parseInt(aralReading[lvl]) || 0;
-                                                const isExceeded = currentVal > capacity;
-
-                                                return (
-                                                    <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
-                                                        <input 
-                                                            type="number" 
-                                                            min="0" 
-                                                            max={capacity}
-                                                            placeholder="0" 
-                                                            disabled={!isAvailable}
-                                                            value={aralReading[lvl] || ""} 
-                                                            onChange={(e) => handleAralChange('reading', lvl, e.target.value)} 
-                                                            className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
-                                                        />
-                                                        {isAvailable && (
-                                                            <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
-                                                                Max: {capacity}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-
-                            {/* Science */}
-                            <div className="bg-white rounded-3xl p-6 shadow-sm border-2 border-slate-100 mb-8">
-                                <h3 className="text-lg font-bold text-slate-700 mb-4">Do you have ARAL Learners in Science?</h3>
-                                <div className="flex gap-3 mb-4">
-                                    <button onClick={() => setHasAralScience(true)} className={`${toggleBtnBase} ${hasAralScience === true ? toggleBtnActive : toggleBtnInactive}`}>Yes</button>
-                                    <button onClick={() => { setHasAralScience(false); setAralScience({}); }} className={`${toggleBtnBase} ${hasAralScience === false ? toggleBtnActive : toggleBtnInactive}`}>No</button>
-                                </div>
-                                <AnimatePresence>
-                                    {hasAralScience && (
-                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="grid grid-cols-2 gap-3 mt-4">
-                                            {ELEM_GRADES.map(lvl => {
-                                                const isAvailable = gradeAvailability[lvl] !== false;
-                                                const capacity = gradeCapacities[lvl] || 0;
-                                                const currentVal = parseInt(aralScience[lvl]) || 0;
-                                                const isExceeded = currentVal > capacity;
-
-                                                return (
-                                                    <div key={lvl} className={!isAvailable ? 'opacity-40 grayscale' : ''}>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase text-center mb-1">Grade {lvl.replace('g','')}</p>
-                                                        <input 
-                                                            type="number" 
-                                                            min="0" 
-                                                            max={capacity}
-                                                            placeholder="0" 
-                                                            disabled={!isAvailable}
-                                                            value={aralScience[lvl] || ""} 
-                                                            onChange={(e) => handleAralChange('science', lvl, e.target.value)} 
-                                                            className={`${chunkyInput} !p-3 !text-lg !mt-0 ${isExceeded ? 'border-red-500 bg-red-50 text-red-600' : ''}`} 
-                                                        />
-                                                        {isAvailable && (
-                                                            <p className={`text-[9px] font-black text-center mt-1 uppercase tracking-tighter ${isExceeded ? 'text-red-500' : 'text-slate-400'}`}>
-                                                                Max: {capacity}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-
-                            <button 
-                                onClick={handleNext} 
-                                disabled={
-                                    hasAralMath === null || 
-                                    hasAralReading === null || 
-                                    hasAralScience === null ||
-                                    (hasAralMath === true && (Object.values(aralMath).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralMath[lvl]) || 0) > (gradeCapacities[lvl] || 0)))) ||
-                                    (hasAralReading === true && (Object.values(aralReading).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralReading[lvl]) || 0) > (gradeCapacities[lvl] || 0)))) ||
-                                    (hasAralScience === true && (Object.values(aralScience).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralScience[lvl]) || 0) > (gradeCapacities[lvl] || 0))))
-                                } 
-                                className="w-full py-5 rounded-2xl bg-indigo-600 text-white font-black text-lg shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:bg-slate-300 disabled:cursor-not-allowed"
-                            >
-                                Continue <FiArrowRight className="w-6 h-6 inline ml-2" />
-                            </button>
                         </motion.div>
                     )}
 
@@ -1354,50 +1411,99 @@ const Unit2Learners = () => {
                                             className={chunkyInput}
                                         />
                                     </div>
-                                </div>
 
-                                <div className={`mt-10 p-6 rounded-3xl border-4 transition-all flex items-center gap-4 ${isMathPerfect ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
-                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg ${isMathPerfect ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>
-                                        {isMathPerfect ? '✅' : '⚖️'}
-                                    </div>
-                                    <div className="flex-1">
-                                        <h4 className={`font-black uppercase tracking-widest text-[10px] mb-1 ${isMathPerfect ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                            {isMathPerfect ? 'Verification Pass' : 'Verification Pending'}
-                                        </h4>
-                                        <p className={`text-sm font-bold leading-tight ${isMathPerfect ? 'text-emerald-800' : 'text-amber-800'}`}>
-                                            {isMathPerfect 
-                                                ? "Male + Female perfectly matches the grand enrollment total. You're ready to save!" 
-                                                : `The total (${genderSum}) must exactly match the grand total of ${grandTotal}.`
-                                            }
-                                        </p>
+                                    <div className={`mt-10 p-6 rounded-3xl border-4 transition-all flex items-center gap-4 ${isMathPerfect ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg ${isMathPerfect ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>
+                                            {isMathPerfect ? '✅' : '⚖️'}
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className={`font-black uppercase tracking-widest text-[10px] mb-1 ${isMathPerfect ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                                {isMathPerfect ? 'Verification Pass' : 'Verification Pending'}
+                                            </h4>
+                                            <p className={`text-sm font-bold leading-tight ${isMathPerfect ? 'text-emerald-800' : 'text-amber-800'}`}>
+                                                {isMathPerfect 
+                                                    ? "Male + Female perfectly matches the grand enrollment total. You're ready to save!" 
+                                                    : `The total (${genderSum}) must exactly match the grand total of ${grandTotal}.`
+                                                }
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </>
+        )}
+    </main>
 
-                            <button 
-                                onClick={handleSave} 
-                                disabled={isSaving || !isMathPerfect}
-                                className="w-full h-20 py-5 rounded-[2.5rem] bg-emerald-600 text-white font-black text-xl shadow-[0_15px_40px_rgba(16,185,129,0.3)] hover:bg-emerald-700 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:bg-slate-700 disabled:cursor-not-allowed"
-                            >
-                                {isSaving ? (
+            <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="Smart Enrollment Sync Saved! Your learner counts are locked in." redirectUrl="/modular-dashboard" />
+
+            {!isReadOnly && (
+                <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
+                    <div className="max-w-md mx-auto flex gap-3">
+                        {currentStep === 1 ? (
+                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all">
+                                <FiSave className="w-6 h-6" />
+                            </button>
+                        ) : (
+                            <>
+                                <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
+                                    <FiArrowLeft className="w-6 h-6" />
+                                </button>
+                                <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all">
+                                    <FiSave className="w-6 h-6" />
+                                </button>
+                            </>
+                        )}
+                        <button 
+                            onClick={currentStep === 7 ? handleSave : handleNext}
+                            disabled={!canContinue || (currentStep === 7 && isSaving)}
+                            className={`flex-1 h-16 rounded-[2rem] ${currentStep === 7 ? 'bg-emerald-600 shadow-emerald-200' : 'bg-blue-600 shadow-blue-200'} text-white font-black text-[15px] shadow-xl active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-700 disabled:shadow-none uppercase tracking-widest`}
+                        >
+                            {currentStep === 7 ? (
+                                isSaving ? (
                                     <>
                                         <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
                                         Saving Profile...
                                     </>
                                 ) : (
-                                    <>
-                                        💾 Save School Profile
-                                    </>
-                                )}
-                            </button>
-                        </motion.div>
-                    )}
-                        </AnimatePresence>
-                    </>
-                )}
-            </main>
+                                    <><FiSave className="w-5 h-5" /> Save School Profile</>
+                                )
+                            ) : (
+                                <>Continue <FiArrowRight className="w-5 h-5" /></>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )}
 
-            <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="Smart Enrollment Sync Saved! Your learner counts are locked in." redirectUrl="/modular-dashboard" />
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

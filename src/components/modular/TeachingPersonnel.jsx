@@ -4,10 +4,11 @@ import {
   FiX, FiCheckCircle, FiPlus, FiSearch, FiEdit2, 
   FiTrash2, FiUser, FiBriefcase, FiAlertTriangle, 
   FiChevronRight, FiChevronLeft, FiPlusCircle, FiArrowLeft,
-  FiChevronsLeft, FiChevronsRight, FiUsers
+  FiChevronsLeft, FiChevronsRight, FiUsers, FiSave
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
 // ── Constants & Definitions ──────────────────────────────────────────────────
 
@@ -130,6 +131,8 @@ const TeachingPersonnelUnit = () => {
     const [baselineTeachers, setBaselineTeachers] = useState(0);
     const [isFinalizing, setIsFinalizing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [showDraftModal, setShowDraftModal] = useState(false);
     
     // UI States
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -217,42 +220,64 @@ const TeachingPersonnelUnit = () => {
                     });
                 } catch (e) { console.warn("Progress sync failed", e); }
 
+                // Clear Draft on Finalize
+                await clearUnitDraft(6, schoolId);
+
                 navigate(NEXT_UNIT_PATH);
             }
         } catch (err) { alert("Finalization failed."); }
         setIsFinalizing(false);
     };
 
+    const handleSaveDraftAndExit = async () => {
+        if (!schoolId) return;
+        const draftData = {
+            currentPage,
+            rosterSearch
+        };
+        await saveUnitDraft(6, schoolId, draftData);
+        navigate("/modular-dashboard");
+    };
+
     // Initial Load
     useEffect(() => {
-        const storedId = localStorage.getItem("schoolId");
-        if (!storedId) {
-            navigate("/login");
-            return;
-        }
-        setSchoolId(storedId);
-        fetchRoster(storedId);
-        fetchBaseline(storedId);
-    }, []);
+        const init = async () => {
+            const storedId = localStorage.getItem("schoolId");
+            if (!storedId) {
+                navigate("/login");
+                return;
+            }
+            setSchoolId(storedId);
 
-    // Fetch Core Data on mount
-    useEffect(() => {
-        const initData = async () => {
             try {
-                // Fetch Specs
-                const specRes = await fetch("/api/specializations");
-                const specData = await specRes.json();
-                if (specData.success) setSpecializationOptions(specData.data);
+                // Check for Draft First
+                const draft = await getUnitDraft(6, storedId);
+                if (draft) {
+                    setCurrentPage(draft.currentPage || 1);
+                    setRosterSearch(draft.rosterSearch || "");
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
+                }
 
-                // Fetch Subjects
-                const subRes = await fetch("/api/subjects");
+                // Fetch Core Data
+                fetchRoster(storedId);
+                fetchBaseline(storedId);
+
+                // Fetch Specs & Subjects
+                const [specRes, subRes] = await Promise.all([
+                    fetch("/api/specializations"),
+                    fetch("/api/subjects")
+                ]);
+                const specData = await specRes.json();
                 const subData = await subRes.json();
+                
+                if (specData.success) setSpecializationOptions(specData.data);
                 if (subData.success) setSubjectsMaster(subData.data);
             } catch (err) {
                 console.error("Initialization error:", err);
             }
         };
-        initData();
+        init();
     }, []);
 
     // Detect if current teacher specialization is custom
@@ -586,9 +611,11 @@ const TeachingPersonnelUnit = () => {
             {/* Header */}
             <header className="bg-white border-b border-slate-100 sticky top-0 z-40 px-5 py-4">
                 <div className="max-w-md mx-auto flex items-center justify-between">
-                    <button onClick={() => navigate("/modular-dashboard", { replace: true })} className="p-2 -ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
-                        <FiArrowLeft className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => navigate("/modular-dashboard", { replace: true })} className="p-2 -ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                    </div>
                     <div className="text-center">
                         <div className="text-[10px] font-black tracking-widest text-blue-500 uppercase">Unit 6</div>
                         <h1 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Teacher Roster & Workload</h1>
@@ -598,6 +625,17 @@ const TeachingPersonnelUnit = () => {
                     </button>
                 </div>
             </header>
+
+            {/* Welcome Back Toast */}
+            <AnimatePresence>
+                {showWelcomeBack && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-[13px] font-bold flex items-center gap-2 z-[60]">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                        Recovered your draft!
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <main className="max-w-md mx-auto p-5">
                 {/* Baseline Badge */}
@@ -1075,19 +1113,51 @@ const TeachingPersonnelUnit = () => {
             </AnimatePresence>
 
             {/* Finalize Button */}
-            <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 flex justify-center z-30 pointer-events-none">
-                <button 
-                  onClick={handleFinalize}
-                  disabled={teachers.length === 0 || isFinalizing}
-                  className="w-full max-w-sm py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 pointer-events-auto disabled:opacity-50 disabled:grayscale"
-                >
-                    {isFinalizing ? (
-                        <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                        <>Finalize & Submit Unit 6 {teachers.length > 0 && `(${teachers.length})`} <FiChevronRight size={20} /></>
-                    )}
-                </button>
+            <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
+                <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
+                    <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                         <FiSave className="w-6 h-6" />
+                    </button>
+                    <button 
+                      onClick={handleFinalize}
+                      disabled={teachers.length === 0 || isFinalizing}
+                      className="flex-1 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 disabled:opacity-50 disabled:grayscale"
+                    >
+                        {isFinalizing ? (
+                            <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <>Finalize & Submit Unit 6 {teachers.length > 0 && `(${teachers.length})`} <FiChevronRight size={20} /></>
+                        )}
+                    </button>
+                </div>
             </footer>
+
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center pointer-events-auto">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <style>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; }

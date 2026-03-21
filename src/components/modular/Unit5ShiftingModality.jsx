@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiArrowLeft, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTriangle, FiMonitor, FiRadio, FiBook, FiLayers, FiUnlock } from "react-icons/fi";
+import { FiX, FiArrowLeft, FiCheckCircle, FiEdit2, FiCheck, FiClock, FiAlertTriangle, FiMonitor, FiRadio, FiBook, FiLayers, FiUnlock, FiSave } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 4; // 1: Gatekeeper, 2: Grade Loop, 3: ADM, 4: Review
@@ -59,8 +60,10 @@ const Unit5ShiftingModality = () => {
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [curricularOffering, setCurricularOffering] = useState("");
+    const [showDraftModal, setShowDraftModal] = useState(false);
 
     // ── Dynamic grades based on curricular offering ──────────────────────
     const activeGrades = useMemo(() => {
@@ -112,13 +115,14 @@ const Unit5ShiftingModality = () => {
             setSchoolId(storedId);
 
             try {
-                // Prevent aggressive PWA caching using a timestamp buster
+                const draft = await getUnitDraft(5, storedId);
                 const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+                
                 if (res.ok) {
                     const saved = await res.json();
                     let d = (saved.exists && saved.data) ? saved.data : {};
 
-                    // Fallback to local quest progress for curricular offering if missing from DB fetch
+                    // Fallback to local quest progress for curricular offering
                     if (!d.curricular_offering) {
                         try {
                             const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
@@ -126,14 +130,10 @@ const Unit5ShiftingModality = () => {
                         } catch (e) {}
                     }
 
-                    // Base curriculum
                     setCurricularOffering(d.curricular_offering || "");
                     
-                    // We must parse activeGrades here locally first since the useMemo needs curricularOffering to mount
-                    // Define allowed keys based on curricular offering keywords
                     let offeringKeys = [];
                     let coLower = (d.curricular_offering || "").toLowerCase();
-                    
                     if (coLower.includes("kinder")) offeringKeys.push("kinder");
                     if (coLower.includes("elementary") || coLower.includes("primary")) {
                         offeringKeys.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
@@ -144,81 +144,61 @@ const Unit5ShiftingModality = () => {
                     if (coLower.includes("senior high") || coLower.includes("shs")) {
                         offeringKeys.push("g11", "g12");
                     }
-                    // Safety: if nothing matches, default to all
                     if (offeringKeys.length === 0) offeringKeys = Object.keys(GRADE_LABEL_MAP);
 
                     let baseGrades = offeringKeys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
                     let finalGrades = baseGrades;
 
-                    // Filter active grades based on Unit 2 config
                     if (d.unit2_simplified_enrollment) {
                         try {
                             const u2 = typeof d.unit2_simplified_enrollment === 'string' 
                                 ? JSON.parse(d.unit2_simplified_enrollment) 
                                 : d.unit2_simplified_enrollment;
-                            
                             const q = u2.questionnaire || {};
                             let processedActiveIds = new Set();
-
-                            // 1. Baseline
                             baseGrades.forEach(g => {
                                 const isAvail = q.gradeAvailability?.[g.key] !== false;
                                 const hasData = q.gradeTotals?.[g.key] !== undefined || (g.key === 'kinder' && q.kinderEnrollment !== undefined);
                                 if (isAvail && hasData) processedActiveIds.add(g.key);
                             });
-
-                            // 2. Multigrade overrides
-                            (q.mgCombinations || []).forEach(combo => {
-                                (combo.grades || []).forEach(gid => processedActiveIds.add(gid));
-                            });
-
-                            // 3. Fallback array parsing (Source of truth)
+                            (q.mgCombinations || []).forEach(combo => { (combo.grades || []).forEach(gid => processedActiveIds.add(gid)); });
                             let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
                             u2Array.forEach(item => {
                                 if (item.grade_level) {
-                                    const isAvail = q.gradeAvailability?.[item.grade_level] !== false;
-                                    const isActive = item.is_active !== false;
-                                    
-                                    if (!isAvail || !isActive) {
-                                        processedActiveIds.delete(item.grade_level);
-                                    } else {
-                                        processedActiveIds.add(item.grade_level);
-                                    }
+                                    if (q.gradeAvailability?.[item.grade_level] === false || item.is_active === false) processedActiveIds.delete(item.grade_level);
+                                    else processedActiveIds.add(item.grade_level);
                                 }
                             });
-
-                            // Only overwrite if Unit 2 actually gave us valid data
-                            if (processedActiveIds.size > 0) {
-                                finalGrades = baseGrades.filter(g => processedActiveIds.has(g.key));
-                            }
-                        } catch (e) {
-                            console.warn("Unit 2 Parse error in Unit 5", e);
-                        }
+                            if (processedActiveIds.size > 0) finalGrades = baseGrades.filter(g => processedActiveIds.has(g.key));
+                        } catch (e) { console.warn("Unit 2 Parse error in Unit 5", e); }
                     }
 
-                    // Override the standard active grades with the filtered version
                     setFilteredGrades(finalGrades);
 
-                    // If there is saved Unit 5 data, jump to review mode
-                    if (d.unit5_completed) {
+                    // MASTER PRECEDENCE: Draft > Database
+                    if (draft) {
+                        setCurrentChapter(draft.currentChapter || 1);
+                        setHasStandardShifting(draft.hasStandardShifting);
+                        setGradeIdx(draft.gradeIdx || 0);
+                        setMapData(draft.mapData || {});
+                        setHasAdms(draft.hasAdms);
+                        setAdmData(draft.admData || { adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false });
+                        setIsReviewMode(false); // Force edit mode for drafts
+                        setShowWelcomeBack(true);
+                        setTimeout(() => setShowWelcomeBack(false), 3000);
+                    } else if (d.unit5_completed) {
                         setSavedData(d);
                         setHasStandardShifting(d.has_standard_shifting);
-                        
                         const prefillMap = {};
                         finalGrades.forEach(g => {
                             prefillMap[`shift_${g.key}`] = d[`shift_${g.key}`] || "";
                             prefillMap[`mode_${g.key}`] = d[`mode_${g.key}`] || "";
                         });
                         setMapData(prefillMap);
-                        
                         setHasAdms(d.adm_mdl || d.adm_odl || d.adm_tvi || d.adm_blended);
                         setAdmData({
-                            adm_mdl: !!d.adm_mdl,
-                            adm_odl: !!d.adm_odl,
-                            adm_tvi: !!d.adm_tvi,
-                            adm_blended: !!d.adm_blended
+                            adm_mdl: !!d.adm_mdl, adm_odl: !!d.adm_odl, adm_tvi: !!d.adm_tvi, adm_blended: !!d.adm_blended
                         });
-
                         setIsReviewMode(true);
                     }
                 }
@@ -298,6 +278,20 @@ const Unit5ShiftingModality = () => {
         }
     };
 
+    const handleSaveDraftAndExit = async () => {
+        if (!schoolId) return;
+        const draftData = {
+            currentChapter,
+            hasStandardShifting,
+            gradeIdx,
+            mapData,
+            hasAdms,
+            admData
+        };
+        await saveUnitDraft(5, schoolId, draftData);
+        navigate("/modular-dashboard");
+    };
+
     // ── Submission ──────────────────────────────────────────────────────────
     const handleSubmit = async () => {
         if (!schoolId) return;
@@ -344,6 +338,7 @@ const Unit5ShiftingModality = () => {
 
             // Ensure app syncs to start the dashboard animation correctly
             window.dispatchEvent(new Event("storage"));
+            await clearUnitDraft(5, schoolId);
             setShowSuccess(true);
         } catch (err) {
             alert("Failed to save data. " + err.message);
@@ -504,11 +499,22 @@ const Unit5ShiftingModality = () => {
                     <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
                         <FiArrowLeft className="w-6 h-6 text-gray-400 hover:text-gray-600" />
                     </button>
-                    <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="mx-4 h-4 bg-gray-200 rounded-full overflow-hidden flex-1">
                         <motion.div className="h-full bg-indigo-500 rounded-full" animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.4 }} />
                     </div>
                 </div>
             </header>
+
+            {/* Welcome Back Toast */}
+            <AnimatePresence>
+                {showWelcomeBack && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-[13px] font-bold flex items-center gap-2 z-[60]">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                        Recovered your draft!
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <main className="flex-1 overflow-visible pb-32">
                 <div className="max-w-md w-full mx-auto mt-6 px-4">
@@ -721,6 +727,23 @@ const Unit5ShiftingModality = () => {
             {/* ── Sticky Footer ── */}
             <div className="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t border-gray-100 flex justify-center z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.02)]">
                 <div className="w-full max-w-md flex gap-3 px-2">
+                    {currentChapter === 1 ? (
+                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                            <FiSave className="w-6 h-6" />
+                        </button>
+                    ) : (
+                        <div className="flex gap-2">
+                            <button onClick={handleBack}
+                                className="w-16 h-16 flex justify-center items-center rounded-3xl bg-slate-100 text-slate-500 border-2 border-slate-200 active:translate-y-[2px] transition-all outline-none">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                            <button onClick={() => setShowDraftModal(true)}
+                                className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
+                            >
+                                <FiSave className="w-6 h-6" />
+                            </button>
+                        </div>
+                    )}
                     {currentChapter < 4 && (
                         <button
                             onClick={handleNext}
@@ -754,6 +777,32 @@ const Unit5ShiftingModality = () => {
                 message="You've successfully mapped out your Shifting and Modalities." 
                 buttonText="Back to Quest Board" 
             />
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

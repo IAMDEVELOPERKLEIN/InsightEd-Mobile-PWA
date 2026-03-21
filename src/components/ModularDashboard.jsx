@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
-import { getUnit1Draft } from "../db";
+import { getUnitDraft } from "../db";
 import BarongMascot from "./BarongMascot";
 import BottomNav from "../modules/BottomNav";
 import { DASHBOARD_METADATA } from "../config/dashboardMetadata";
@@ -73,6 +73,8 @@ const ModularDashboard = () => {
     });
     const [curricularOffering, setCurricularOffering] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [unitDrafts, setUnitDrafts] = useState({});
+    const [unitTimestamps, setUnitTimestamps] = useState({});
 
     useEffect(() => {
         const loadProgress = async () => {
@@ -100,6 +102,9 @@ const ModularDashboard = () => {
                             }
                             // Sync if server has more/different data
                             setQuestProgress(data.progress);
+                            if (data.progress.timestamps) {
+                                setUnitTimestamps(data.progress.timestamps);
+                            }
                             
                             // Only cache if not impersonating
                             if (!impersonatedUid) {
@@ -118,14 +123,53 @@ const ModularDashboard = () => {
             loadProgress();
         }
 
-        const checkDraft = async () => {
-            const draft = await getUnit1Draft('draft_unit_1');
-            if (draft && draft.step > 1 && draft.step <= 3) {
-                setHasDraft(true);
+        const checkAllDrafts = async () => {
+            const schoolId = localStorage.getItem('schoolId');
+            if (!schoolId) return;
+
+            const drafts = {};
+            // Check Units 1-9
+            for (let i = 1; i <= 9; i++) {
+                try {
+                    const draft = await getUnitDraft(i, schoolId);
+                    if (draft) {
+                        // For Unit 1, it has a specific step check in legacy code, 
+                        // but let's be general: if it exists, it's a draft.
+                        drafts[i] = true;
+                    }
+                } catch (e) {
+                    console.warn(`Error checking draft for unit ${i}`, e);
+                }
             }
+            setUnitDrafts(drafts);
         };
-        checkDraft();
-    }, []);
+        checkAllDrafts();
+    }, [user]);
+
+    const formatTimestamp = (ts) => {
+        if (!ts) return "Not started";
+        const date = new Date(ts);
+        if (isNaN(date.getTime())) return "Not started";
+        
+        const now = new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        
+        const timeStr = new Intl.DateTimeFormat('en-PH', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        }).format(date);
+        
+        if (isToday) return `Today, ${timeStr}`;
+        
+        return new Intl.DateTimeFormat('en-PH', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        }).format(date);
+    };
 
     const handleBack = () => {
         navigate(-1);
@@ -157,7 +201,9 @@ const ModularDashboard = () => {
                 title: title,
                 icon: <Icon className="w-5 h-5" />,
                 path: u.path,
-                locked: false // Logic for locking can be added here if needed
+                locked: false, // Logic for locking can be added here if needed
+                hasDraft: !!unitDrafts[u.id],
+                lastUpdated: unitTimestamps[`unit${u.id}`]
             };
         });
     }, [curricularOffering, questProgress.completedUnits, mode]);
@@ -283,9 +329,26 @@ const ModularDashboard = () => {
                                                 </span>
                                             ) : null}
                                         </div>
-                                        <span className={`text-sm font-black tracking-tight ${isLocked ? 'text-slate-500' : 'text-slate-800'}`}>
-                                            {mod.title}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-sm font-black tracking-tight ${isLocked ? 'text-slate-500' : 'text-slate-800'}`}>
+                                                {mod.title}
+                                            </span>
+                                            {mod.hasDraft && (
+                                                <motion.span 
+                                                    initial={{ scale: 0.8, opacity: 0 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    className="px-2 py-0.5 rounded-lg bg-amber-500 text-white text-[8px] font-black uppercase tracking-wider shadow-sm shadow-amber-200"
+                                                >
+                                                    Draft
+                                                </motion.span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1 mt-0.5">
+                                            <FiClock className="w-3 h-3 text-slate-300" />
+                                            <span className="text-[10px] font-bold text-slate-400">
+                                                {formatTimestamp(mod.lastUpdated)}
+                                            </span>
+                                        </div>
                                     </div>
                                     
                                     {isNextActiveRound && (

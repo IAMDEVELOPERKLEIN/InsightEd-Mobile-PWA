@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown, FiUnlock, FiAlertTriangle, FiClock, FiAlertOctagon, FiCloudLightning, FiTrendingUp } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -55,6 +56,8 @@ export default function Unit8PhysicalFacilities() {
     const [schoolId, setSchoolId] = useState("");
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [showDraftModal, setShowDraftModal] = useState(false);
     const [schoolData, setSchoolData] = useState(null);
     const [currentPage, setCurrentPage] = useState(1); // 1-5 Wizard Stages
     const [buildingTypes, setBuildingTypes] = useState(() => {
@@ -142,7 +145,7 @@ export default function Unit8PhysicalFacilities() {
             setSchoolId(storedId);
 
             try {
-                // Fetch school profile to get latitude and longitude for map center
+                const draft = await getUnitDraft(8, storedId);
                 const resProfile = await fetch(`/api/ph_schools/${storedId}`);
                 if (resProfile.ok) {
                     const profile = await resProfile.json();
@@ -154,19 +157,26 @@ export default function Unit8PhysicalFacilities() {
                     }
                 }
 
-                // Fetch existing spaces
+                // MASTER PRECEDENCE: Draft > Database
+                if (draft) {
+                    setCurrentPage(draft.currentPage || 1);
+                    setBuildings(draft.buildings || []);
+                    setRoomsData(draft.roomsData || []);
+                    setRepairAssessments(draft.repairAssessments || []);
+                    setSpaces(draft.spaces || []);
+                    setHasRepair(draft.hasRepair);
+                    setIsReadOnly(false); // Force edit mode for drafts
+                    setShowWelcomeBack(true);
+                    setTimeout(() => setShowWelcomeBack(false), 3000);
+                } else {
+                    fetchMasterData(storedId);
+                }
+
                 fetchSpaces(storedId);
-
-                // Prefetch building types in background
                 fetchBuildingTypes();
-
-                // Fetch Phase 2 Master Data
-                fetchMasterData(storedId);
-
-                // Fetch Teachers for advisory
                 fetchTeachers(storedId);
             } catch (e) {
-                console.warn("Could not fetch Unit 10 data", e);
+                console.warn("Could not fetch Unit 8 data", e);
             }
         };
         init();
@@ -174,61 +184,39 @@ export default function Unit8PhysicalFacilities() {
 
     const fetchMasterData = async (id) => {
         try {
-            // Using the updated Unit 10 master endpoint for consolidated tables
             const res = await fetch(`/api/ph_schools/unit10/${id}/master`);
             if (res.ok) {
                 const json = await res.json();
                 if (json.success && json.data) {
                     const { inventory, repairs, isCompleted } = json.data;
-
-                    // 1. Unified Inventory
                     setBuildings(inventory);
-
-                    // 2. Populate roomsData from all buildings
                     const allRooms = [];
                     inventory.forEach(b => {
                         if (b.rooms && Array.isArray(b.rooms)) {
                             b.rooms.forEach(r => {
                                 allRooms.push({
-                                    id: r.id,
-                                    building_local_id: b.id, // Linking to building
-                                    room_name: r.room_name,
-                                    grade_level: r.grade_level,
-                                    advisory_teacher: r.advisory_teacher,
-                                    room_length: r.room_length,
-                                    room_width: r.room_width,
-                                    dimension: r.dimension || '',
-                                    condition: r.condition || 'Good Condition'
+                                    id: r.id, building_local_id: b.id, room_name: r.room_name,
+                                    grade_level: r.grade_level, advisory_teacher: r.advisory_teacher,
+                                    room_length: r.room_length, room_width: r.room_width,
+                                    dimension: r.dimension || '', condition: r.condition || 'Good Condition'
                                 });
                             });
                         }
                     });
                     setRoomsData(allRooms);
-
-                    // 3. Reconstruct Repairs
                     const assessments = repairs.map(r => ({
-                        id: r.id,
-                        roomId: r.building_name + '-' + r.room_name,
-                        building_name: r.building_name,
-                        room_name: r.room_name,
-                        item: r.item_name,
-                        oms: r.oms,
-                        condition: r.condition,
-                        damage_ratio: r.damage_ratio,
-                        recommend_action: r.recommended_action,
-                        demo_justification: r.demo_justification,
-                        remarks: r.remarks
+                        id: r.id, roomId: r.building_name + '-' + r.room_name,
+                        building_name: r.building_name, room_name: r.room_name,
+                        item: r.item_name, oms: r.oms, condition: r.condition,
+                        damage_ratio: r.damage_ratio, recommend_action: r.recommended_action,
+                        demo_justification: r.demo_justification, remarks: r.remarks
                     }));
                     setRepairAssessments(assessments);
                     if (assessments.length > 0) setHasRepair(true);
-
-
                     setIsReadOnly(isCompleted);
                 }
             }
-        } catch (e) {
-            console.warn("Error fetching master data:", e);
-        }
+        } catch (e) { console.warn("Error fetching master data:", e); }
     };
 
 
@@ -707,6 +695,7 @@ export default function Unit8PhysicalFacilities() {
             }
             
             setShowSuccess(true);
+            await clearUnitDraft(8, schoolId);
             // Redirection happens via SuccessModal onClose or we can delay it
             setTimeout(() => {
                 navigate("/modular-dashboard");
@@ -724,6 +713,20 @@ export default function Unit8PhysicalFacilities() {
         navigate("/modular-dashboard");
     };
 
+    const handleSaveDraftAndExit = async () => {
+        if (!schoolId) return;
+        const draftData = {
+            currentPage,
+            buildings,
+            roomsData,
+            repairAssessments,
+            spaces,
+            hasRepair
+        };
+        await saveUnitDraft(8, schoolId, draftData);
+        navigate("/modular-dashboard");
+    };
+
     // ── Summary Dashboard Component ─────────────────────────────────────────
     const SummaryDashboard = () => {
         const totalClassrooms = buildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0);
@@ -732,9 +735,11 @@ export default function Unit8PhysicalFacilities() {
             <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden selection:bg-indigo-500/30">
                 {/* Top Navigation */}
                 <header className="px-6 py-4 flex items-center justify-between sticky top-0 bg-gray-50/80 backdrop-blur-md z-50 border-b border-gray-200/50">
-                    <button onClick={handleBack} className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 shadow-sm hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all">
-                        <FiArrowLeft className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleBack} className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 shadow-sm hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                    </div>
                     <div className="flex flex-col items-center">
                         <span className="text-[10px] font-black tracking-[0.2em] text-indigo-500 uppercase">Unit 8 Insight</span>
                         <h1 className="font-black text-gray-800 text-lg uppercase tracking-wide">Physical Facilities</h1>
@@ -912,17 +917,24 @@ export default function Unit8PhysicalFacilities() {
 
                     {/* 5. Unlock Action */}
                     <div className="pt-6">
+                        <p className="text-center text-xs font-bold text-gray-400 mt-4 mb-20">Your Physical Facilities Audit data is saved and verified.</p>
+                    </div>
+                </main>
+                
+                <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
+                    <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
+                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                             <FiSave className="w-6 h-6" />
+                        </button>
                         <button
                             onClick={() => setIsReadOnly(false)}
-                            className="w-full py-4 rounded-2xl bg-indigo-50 text-indigo-700 font-black text-lg border-2 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                            className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
                         >
-                            <FiUnlock className="w-5 h-5" />
+                            <FiUnlock className="w-6 h-6" />
                             <span>Unlock to Edit Architecture</span>
                         </button>
-                        <p className="text-center text-xs font-bold text-gray-400 mt-4">Unlocking allows you to update unit records.</p>
                     </div>
-
-                </main>
+                </footer>
             </div>
         );
     };
@@ -934,12 +946,24 @@ export default function Unit8PhysicalFacilities() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden pb-10">
+            {/* Welcome Back Toast */}
+            <AnimatePresence>
+                {showWelcomeBack && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-[13px] font-bold flex items-center gap-2 z-[60]">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                        Recovered your draft!
+                    </motion.div>
+                )}
+            </AnimatePresence>
             {/* Header / Nav */}
             <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
                 <div className="max-w-3xl mx-auto flex items-center justify-between">
-                    <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 text-gray-400">
-                        <FiArrowLeft className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 text-gray-400">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                    </div>
                     <div className="flex flex-col items-center">
                         <h1 className="font-bold text-gray-800 text-xl">Unit 8 Audit</h1>
                         <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Step {currentPage} of 4</span>
@@ -1640,38 +1664,42 @@ export default function Unit8PhysicalFacilities() {
                     </motion.div>
                 )}
 
-                {/* Wizard Navigation Buttons */}
-                <div className="mt-8 flex gap-4 pb-12">
-                    {currentPage > 1 && (
-                        <button
-                            onClick={() => setCurrentPage(prev => prev - 1)}
-                            className="flex-1 py-4 px-6 rounded-2xl bg-white border-2 border-gray-200 text-gray-600 font-black text-lg flex items-center justify-center gap-2 hover:bg-gray-50 transition-all active:scale-95"
-                        >
-                            <FiArrowLeft /> Back
-                        </button>
-                    )}
-                    {currentPage < 4 && (
-                        <button
-                            onClick={() => {
-                                // Validation for Phase 2 Step 3: Granular Room Setup
-                                if (currentPage === 3) {
-                                    const missingGradeLevel = roomsData.some(r => !r.grade_level);
-                                    if (missingGradeLevel) {
-                                        alert("Please select a Granular Grade Level for all classrooms before proceeding.");
-                                        return;
-                                    }
-                                }
-                                setCurrentPage(prev => prev + 1);
-                                handlePartialSync();
-                            }}
-                            className="flex-[2] py-4 px-6 rounded-2xl bg-indigo-500 text-white font-black text-lg flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
-                        >
-                            Next Step <FiArrowRight />
-                        </button>
-                    )}
-                </div>
+                </main>
 
-            </main>
+                {/* Wizard Navigation Buttons */}
+                <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
+                    <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
+                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none shrink-0">
+                             <FiSave className="w-6 h-6" />
+                        </button>
+                        
+                        {currentPage === 4 ? (
+                            <button onClick={handleMasterSubmit} disabled={loading}
+                                className="flex-1 py-5 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
+                                {loading ? "Processing..." : "Submit Unit Audit"}
+                                <FiArrowRight className="w-6 h-6" />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    // Validation for Phase 2 Step 3: Granular Room Setup
+                                    if (currentPage === 3) {
+                                        const missingGradeLevel = roomsData.some(r => !r.grade_level);
+                                        if (missingGradeLevel) {
+                                            alert("Please select a Granular Grade Level for all classrooms before proceeding.");
+                                            return;
+                                        }
+                                    }
+                                    setCurrentPage(prev => prev + 1);
+                                    handlePartialSync();
+                                }}
+                                className="flex-1 py-5 rounded-3xl bg-indigo-500 text-white font-black text-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
+                            >
+                                Next Step <FiArrowRight className="w-6 h-6" />
+                            </button>
+                        )}
+                    </div>
+                </footer>
 
             <SuccessModal
                 isOpen={showSuccess}
@@ -1682,6 +1710,33 @@ export default function Unit8PhysicalFacilities() {
                 message="Unit 8 Physical Facilities Audit finalized and saved successfully! ✨"
                 redirectUrl="/modular-dashboard"
             />
+
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center pointer-events-auto">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative text-left">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2 } from "react-icons/fi";
-import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave } from "react-icons/fi";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
@@ -80,6 +80,7 @@ const Unit1SchoolIdentity = () => {
         school_type: "",
         mother_school_id: "",
         extension_mother_school_name: "",
+        ownership_document_type: "",
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -93,6 +94,7 @@ const Unit1SchoolIdentity = () => {
     const [fetchingMotherSchool, setFetchingMotherSchool] = useState(false);
     const [motherSchoolNotFound, setMotherSchoolNotFound] = useState(false);
     const [showGDriveGuide, setShowGDriveGuide] = useState(false);
+    const [showDraftModal, setShowDraftModal] = useState(false);
     const [showFullscreenPdf, setShowFullscreenPdf] = useState(false);
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
@@ -102,7 +104,7 @@ const Unit1SchoolIdentity = () => {
         const init = async () => {
             const storedId = user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
-                const draft = await getUnit1Draft("draft_unit_1");
+                const draft = await getUnitDraft(1, "anonymous"); // Fallback or global draft
                 if (draft && draft.formData) {
                     setFormData(prev => ({ ...prev, ...draft.formData }));
                     setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
@@ -113,10 +115,11 @@ const Unit1SchoolIdentity = () => {
                 return;
             }
 
-            // Kick off both fetches simultaneously
-            const [savedRes, iernRes] = await Promise.all([
+            // Kick off all fetches simultaneously
+            const [savedRes, iernRes, draft] = await Promise.all([
                 fetch(`/api/ph_schools/${storedId}`).catch(() => null),
                 fetch(`/api/schools_iern/${storedId}`).catch(() => null),
+                getUnitDraft(1, storedId)
             ]);
 
             let d = null;
@@ -136,98 +139,100 @@ const Unit1SchoolIdentity = () => {
                 if (j.exists && j.data) iernRow = j.data;
             }
 
-            if (d && d.unit1_completed) {
-                // Merge saved + iern data
-                const merged = {
-                    school_id:           d.school_id || storedId,
-                    school_name:         d.school_name || iernRow?.School_Name || "",
-                    iern:                d.iern || iernRow?.iern || "",
-                    region:              d.region || iernRow?.Region || "",
-                    province:            d.province || iernRow?.Province || "",
-                    municipality:        d.municipality || iernRow?.Municipality || iernRow?.City || "",
-                    barangay:            d.barangay || iernRow?.Barangay || "",
-                    division:            d.division || iernRow?.Division || "",
-                    district:            d.district || iernRow?.District || "",
-                    leg_district:        d.leg_district || iernRow?.Legislative_District || "",
-                    curricular_offering: normalizeOffering(d.curricular_offering) || "",
-                    latitude:            d.latitude || iernRow?.Latitude || "",
-                    longitude:           d.longitude || iernRow?.Longitude || "",
-                    school_head:         d.school_head || "",
-                    contact_number:      d.contact_number || "",
-                    // FIX: Load missing fields for Ownership page
-                    ownership:           d.ownership === "deped owned" ? "deped" : (d.ownership || ""),
-                    google_drive_link:   d.google_drive_link || "",
-                    google_drive_file_id: d.google_drive_file_id || "",
-                    google_drive_file_name: d.google_drive_file_name || "",
-                    google_drive_thumbnail_url: d.google_drive_thumbnail_url || "",
-                    school_type:         d.school_type || "",
-                    mother_school_id:    d.mother_school_id || "",
-                    extension_mother_school_name: d.extension_mother_school_name || "",
-                };
-                setFormData(merged);
+            // Start with base data from backend or empty state
+            let merged = { ...formData, school_id: storedId };
 
-                // Pre-populate location dropdowns
-                if (merged.region && locationData?.[merged.region]) {
-                    setProvinceOptions(Object.keys(locationData[merged.region]).sort());
-                    if (merged.province && locationData[merged.region][merged.province]) {
-                        setCityOptions(Object.keys(locationData[merged.region][merged.province]).sort());
-                        if (merged.municipality && locationData[merged.region][merged.province][merged.municipality]) {
-                            setBarangayOptions(locationData[merged.region][merged.province][merged.municipality].sort());
-                        }
-                    }
-                }
-                if (merged.region) {
-                    const [divRes, legRes] = await Promise.all([
-                        fetch(`/api/locations/divisions?region=${encodeURIComponent(merged.region)}`).catch(() => null),
-                        fetch(`/api/locations/leg-districts?region=${encodeURIComponent(merged.region)}`).catch(() => null),
-                    ]);
-                    if (divRes?.ok) setDivisionOptions(await divRes.json());
-                    if (legRes?.ok) setLegDistrictOptions(await legRes.json());
-                    if (merged.division) {
-                        const distRes = await fetch(`/api/locations/districts?region=${encodeURIComponent(merged.region)}&division=${encodeURIComponent(merged.division)}`).catch(() => null);
-                        if (distRes?.ok) setDistrictOptions(await distRes.json());
-                    }
-                }
-                setIsReviewMode(true);
-                setIsModeLoading(false);
-                return;
+            if (iernRow) {
+                merged = {
+                    ...merged,
+                    school_name: iernRow.School_Name || "",
+                    region: iernRow.Region || "",
+                    province: iernRow.Province || "",
+                    municipality: iernRow.Municipality || iernRow.City || "",
+                    barangay: iernRow.Barangay || "",
+                    division: iernRow.Division || "",
+                    district: iernRow.District || "",
+                    leg_district: iernRow.Legislative_District || "",
+                    latitude: iernRow.Latitude || "",
+                    longitude: iernRow.Longitude || "",
+                    iern: iernRow.iern || ""
+                };
             }
 
-            // Not yet completed — check draft or auto-fill
-            const draft = await getUnit1Draft("draft_unit_1");
-            // SECURITY: Only restore draft if it belongs to the current school ID
-            if (draft && draft.formData && draft.formData.school_id === storedId) {
-                setFormData(prev => ({ ...prev, ...draft.formData }));
+            if (d) {
+                merged = {
+                    ...merged,
+                    school_name: d.school_name || merged.school_name,
+                    region: d.region || merged.region,
+                    province: d.province || merged.province,
+                    municipality: d.municipality || merged.municipality,
+                    barangay: d.barangay || merged.barangay,
+                    division: d.division || merged.division,
+                    district: d.district || merged.district,
+                    leg_district: d.leg_district || merged.leg_district,
+                    curricular_offering: normalizeOffering(d.curricular_offering) || merged.curricular_offering,
+                    latitude: d.latitude || merged.latitude,
+                    longitude: d.longitude || merged.longitude,
+                    iern: d.iern || merged.iern,
+                    school_head: d.school_head || merged.school_head,
+                    contact_number: d.contact_number || merged.contact_number,
+                    ownership: d.ownership === "deped owned" ? "deped" : (d.ownership || merged.ownership),
+                    google_drive_link: d.google_drive_link || merged.google_drive_link,
+                    google_drive_file_id: d.google_drive_file_id || merged.google_drive_file_id,
+                    google_drive_file_name: d.google_drive_file_name || merged.google_drive_file_name,
+                    google_drive_thumbnail_url: d.google_drive_thumbnail_url || merged.google_drive_thumbnail_url,
+                    school_type: d.school_type || merged.school_type,
+                    mother_school_id: d.mother_school_id || merged.mother_school_id,
+                    extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
+                    ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
+                };
+            }
+
+            // Draft explicitly overrides everything
+            if (draft && draft.formData) {
+                merged = { ...merged, ...draft.formData };
+            }
+
+            setFormData(merged);
+
+            // Pre-populate location dropdowns based on merged state
+            if (merged.region && locationData?.[merged.region]) {
+                setProvinceOptions(Object.keys(locationData[merged.region]).sort());
+                if (merged.province && locationData[merged.region][merged.province]) {
+                    setCityOptions(Object.keys(locationData[merged.region][merged.province]).sort());
+                    if (merged.municipality && locationData[merged.region][merged.province][merged.municipality]) {
+                        setBarangayOptions(locationData[merged.region][merged.province][merged.municipality].sort());
+                    }
+                }
+            }
+            if (merged.region) {
+                const [divRes, legRes] = await Promise.all([
+                    fetch(`/api/locations/divisions?region=${encodeURIComponent(merged.region)}`).catch(() => null),
+                    fetch(`/api/locations/leg-districts?region=${encodeURIComponent(merged.region)}`).catch(() => null),
+                ]);
+                if (divRes?.ok) setDivisionOptions(await divRes.json());
+                if (legRes?.ok) setLegDistrictOptions(await legRes.json());
+                if (merged.division) {
+                    const distRes = await fetch(`/api/locations/districts?region=${encodeURIComponent(merged.region)}&division=${encodeURIComponent(merged.division)}`).catch(() => null);
+                    if (distRes?.ok) setDistrictOptions(await distRes.json());
+                }
+            }
+
+            if (iernRow && !d) {
+                setFetchedIern(iernRow.iern || "");
+                if (iernRow.iern) setShowIernModal(true);
+            }
+
+            // Determine if we should show review mode
+            // If they have an active draft, they are actively editing, so don't show review mode.
+            if (d && d.unit1_completed && !draft) {
+                setIsReviewMode(true);
+            } else if (draft) {
                 setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
-            } else {
-                if (draft) {
-                    console.log("🗑️ Clearing stale draft from another school session.");
-                    await clearUnit1Draft("draft_unit_1");
-                }
-                setFormData(prev => ({ ...prev, school_id: storedId }));
-                if (iernRow) {
-                    setFormData(prev => ({
-                        ...prev,
-                        school_id:           storedId,
-                        school_name:         iernRow.School_Name || prev.school_name,
-                        region:              iernRow.Region || prev.region,
-                        province:            iernRow.Province || prev.province,
-                        municipality:        iernRow.Municipality || iernRow.City || prev.municipality,
-                        barangay:            iernRow.Barangay || prev.barangay,
-                        division:            iernRow.Division || prev.division,
-                        district:            iernRow.District || prev.district,
-                        leg_district:        iernRow.Legislative_District || prev.leg_district,
-                        curricular_offering: prev.curricular_offering,
-                        latitude:            iernRow.Latitude || prev.latitude,
-                        longitude:           iernRow.Longitude || prev.longitude,
-                        iern:                iernRow.iern || prev.iern,
-                    }));
-                    setFetchedIern(iernRow.iern || "");
-                    if (iernRow.iern) setShowIernModal(true);
-                }
             }
+
             setIsModeLoading(false);
         };
         init();
@@ -267,9 +272,10 @@ const Unit1SchoolIdentity = () => {
 
     useEffect(() => {
         if (!isModeLoading) {
-            saveUnit1Draft("draft_unit_1", { formData, step: currentStep });
+            const storedId = user?.school_id || localStorage.getItem("schoolId") || "anonymous";
+            saveUnitDraft(1, storedId, { formData, step: currentStep });
         }
-    }, [formData, currentStep, isModeLoading]);
+    }, [formData, currentStep, isModeLoading, user]);
 
     // ── Handlers ─────────────────────────────────────────────────────────────
     const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -279,7 +285,15 @@ const Unit1SchoolIdentity = () => {
     const handleDivisionChange = (e) => setFormData(prev => ({ ...prev, division: e.target.value, district: "" }));
     const handleOwnershipChange = (e) => {
         setDriveLinkError("");
-        setFormData(prev => ({ ...prev, ownership: e.target.value, google_drive_link: "", google_drive_file_id: "", google_drive_file_name: "", google_drive_thumbnail_url: "" }));
+        setFormData(prev => ({ 
+            ...prev, 
+            ownership: e.target.value, 
+            ownership_document_type: "",
+            google_drive_link: "", 
+            google_drive_file_id: "", 
+            google_drive_file_name: "", 
+            google_drive_thumbnail_url: "" 
+        }));
     };
     const handleSchoolTypeChange = (e) => setFormData(prev => ({ ...prev, school_type: e.target.value, mother_school_id: "", extension_mother_school_name: "" }));
     
@@ -361,6 +375,15 @@ const Unit1SchoolIdentity = () => {
         else handleSubmit();
     };
 
+    const handleSaveDraftAndExit = async () => {
+        const storedId = user?.school_id || localStorage.getItem("schoolId") || "anonymous";
+        await saveUnitDraft(1, storedId, { formData, step: currentStep });
+        if (formData.curricular_offering) {
+            localStorage.setItem("schoolOffering", formData.curricular_offering);
+        }
+        navigate("/modular-dashboard");
+    };
+
     const handleSubmit = async () => {
         try {
             setLoading(true);
@@ -420,6 +443,7 @@ const Unit1SchoolIdentity = () => {
                 school_type: formData.school_type,
                 mother_school_id: formData.mother_school_id,
                 extension_mother_school_name: formData.extension_mother_school_name,
+                ownership_document_type: formData.ownership_document_type,
             };
             
             const res = await fetch("/api/ph_schools/unit1", {
@@ -434,7 +458,7 @@ const Unit1SchoolIdentity = () => {
                 throw new Error(`HTTP ${res.status}: ${errText || "Unknown error"}`);
             }
             
-            await clearUnit1Draft("draft_unit_1");
+            await clearUnitDraft(1, formData.school_id);
             const stored = localStorage.getItem("quest_progress");
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             
@@ -489,7 +513,7 @@ const Unit1SchoolIdentity = () => {
     const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
     const isStep3Valid = formData.curricular_offering !== "";
     const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
-    const isStep5Valid = formData.ownership && formData.google_drive_file_id && formData.school_type && (
+    const isStep5Valid = formData.ownership && formData.ownership_document_type && formData.google_drive_file_id && formData.school_type && (
         (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
         (formData.school_type === "without_annex") ||
         (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound))
@@ -511,10 +535,12 @@ const Unit1SchoolIdentity = () => {
             
             {/* Minimal Header */}
             <header className="px-6 py-5 flex items-center justify-between">
-                <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
-                    <FiArrowLeft className="w-6 h-6" />
-                </button>
-                <div className="flex-1 max-w-[120px] mx-4 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="flex items-center gap-2">
+                    <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
+                        <FiArrowLeft className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="flex-1 max-w-[120px] mx-4 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                     <motion.div className="h-full bg-blue-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.8, ease: "circOut" }} />
                 </div>
                 <span className="text-xs font-black tracking-widest text-gray-300 uppercase">Step {currentStep + 1}/{TOTAL_STEPS}</span>
@@ -782,11 +808,40 @@ const Unit1SchoolIdentity = () => {
                                                     </p>
                                                 </div>
 
-                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">
-                                                    {formData.ownership === "deped" && "CTC (Certificate of Transfer of Certificate)"}
-                                                    {formData.ownership === "privately_owned" && "DOD / DOU (Deed of Donation / Deed of Undertaking)"}
-                                                    {formData.ownership === "lgu_owned" && "Tax Declaration"}
-                                                </label>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document to be uploaded</label>
+                                                <select 
+                                                    name="ownership_document_type" 
+                                                    value={formData.ownership_document_type} 
+                                                    onChange={handleChange} 
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Select Document Type...</option>
+                                                    {formData.ownership === "deped" && (
+                                                        <>
+                                                            <option value="Transfer Certificate of Title">Transfer Certificate of Title</option>
+                                                            <option value="special patents">Special Patents</option>
+                                                            <option value="presidential proclamations">Presidential Proclamations</option>
+                                                            <option value="deed of sale">Deed of Sale</option>
+                                                        </>
+                                                    )}
+                                                    {formData.ownership === "lgu_owned" && (
+                                                        <>
+                                                            <option value="deed of donation">Deed of Donation</option>
+                                                            <option value="usufruct agreement">Usufruct Agreement</option>
+                                                            <option value="memorandum of agreement">Memorandum of Agreement</option>
+                                                        </>
+                                                    )}
+                                                    {formData.ownership === "privately_owned" && (
+                                                        <>
+                                                            <option value="deed of donation (DepEd Registered)">Deed of Donation (DepEd Registered)</option>
+                                                            <option value="Deed of Donation (Unregistered)">Deed of Donation (Unregistered)</option>
+                                                            <option value="Lease Agreement">Lease Agreement</option>
+                                                            <option value="Expropriation">Expropriation</option>
+                                                            <option value="Tax Declaration Only">Tax Declaration Only</option>
+                                                            <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
+                                                        </>
+                                                    )}
+                                                </select>
                                                 
                                                 {/* Google Drive Link Input */}
                                                 <div className="space-y-2">
@@ -986,10 +1041,19 @@ const Unit1SchoolIdentity = () => {
             {!isReviewMode && (
                 <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
                     <div className="max-w-md mx-auto flex gap-3">
-                        {currentStep > 0 && (
-                            <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
-                                <FiArrowLeft className="w-6 h-6" />
+                        {currentStep === 0 ? (
+                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all">
+                                <FiSave className="w-6 h-6" />
                             </button>
+                        ) : (
+                            <>
+                                <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
+                                    <FiArrowLeft className="w-6 h-6" />
+                                </button>
+                                <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all">
+                                    <FiSave className="w-6 h-6" />
+                                </button>
+                            </>
                         )}
                         <button onClick={handleNext} disabled={loading || (!hookIsSuperUser && !isCurrentStepValid())}
                             className={`flex-1 h-16 rounded-[2rem] text-white font-black text-lg transition-all shadow-xl active:scale-98 disabled:opacity-30 disabled:scale-100
@@ -1006,6 +1070,33 @@ const Unit1SchoolIdentity = () => {
             )}
 
             <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="School identity profile has been successfully saved to our cloud registry! ✓" redirectUrl="/modular-dashboard" />
+
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <AnimatePresence>
                 {showIernModal && (

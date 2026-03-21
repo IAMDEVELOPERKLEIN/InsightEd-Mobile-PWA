@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiCheck, FiActivity, FiUnlock } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiEdit2, FiUsers, FiChevronRight, FiChevronLeft, FiAlertTriangle, FiCheck, FiActivity, FiUnlock, FiSave, FiArrowLeft } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_CHAPTERS = 5; // 1: Gatekeeper, 2: Demo Loop, 3: Move Loop, 4: Health Check, 5: Review & Submit
@@ -71,8 +72,10 @@ const Unit4LearnerProfile = () => {
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [savedData, setSavedData] = useState(null);
+    const [showDraftModal, setShowDraftModal] = useState(false);
 
     // ── Chapter 1 State (Gatekeeper) ──────────────────────────────────────
     const [selectedGroups, setSelectedGroups] = useState([]); // Array of IDs
@@ -103,14 +106,15 @@ const Unit4LearnerProfile = () => {
             setSchoolId(storedId);
 
             try {
-                // Prevent overzealous PWA caching
+                const draft = await getUnitDraft(4, storedId);
                 const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+                
                 if (res.ok) {
                     const saved = await res.json();
                     let d = (saved.exists && saved.data) ? saved.data : {};
                     setSavedData(d);
 
-                    // 1. Determine Allowed Grades based on Curricular Offering (Hard Guard)
+                    // 1. Determine Allowed Grades
                     const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
                     const co = (qp.curricular_offering || d.curricular_offering || "").toLowerCase();
                     let offeringAllowed = [];
@@ -124,134 +128,86 @@ const Unit4LearnerProfile = () => {
                     if (co.includes("senior high") || co.includes("shs")) {
                         offeringAllowed.push("g11", "g12");
                     }
-                    // If no keywords match, default to all as safety
                     if (offeringAllowed.length === 0) offeringAllowed = ALL_GRADES_REF.map(g => g.id);
 
-                    // 2. Process Unit 2 Data for Dynamic Filtering & Validation
-                    let gTotals = {};
+                    // 2. Process Unit 2 Data
                     let filteredGrades = [];
-
                     if (d.unit2_simplified_enrollment) {
                         try {
                             const u2 = typeof d.unit2_simplified_enrollment === 'string' 
                                 ? JSON.parse(d.unit2_simplified_enrollment) 
                                 : d.unit2_simplified_enrollment;
-                            
                             const q = u2.questionnaire || {};
                             let processedActiveIds = new Set();
                             let processedTotals = {};
 
-                            // Baseline: Check questionnaire data (Primary Source)
                             ALL_GRADES_REF.forEach(g => {
                                 const gid = g.id;
-                                // Must be in offering AND not explicitly disabled
                                 if (!offeringAllowed.includes(gid)) return;
-
-                                const isAvail = q.gradeAvailability?.[gid] !== false;
-                                const hasData = q.gradeTotals?.[gid] !== undefined || (gid === 'kinder' && q.kinderEnrollment !== undefined);
-                                
-                                if (isAvail && hasData) {
+                                if (q.gradeAvailability?.[gid] !== false && (q.gradeTotals?.[gid] !== undefined || (gid === 'kinder' && q.kinderEnrollment !== undefined))) {
                                     processedActiveIds.add(gid);
                                     processedTotals[gid] = parseInt(q.gradeTotals?.[gid]) || (gid === 'kinder' ? parseInt(q.kinderEnrollment) : 0) || 0;
                                 }
                             });
 
-                            // Refinement: Multigrade / Mixed Combinations (Override or add)
                             (q.mgCombinations || []).forEach(combo => {
                                 const comboTot = parseInt(combo.enrollment) || 0;
-                                (combo.grades || []).forEach(gid => {
-                                    if (offeringAllowed.includes(gid)) {
-                                        processedActiveIds.add(gid);
-                                        processedTotals[gid] = comboTot;
-                                    }
-                                });
+                                (combo.grades || []).forEach(gid => { if (offeringAllowed.includes(gid)) { processedActiveIds.add(gid); processedTotals[gid] = comboTot; } });
                             });
 
-                            // Fallback: Check u2.array or u2 itself if it's an array
                             let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
                             u2Array.forEach(item => {
                                 const gid = item.grade_level;
                                 if (gid && offeringAllowed.includes(gid)) {
-                                    const isAvail = q.gradeAvailability?.[gid] !== false;
-                                    const isActive = item.is_active !== false;
-
-                                    if (!isAvail || !isActive) {
-                                        processedActiveIds.delete(gid);
-                                    } else {
-                                        processedActiveIds.add(gid);
-                                        if (!processedTotals[gid]) {
-                                            processedTotals[gid] = parseInt(item.total) || (parseInt(item.male||0) + parseInt(item.female||0)) || 0;
-                                        }
-                                    }
+                                    if (q.gradeAvailability?.[gid] === false || item.is_active === false) { processedActiveIds.delete(gid); } 
+                                    else { processedActiveIds.add(gid); if (!processedTotals[gid]) processedTotals[gid] = parseInt(item.total) || (parseInt(item.male||0) + parseInt(item.female||0)) || 0; }
                                 }
                             });
 
-                            // Update state from Unit 2 config
                             filteredGrades = ALL_GRADES_REF.filter(g => processedActiveIds.has(g.id));
                             setDynamicGrades(filteredGrades);
                             setGradeTotalsMap(processedTotals);
                             setEnrollmentTotal(parseInt(q.grandTotal) || parseInt(d.total_enrollment) || 0);
-                        } catch (e) {
-                            console.warn("Unit 2 Parse error in Unit 4", e);
-                        }
+                        } catch (e) { console.warn("Unit 2 Parse error", e); }
                     } else {
-                        // Fallback logic using offeringAllowed
                         filteredGrades = ALL_GRADES_REF.filter(g => offeringAllowed.includes(g.id));
                         setDynamicGrades(filteredGrades);
                         setEnrollmentTotal(parseInt(d.total_enrollment) || 0);
                     }
 
-                    if (d.unit4_completed) {
-                        // Pre-fill Chapter 1
-                        if (Array.isArray(d.selected_learner_groups)) {
-                            setSelectedGroups(d.selected_learner_groups);
-                        }
-
-                        // Pre-fill Chapter 2 & 3 Dynamic Columns
-                        const demoObj  = {};
-                        const moveObj  = {};
+                    // MASTER PRECEDENCE: Draft > Database
+                    if (draft) {
+                        setCurrentChapter(draft.currentChapter || 1);
+                        setSelectedGroups(draft.selectedGroups || []);
+                        setCatIdx(draft.catIdx || 0);
+                        setDemographicsData(draft.demographicsData || {});
+                        setHasMovement(draft.hasMovement);
+                        setMovementIdx(draft.movementIdx || 0);
+                        setMovementData(draft.movementData || {});
+                        setBmiData(draft.bmiData || { severely_wasted: "", wasted: "", overweight_obese: "" });
+                        setIsReviewMode(false);
+                        setShowWelcomeBack(true);
+                        setTimeout(() => setShowWelcomeBack(false), 3000);
+                    } else if (d.unit4_completed) {
+                        if (Array.isArray(d.selected_learner_groups)) setSelectedGroups(d.selected_learner_groups);
+                        const demoObj = {};
+                        const moveObj = {};
                         let hasAnyMove = false;
 
-                        // Ch 2
                         DEMOGRAPHIC_CARDS.forEach(c => {
-                            if (c.id === 'als') {
-                                if (d.als_total !== undefined && d.als_total !== null) {
-                                    demoObj['als_total'] = d.als_total.toString();
-                                }
-                            } else {
-                                filteredGrades.forEach(g => {
-                                    const key = `${c.id}_${g.id}`;
-                                    if (d[key] !== undefined && d[key] !== null) {
-                                        demoObj[key] = d[key].toString();
-                                    }
-                                });
-                            }
+                            if (c.id === 'als') { if (d.als_total !== undefined && d.als_total !== null) demoObj['als_total'] = d.als_total.toString(); } 
+                            else { filteredGrades.forEach(g => { const key = `${c.id}_${g.id}`; if (d[key] !== undefined && d[key] !== null) demoObj[key] = d[key].toString(); }); }
                         });
                         
-                        // Ch 3
                         MOVEMENT_TYPES.forEach(m => {
-                            filteredGrades.forEach(g => {
-                                const key = `${m.id}_${g.id}`;
-                                if (d[key] !== undefined && d[key] !== null) {
-                                    moveObj[key] = d[key].toString();
-                                    if (d[key] > 0) hasAnyMove = true;
-                                }
-                            });
+                            filteredGrades.forEach(g => { const key = `${m.id}_${g.id}`; if (d[key] !== undefined && d[key] !== null) { moveObj[key] = d[key].toString(); if (d[key] > 0) hasAnyMove = true; } });
                         });
 
-                        // Ch 4 Pre-fill BMI
-                        setBmiData({
-                            severely_wasted: d.bmi_severely_wasted?.toString() || "",
-                            wasted: d.bmi_wasted?.toString() || "",
-                            overweight_obese: d.bmi_overweight_obese?.toString() || ""
-                        });
-
+                        setBmiData({ severely_wasted: d.bmi_severely_wasted?.toString() || "", wasted: d.bmi_wasted?.toString() || "", overweight_obese: d.bmi_overweight_obese?.toString() || "" });
                         setDemographicsData(demoObj);
                         setMovementData(moveObj);
-                        
                         if (hasAnyMove) setHasMovement(true);
                         else if (d.updated_at) setHasMovement(false);
-
                         setIsReviewMode(true);
                     }
                 }
@@ -358,6 +314,22 @@ const Unit4LearnerProfile = () => {
         }
     };
 
+    const handleSaveDraftAndExit = async () => {
+        if (!schoolId) return;
+        const draftData = {
+            currentChapter,
+            selectedGroups,
+            catIdx,
+            demographicsData,
+            hasMovement,
+            movementIdx,
+            movementData,
+            bmiData
+        };
+        await saveUnitDraft(4, schoolId, draftData);
+        navigate("/modular-dashboard");
+    };
+
     // ── Submit ────────────────────────────────────────────────────────────
     const handleSubmit = async () => {
         if (!schoolId) return;
@@ -443,6 +415,7 @@ const Unit4LearnerProfile = () => {
                 });
             } catch (e) { console.warn("Progress sync failed", e); }
 
+            await clearUnitDraft(4, schoolId);
             setShowSuccess(true);
         } catch (err) {
             console.error("UNIT 4 BOTTLENECK CATCH:", err);
@@ -665,25 +638,21 @@ const Unit4LearnerProfile = () => {
     // ══════════════════════════════════════════════════════════════════════
     return (
         <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-gray-100 flex flex-col font-sans text-slate-800">
-            
+            {/* Welcome Back Toast */}
+            <AnimatePresence>
+                {showWelcomeBack && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-[13px] font-bold flex items-center gap-2 z-[60]">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                        Recovered your draft!
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md shadow-sm px-4 py-4 mb-2">
-                <div className="max-w-xl mx-auto flex items-center justify-between">
-                    <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400">
-                        <FiChevronLeft className="w-8 h-8" />
-                    </button>
-                    <div className="flex-1 px-6">
-                        <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
-                            {Array.from({ length: TOTAL_CHAPTERS }).map((_, i) => (
-                                <div 
-                                    key={i} 
-                                    className={`h-full transition-all duration-500 ease-out border-r-2 border-white last:border-0 ${currentChapter >= i + 1 ? 'bg-indigo-500' : 'bg-transparent'}`} 
-                                    style={{ width: `${100 / TOTAL_CHAPTERS}%` }} 
-                                />
-                            ))}
-                        </div>
-                    </div>
-                    <button onClick={() => navigate("/modular-dashboard")} className="p-2 -mr-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400">
-                        <FiX className="w-7 h-7" />
+                <div className="max-w-xl mx-auto flex items-center justify-start gap-2">
+                    <button onClick={handleBack} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                        <FiArrowLeft className="w-5 h-5" />
                     </button>
                 </div>
             </header>
@@ -1147,12 +1116,22 @@ const Unit4LearnerProfile = () => {
             <div className="fixed bottom-0 left-0 w-full p-6 bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-center z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
                 <div className="w-full max-w-xl flex gap-4">
                     
-                    {(currentChapter > 1 || (currentChapter === 2 && catIdx > 0)) && (
-                        <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
-                            onClick={handleBack}
-                            className="w-20 h-16 flex justify-center items-center rounded-3xl bg-slate-100 text-slate-500 border-b-[6px] border-slate-200 active:border-b-0 active:translate-y-[6px] transition-all duration-100">
-                            <FiChevronLeft className="w-8 h-8" />
-                        </motion.button>
+                    {currentChapter === 1 ? (
+                         <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                             <FiSave className="w-6 h-6" />
+                         </button>
+                    ) : (
+                        <div className="flex gap-2">
+                            <button onClick={handleBack}
+                                className="w-16 h-16 flex justify-center items-center rounded-3xl bg-slate-100 text-slate-500 border-2 border-slate-200 active:translate-y-[2px] transition-all">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                            <button onClick={() => setShowDraftModal(true)}
+                                className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
+                            >
+                                <FiSave className="w-6 h-6" />
+                            </button>
+                        </div>
                     )}
 
                     {currentChapter === TOTAL_CHAPTERS ? (
@@ -1176,6 +1155,33 @@ const Unit4LearnerProfile = () => {
                 message="Learner Profile complete! ✓ Community, Movement & BMI linked. 🚀"
                 redirectUrl="/modular-dashboard"
             />
+
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
