@@ -6,16 +6,18 @@ import {
     FaShieldAlt, FaMapMarkerAlt, FaClinicMedical, FaSignal, FaCloudRain,
     FaHorse, FaBicycle, FaMotorcycle
 } from 'react-icons/fa';
+import { FiSave } from 'react-icons/fi';
 import PageTransition from '../components/PageTransition';
 
-const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
+const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft, isReadOnly = false, initialValues = null }, ref) => {
     const [loading, setLoading] = useState(false);
     const [riskIndex, setRiskIndex] = useState(null);
-    const [currentStep, setCurrentStep] = useState(1);
+    const [currentStep, setCurrentStep] = useState(initialValues?.currentStep || 1);
+    const [showDraftModal, setShowDraftModal] = useState(false);
 
-    const { register, handleSubmit, watch, setValue, formState: { errors, isValid }, reset } = useForm({
+    const { register, handleSubmit, watch, setValue, formState: { errors, isValid }, reset, getValues } = useForm({
         mode: 'onChange',
-        defaultValues: {
+        defaultValues: initialValues?.formData || {
             school_id: schoolId,
             transportation_modes: [],
             road_paved_pct: 50,
@@ -52,6 +54,11 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
             road_passable_public_transpo_pct: 100
         }
     });
+
+    React.useImperativeHandle(ref, () => ({
+        getFormData: () => getValues(),
+        getCurrentStep: () => currentStep
+    }));
 
     const watchPaved = watch('road_paved_pct');
     const watchNearCliff = watch('near_cliff_ravine');
@@ -769,6 +776,9 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                     {!isReadOnly && (
                         <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-gray-100 dark:border-slate-800 z-50">
                             <div className="max-w-2xl mx-auto flex gap-4">
+                                <button type="button" onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center text-gray-400 dark:text-slate-500 hover:text-gray-900 dark:hover:text-slate-200 active:scale-95 transition-all outline-none">
+                                     <FiSave className="w-6 h-6" />
+                                </button>
                                 {currentStep > 1 && (
                                     <button 
                                         type="button" 
@@ -809,9 +819,36 @@ const SchoolLocation = ({ schoolId, onSaveSuccess, isReadOnly = false }) => {
                         </div>
                     )}
                 </form>
+
+                <AnimatePresence>
+                    {showDraftModal && (
+                        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center pointer-events-auto">
+                            <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                                className="bg-white dark:bg-slate-800 w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative text-left">
+                                <div className="w-16 h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full mx-auto mb-8" />
+                                <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                    <FiSave />
+                                </div>
+                                <h2 className="text-2xl font-black text-gray-900 dark:text-white text-center leading-tight">Save Progress?</h2>
+                                <p className="text-gray-500 dark:text-slate-400 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                                
+                                <div className="grid grid-cols-2 gap-4 mt-10">
+                                    <button type="button" onClick={() => setShowDraftModal(false)}
+                                        className="py-5 rounded-[2rem] bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white font-black text-lg active:scale-95 transition-all outline-none">
+                                        Continue
+                                    </button>
+                                    <button type="button" onClick={onSaveDraft}
+                                        className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 dark:shadow-none active:scale-95 transition-all outline-none">
+                                        Save & Exit
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
             </div>
         </PageTransition>
     );
-};
+});
 
 export default SchoolLocation;

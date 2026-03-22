@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const chunkyInput = "w-full p-4 mt-2 bg-gray-50 border-2 border-gray-200 rounded-2xl text-lg font-black text-gray-700 focus:outline-none focus:border-indigo-500 focus:bg-indigo-50 transition-colors shadow-sm text-center";
@@ -64,7 +65,9 @@ const Unit7SchoolResources = () => {
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
+    const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
+    const [showDraftModal, setShowDraftModal] = useState(false);
 
     // Core Workflow State
     const [currentPhase, setCurrentPhase] = useState(1); 
@@ -147,10 +150,27 @@ const Unit7SchoolResources = () => {
             }
 
             try {
-                const res = await fetch(`/api/ph_schools/${storedId}`);
+                const draft = await getUnitDraft(7, storedId);
+                const res = await fetch(`/api/ph_schools/${storedId}?t=${Date.now()}`);
+                
                 if (res.ok) {
                     const saved = await res.json();
-                    if (saved.exists && saved.data) {
+                    let d = (saved.exists && saved.data) ? saved.data : {};
+
+                    // MASTER PRECEDENCE: Draft > Database
+                    if (draft) {
+                        setCurrentPhase(draft.currentPhase || 1);
+                        setGradesData(draft.gradesData || []);
+                        setGeneralRoomsData(draft.generalRoomsData || {});
+                        setIctData(draft.ictData || {});
+                        setHasEcart(draft.hasEcart);
+                        setECarts(draft.eCarts || []);
+                        setWashData(draft.washData || {});
+                        setUtilitiesData(draft.utilitiesData || {});
+                        setIsReviewMode(false); // Force edit mode for drafts
+                        setShowWelcomeBack(true);
+                        setTimeout(() => setShowWelcomeBack(false), 3000);
+                    } else if (saved.exists && saved.data) {
                         const d = saved.data;
                         
                         // Check SPED/ALS
@@ -494,6 +514,24 @@ const Unit7SchoolResources = () => {
         return true;
     }, [utilitiesData]);
 
+    const handleSaveDraftAndExit = async () => {
+        const storedId = localStorage.getItem("schoolId");
+        if (!storedId) return;
+
+        const draftData = {
+            currentPhase,
+            gradesData,
+            generalRoomsData,
+            ictData,
+            hasEcart,
+            eCarts,
+            washData,
+            utilitiesData
+        };
+        await saveUnitDraft(7, storedId, draftData);
+        navigate("/modular-dashboard");
+    };
+
     const handleFinalSubmit = async () => {
         // STRICT VALIDATION: Check if any grade levels have been audited
         const auditedCount = gradesData.filter(g => g.isVerified).length;
@@ -525,7 +563,7 @@ const Unit7SchoolResources = () => {
             });
 
             if (res.ok) {
-                // Secondary API call to sync eCarts with the new relational table
+                await clearUnitDraft(7, storedId);
                 try {
                     await fetch(`/api/ph_schools/unit9/${storedId}/ecarts`, {
                         method: "POST",
@@ -730,7 +768,7 @@ const Unit7SchoolResources = () => {
                     }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
                         <FiArrowLeft className="w-6 h-6" />
                     </button>
-                    <div className="flex-1 mx-4 h-4 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="mx-4 h-4 bg-gray-200 rounded-full overflow-hidden flex-1">
                         <motion.div
                             className="h-full bg-indigo-500 rounded-full"
                             animate={{ width: progressWidth }}
@@ -739,6 +777,17 @@ const Unit7SchoolResources = () => {
                     </div>
                 </div>
             </header>
+
+            {/* Welcome Back Toast */}
+            <AnimatePresence>
+                {showWelcomeBack && (
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
+                        className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-2.5 rounded-full shadow-2xl text-[13px] font-bold flex items-center gap-2 z-[60]">
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-ping" />
+                        Recovered your draft!
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <main className="flex-1 overflow-x-hidden pb-32">
                 <div className="max-w-md w-full mx-auto relative px-6 mt-8">
@@ -1190,29 +1239,29 @@ const Unit7SchoolResources = () => {
                 </div>
             </main>
 
-            {/* ── Sticky Footer ── */}
             <div className="fixed bottom-0 left-0 w-full p-5 bg-white border-t border-gray-100 flex justify-center z-40 shadow-[0_-2px_12px_rgba(0,0,0,0.02)]">
-                <div className="w-full max-w-md flex justify-end gap-3">
+                <div className="w-full max-w-md flex items-center gap-3">
+                    <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                         <FiSave className="w-6 h-6" />
+                    </button>
                     {currentPhase === 1 ? (
-                        <>
-                            <button disabled={!isPhase1Valid} onClick={handleMainProceed} className="w-full py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                                Continue to Phase 2 <FiChevronRight className="w-5 h-5" />
-                            </button>
-                        </>
+                        <button disabled={!isPhase1Valid} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                            Continue to Phase 2 <FiChevronRight className="w-5 h-5" />
+                        </button>
                     ) : currentPhase === 2 ? (
-                        <button disabled={!ictStats.isValid} onClick={handlePhase2Proceed} className="w-full py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                        <button disabled={!ictStats.isValid} onClick={handlePhase2Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                             Continue to Mobile Labs (eCart) <FiChevronRight className="w-5 h-5" />
                         </button>
                     ) : currentPhase === 3 ? (
-                        <button disabled={!isPhase3Valid} onClick={handlePhase3Proceed} className="w-full py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                        <button disabled={!isPhase3Valid} onClick={handlePhase3Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                             Continue to Phase 4 (WASH) <FiChevronRight className="w-5 h-5" />
                         </button>
                     ) : currentPhase === 4 ? (
-                        <button disabled={!washStats.isValid} onClick={handlePhase4Proceed} className="w-full py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                        <button disabled={!washStats.isValid} onClick={handlePhase4Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                             Continue to Phase 5 (Utilities) <FiChevronRight className="w-5 h-5" />
                         </button>
                     ) : (
-                        <button disabled={!isPhase5Valid || loading} onClick={handleFinalSubmit} className="w-full py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                        <button disabled={!isPhase5Valid || loading} onClick={handleFinalSubmit} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                             {loading ? "Submitting..." : "Submit School Resources"} <FiCheckCircle className="w-5 h-5" />
                         </button>
                     )}
@@ -1353,6 +1402,32 @@ const Unit7SchoolResources = () => {
                 )}
             </AnimatePresence>
 
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center pointer-events-auto">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative text-left">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

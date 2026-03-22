@@ -326,6 +326,24 @@ const runAutoMigrations = async () => {
     // Unit 4
     await unit4MigrateCols();
 
+    // Unit 1: Ownership Document Type
+    await checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', pool);
+    if (poolNew) await checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', poolNew);
+    
+    // Unit Updated At Timestamps
+    for (let i = 1; i <= 10; i++) {
+      const colName = `unit${i}_updated_at`;
+      await checkAndAddColumn('ph_schools', colName, 'TIMESTAMPTZ', pool);
+      if (poolNew) await checkAndAddColumn('ph_schools', colName, 'TIMESTAMPTZ', poolNew);
+      
+      // Convert existing TIMESTAMP columns to TIMESTAMPTZ to fix timezone issues
+      await pool.query(`ALTER TABLE ph_schools ALTER COLUMN "${colName}" TYPE TIMESTAMPTZ USING "${colName}"::TIMESTAMPTZ`).catch(() => {});
+      if (poolNew) await poolNew.query(`ALTER TABLE ph_schools ALTER COLUMN "${colName}" TYPE TIMESTAMPTZ USING "${colName}"::TIMESTAMPTZ`).catch(() => {});
+    }
+
+    await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', pool);
+    if (poolNew) await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', poolNew);
+
     console.log("   [Auto-Migrate] Finished.");
   } catch (e) {
     console.error("❌ Auto-Migrate Fail:", e.message);
@@ -13710,6 +13728,9 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
         unit5_completed, unit6_completed, unit7_completed, unit8_completed,
         unit9_completed, unit10_completed, curricular_offering,
         unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9, unit10,
+        unit1_updated_at, unit2_updated_at, unit3_updated_at, unit4_updated_at,
+        unit5_updated_at, unit6_updated_at, unit7_updated_at, unit8_updated_at,
+        unit9_updated_at, unit10_updated_at,
         school_name, total_enrollment
        FROM ph_schools WHERE school_id = $1`,
       [schoolId]
@@ -13721,8 +13742,8 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
     const backfillClauses = [];
 
     let curricular_offering = null;
+    const row = result.rows[0] || {};
     if (result.rows.length > 0) {
-      const row = result.rows[0];
       curricular_offering = row.curricular_offering;
 
       // ── Unit 1: School Identity ─────────────────────────────────────────
@@ -13828,7 +13849,28 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       }
     }
 
-    res.json({ success: true, progress: { completedUnits, incompleteUnits, xp, curricular_offering } });
+    res.json({ 
+      success: true, 
+      progress: { 
+        completedUnits, 
+        incompleteUnits, 
+        xp, 
+        curricular_offering,
+        school_name: row?.school_name || "Unknown School",
+        timestamps: {
+          unit1: row?.unit1_updated_at,
+          unit2: row?.unit2_updated_at,
+          unit3: row?.unit3_updated_at,
+          unit4: row?.unit4_updated_at,
+          unit5: row?.unit5_updated_at,
+          unit6: row?.unit6_updated_at,
+          unit7: row?.unit7_updated_at,
+          unit8: row?.unit8_updated_at,
+          unit9: row?.unit9_updated_at,
+          unit10: row?.unit10_updated_at,
+        }
+      } 
+    });
   } catch (err) {
     console.error("Fetch Quest Progress Error:", err);
     // Return empty progress rather than an error so dashboard still renders
@@ -14079,14 +14121,15 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         console.log(`💾 Saving Google Drive document: ${data.google_drive_file_id}`);
 
         const docQuery = `
-          INSERT INTO ownership_documents (school_id, iern, google_drive_file_id, google_drive_link, google_drive_file_name, google_drive_thumbnail_url, ownership_type)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO ownership_documents (school_id, iern, google_drive_file_id, google_drive_link, google_drive_file_name, google_drive_thumbnail_url, ownership_type, ownership_document_type)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (school_id) DO UPDATE SET
             google_drive_file_id = EXCLUDED.google_drive_file_id,
             google_drive_link = EXCLUDED.google_drive_link,
             google_drive_file_name = EXCLUDED.google_drive_file_name,
             google_drive_thumbnail_url = EXCLUDED.google_drive_thumbnail_url,
             ownership_type = EXCLUDED.ownership_type,
+            ownership_document_type = EXCLUDED.ownership_document_type,
             updated_at = CURRENT_TIMESTAMP
           RETURNING id
         `;
@@ -14098,7 +14141,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           data.google_drive_link,
           data.google_drive_file_name || "Google Drive Document",
           data.google_drive_thumbnail_url || null,
-          data.ownership || null
+          data.ownership || null,
+          data.ownership_document_type || null
         ]);
 
         documentId = docResult.rows[0].id;
@@ -14116,8 +14160,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         school_id, iern, school_name, region, province, municipality, barangay,
         division, district, leg_district, curricular_offering, latitude, longitude,
         school_head, contact_number, ownership, ownership_document_path, school_type,
-        mother_school_id, extension_mother_school_name, unit1_completed, unit1
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        mother_school_id, extension_mother_school_name, unit1_completed, unit1,
+        ownership_document_type, unit1_updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -14140,19 +14185,22 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         extension_mother_school_name = EXCLUDED.extension_mother_school_name,
         unit1_completed = EXCLUDED.unit1_completed,
         unit1 = EXCLUDED.unit1,
+        ownership_document_type = EXCLUDED.ownership_document_type,
+        unit1_updated_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP;
     `;
+
     const values = [
       data.school_id, data.iern || null, data.school_name,
-      data.region, data.province || null, data.municipality || null, data.barangay || null,
-      data.division, data.district, data.leg_district || null,
-      data.curricular_offering,
-      data.latitude || null, data.longitude || null,
-      data.school_head || null, data.contact_number || null,
-      data.ownership || null, documentId ? `doc-${documentId}` : null, data.school_type || null,
+      data.region, data.province, data.municipality, data.barangay,
+      data.division, data.district, data.leg_district, data.curricular_offering,
+      data.latitude, data.longitude, data.school_head || null,
+      data.contact_number || null, data.ownership || null,
+      data.google_drive_link || null, // ownership_document_path
+      data.school_type || null,
       data.mother_school_id || null, data.extension_mother_school_name || null,
-      isCompleted,
-      isCompleted ? 1 : 0
+      isCompleted, isCompleted ? 1 : 0,
+      data.ownership_document_type || null
     ];
 
     // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -14166,7 +14214,10 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           longitude = $13, school_head = $14, contact_number = $15,
           ownership = $16, ownership_document_path = $17, school_type = $18,
           mother_school_id = $19, extension_mother_school_name = $20,
-          unit1_completed = $21, unit1 = $22, updated_at = CURRENT_TIMESTAMP
+          unit1_completed = $21, unit1 = $22,
+          ownership_document_type = $23,
+          unit1_updated_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2
       `, values);
 
@@ -14293,7 +14344,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
       'unit2_simplified_enrollment = $18',
       'multigrade_groupings_1 = $20', 'multigrade_groupings_2 = $21', 'multigrade_groupings_3 = $22',
       'multigrade_enrollment_1 = $23', 'multigrade_enrollment_2 = $24', 'multigrade_enrollment_3 = $25',
-      'unit2_completed = TRUE', 'verified_as_of = CURRENT_TIMESTAMP'
+      'unit2_completed = TRUE', 'unit2_updated_at = CURRENT_TIMESTAMP', 'verified_as_of = CURRENT_TIMESTAMP'
     ];
 
     const values = [
@@ -14381,6 +14432,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
       'multigrade_sections_count = $2',
       'unit3_simplified_counts = $3::jsonb',
       'unit3_completed = TRUE',
+      'unit3_updated_at = CURRENT_TIMESTAMP',
       'updated_at = CURRENT_TIMESTAMP',
       'grade_kinder_size = $4',
       'grade_1_size = $5',
@@ -14532,6 +14584,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
     }
 
     setClauses.push(`unit4_completed = TRUE`);
+    setClauses.push(`unit4_updated_at = CURRENT_TIMESTAMP`);
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(schoolId);
 
@@ -14615,9 +14668,9 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
     }
 
     dynamicFields.push(`unit5_completed = TRUE`);
+    dynamicFields.push(`unit5_updated_at = CURRENT_TIMESTAMP`);
     dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
-    values.push(schoolId); // Last param is the WHERE clause
-
+    dynamicFields.push(`updated_at = CURRENT_TIMESTAMP`);
     // Ensure the row exists before updating, in case the user jumped straight to this unit
     await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
 
@@ -14636,6 +14689,8 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
       console.error("[Unit 5] Failed to calculate teacher baseline:", countErr.message);
     }
     // --- END BASELINE CALCULATION ---
+
+    values.push(schoolId);
 
     const query = `
         UPDATE ph_schools 
@@ -14687,6 +14742,9 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
       RETURNING *;
     `;
     const result = await pool.query(query, values);
+
+    // Also update ph_schools with timestamp and completion flag
+    await pool.query('UPDATE ph_schools SET unit9_completed = TRUE, unit9 = 1, unit9_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [validatedData.school_id]).catch(() => {});
 
     // Auto-update school_summary instantly
     try {
@@ -15035,7 +15093,7 @@ app.post('/api/ph_schools/unit6/:schoolId', async (req, res) => {
       await pool.query(`UPDATE ph_schools SET unit6_completed = FALSE, unit6 = 2 WHERE school_id = $1`, [schoolId]);
     } else {
       // Full Submission: unit6 = 1, unit6_completed = TRUE
-      await pool.query(`UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1 WHERE school_id = $1`, [schoolId]);
+      await pool.query(`UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1, unit6_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, [schoolId]);
     }
 
     // 3. Calculate baseline total from registry for Unit 7's reference
@@ -15133,7 +15191,7 @@ app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
     }
 
     await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query('UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1 WHERE school_id = $1', [schoolId]);
+    await pool.query('UPDATE ph_schools SET unit7_completed = TRUE, unit7 = 1, unit7_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [schoolId]);
     res.json({ success: true, message: "Unit 7 finalized!" });
   } catch (err) {
     console.error("Finalize Unit 7 Error:", err);
@@ -15379,7 +15437,7 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
         if (invRes.rows.length > 0 || repRes.rows.length > 0 || demRes.rows.length > 0) {
           completed = true;
           // Best effort: sync flag in background
-          pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1 WHERE school_id = $1', [schoolId]).catch(e => { });
+          pool.query('UPDATE ph_schools SET unit8_completed = TRUE, unit8 = 1, unit8_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [schoolId]).catch(e => { });
         }
       }
     } catch (e) {

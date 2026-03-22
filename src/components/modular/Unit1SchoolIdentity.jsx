@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2 } from "react-icons/fi";
-import { saveUnit1Draft, getUnit1Draft, clearUnit1Draft } from "../../db";
+import { FiX, FiCheckCircle, FiCheck, FiEdit2, FiArrowLeft, FiUnlock, FiInfo, FiMaximize2, FiSave } from "react-icons/fi";
+import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 import { useAuth } from "../../context/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
@@ -10,7 +10,7 @@ import locationData from "../../locations.json";
 import useReadOnly from "../../hooks/useReadOnly";
 import { normalizeOffering } from "../../utils/dataNormalization";
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 const chunkyInput = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm placeholder:text-gray-300";
 const chunkySelect = "w-full p-4 mt-2 bg-white border-2 border-gray-100 rounded-3xl text-lg font-semibold text-gray-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-sm appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%236B7280%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-[length:24px] bg-[right_1rem_center] bg-no-repeat disabled:opacity-50 disabled:bg-gray-50";
@@ -80,6 +80,14 @@ const Unit1SchoolIdentity = () => {
         school_type: "",
         mother_school_id: "",
         extension_mother_school_name: "",
+        ownership_document_type: "",
+        head_first_name: "",
+        head_middle_name: "",
+        head_last_name: "",
+        head_sex: "",
+        head_position_title: "",
+        head_date_of_birth: "",
+        head_date_hired: "",
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -93,6 +101,7 @@ const Unit1SchoolIdentity = () => {
     const [fetchingMotherSchool, setFetchingMotherSchool] = useState(false);
     const [motherSchoolNotFound, setMotherSchoolNotFound] = useState(false);
     const [showGDriveGuide, setShowGDriveGuide] = useState(false);
+    const [showDraftModal, setShowDraftModal] = useState(false);
     const [showFullscreenPdf, setShowFullscreenPdf] = useState(false);
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
@@ -102,7 +111,7 @@ const Unit1SchoolIdentity = () => {
         const init = async () => {
             const storedId = user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
-                const draft = await getUnit1Draft("draft_unit_1");
+                const draft = await getUnitDraft(1, "anonymous"); // Fallback or global draft
                 if (draft && draft.formData) {
                     setFormData(prev => ({ ...prev, ...draft.formData }));
                     setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
@@ -113,10 +122,11 @@ const Unit1SchoolIdentity = () => {
                 return;
             }
 
-            // Kick off both fetches simultaneously
-            const [savedRes, iernRes] = await Promise.all([
+            // Kick off all fetches simultaneously
+            const [savedRes, iernRes, draft] = await Promise.all([
                 fetch(`/api/ph_schools/${storedId}`).catch(() => null),
                 fetch(`/api/schools_iern/${storedId}`).catch(() => null),
+                getUnitDraft(1, storedId)
             ]);
 
             let d = null;
@@ -136,98 +146,107 @@ const Unit1SchoolIdentity = () => {
                 if (j.exists && j.data) iernRow = j.data;
             }
 
-            if (d && d.unit1_completed) {
-                // Merge saved + iern data
-                const merged = {
-                    school_id:           d.school_id || storedId,
-                    school_name:         d.school_name || iernRow?.School_Name || "",
-                    iern:                d.iern || iernRow?.iern || "",
-                    region:              d.region || iernRow?.Region || "",
-                    province:            d.province || iernRow?.Province || "",
-                    municipality:        d.municipality || iernRow?.Municipality || iernRow?.City || "",
-                    barangay:            d.barangay || iernRow?.Barangay || "",
-                    division:            d.division || iernRow?.Division || "",
-                    district:            d.district || iernRow?.District || "",
-                    leg_district:        d.leg_district || iernRow?.Legislative_District || "",
-                    curricular_offering: normalizeOffering(d.curricular_offering) || "",
-                    latitude:            d.latitude || iernRow?.Latitude || "",
-                    longitude:           d.longitude || iernRow?.Longitude || "",
-                    school_head:         d.school_head || "",
-                    contact_number:      d.contact_number || "",
-                    // FIX: Load missing fields for Ownership page
-                    ownership:           d.ownership === "deped owned" ? "deped" : (d.ownership || ""),
-                    google_drive_link:   d.google_drive_link || "",
-                    google_drive_file_id: d.google_drive_file_id || "",
-                    google_drive_file_name: d.google_drive_file_name || "",
-                    google_drive_thumbnail_url: d.google_drive_thumbnail_url || "",
-                    school_type:         d.school_type || "",
-                    mother_school_id:    d.mother_school_id || "",
-                    extension_mother_school_name: d.extension_mother_school_name || "",
-                };
-                setFormData(merged);
+            // Start with base data from backend or empty state
+            let merged = { ...formData, school_id: storedId };
 
-                // Pre-populate location dropdowns
-                if (merged.region && locationData?.[merged.region]) {
-                    setProvinceOptions(Object.keys(locationData[merged.region]).sort());
-                    if (merged.province && locationData[merged.region][merged.province]) {
-                        setCityOptions(Object.keys(locationData[merged.region][merged.province]).sort());
-                        if (merged.municipality && locationData[merged.region][merged.province][merged.municipality]) {
-                            setBarangayOptions(locationData[merged.region][merged.province][merged.municipality].sort());
-                        }
-                    }
-                }
-                if (merged.region) {
-                    const [divRes, legRes] = await Promise.all([
-                        fetch(`/api/locations/divisions?region=${encodeURIComponent(merged.region)}`).catch(() => null),
-                        fetch(`/api/locations/leg-districts?region=${encodeURIComponent(merged.region)}`).catch(() => null),
-                    ]);
-                    if (divRes?.ok) setDivisionOptions(await divRes.json());
-                    if (legRes?.ok) setLegDistrictOptions(await legRes.json());
-                    if (merged.division) {
-                        const distRes = await fetch(`/api/locations/districts?region=${encodeURIComponent(merged.region)}&division=${encodeURIComponent(merged.division)}`).catch(() => null);
-                        if (distRes?.ok) setDistrictOptions(await distRes.json());
-                    }
-                }
-                setIsReviewMode(true);
-                setIsModeLoading(false);
-                return;
+            if (iernRow) {
+                merged = {
+                    ...merged,
+                    school_name: iernRow.School_Name || "",
+                    region: iernRow.Region || "",
+                    province: iernRow.Province || "",
+                    municipality: iernRow.Municipality || iernRow.City || "",
+                    barangay: iernRow.Barangay || "",
+                    division: iernRow.Division || "",
+                    district: iernRow.District || "",
+                    leg_district: iernRow.Legislative_District || "",
+                    latitude: iernRow.Latitude || "",
+                    longitude: iernRow.Longitude || "",
+                    iern: iernRow.iern || ""
+                };
             }
 
-            // Not yet completed — check draft or auto-fill
-            const draft = await getUnit1Draft("draft_unit_1");
-            // SECURITY: Only restore draft if it belongs to the current school ID
-            if (draft && draft.formData && draft.formData.school_id === storedId) {
-                setFormData(prev => ({ ...prev, ...draft.formData }));
+            if (d) {
+                merged = {
+                    ...merged,
+                    school_name: d.school_name || merged.school_name,
+                    region: d.region || merged.region,
+                    province: d.province || merged.province,
+                    municipality: d.municipality || merged.municipality,
+                    barangay: d.barangay || merged.barangay,
+                    division: d.division || merged.division,
+                    district: d.district || merged.district,
+                    leg_district: d.leg_district || merged.leg_district,
+                    curricular_offering: normalizeOffering(d.curricular_offering) || merged.curricular_offering,
+                    latitude: d.latitude || merged.latitude,
+                    longitude: d.longitude || merged.longitude,
+                    iern: d.iern || merged.iern,
+                    school_head: d.school_head || merged.school_head,
+                    contact_number: d.contact_number || merged.contact_number,
+                    ownership: d.ownership === "deped owned" ? "deped" : (d.ownership || merged.ownership),
+                    google_drive_link: d.google_drive_link || merged.google_drive_link,
+                    google_drive_file_id: d.google_drive_file_id || merged.google_drive_file_id,
+                    google_drive_file_name: d.google_drive_file_name || merged.google_drive_file_name,
+                    google_drive_thumbnail_url: d.google_drive_thumbnail_url || merged.google_drive_thumbnail_url,
+                    school_type: d.school_type || merged.school_type,
+                    mother_school_id: d.mother_school_id || merged.mother_school_id,
+                    extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
+                    ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
+                    head_first_name: d.head_first_name || merged.head_first_name,
+                    head_middle_name: d.head_middle_name || merged.head_middle_name,
+                    head_last_name: d.head_last_name || merged.head_last_name,
+                    head_sex: d.head_sex || merged.head_sex,
+                    head_position_title: d.head_position_title || merged.head_position_title,
+                    head_date_of_birth: (d.head_date_of_birth) ? d.head_date_of_birth.split('T')[0] : merged.head_date_of_birth,
+                    head_date_hired: (d.head_date_hired) ? d.head_date_hired.split('T')[0] : merged.head_date_hired,
+                };
+            }
+
+            // Draft explicitly overrides everything
+            if (draft && draft.formData) {
+                merged = { ...merged, ...draft.formData };
+            }
+
+            setFormData(merged);
+
+            // Pre-populate location dropdowns based on merged state
+            if (merged.region && locationData?.[merged.region]) {
+                setProvinceOptions(Object.keys(locationData[merged.region]).sort());
+                if (merged.province && locationData[merged.region][merged.province]) {
+                    setCityOptions(Object.keys(locationData[merged.region][merged.province]).sort());
+                    if (merged.municipality && locationData[merged.region][merged.province][merged.municipality]) {
+                        setBarangayOptions(locationData[merged.region][merged.province][merged.municipality].sort());
+                    }
+                }
+            }
+            if (merged.region) {
+                const [divRes, legRes] = await Promise.all([
+                    fetch(`/api/locations/divisions?region=${encodeURIComponent(merged.region)}`).catch(() => null),
+                    fetch(`/api/locations/leg-districts?region=${encodeURIComponent(merged.region)}`).catch(() => null),
+                ]);
+                if (divRes?.ok) setDivisionOptions(await divRes.json());
+                if (legRes?.ok) setLegDistrictOptions(await legRes.json());
+                if (merged.division) {
+                    const distRes = await fetch(`/api/locations/districts?region=${encodeURIComponent(merged.region)}&division=${encodeURIComponent(merged.division)}`).catch(() => null);
+                    if (distRes?.ok) setDistrictOptions(await distRes.json());
+                }
+            }
+
+            if (iernRow && !d) {
+                setFetchedIern(iernRow.iern || "");
+                if (iernRow.iern) setShowIernModal(true);
+            }
+
+            // Determine if we should show review mode
+            // If they have an active draft, they are actively editing, so don't show review mode.
+            if (d && d.unit1_completed && !draft) {
+                setIsReviewMode(true);
+            } else if (draft) {
                 setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
-            } else {
-                if (draft) {
-                    console.log("🗑️ Clearing stale draft from another school session.");
-                    await clearUnit1Draft("draft_unit_1");
-                }
-                setFormData(prev => ({ ...prev, school_id: storedId }));
-                if (iernRow) {
-                    setFormData(prev => ({
-                        ...prev,
-                        school_id:           storedId,
-                        school_name:         iernRow.School_Name || prev.school_name,
-                        region:              iernRow.Region || prev.region,
-                        province:            iernRow.Province || prev.province,
-                        municipality:        iernRow.Municipality || iernRow.City || prev.municipality,
-                        barangay:            iernRow.Barangay || prev.barangay,
-                        division:            iernRow.Division || prev.division,
-                        district:            iernRow.District || prev.district,
-                        leg_district:        iernRow.Legislative_District || prev.leg_district,
-                        curricular_offering: prev.curricular_offering,
-                        latitude:            iernRow.Latitude || prev.latitude,
-                        longitude:           iernRow.Longitude || prev.longitude,
-                        iern:                iernRow.iern || prev.iern,
-                    }));
-                    setFetchedIern(iernRow.iern || "");
-                    if (iernRow.iern) setShowIernModal(true);
-                }
             }
+
             setIsModeLoading(false);
         };
         init();
@@ -267,9 +286,10 @@ const Unit1SchoolIdentity = () => {
 
     useEffect(() => {
         if (!isModeLoading) {
-            saveUnit1Draft("draft_unit_1", { formData, step: currentStep });
+            const storedId = user?.school_id || localStorage.getItem("schoolId") || "anonymous";
+            saveUnitDraft(1, storedId, { formData, step: currentStep });
         }
-    }, [formData, currentStep, isModeLoading]);
+    }, [formData, currentStep, isModeLoading, user]);
 
     // ── Handlers ─────────────────────────────────────────────────────────────
     const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -279,7 +299,15 @@ const Unit1SchoolIdentity = () => {
     const handleDivisionChange = (e) => setFormData(prev => ({ ...prev, division: e.target.value, district: "" }));
     const handleOwnershipChange = (e) => {
         setDriveLinkError("");
-        setFormData(prev => ({ ...prev, ownership: e.target.value, google_drive_link: "", google_drive_file_id: "", google_drive_file_name: "", google_drive_thumbnail_url: "" }));
+        setFormData(prev => ({ 
+            ...prev, 
+            ownership: e.target.value, 
+            ownership_document_type: "",
+            google_drive_link: "", 
+            google_drive_file_id: "", 
+            google_drive_file_name: "", 
+            google_drive_thumbnail_url: "" 
+        }));
     };
     const handleSchoolTypeChange = (e) => setFormData(prev => ({ ...prev, school_type: e.target.value, mother_school_id: "", extension_mother_school_name: "" }));
     
@@ -361,6 +389,15 @@ const Unit1SchoolIdentity = () => {
         else handleSubmit();
     };
 
+    const handleSaveDraftAndExit = async () => {
+        const storedId = user?.school_id || localStorage.getItem("schoolId") || "anonymous";
+        await saveUnitDraft(1, storedId, { formData, step: currentStep });
+        if (formData.curricular_offering) {
+            localStorage.setItem("schoolOffering", formData.curricular_offering);
+        }
+        navigate("/modular-dashboard");
+    };
+
     const handleSubmit = async () => {
         try {
             setLoading(true);
@@ -420,6 +457,14 @@ const Unit1SchoolIdentity = () => {
                 school_type: formData.school_type,
                 mother_school_id: formData.mother_school_id,
                 extension_mother_school_name: formData.extension_mother_school_name,
+                ownership_document_type: formData.ownership_document_type,
+                head_first_name: formData.head_first_name,
+                head_middle_name: formData.head_middle_name,
+                head_last_name: formData.head_last_name,
+                head_sex: formData.head_sex,
+                head_position_title: formData.head_position_title,
+                head_date_of_birth: formData.head_date_of_birth,
+                head_date_hired: formData.head_date_hired,
             };
             
             const res = await fetch("/api/ph_schools/unit1", {
@@ -434,7 +479,7 @@ const Unit1SchoolIdentity = () => {
                 throw new Error(`HTTP ${res.status}: ${errText || "Unknown error"}`);
             }
             
-            await clearUnit1Draft("draft_unit_1");
+            await clearUnitDraft(1, formData.school_id);
             const stored = localStorage.getItem("quest_progress");
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             
@@ -480,6 +525,7 @@ const Unit1SchoolIdentity = () => {
         { q: "Confirm the school name", sub: "Is this the official name of the institution?" },
         { q: "Where is the school located?", sub: "Select the specific region, division, and district details." },
         { q: "What does the school offer?", sub: "Choose the curricular levels provided by the school." },
+        { q: "School Head Information", sub: "Please provide the details of the school's primary administrator." },
         { q: "Pin the school 📍", sub: "Confirm the coordinates to update the school's map registry." },
         { q: "School Ownership & Classification", sub: "Provide ownership details and school classification." },
     ];
@@ -488,8 +534,9 @@ const Unit1SchoolIdentity = () => {
     const isStep1Valid = formData.school_name.trim().length > 3;
     const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
     const isStep3Valid = formData.curricular_offering !== "";
-    const isStep4Valid = formData.latitude !== "" && formData.longitude !== "";
-    const isStep5Valid = formData.ownership && formData.google_drive_file_id && formData.school_type && (
+    const isStep4Valid = formData.head_first_name !== "" && formData.head_last_name !== "" && formData.head_position_title !== "" && formData.head_date_hired !== "";
+    const isStep5Valid = formData.latitude !== "" && formData.longitude !== "";
+    const isStep6Valid = formData.ownership && formData.ownership_document_type && formData.google_drive_file_id && formData.school_type && (
         (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
         (formData.school_type === "without_annex") ||
         (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound))
@@ -501,6 +548,7 @@ const Unit1SchoolIdentity = () => {
         if (currentStep === 3) return isStep3Valid;
         if (currentStep === 4) return isStep4Valid;
         if (currentStep === 5) return isStep5Valid;
+        if (currentStep === 6) return isStep6Valid;
         return false;
     };
 
@@ -511,10 +559,12 @@ const Unit1SchoolIdentity = () => {
             
             {/* Minimal Header */}
             <header className="px-6 py-5 flex items-center justify-between">
-                <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
-                    <FiArrowLeft className="w-6 h-6" />
-                </button>
-                <div className="flex-1 max-w-[120px] mx-4 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="flex items-center gap-2">
+                    <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
+                        <FiArrowLeft className="w-6 h-6" />
+                    </button>
+                </div>
+                <div className="flex-1 max-w-[120px] mx-4 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                     <motion.div className="h-full bg-blue-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.8, ease: "circOut" }} />
                 </div>
                 <span className="text-xs font-black tracking-widest text-gray-300 uppercase">Step {currentStep + 1}/{TOTAL_STEPS}</span>
@@ -593,6 +643,31 @@ const Unit1SchoolIdentity = () => {
                                             </div>
                                             <div className="bg-indigo-50 px-3 py-2 rounded-xl">
                                                 <span className="font-black text-indigo-700 text-sm">{formData.region || "Req"}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section>
+                                    <div className="flex items-center gap-2 mb-4 ml-2 mt-8">
+                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">School Head</h3>
+                                    </div>
+                                    <div className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm space-y-4">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Full Name</span>
+                                            <p className="text-xl font-black text-slate-800">
+                                                {[formData.head_first_name, formData.head_middle_name, formData.head_last_name].filter(Boolean).join(' ')}
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Position</span>
+                                                <p className="font-bold text-slate-700">{formData.head_position_title || "N/A"}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Assigned</span>
+                                                <p className="font-bold text-slate-700">{formData.head_date_hired || "N/A"}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -738,7 +813,109 @@ const Unit1SchoolIdentity = () => {
                                     </div>
                                 )}
 
-                                { currentStep === 4 && (
+                                {currentStep === 4 && (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 gap-4">
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">First Name</label>
+                                                <input
+                                                    type="text"
+                                                    name="head_first_name"
+                                                    value={formData.head_first_name}
+                                                    onChange={handleChange}
+                                                    placeholder="First Name"
+                                                    className={chunkyInput}
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Middle Name</label>
+                                                    <input
+                                                        type="text"
+                                                        name="head_middle_name"
+                                                        value={formData.head_middle_name}
+                                                        onChange={handleChange}
+                                                        placeholder="Middle (Optional)"
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Last Name</label>
+                                                    <input
+                                                        type="text"
+                                                        name="head_last_name"
+                                                        value={formData.head_last_name}
+                                                        onChange={handleChange}
+                                                        placeholder="Last Name"
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Sex</label>
+                                                <select
+                                                    name="head_sex"
+                                                    value={formData.head_sex}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="">Select Sex</option>
+                                                    <option value="Male">Male</option>
+                                                    <option value="Female">Female</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Position Title</label>
+                                                <select
+                                                    name="head_position_title"
+                                                    value={formData.head_position_title}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="">Select Position</option>
+                                                    <option value="Teacher I">Teacher I</option>
+                                                    <option value="Teacher II">Teacher II</option>
+                                                    <option value="Teacher III">Teacher III</option>
+                                                    <option value="Master Teacher I">Master Teacher I</option>
+                                                    <option value="Master Teacher II">Master Teacher II</option>
+                                                    <option value="Head Teacher I">Head Teacher I</option>
+                                                    <option value="Head Teacher II">Head Teacher II</option>
+                                                    <option value="Head Teacher III">Head Teacher III</option>
+                                                    <option value="School Principal I">School Principal I</option>
+                                                    <option value="School Principal II">School Principal II</option>
+                                                    <option value="School Principal III">School Principal III</option>
+                                                    <option value="School Principal IV">School Principal IV</option>
+                                                    <option value="Assistant School Principal I">Assistant School Principal I</option>
+                                                    <option value="Assistant School Principal II">Assistant School Principal II</option>
+                                                </select>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date of Birth</label>
+                                                    <input
+                                                        type="date"
+                                                        name="head_date_of_birth"
+                                                        value={formData.head_date_of_birth}
+                                                        onChange={handleChange}
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date Assigned</label>
+                                                    <input
+                                                        type="date"
+                                                        name="head_date_hired"
+                                                        value={formData.head_date_hired}
+                                                        onChange={handleChange}
+                                                        className={chunkyInput}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {currentStep === 5 && (
                                     <div className="space-y-4 pb-20">
                                         
                                         <div className="h-48 rounded-[2rem] overflow-hidden border-2 border-gray-100 shadow-inner relative mt-4">
@@ -756,7 +933,7 @@ const Unit1SchoolIdentity = () => {
                                     </div>
                                 )}
 
-                                        {currentStep === 5 && (
+                                        {currentStep === 6 && (
                                     <div className="space-y-6 pb-20">
                                         {/* Ownership Question */}
                                         <div>
@@ -782,11 +959,40 @@ const Unit1SchoolIdentity = () => {
                                                     </p>
                                                 </div>
 
-                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">
-                                                    {formData.ownership === "deped" && "CTC (Certificate of Transfer of Certificate)"}
-                                                    {formData.ownership === "privately_owned" && "DOD / DOU (Deed of Donation / Deed of Undertaking)"}
-                                                    {formData.ownership === "lgu_owned" && "Tax Declaration"}
-                                                </label>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document to be uploaded</label>
+                                                <select 
+                                                    name="ownership_document_type" 
+                                                    value={formData.ownership_document_type} 
+                                                    onChange={handleChange} 
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Select Document Type...</option>
+                                                    {formData.ownership === "deped" && (
+                                                        <>
+                                                            <option value="Transfer Certificate of Title">Transfer Certificate of Title</option>
+                                                            <option value="special patents">Special Patents</option>
+                                                            <option value="presidential proclamations">Presidential Proclamations</option>
+                                                            <option value="deed of sale">Deed of Sale</option>
+                                                        </>
+                                                    )}
+                                                    {formData.ownership === "lgu_owned" && (
+                                                        <>
+                                                            <option value="deed of donation">Deed of Donation</option>
+                                                            <option value="usufruct agreement">Usufruct Agreement</option>
+                                                            <option value="memorandum of agreement">Memorandum of Agreement</option>
+                                                        </>
+                                                    )}
+                                                    {formData.ownership === "privately_owned" && (
+                                                        <>
+                                                            <option value="deed of donation (DepEd Registered)">Deed of Donation (DepEd Registered)</option>
+                                                            <option value="Deed of Donation (Unregistered)">Deed of Donation (Unregistered)</option>
+                                                            <option value="Lease Agreement">Lease Agreement</option>
+                                                            <option value="Expropriation">Expropriation</option>
+                                                            <option value="Tax Declaration Only">Tax Declaration Only</option>
+                                                            <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
+                                                        </>
+                                                    )}
+                                                </select>
                                                 
                                                 {/* Google Drive Link Input */}
                                                 <div className="space-y-2">
@@ -986,10 +1192,19 @@ const Unit1SchoolIdentity = () => {
             {!isReviewMode && (
                 <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
                     <div className="max-w-md mx-auto flex gap-3">
-                        {currentStep > 0 && (
-                            <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
-                                <FiArrowLeft className="w-6 h-6" />
+                        {currentStep === 0 ? (
+                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all">
+                                <FiSave className="w-6 h-6" />
                             </button>
+                        ) : (
+                            <>
+                                <button onClick={handleBack} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 active:scale-95 transition-all">
+                                    <FiArrowLeft className="w-6 h-6" />
+                                </button>
+                                <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all">
+                                    <FiSave className="w-6 h-6" />
+                                </button>
+                            </>
                         )}
                         <button onClick={handleNext} disabled={loading || (!hookIsSuperUser && !isCurrentStepValid())}
                             className={`flex-1 h-16 rounded-[2rem] text-white font-black text-lg transition-all shadow-xl active:scale-98 disabled:opacity-30 disabled:scale-100
@@ -1006,6 +1221,33 @@ const Unit1SchoolIdentity = () => {
             )}
 
             <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="School identity profile has been successfully saved to our cloud registry! ✓" redirectUrl="/modular-dashboard" />
+
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full rounded-t-[3rem] p-10 pb-12 shadow-2xl relative">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <AnimatePresence>
                 {showIernModal && (

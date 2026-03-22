@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { useAuth } from '../context/AuthContext';
-import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool, FiKey, FiCopy, FiX, FiMapPin, FiCheck } from "react-icons/fi";
+import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool, FiKey, FiCopy, FiX, FiMapPin, FiCheck, FiLock } from "react-icons/fi";
 import { TbSchool } from "react-icons/tb";
 import KnowledgeManager from '../components/KnowledgeManager';
 
@@ -65,6 +65,10 @@ const AdminDashboard = () => {
     // Maintenance State
     const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [togglingMaintenance, setTogglingMaintenance] = useState(false);
+
+    // Nexus Module Locks
+    const [nexusLocks, setNexusLocks] = useState({ 'school-info': false, 'esf7': false, 'nspp': false });
+    const [updatingLocks, setUpdatingLocks] = useState(false);
 
     // Fraud Detection State
     const [isRunningFraud, setIsRunningFraud] = useState(false);
@@ -140,7 +144,8 @@ const AdminDashboard = () => {
                 fetch('/api/activities').then(r => r.json()),
                 fetch('/api/settings/enrolment_deadline').then(r => r.json()),
                 fetch('/api/settings/maintenance_mode').then(r => r.json()),
-                fetch('/api/admin/feedback').then(r => r.json())
+                fetch('/api/admin/feedback').then(r => r.json()),
+                fetch('/api/settings/nexus_module_locks').then(r => r.json())
             ]);
 
 
@@ -167,6 +172,15 @@ const AdminDashboard = () => {
             // Handle Feedback
             if (Array.isArray(feedbackRes)) {
                 setFeedbackList(feedbackRes);
+            }
+
+            // Handle Nexus Locks
+            if (nexusLocksRes && nexusLocksRes.value) {
+                try {
+                    setNexusLocks(JSON.parse(nexusLocksRes.value));
+                } catch (e) {
+                    console.error("Failed to parse nexus locks:", e);
+                }
             }
 
 
@@ -320,6 +334,36 @@ const AdminDashboard = () => {
             alert("❌ Error updating maintenance mode.");
         } finally {
             setTogglingMaintenance(false);
+        }
+    };
+
+    const handleToggleNexusLock = async (moduleId) => {
+        const newLocks = { ...nexusLocks, [moduleId]: !nexusLocks[moduleId] };
+        setNexusLocks(newLocks); // Optimistic UI
+        setUpdatingLocks(true);
+        try {
+            const adminUid = user ? user.uid : 'admin';
+            const res = await fetch('/api/settings/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: 'nexus_module_locks',
+                    value: JSON.stringify(newLocks),
+                    userUid: adminUid
+                })
+            });
+
+            if (!res.ok) {
+                alert("❌ Failed to update module lock.");
+                // Revert
+                setNexusLocks(nexusLocks);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("❌ Error updating module lock.");
+            setNexusLocks(nexusLocks);
+        } finally {
+            setUpdatingLocks(false);
         }
     };
 
@@ -618,6 +662,55 @@ const AdminDashboard = () => {
                 >
                     {isRunningFraud ? 'Running...' : 'Run Scan'}
                 </button>
+            </div>
+
+            {/* NEXUS MODULE CONTROL CARD */}
+            <div className="mt-4 bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-indigo-50 text-indigo-600 rounded-full">
+                        <FiGrid size={20} />
+                    </div>
+                    <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-800">Nexus Module Controls</h3>
+                        <p className="text-[10px] text-gray-500">Enable or disable front-page cards for users.</p>
+                    </div>
+                </div>
+                
+                <div className="space-y-3">
+                    {[
+                        { id: 'school-info', label: 'School Profile', icon: '🏛️' },
+                        { id: 'esf7', label: 'eSF7 Hub', icon: '🛡️' },
+                        { id: 'nspp', label: 'NSPP Path', icon: '⚡' }
+                    ].map((mod) => (
+                        <div key={mod.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <span className="text-lg">{mod.icon}</span>
+                                <span className="text-sm font-bold text-gray-700">{mod.label}</span>
+                            </div>
+                            <button
+                                onClick={() => handleToggleNexusLock(mod.id)}
+                                disabled={updatingLocks}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest transition-all ${
+                                    nexusLocks[mod.id]
+                                        ? 'bg-red-50 text-red-600 border border-red-100'
+                                        : 'bg-green-50 text-green-600 border border-green-100'
+                                }`}
+                            >
+                                {nexusLocks[mod.id] ? (
+                                    <>
+                                        <FiLock size={12} />
+                                        LOCKED
+                                    </>
+                                ) : (
+                                    <>
+                                        <FiCheck size={12} />
+                                        ACTIVE
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    ))}
+                </div>
             </div>
 
             {fraudOutput && (

@@ -11,6 +11,7 @@ export const DASHBOARD_METADATA = {
         { id: 6, title: "Teaching Personnel", icon: FiUsers, emoji: '👩‍🏫', path: "/modular/unit-6", xp: 400 },
         { id: 7, title: "School Resources", icon: FiBookOpen, emoji: '🧰', path: "/modular/unit-7", xp: 450 },
         { id: 8, title: "Physical Facilities", icon: FiBookOpen, emoji: '🏗️', path: "/modular/unit-8", xp: 500 },
+        { id: 9, title: "Special Hardship", icon: FiMapPin, emoji: '🛡️', path: "/modular/unit-9", xp: 550 },
     ],
     forms: [
         { id: 1, name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600", flag: "f1_profile", unit: 1 },

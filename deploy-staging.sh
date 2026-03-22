@@ -1,22 +1,23 @@
 #!/bin/bash
 
-# Deployment Script (Local to Remote)
-# This script pushes code directly from your LOCAL machine to the Azure VM.
+# Deployment Script (Local to Staging)
+# This script pushes code directly from your LOCAL machine to the Azure VM Staging Area.
 
 SERVER_IP="20.24.58.49"
-SERVER_DIR="/var/www/html/InsightEd-Mobile-PWA"
+SERVER_DIR="/var/www/html/InsightEd-Staging"
 USER="Administrator1"
 PASS="7v52E69TYgTE"
 
 echo "------------------------------------------------"
-echo "🚀 Local-to-Remote Deployment"
+echo "🚀 Local-to-Staging Deployment"
 echo "------------------------------------------------"
 echo "Host: $SERVER_IP"
 echo "User: $USER"
 echo "Pass: $PASS"
+echo "Target Dir: $SERVER_DIR"
 echo "------------------------------------------------"
 
-echo "📤 1. Syncing local files to VM..."
+echo "📤 1. Syncing local files to VM Staging..."
 if command -v rsync >/dev/null 2>&1; then
     rsync -avz --delete \
         --exclude 'node_modules/' \
@@ -30,8 +31,8 @@ else
     scp -r ./api ./src ./public ./index.html ./package.json ./vite.config.js ./tailwind.config.js ./postcss.config.js $USER@$SERVER_IP:$SERVER_DIR/
 fi
 
-echo "🏗️  2. Running remote build and restart..."
-ssh $USER@$SERVER_IP "cd $SERVER_DIR && npm install --legacy-peer-deps && npm run build && pm2 restart insighted-backend"
+echo "🏗️  2. Running remote build and restart (Staging)..."
+ssh $USER@$SERVER_IP "mkdir -p $SERVER_DIR && cd $SERVER_DIR && npm install --legacy-peer-deps && npm run build -- --base=/insighted-staging/ && pm2 restart insighted-staging || PORT=5001 pm2 start api/index.js --name insighted-staging"
 
-echo "✅ Local Deployment Complete!"
+echo "✅ Staging Deployment Complete!"
 echo "------------------------------------------------"

@@ -10,11 +10,12 @@ const GALLERY_STORE = 'gallery_cache'; // New store for caching gallery images
 const DRAFT_SPACES_STORE = 'buildable_spaces_drafts'; // New store for draft spaces
 const REPAIRS_STORE = 'facility_repairs'; // Store for offline facility repairs
 const UNIT_1_DRAFT_STORE = 'unit_1_draft_store'; // New store for Unit 1 School Head drafts
+const UNIT_DRAFTS_STORE = 'unit_drafts'; // Generic store for all unit drafts
 
 const SCHOOLS_STORE = 'schools_cache'; // Define constant at top
 
 // UNIFIED DB VERSION — all functions must use THIS version 
-const DB_VERSION = 11;
+const DB_VERSION = 12;
 
 // 1. Initialize the Database
 export async function initDB() {
@@ -58,6 +59,10 @@ export async function initDB() {
       // Create Unit 1 Drafts store
       if (!db.objectStoreNames.contains(UNIT_1_DRAFT_STORE)) {
         db.createObjectStore(UNIT_1_DRAFT_STORE, { keyPath: 'iern' });
+      }
+      // Create Generic Unit Drafts store
+      if (!db.objectStoreNames.contains(UNIT_DRAFTS_STORE)) {
+        db.createObjectStore(UNIT_DRAFTS_STORE, { keyPath: 'id' });
       }
     },
   });
@@ -312,4 +317,43 @@ export async function getUnit1Draft(iern) {
 export async function clearUnit1Draft(iern) {
   const db = await initDB();
   return db.delete(UNIT_1_DRAFT_STORE, iern);
+}
+
+// ==========================================
+//        GENERIC UNIT DRAFTS (School Head)
+// ==========================================
+
+/**
+ * Saves a unit draft to IndexedDB
+ * @param {string|number} unitId 
+ * @param {string|number} schoolId 
+ * @param {Object} draft - { step, formData, ... }
+ */
+export async function saveUnitDraft(unitId, schoolId, draft) {
+  const db = await initDB();
+  const id = `unit_${unitId}_school_${schoolId}`;
+  return db.put(UNIT_DRAFTS_STORE, { id, unitId, schoolId, draft, timestamp: Date.now() });
+}
+
+/**
+ * Retrieves a unit draft from IndexedDB
+ * @param {string|number} unitId 
+ * @param {string|number} schoolId 
+ */
+export async function getUnitDraft(unitId, schoolId) {
+  const db = await initDB();
+  const id = `unit_${unitId}_school_${schoolId}`;
+  const entry = await db.get(UNIT_DRAFTS_STORE, id);
+  return entry ? entry.draft : null;
+}
+
+/**
+ * Clears a unit draft from IndexedDB
+ * @param {string|number} unitId 
+ * @param {string|number} schoolId 
+ */
+export async function clearUnitDraft(unitId, schoolId) {
+  const db = await initDB();
+  const id = `unit_${unitId}_school_${schoolId}`;
+  return db.delete(UNIT_DRAFTS_STORE, id);
 }
