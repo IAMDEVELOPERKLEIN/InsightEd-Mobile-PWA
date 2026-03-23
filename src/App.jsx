@@ -188,7 +188,14 @@ const AnimatedRoutes = () => {
         <Route path="/engineer-projects" element={<EngineerProjects />} />
         <Route path="/super-admin" element={<Navigate to="/super-user-selector" replace />} />
         <Route path="/finance-dashboard" element={<FinanceDashboard />} />
-        <Route path="/nodes-dashboard" element={<NodesDashboard />} />
+        <Route 
+          path="/nodes-dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['School Head']}>
+              <NodesDashboard />
+            </ProtectedRoute>
+          } 
+        />
         <Route path="/lgu-dashboard" element={<LguDashboard />} />
         <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
         <Route path="/lgu-project-details/:id" element={<LguProjectDetails />} />
@@ -245,14 +252,6 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
               <MyActivityDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/nexus-dashboard"
-          element={
-            <ProtectedRoute allowedRoles={['School Head']}>
-              <NodesDashboard />
             </ProtectedRoute>
           }
         />
