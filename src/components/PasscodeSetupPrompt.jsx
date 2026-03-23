@@ -82,6 +82,9 @@ const PasscodeSetupPrompt = () => {
             } else {
                 const data = await res.json();
                 setError(data.error || 'Failed to save passcode');
+                setTempPasscode('');
+                setConfirmPasscode('');
+                setStep('setup');
             }
         } catch (err) {
             console.error("Passcode setup error:", err);

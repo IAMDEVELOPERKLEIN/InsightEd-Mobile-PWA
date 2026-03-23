@@ -93,10 +93,12 @@ import Unit8PhysicalFacilities from './components/modular/Unit8PhysicalFacilitie
 import Unit9SchoolLocation from './components/modular/Unit9SchoolLocation';
 
 // Nexus & Drafts
-import NexusDashboard from './modules/NexusDashboard';
+import NodesDashboard from './modules/NexusDashboard';
 import ESF7Draft from './forms/ESF7Draft';
 import NSPPDraft from './forms/NSPPDraft';
 import ESF7Review from './modules/ESF7Review';
+import LaunchPad from './components/LaunchPad';
+
 
 
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
@@ -107,7 +109,8 @@ const AnimatedRoutes = () => {
 
   useEffect(() => {
     // List of public paths that don't require authentication
-    const publicPaths = ['/', '/register', '/adminlogin'];
+    const publicPaths = ['/', '/login', '/register', '/adminlogin'];
+
     
     // If auth is finished loading and no user is found on a non-public path, redirect to login
     if (!loading && !user && !publicPaths.includes(location.pathname)) {
@@ -154,7 +157,7 @@ const AnimatedRoutes = () => {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-500 font-medium animate-pulse">Initializing InsightEd...</p>
+          <p className="text-slate-500 font-medium animate-pulse">Initializing InsightED...</p>
         </div>
       </div>
     );
@@ -171,8 +174,10 @@ const AnimatedRoutes = () => {
   return (
     <Routes>
       {/* Authentication */}
-      <Route path="/" element={<Login />} />
+      <Route path="/" element={<LaunchPad />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
@@ -183,6 +188,7 @@ const AnimatedRoutes = () => {
         <Route path="/engineer-projects" element={<EngineerProjects />} />
         <Route path="/super-admin" element={<Navigate to="/super-user-selector" replace />} />
         <Route path="/finance-dashboard" element={<FinanceDashboard />} />
+        <Route path="/nodes-dashboard" element={<NodesDashboard />} />
         <Route path="/lgu-dashboard" element={<LguDashboard />} />
         <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
         <Route path="/lgu-project-details/:id" element={<LguProjectDetails />} />
@@ -246,7 +252,7 @@ const AnimatedRoutes = () => {
           path="/nexus-dashboard"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
-              <NexusDashboard />
+              <NodesDashboard />
             </ProtectedRoute>
           }
         />
@@ -397,7 +403,7 @@ function App() {
 
 const AppContent = () => {
   const location = useLocation();
-  const showChatFloating = (location.pathname === '/' || location.pathname === '/adminlogin') && location.pathname !== '/chat';
+  const showChatFloating = false; // Floating button removed per user request. Dedicated button added to Login.
 
   return (
     <>

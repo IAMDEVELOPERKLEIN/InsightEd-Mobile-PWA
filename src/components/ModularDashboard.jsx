@@ -183,9 +183,6 @@ const ModularDashboard = () => {
                               offering.includes('high school');
 
         let units = DASHBOARD_METADATA.units;
-        
-        // Filter out Unit 9 as it's isolated to the SHA Nexus Card
-        units = units.filter(u => u.id <= 8);
 
         return units.map(u => {
             let title = u.title;

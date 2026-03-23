@@ -341,6 +341,14 @@ const runAutoMigrations = async () => {
       if (poolNew) await poolNew.query(`ALTER TABLE ph_schools ALTER COLUMN "${colName}" TYPE TIMESTAMPTZ USING "${colName}"::TIMESTAMPTZ`).catch(() => {});
     }
 
+    // Unit 1: Year Established
+    await checkAndAddColumn('ph_schools', 'established_month', 'TEXT', pool);
+    await checkAndAddColumn('ph_schools', 'established_year', 'INTEGER', pool);
+    if (poolNew) {
+      await checkAndAddColumn('ph_schools', 'established_month', 'TEXT', poolNew);
+      await checkAndAddColumn('ph_schools', 'established_year', 'INTEGER', poolNew);
+    }
+
     await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', pool);
     if (poolNew) await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', poolNew);
 
@@ -14111,7 +14119,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.latitude &&
       data.longitude &&
       data.school_name &&
-      data.google_drive_file_id
+      data.google_drive_file_id &&
+      data.established_month &&
+      data.established_year
     );
 
     // Save Google Drive document link to ownership_documents table if provided
@@ -14161,8 +14171,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         division, district, leg_district, curricular_offering, latitude, longitude,
         school_head, contact_number, ownership, ownership_document_path, school_type,
         mother_school_id, extension_mother_school_name, unit1_completed, unit1,
-        ownership_document_type, unit1_updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP)
+        ownership_document_type, established_month, established_year, unit1_updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, CURRENT_TIMESTAMP)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -14186,6 +14196,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         unit1_completed = EXCLUDED.unit1_completed,
         unit1 = EXCLUDED.unit1,
         ownership_document_type = EXCLUDED.ownership_document_type,
+        established_month = EXCLUDED.established_month,
+        established_year = EXCLUDED.established_year,
         unit1_updated_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP;
     `;
@@ -14200,7 +14212,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.school_type || null,
       data.mother_school_id || null, data.extension_mother_school_name || null,
       isCompleted, isCompleted ? 1 : 0,
-      data.ownership_document_type || null
+      data.ownership_document_type || null,
+      data.established_month || null, data.established_year || null
     ];
 
     // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes

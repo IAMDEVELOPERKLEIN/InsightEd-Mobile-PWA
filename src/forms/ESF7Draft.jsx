@@ -134,7 +134,7 @@ const ESF7Draft = () => {
 
             if (res.ok) {
                 setSubmitSuccess(true);
-                setTimeout(() => navigate('/nexus-dashboard'), 2000);
+                setTimeout(() => navigate('/nodes-dashboard'), 2000);
             } else {
                 const data = await res.json();
                 throw new Error(data.error || "Failed to stage data.");
@@ -152,11 +152,11 @@ const ESF7Draft = () => {
                 {(isParsing || isLoadingStatus) && <SubmissionLoader message={isParsing ? "Extracting from Cloud..." : "Syncing with InsightEd Cloud..."} />}
                 {isSubmitting && <SubmissionLoader message="Staging your records..." />}
             </AnimatePresence>
-            <div className="min-h-screen bg-slate-50 font-sans pb-24">
+            <div className="min-h-screen bg-slate-50 pb-24">
                 {/* --- HEADER --- */}
                 <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => navigate('/nexus-dashboard')} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                        <button onClick={() => navigate('/nodes-dashboard')} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                             <FiArrowLeft className="w-6 h-6 text-slate-600" />
                         </button>
                         <div>
@@ -330,7 +330,7 @@ const ESF7Draft = () => {
                                 </div>
                                 <button 
                                     onClick={() => setParsedData(null)}
-                                    className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest border border-slate-200 px-3 py-1.5 rounded-full transition-colors font-sans"
+                                    className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest border border-slate-200 px-3 py-1.5 rounded-full transition-colors"
                                 >
                                     Reset
                                 </button>

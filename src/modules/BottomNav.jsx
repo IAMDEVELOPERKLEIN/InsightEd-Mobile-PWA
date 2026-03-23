@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar, TbFileCheck } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign } from "react-icons/fi";
+import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign, FiGrid } from "react-icons/fi";
 import { motion } from 'framer-motion';
 
 const BottomNav = ({ userRole: propRole }) => {
@@ -56,9 +56,9 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
-            { label: 'Home', path: '/nexus-dashboard', icon: FiHome },
+            { label: 'Home', path: '/my-activity', icon: FiHome },
             { label: 'Units', path: '/modular-dashboard', icon: LuCompass },
-            { label: 'History', path: '/my-activity', icon: FiList },
+            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Profile', path: '/profile', icon: FiUser },
         ],
 
@@ -146,10 +146,11 @@ const BottomNav = ({ userRole: propRole }) => {
                     <motion.button
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        onClick={() => navigate('/chat')}
+                        onClick={() => navigate('/nodes-dashboard')}
                         className="w-16 h-16 bg-[#10346B] text-white rounded-full flex items-center justify-center shadow-xl shadow-blue-900/40 border-4 border-white"
+                        title="Back to Nodes"
                     >
-                        <FiMessageSquare size={32} />
+                        <FiGrid size={32} />
                     </motion.button>
                 </div>
             )}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import logo from './assets/InsightEd1.png';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import PageTransition from './components/PageTransition';
 import Papa from 'papaparse';
@@ -52,7 +52,7 @@ const getDashboardPath = (role, accountCategory) => {
     const roleMap = {
         'EFD Engineer': '/efd-dashboard',
         'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/nexus-dashboard',
+        'School Head': '/nodes-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/super-user-selector',
         'Central Office': '/monitoring-dashboard',
@@ -69,8 +69,12 @@ const Register = () => {
     const { login } = useAuth();
     const [loading, setLoading] = useState(false);
 
+    const location = useLocation();
+    const pathId = location.state?.pathId;
+
     // --- BASIC FORM STATE ---
     const [formData, setFormData] = useState({
+
         firstName: '',
         lastName: '',
         email: '', // Generic roles auth email
@@ -139,7 +143,29 @@ const Register = () => {
 
     // --- 1. LOAD INITIAL DATA (Regions + Office CSV) ---
     useEffect(() => {
+        // Handle Path Restrictions from Launch Pad
+        if (pathId) {
+            console.log("[Register] Enforcing path-based restrictions:", pathId);
+            if (pathId === 'path_school_head') {
+                setActiveTab('internal');
+                setFormData(prev => ({ ...prev, role: 'School Head' }));
+            } else if (pathId === 'path_ro_sd') {
+                setActiveTab('internal');
+                setFormData(prev => ({ ...prev, role: 'Regional Office' }));
+            } else if (pathId === 'path_engineers') {
+                setActiveTab('internal');
+                setFormData(prev => ({ ...prev, role: 'Division Engineer' }));
+            } else if (pathId === 'path_agencies') {
+                setActiveTab('external');
+                setFormData(prev => ({ ...prev, role: 'Implementing Agency' }));
+            } else if (pathId === 'path_efd') {
+                setActiveTab('internal');
+                setFormData(prev => ({ ...prev, role: 'EFD Engineer' }));
+            }
+        }
+
         // Load Regions from API
+
         fetch('/api/locations/regions')
             .then(res => res.json())
             .then(data => setRegions(data || []))
@@ -656,9 +682,9 @@ const Register = () => {
                         {/* Header */}
                         {registrationStage === 'form' && (
                             <div className="text-center mb-8">
-                                <img src={logo} alt="InsightEd Ratio" className="h-20 mx-auto mb-4 object-contain drop-shadow-sm" />
+                                <img src={logo} alt="InsightED Ratio" className="h-20 mx-auto mb-4 object-contain drop-shadow-sm" />
                                 <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Create Account</h2>
-                                <p className="text-slate-500 font-medium">Join the InsightEd network</p>
+                                <p className="text-slate-500 font-medium">Join the InsightED network</p>
                             </div>
                         )}
 
@@ -666,31 +692,41 @@ const Register = () => {
 
                             {registrationStage === 'form' && (
                                 <>
-                                    {/* REGISTRATION TABS */}
-                            <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
-                                <button
-                                    type="button"
-                                    onClick={() => handleTabChange('internal')}
-                                    className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
-                                        activeTab === 'internal'
-                                            ? 'bg-white text-blue-700 shadow-sm'
-                                            : 'text-slate-500 hover:text-slate-700'
-                                    }`}
-                                >
-                                    Internal Personnel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => handleTabChange('external')}
-                                    className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
-                                        activeTab === 'external'
-                                            ? 'bg-white text-purple-700 shadow-sm'
-                                            : 'text-slate-500 hover:text-slate-700'
-                                    }`}
-                                >
-                                    External Agency
-                                </button>
-                            </div>
+                            {/* REGISTRATION TABS (Hidden if path is restricted) */}
+                            {(!pathId || (pathId !== 'path_school_head' && pathId !== 'path_ro_sd' && pathId !== 'path_engineers' && pathId !== 'path_efd' && pathId !== 'path_agencies')) ? (
+                                <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTabChange('internal')}
+                                        className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
+                                            activeTab === 'internal'
+                                                ? 'bg-white text-blue-700 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        Internal Personnel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTabChange('external')}
+                                        className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
+                                            activeTab === 'external'
+                                                ? 'bg-white text-purple-700 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        Implementing Agency
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="mb-6 px-2 py-1 bg-blue-50 rounded-lg inline-block border border-blue-100">
+                                    <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">
+                                        {activeTab === 'internal' ? 'Internal Personnel Path' : 'Implementing Agency Path'}
+                                    </span>
+                                </div>
+                            )}
+
+
 
                             {activeTab === 'internal' && (
                                 <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
@@ -700,21 +736,37 @@ const Register = () => {
                                         name="role"
                                         value={formData.role}
                                         onChange={handleRoleChange}
-                                        className="w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-blue-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
+                                        disabled={pathId === 'path_school_head'}
+                                        className={`w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-blue-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer ${pathId === 'path_school_head' ? 'opacity-70 bg-slate-50' : ''}`}
                                     >
-                                        <option value="Central Office">CO Personnel</option>
-                                        <option value="Regional Office">RO Personnel</option>
-                                        <option value="School Division Office">SDO Personnel</option>
-                                        <option value="School Head">School Head</option>
-                                        <option value="Division Engineer">Division Engineer</option>
-                                        {/*<option value="Non-DepEd Engineer">Non-DepEd Engineer</option>*/}
-                                        <option value="EFD Engineer">EFD Engineer </option>
-                                        <option value="Local Government Unit">Local Government Unit</option>
-                                        <option value="Central Office Finance">Central Office Finance</option>
-                                        {/* <option value="Super User" hidden>Super User</option> */}
-                                        {/* Super User hidden from registration - managed internally */}
-                                        {/* {<option value="Admin">Admin</option>} */}
+                                        {(!pathId || pathId === 'path_ro_sd') && (
+                                            <>
+                                                <option value="Central Office">CO Personnel</option>
+                                                <option value="Regional Office">RO Personnel</option>
+                                                <option value="School Division Office">SDO Personnel</option>
+                                            </>
+                                        )}
+                                        
+                                        {(!pathId || pathId === 'path_school_head') && (
+                                            <option value="School Head">School Head</option>
+                                        )}
+
+                                        {(!pathId || pathId === 'path_engineers') && (
+                                            <option value="Division Engineer">Division Engineer</option>
+                                        )}
+
+                                        {(!pathId || pathId === 'path_efd') && (
+                                            <option value="EFD Engineer">EFD Engineer</option>
+                                        )}
+
+                                        {!pathId && (
+                                            <>
+                                                <option value="Local Government Unit">Local Government Unit</option>
+                                                <option value="Central Office Finance">Central Office Finance</option>
+                                            </>
+                                        )}
                                     </select>
+
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-blue-500">
                                         <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
                                     </div>

@@ -175,7 +175,7 @@ const MonitoringDashboard = () => {
         // PAGE 1: EXECUTIVE SUMMARY
         doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
-        doc.text("InsightEd Data Health & Compliance Report", 40, 60);
+        doc.text("InsightED Data Health & Compliance Report", 40, 60);
 
         doc.setFontSize(12);
         doc.setFont('helvetica', 'normal');
@@ -392,7 +392,7 @@ const MonitoringDashboard = () => {
             doc.setFontSize(22);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(30, 41, 59); // slate-800
-            doc.text("InsightEd - Executive Analytics Brief", 40, 60);
+            doc.text("InsightED - Executive Analytics Brief", 40, 60);
 
             doc.setFontSize(12);
             doc.setFont('helvetica', 'normal');
@@ -1277,7 +1277,7 @@ const MonitoringDashboard = () => {
                                         Update Available
                                     </h2>
                                     <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                                        A new version of InsightEd is ready. <br />Please reload to apply the latest changes.
+                                        A new version of InsightED is ready. <br />Please reload to apply the latest changes.
                                     </p>
                                 </div>
 
@@ -1610,7 +1610,7 @@ const MonitoringDashboard = () => {
                                     Update Available
                                 </h2>
                                 <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                                    A new version of InsightEd is ready. <br />Please reload to apply the latest changes.
+                                    A new version of InsightED is ready. <br />Please reload to apply the latest changes.
                                 </p>
                             </div>
 

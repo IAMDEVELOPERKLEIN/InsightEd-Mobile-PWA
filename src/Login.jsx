@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import logo from './assets/InsightEd1.png';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+
 import { useAuth } from './context/AuthContext';
 import PageTransition from './components/PageTransition';
 import LoadingScreen from './components/LoadingScreen';
 import PinLogin from './components/PinLogin';
+import { FiArrowLeft } from 'react-icons/fi';
+
 
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role, accountCategory) => {
@@ -16,7 +19,7 @@ const getDashboardPath = (role, accountCategory) => {
     }
     const roleMap = {
         'Local Government Unit': '/lgu-dashboard',
-        'School Head': '/nexus-dashboard',
+        'School Head': '/nodes-dashboard',
         'Human Resource': '/hr-dashboard',
         'Regional Office': '/monitoring-dashboard',
         'School Division Office': '/monitoring-dashboard',
@@ -61,7 +64,27 @@ const Login = () => {
     });
     const [usePassword, setUsePassword] = useState(!localStorage.getItem('remembered_user'));
     const navigate = useNavigate();
+    const location = useLocation();
     const { login, user: authUser, loading: authLoading } = useAuth();
+
+    // NEW: Handle path-based role restrictions from Launch Pad
+    useEffect(() => {
+        const pathId = location.state?.pathId;
+        if (pathId) {
+            console.log("[Login] Received path identifier:", pathId);
+            if (pathId === 'path_school_head') {
+                setIsSchoolHead(true);
+            } else {
+                // All other paths (RO/SD, Engineers, etc.) use Email login
+                setIsSchoolHead(false);
+            }
+        } else if (location.state?.roleType) {
+            // Fallback for legacy roleType state if any
+            setIsSchoolHead(location.state.roleType === 'School Head');
+        }
+    }, [location.state]);
+
+
 
     // --- 0. INSTALLATION GATE LOGIC ---11111
     const [isInstalled, setIsInstalled] = useState(false);
@@ -239,6 +262,7 @@ const Login = () => {
                 ? "The server is taking too long to respond. Please check your connection and try again."
                 : (error.message || "Login Failed. Please check your credentials.");
             alert(friendlyMsg);
+            setPassword(''); // Clear field on error
             setLoading(false);
         } finally {
             clearTimeout(loginTimeoutId);
@@ -387,30 +411,36 @@ const Login = () => {
 
                 <div className="relative z-10 w-[90%] max-w-md">
                     {/* GLASSMORMISM CARD */}
-                    <div className="bg-white/70 backdrop-blur-xl border border-white/50 shadow-2xl rounded-3xl p-8 transform transition-all hover:scale-[1.01] duration-500">
+                    <div className="bg-white/70 backdrop-blur-xl border border-white/50 shadow-2xl rounded-3xl p-8 transform transition-all hover:scale-[1.01] duration-500 relative">
+                        
+                        {/* BACK TO LAUNCH PAD */}
+                        <button 
+                            onClick={() => navigate('/')}
+                            className="absolute top-6 left-6 p-2 rounded-xl bg-white/50 text-slate-400 hover:text-[#004A99] hover:bg-white transition-all shadow-sm border border-slate-100 group z-20"
+                            title="Back to Launch Pad"
+                        >
+                            <FiArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                        </button>
+
 
                         {/* HEADER */}
                         <div className="text-center mb-8">
                             <div className="relative w-24 h-24 mx-auto mb-4 bg-white/50 rounded-2xl shadow-inner flex items-center justify-center p-2">
-                                <img src={logo} alt="InsightEd Logo" className="w-full h-full object-contain drop-shadow-sm" />
+                                <img src={logo} alt="InsightED Logo" className="w-full h-full object-contain drop-shadow-sm" />
                             </div>
-                            <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">InsightEd</h1>
+                            <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">InsightED</h1>
                             <p className="text-slate-500 text-sm mt-2 font-medium">Department of Education</p>
                         </div>
 
-                        {/* TOGGLE SECTION: Are you a School Head? */}
-                        {!rememberedUser || usePassword ? (
-                            <div className="flex items-center justify-between mb-8 px-2">
+                        {/* TOGGLE SECTION: Are you a School Head? (Hidden if path is pre-selected) */}
+                        {(!rememberedUser || usePassword) && !location.state?.pathId ? (
+                            <div className="flex items-center justify-between mb-8 px-2 animate-in fade-in duration-500">
                                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Are you a School Head?</span>
                                 <button
                                     type="button"
                                     onClick={() => {
                                         const newState = !isSchoolHead;
                                         setIsSchoolHead(newState);
-                                        if (newState) {
-                                            // Optional: help the user by switching to passcode if they toggle this
-                                            // setLoginMode('passcode');
-                                        }
                                     }}
                                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 focus:outline-none ${isSchoolHead ? 'bg-blue-600' : 'bg-slate-300'}`}
                                 >
@@ -420,6 +450,7 @@ const Login = () => {
                                 </button>
                             </div>
                         ) : null}
+
 
                         {rememberedUser && !usePassword ? (
                             <PinLogin 
@@ -540,46 +571,56 @@ const Login = () => {
                         <div className="mt-4">
                             <Link
                                 to="/register"
+                                state={{ pathId: location.state?.pathId }}
                                 className="w-full block text-center py-4 border-2 border-blue-50 bg-blue-50/30 rounded-2xl text-blue-600 font-extrabold hover:bg-blue-100/50 hover:border-blue-100 transition-all active:scale-[0.98]"
                             >
                                 CREATE NEW ACCOUNT
                             </Link>
                         </div>
 
+
                     </div>
 
-                    {/* INSTALLATION TRIGGER BUTTON */}
-                    {!isInstalled && (
-                        <div className="mt-4 flex justify-center">
+                    {/* BOTTOM BUTTONS ROW */}
+                    <div className="mt-6 flex flex-wrap justify-center gap-3">
+                        {!isInstalled && (
                             <button
                                 onClick={() => setShowInstallModal(true)}
-                                className="flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-sm font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95"
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-[11px] font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95 shadow-blue-900/10"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                 </svg>
                                 <span>Install App</span>
                             </button>
-                        </div>
-                    )}
+                        )}
 
-                    {/* TROUBLESHOOT & UPDATES TRIGGER (OUTSIDE PANEL) */}
-                    <div className="mt-4 flex justify-center">
                         <button
                             type="button"
                             onClick={handleTroubleshoot}
-                            className="flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-slate-600 text-sm font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95"
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-[11px] font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95 shadow-blue-900/10"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
                             </svg>
-                            <span>Troubleshoot & Updates</span>
+                            <span>Troubleshoot</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => navigate('/chat')}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-[11px] font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95 shadow-blue-900/10"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                            </svg>
+                            <span>Help Desk Chat</span>
                         </button>
                     </div>
 
                     {/* FOOTER NOTE */}
                     <div className="text-center mt-6">
-                        <p className="text-slate-200/80 text-xs font-medium">© 2026 InsightEd. Secure & Encrypted.</p>
+                        <p className="text-slate-200/80 text-xs font-medium">© 2026 InsightED. Secure & Encrypted.</p>
                     </div>
                 </div>
 

@@ -81,6 +81,8 @@ const Unit1SchoolIdentity = () => {
         mother_school_id: "",
         extension_mother_school_name: "",
         ownership_document_type: "",
+        established_month: "",
+        established_year: "",
         head_first_name: "",
         head_middle_name: "",
         head_last_name: "",
@@ -192,6 +194,8 @@ const Unit1SchoolIdentity = () => {
                     mother_school_id: d.mother_school_id || merged.mother_school_id,
                     extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
                     ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
+                    established_month: d.established_month || merged.established_month,
+                    established_year: d.established_year || merged.established_year,
                     head_first_name: d.head_first_name || merged.head_first_name,
                     head_middle_name: d.head_middle_name || merged.head_middle_name,
                     head_last_name: d.head_last_name || merged.head_last_name,
@@ -416,7 +420,9 @@ const Unit1SchoolIdentity = () => {
                 { key: 'latitude', label: 'Map Pin (Latitude)' },
                 { key: 'longitude', label: 'Map Pin (Longitude)' },
                 { key: 'school_name', label: 'School Name' },
-                { key: 'google_drive_file_id', label: 'Ownership Document' }
+                { key: 'google_drive_file_id', label: 'Ownership Document' },
+                { key: 'established_month', label: 'Month Established' },
+                { key: 'established_year', label: 'Year Established' }
             ];
 
             const missing = requiredFields.filter(f => !formData[f.key]).map(f => f.label);
@@ -449,11 +455,9 @@ const Unit1SchoolIdentity = () => {
                 iern: finalIern || "",
                 school_head: formData.school_head,
                 contact_number: formData.contact_number,
-                ownership: formData.ownership,
-                google_drive_link: formData.google_drive_link,
-                google_drive_file_id: formData.google_drive_file_id,
-                google_drive_file_name: formData.google_drive_file_name,
                 google_drive_thumbnail_url: formData.google_drive_thumbnail_url,
+                established_month: formData.established_month,
+                established_year: formData.established_year,
                 school_type: formData.school_type,
                 mother_school_id: formData.mother_school_id,
                 extension_mother_school_name: formData.extension_mother_school_name,
@@ -536,7 +540,12 @@ const Unit1SchoolIdentity = () => {
     const isStep3Valid = formData.curricular_offering !== "";
     const isStep4Valid = formData.head_first_name !== "" && formData.head_last_name !== "" && formData.head_position_title !== "" && formData.head_date_hired !== "";
     const isStep5Valid = formData.latitude !== "" && formData.longitude !== "";
-    const isStep6Valid = formData.ownership && formData.ownership_document_type && formData.google_drive_file_id && formData.school_type && (
+    const isStep6Valid = formData.ownership && 
+        formData.ownership_document_type && 
+        formData.google_drive_file_id && 
+        formData.school_type &&
+        formData.established_month &&
+        formData.established_year && (
         (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
         (formData.school_type === "without_annex") ||
         (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound))
@@ -643,6 +652,26 @@ const Unit1SchoolIdentity = () => {
                                             </div>
                                             <div className="bg-indigo-50 px-3 py-2 rounded-xl">
                                                 <span className="font-black text-indigo-700 text-sm">{formData.region || "Req"}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+                                
+                                <section>
+                                    <div className="flex items-center gap-2 mb-4 ml-2 mt-8">
+                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Foundation Info</h3>
+                                    </div>
+                                    <div className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Year Established</span>
+                                                <p className="text-xl font-black text-slate-800">
+                                                    {formData.established_month} {formData.established_year}
+                                                </p>
+                                            </div>
+                                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center shadow-inner text-xl">
+                                                🎊
                                             </div>
                                         </div>
                                     </div>
@@ -935,6 +964,35 @@ const Unit1SchoolIdentity = () => {
 
                                         {currentStep === 6 && (
                                     <div className="space-y-6 pb-20">
+                                        {/* Year Established */}
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Year Established</label>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <select 
+                                                    name="established_month" 
+                                                    value={formData.established_month} 
+                                                    onChange={handleChange} 
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Month...</option>
+                                                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                                        <option key={m} value={m}>{m}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    name="established_year"
+                                                    value={formData.established_year}
+                                                    onChange={handleChange}
+                                                    className={chunkySelect}
+                                                >
+                                                    <option value="" disabled hidden style={{color: '#999'}}>Year...</option>
+                                                    {Array.from({ length: new Date().getFullYear() - 1900 + 1 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                                        <option key={y} value={y}>{y}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
                                         {/* Ownership Question */}
                                         <div>
                                             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block mb-2">Ownership Type</label>
