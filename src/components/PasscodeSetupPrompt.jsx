@@ -14,7 +14,7 @@ const PasscodeSetupPrompt = () => {
 
     useEffect(() => {
         // Check if user is logged in but has no passcode
-        const needsSetup = user && !user.passcode;
+        const needsSetup = user && !user.passcode && localStorage.getItem('needs_pin_setup') === 'true';
         
         if (user && user.passcode) {
             localStorage.removeItem('needs_pin_setup');
@@ -25,9 +25,15 @@ const PasscodeSetupPrompt = () => {
             setTempPasscode('');
             setConfirmPasscode('');
             setError('');
+            
+            // Slight delay to ensure other welcome modals (like Nexus) don't overlap immediately
+            const timer = setTimeout(() => {
+                 setIsOpen(true);
+            }, 800);
+            return () => clearTimeout(timer);
+        } else {
+            setIsOpen(false);
         }
-
-        setIsOpen(!!needsSetup);
     }, [user]);
 
     const handleKeyPress = (num) => {
@@ -146,13 +152,24 @@ const PasscodeSetupPrompt = () => {
                                 <p className="text-slate-500 text-sm mb-8 leading-relaxed font-medium">
                                     Final step to protect your data. Setup a 6-digit passcode to enable secure features and account protection.
                                 </p>
-                                <button
-                                    onClick={() => setStep('setup')}
-                                    className="w-full bg-[#004A99] hover:bg-blue-800 text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-900/20 transition-all active:scale-[0.98] group flex items-center justify-center gap-2"
-                                >
-                                    Protect My Account
-                                    <span className="group-hover:translate-x-1 transition-transform">→</span>
-                                </button>
+                                <div className="flex flex-col gap-3">
+                                    <button
+                                        onClick={() => setStep('setup')}
+                                        className="w-full bg-[#004A99] hover:bg-blue-800 text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-900/20 transition-all active:scale-[0.98] group flex items-center justify-center gap-2"
+                                    >
+                                        Protect My Account
+                                        <span className="group-hover:translate-x-1 transition-transform">→</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsOpen(false);
+                                            localStorage.removeItem('needs_pin_setup'); // Remove flag so it doesn't prompt again until next forced event
+                                        }}
+                                        className="w-full text-slate-400 py-2 hover:text-slate-600 text-xs font-bold uppercase tracking-widest transition-colors"
+                                    >
+                                        Remind me later
+                                    </button>
+                                </div>
                             </motion.div>
                         )}
 
