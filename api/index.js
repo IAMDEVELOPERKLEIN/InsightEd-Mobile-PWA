@@ -5574,6 +5574,9 @@ app.get('/api/schools', async (req, res) => {
 // --- 3c. POST: Check if School is Already Registered ---
 app.post('/api/check-existing-school', async (req, res) => {
   const { schoolId } = req.body;
+  if (!schoolId) {
+    return res.status(400).json({ error: "School ID is required." });
+  }
   try {
     const result = await pool.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolId]);
     if (result.rows.length > 0) {
@@ -5582,7 +5585,7 @@ app.post('/api/check-existing-school', async (req, res) => {
     return res.json({ exists: false });
   } catch (error) {
     console.error("Check Existing Error:", error);
-    return res.status(500).json({ error: "Database error checking school." });
+    return res.status(500).json({ error: "Database error checking school: " + error.message });
   }
 });
 
@@ -5876,7 +5879,7 @@ app.post('/api/register-beta', async (req, res) => {
             passcode = EXCLUDED.passcode;`,
         [
           uid,
-          null, // School Heads use school_id, not email
+          email || null, // School Heads now provide their DepEd email
           'School Head',
           contactNumber || null,
           firstName || 'School',
@@ -5931,9 +5934,9 @@ app.post('/api/register-beta', async (req, res) => {
       schoolData.district || iernData.District || null,
       schoolData.legislative_district || schoolData.legislative || iernData.LegLegDistrict || iernData.LegDistrict || null,
       null, // Curricular offering defaulted to blank on registration
-      iernData.Latitude || null,
-      iernData.Longitude || null,
-      iernData.Barangay || null,
+      schoolData.latitude || iernData.Latitude || null,
+      schoolData.longitude || iernData.Longitude || null,
+      schoolData.barangay || iernData.Barangay || null,
       foundIern
     ];
 
@@ -6316,46 +6319,57 @@ app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
 
 
 
-// --- 3g. Consolidated Auth: Lookup Masked Email & Forgot Password ---
-app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
+// --- 3g. Consolidated Auth: Lookup Registered Email & Forgot Password ---
+app.get('/api/lookup-email/:identifier', async (req, res) => {
+  const { identifier } = req.params;
   try {
-    // Strict lookup by school_id in users table
-    const result = await pool.query("SELECT email FROM users WHERE school_id = $1 LIMIT 1", [schoolId]);
+    const isSchoolId = /^\d{6,}$/.test(identifier);
+    const query = isSchoolId 
+      ? "SELECT email FROM users WHERE school_id = $1 LIMIT 1"
+      : "SELECT email FROM users WHERE LOWER(email) = $1 LIMIT 1";
+
+    const result = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
+    
     if (result.rows.length === 0) {
-      return res.status(404).json({ found: false, error: "No user found with this School ID." });
+      return res.status(404).json({ found: false, error: "No user found with this identifier." });
     }
 
     const email = result.rows[0].email;
     if (!email) {
-      console.warn(`[AUTH] Masked Lookup: No email registered for school_id ${schoolId}`);
-      return res.status(404).json({ found: false, error: "No email address registered for this School ID." });
+      return res.status(404).json({ found: false, error: "No email address registered for this account." });
     }
 
     const [username, domain] = email.split('@');
     const maskedEmail = username[0] + '*'.repeat(username.length - 1) + '@' + domain;
-    res.json({ found: true, maskedEmail });
+    res.json({ found: true, email: email, maskedEmail });
   } catch (err) {
-    console.error("Lookup Masked Email Error:", err.message);
+    console.error("Lookup Email Error:", err.message);
     res.status(500).json({ error: "Server Error" });
   }
 });
 
 app.post('/api/forgot-password', async (req, res) => {
-  const { schoolId } = req.body;
-  if (!schoolId) return res.status(400).json({ error: "School ID required." });
+  const { schoolId, email: providedEmail, identifier } = req.body;
+  const input = (identifier || schoolId || providedEmail || '').trim();
+  
+  if (!input) return res.status(400).json({ error: "Identifier (Email or School ID) required." });
 
   try {
-    const result = await pool.query("SELECT email FROM users WHERE school_id = $1 LIMIT 1", [schoolId]);
-    if (result.rows.length === 0) return res.status(404).json({ error: "No user found with this School ID." });
+    const isSchoolId = /^\d{6,}$/.test(input);
+    const query = isSchoolId 
+      ? "SELECT email FROM users WHERE school_id = $1 LIMIT 1"
+      : "SELECT email FROM users WHERE LOWER(email) = $1 LIMIT 1";
+
+    const result = await pool.query(query, [isSchoolId ? input : input.toLowerCase()]);
+    
+    if (result.rows.length === 0) return res.status(404).json({ error: "No user found with this identifier." });
 
     const email = result.rows[0].email;
     if (!email) {
-      console.warn(`[AUTH] Forgot Password: No email for school_id ${schoolId}`);
-      return res.status(404).json({ error: "No email address registered for this School ID. Please contact an administrator." });
+      return res.status(404).json({ error: "No email address registered for this account. Please contact an administrator." });
     }
 
-    console.log(`[STUB] Password reset sent to ${email} for School ID ${schoolId}`);
+    console.log(`[STUB] Password reset sent to ${email} for identifier ${input}`);
     res.json({ success: true, message: `Reset link sent to registered email: ${email[0]}***@${email.split('@')[1]}` });
   } catch (err) {
     console.error("Forgot Password Error:", err.message);
@@ -14211,8 +14225,11 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         division, district, leg_district, curricular_offering, latitude, longitude,
         school_head, contact_number, ownership, ownership_document_path, school_type,
         mother_school_id, extension_mother_school_name, unit1_completed, unit1,
-        ownership_document_type, established_month, established_year, unit1_updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, CURRENT_TIMESTAMP)
+        ownership_document_type, established_month, established_year,
+        head_first_name, head_middle_name, head_last_name, head_sex, head_position_title,
+        head_date_of_birth, head_date_hired, google_drive_link, google_drive_file_id,
+        google_drive_file_name, google_drive_thumbnail_url, unit1_updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, CURRENT_TIMESTAMP)
       ON CONFLICT (school_id) DO UPDATE SET
         iern = EXCLUDED.iern,
         school_name = EXCLUDED.school_name,
@@ -14238,6 +14255,17 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         ownership_document_type = EXCLUDED.ownership_document_type,
         established_month = EXCLUDED.established_month,
         established_year = EXCLUDED.established_year,
+        head_first_name = EXCLUDED.head_first_name,
+        head_middle_name = EXCLUDED.head_middle_name,
+        head_last_name = EXCLUDED.head_last_name,
+        head_sex = EXCLUDED.head_sex,
+        head_position_title = EXCLUDED.head_position_title,
+        head_date_of_birth = EXCLUDED.head_date_of_birth,
+        head_date_hired = EXCLUDED.head_date_hired,
+        google_drive_link = EXCLUDED.google_drive_link,
+        google_drive_file_id = EXCLUDED.google_drive_file_id,
+        google_drive_file_name = EXCLUDED.google_drive_file_name,
+        google_drive_thumbnail_url = EXCLUDED.google_drive_thumbnail_url,
         unit1_updated_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP;
     `;
@@ -14253,7 +14281,12 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.mother_school_id || null, data.extension_mother_school_name || null,
       isCompleted, isCompleted ? 1 : 0,
       data.ownership_document_type || null,
-      data.established_month || null, data.established_year || null
+      data.established_month || null, data.established_year || null,
+      data.head_first_name || null, data.head_middle_name || null, data.head_last_name || null,
+      data.head_sex || null, data.head_position_title || null,
+      data.head_date_of_birth || null, data.head_date_hired || null,
+      data.google_drive_link || null, data.google_drive_file_id || null,
+      data.google_drive_file_name || null, data.google_drive_thumbnail_url || null
     ];
 
     // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
@@ -14268,7 +14301,11 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
           ownership = $16, ownership_document_path = $17, school_type = $18,
           mother_school_id = $19, extension_mother_school_name = $20,
           unit1_completed = $21, unit1 = $22,
-          ownership_document_type = $23,
+          ownership_document_type = $23, established_month = $24, established_year = $25,
+          head_first_name = $26, head_middle_name = $27, head_last_name = $28,
+          head_sex = $29, head_position_title = $30, head_date_of_birth = $31,
+          head_date_hired = $32, google_drive_link = $33, google_drive_file_id = $34,
+          google_drive_file_name = $35, google_drive_thumbnail_url = $36,
           unit1_updated_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
         WHERE iern = $2

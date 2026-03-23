@@ -100,6 +100,9 @@ const Register = () => {
         passcode: ''
     });
 
+    const [currentStep, setCurrentStep] = useState(1);
+    const maxSteps = formData.role === 'School Head' ? 5 : 4;
+
     // --- REGISTRATION STAGES ---
     const [registrationStage, setRegistrationStage] = useState('form'); // 'form' | 'passcode' | 'confirm'
 
@@ -429,6 +432,101 @@ const Register = () => {
         }
     };
 
+    // --- STEP NAVIGATION & VALIDATION ---
+    const validateStep = (step) => {
+        const d = formData;
+        if (step === 1) {
+            // Identity & Role
+            if (!d.firstName || !d.lastName || !d.role) {
+                alert("Please complete all fields in this step.");
+                return false;
+            }
+            return true;
+        }
+
+        if (step === 2) {
+            // Contact Info
+            const email = (d.role === 'School Head') ? d.schoolEmail : d.email;
+            if (!email || !d.contactNumber) {
+                alert("Email and Mobile Number are required.");
+                return false;
+            }
+            if (d.contactNumber.length !== 11 || !d.contactNumber.startsWith('09')) {
+                alert("Please enter a valid 11-digit mobile number starting with 09.");
+                return false;
+            }
+            if (d.role === 'School Head' && !email.toLowerCase().endsWith('@deped.gov.ph')) {
+                alert("Please use your official @deped.gov.ph school email.");
+                return false;
+            }
+            return true;
+        }
+
+        if (step === 3) {
+            // Assignment / Location
+            if (d.role === 'School Head') {
+                if (!selectedSchool) {
+                    alert("Please select your school.");
+                    return false;
+                }
+            } else if (d.role === 'Implementing Agency' || d.role === 'Local Government Unit') {
+                if (!d.region || !d.province) {
+                    alert("Please complete your assignment location details.");
+                    return false;
+                }
+                if (d.role === 'Implementing Agency' && (d.agencyType === 'CGO' || d.agencyType === 'MGO') && !d.municipality) {
+                    alert("Please select your Municipality/City.");
+                    return false;
+                }
+            } else {
+                // RO / SDO / Engineers
+                if (!d.region || !d.office) {
+                    alert("Please complete your assignment details.");
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        if (step === 4 && d.role === 'School Head') {
+            // Geotagging validation
+            if (!selectedSchool) {
+                alert("School data missing. Please go back and select your school again.");
+                return false;
+            }
+            return true;
+        }
+
+        const securityStep = d.role === 'School Head' ? 5 : 4;
+        if (step === securityStep) {
+            // Security
+            if (!formData.password) {
+                alert("Please enter a password.");
+                return false;
+            }
+            if (formData.password.length < 6) {
+                alert("Password must be at least 6 characters.");
+                return false;
+            }
+            if (formData.password !== formData.confirmPassword) {
+                alert("Passwords do not match.");
+                return false;
+            }
+            return true;
+        }
+        return true;
+    };
+
+    const handleNext = () => {
+        if (validateStep(currentStep)) {
+            setCurrentStep(prev => Math.min(prev + 1, maxSteps));
+        }
+    };
+
+    const handleBack = () => {
+        setCurrentStep(prev => Math.max(prev - 1, 1));
+    };
+
     // --- 3. DRAGGABLE MARKER LOGIC ---
     const eventHandlers = useMemo(
         () => ({
@@ -613,6 +711,7 @@ const Register = () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        email: contactEmail, // Critical: Include DepEd email
                         password: formData.password,
                         contactNumber: contactDigits,
                         firstName: formData.firstName,
@@ -621,18 +720,21 @@ const Register = () => {
                     })
                 });
 
-                console.log("Step B: Registration response received", regRes.status);
-                if (!regRes.ok) {
-                    const errorText = await regRes.text();
-                    throw new Error(`Registration Failed (${regRes.status}): ${errorText || 'No detail'}`);
-                }
                 const regText = await regRes.text();
                 console.log("Step B: Registration response text:", regText);
+                if (!regRes.ok) {
+                    let errorMessage = `Registration Failed (${regRes.status})`;
+                    try {
+                        const errData = JSON.parse(regText);
+                        errorMessage = errData.error || errData.message || errorMessage;
+                    } catch (e) {
+                        errorMessage = regText || errorMessage;
+                    }
+                    throw new Error(errorMessage);
+                }
+                
                 if (!regText) throw new Error("Empty response from " + endpoint);
                 regData = JSON.parse(regText);
-                if (!regData.success) {
-                    throw new Error(regData.error || "Server Registration Failed.");
-                }
 
                 if (regData.success && regData.token) {
                     login(regData.user, regData.token);
@@ -751,832 +853,395 @@ const Register = () => {
 
                             {registrationStage === 'form' && (
                                 <>
-                            {/* REGISTRATION TABS (Hidden if path is restricted) */}
-                            {(!pathId || (pathId !== 'path_school_head' && pathId !== 'path_ro_sd' && pathId !== 'path_engineers' && pathId !== 'path_efd' && pathId !== 'path_agencies')) ? (
-                                <div className="flex bg-slate-100 p-1 rounded-2xl mb-6">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleTabChange('internal')}
-                                        className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
-                                            activeTab === 'internal'
-                                                ? 'bg-white text-blue-700 shadow-sm'
-                                                : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                    >
-                                        Internal Personnel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleTabChange('external')}
-                                        className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${
-                                            activeTab === 'external'
-                                                ? 'bg-white text-purple-700 shadow-sm'
-                                                : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                    >
-                                        Implementing Agency
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="mb-6 px-2 py-1 bg-blue-50 rounded-lg inline-block border border-blue-100">
-                                    <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">
-                                        {activeTab === 'internal' ? 'Internal Personnel Path' : 'Implementing Agency Path'}
-                                    </span>
-                                </div>
-                            )}
-
-
-
-                            {activeTab === 'internal' && (
-                                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
-                                    <label className="block text-xs font-bold text-blue-800 uppercase tracking-wider mb-2">Registering As</label>
-                                <div className="relative">
-                                    <select
-                                        name="role"
-                                        value={formData.role}
-                                        onChange={handleRoleChange}
-                                        disabled={pathId === 'path_school_head'}
-                                        className={`w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-blue-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer ${pathId === 'path_school_head' ? 'opacity-70 bg-slate-50' : ''}`}
-                                    >
-                                        {(!pathId || pathId === 'path_ro_sd') && (
-                                            <>
-                                                <option value="Central Office">CO Personnel</option>
-                                                <option value="Regional Office">RO Personnel</option>
-                                                <option value="School Division Office">SDO Personnel</option>
-                                            </>
-                                        )}
-                                        
-                                        {(!pathId || pathId === 'path_school_head') && (
-                                            <option value="School Head">School Head</option>
-                                        )}
-
-                                        {(!pathId || pathId === 'path_engineers') && (
-                                            <option value="Division Engineer">Division Engineer</option>
-                                        )}
-
-                                        {(!pathId || pathId === 'path_efd') && (
-                                            <option value="EFD Engineer">EFD Engineer</option>
-                                        )}
-
-                                        {!pathId && (
-                                            <>
-                                                <option value="Local Government Unit">Local Government Unit</option>
-                                                <option value="Central Office Finance">Central Office Finance</option>
-                                            </>
-                                        )}
-                                    </select>
-
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-blue-500">
-                                        <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
-                                    </div>
-                                </div>
-                                </div>
-                            )}
-
-                            {activeTab === 'external' && (
-                                <div className="space-y-4 p-4 bg-purple-50 rounded-xl border border-purple-100 animate-in fade-in slide-in-from-top-2">
-                                    <h3 className="text-sm font-bold text-purple-800 uppercase flex items-center gap-2">
-                                        <span className="bg-purple-100 text-purple-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">1</span>
-                                        Agency & Assignment
-                                    </h3>
-                                    {/* 1. AGENCY DETAILS (Moved to top) */}
-                                    <div className="space-y-3">
-                                        <label className="text-xs font-bold text-purple-700 uppercase">Agency Details</label>
-                                        
-                                        <select
-                                            name="agencyType"
-                                            value={formData.agencyType || ''}
-                                            onChange={handleChange}
-                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
-                                            required
-                                        >
-                                            <option value="">Select Agency Type</option>
-                                            <option value="PGO">PGO (Provincial Government Office)</option>
-                                            <option value="CGO">CGO (City Government Office)</option>
-                                            <option value="MGO">MGO (Municipal Government Office)</option>
-                                            <option value="DPWH">DPWH (Department of Public Works and Highways)</option>
-                                            <option value="CSO">CSO (Civil Society Organization)</option>
-                                        </select>
-
-                                        {formData.agencyType && (
-                                            <div className="animate-in fade-in slide-in-from-top-1">
-                                                <input
-                                                    name="specificAgency"
-                                                    value={formData.specificAgency || ''}
-                                                    placeholder={
-                                                        formData.agencyType === 'DPWH' ? "Specify District (e.g., District 1)" :
-                                                        formData.agencyType === 'CSO' ? "Specify CSO Name" :
-                                                        `Select level to auto-fill name...`
-                                                    }
-                                                    readOnly={['PGO', 'CGO', 'MGO'].includes(formData.agencyType)}
-                                                    onChange={handleChange}
-                                                    className={`w-full border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500 transition-all ${
-                                                        ['PGO', 'CGO', 'MGO'].includes(formData.agencyType) 
-                                                            ? 'bg-slate-100 cursor-not-allowed font-bold text-slate-600' 
-                                                            : 'bg-white'
-                                                    }`}
-                                                    required
-                                                />
-                                                {['PGO', 'CGO', 'MGO'].includes(formData.agencyType) && (
-                                                    <p className="text-[10px] text-purple-400 mt-1 ml-1 italic">This name is automatically generated based on your location.</p>
-                                                )}
-                                                {['DPWH', 'CSO'].includes(formData.agencyType) && (
-                                                    <p className="text-[10px] text-purple-400 mt-1 ml-1">Provide the specific name or district of the agency.</p>
-                                                )}
-                                            </div>
-                                        )}
-                                        
-                                        <input
-                                            name="position"
-                                            value={formData.position}
-                                            placeholder="Position / Designation"
-                                            onChange={handleChange}
-                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                                            required
-                                        />
-                                    </div>
-
-                                    {/* 2. JURISDICTION (Moved down) */}
-                                    <div className="space-y-3 pt-3 border-t border-purple-200/50">
-                                        <label className="text-xs font-bold text-purple-700 uppercase">Jurisdiction</label>
-
-                                        {/* REGION */}
-                                        <select
-                                            name="region"
-                                            onChange={handleRegionChange}
-                                            value={formData.region}
-                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
-                                            required
-                                        >
-                                            <option value="">Select Region</option>
-                                            {regions.map((reg) => (
-                                                <option key={reg} value={reg}>{reg}</option>
-                                            ))}
-                                        </select>
-
-                                        {/* PROVINCE */}
-                                        <select
-                                            name="province"
-                                            onChange={handleProvinceChange}
-                                            value={formData.province}
-                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                                            disabled={!formData.region}
-                                            required
-                                        >
-                                            <option value="">Select Province</option>
-                                            {provinceOptions.map((prov) => (
-                                                <option key={prov} value={prov}>{prov}</option>
-                                            ))}
-                                        </select>
-
-                                        {/* MUNICIPALITY */}
-                                        {!['PGO', 'DPWH', 'CSO'].includes(formData.agencyType) && (
-                                            <select
-                                                name="city"
-                                                onChange={handleCityChange}
-                                                value={formData.city}
-                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                                                disabled={!formData.province}
-                                                required
-                                            >
-                                                <option value="">Select Municipality/City</option>
-                                                {cityOptions.map((city) => (
-                                                    <option key={city} value={city}>{city}</option>
-                                                ))}
-                                            </select>
-                                        )}
-                                    </div>
-
-                                    {/* CONTACT INFO REMOVED - MOVED TO TOP */}
-                                </div>
-                            )}
-
-                            {/* AUTHORIZATION CODE INPUT (For Non-School Heads and Non-Super Users) */}
-                            {formData.role !== 'School Head' && formData.role !== 'Super User' && (
-                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 animate-fade-in">
-                                    <label className="block text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                                        </svg>
-                                        Authorization Code (Required)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="authCode"
-                                        value={formData.authCode}
-                                        onChange={handleChange}
-                                        placeholder="Enter Secure Code"
-                                        className="w-full bg-white border border-amber-300 rounded-xl px-4 py-3 text-amber-900 font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all placeholder:text-amber-300 placeholder:font-sans placeholder:tracking-normal"
-                                        required
-                                    />
-                                    <p className="text-[10px] text-amber-600 mt-2 ml-1">
-                                        Please send an email to <span className="font-bold select-all">support.stride@deped.gov.ph</span> to obtain the secure code for <strong>{formData.role}</strong> registration.
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* === SCHOOL HEAD SPECIFIC FLOW === */}
-                            {formData.role === 'School Head' ? (
-                                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4">
-                                    <div className="bg-white p-5 rounded-2xl border-l-4 border-l-blue-500 shadow-sm border border-slate-100">
-                                        <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                            <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">1</span>
-                                            School Selection
-                                        </h3>
-
-                                        {regions.length === 0 ? (
-                                            <div className="text-center py-4 text-slate-400 text-sm animate-pulse">Loading School Database...</div>
-                                        ) : (
-                                            <div className="grid grid-cols-1 gap-3">
-                                                {/* 1. Region */}
-                                                <select
-                                                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                                    value={selectedRegion}
-                                                    onChange={(e) => {
-                                                        setSelectedRegion(e.target.value);
-                                                        setSelectedDivision('');
-                                                        setSelectedDistrict('');
-                                                        setSelectedMunicipality('');
-                                                        setSelectedSchool(null);
-                                                    }}
-                                                >
-                                                    <option value="">Select Region</option>
-                                                    {regions.map(r => <option key={r} value={r}>{r}</option>)}
-                                                </select>
-
-                                                {/* 2. Division */}
-                                                <select
-                                                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-                                                    value={selectedDivision}
-                                                    disabled={!selectedRegion}
-                                                    onChange={(e) => {
-                                                        setSelectedDivision(e.target.value);
-                                                        setSelectedDistrict('');
-                                                        setSelectedMunicipality('');
-                                                        setSelectedSchool(null);
-                                                    }}
-                                                >
-                                                    <option value="">Select Division</option>
-                                                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-                                                </select>
-
-                                                {/* 3. District */}
-                                                <select
-                                                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-                                                    value={selectedDistrict}
-                                                    disabled={!selectedDivision}
-                                                    onChange={(e) => {
-                                                        setSelectedDistrict(e.target.value);
-                                                        setSelectedMunicipality('');
-                                                        setSelectedSchool(null);
-                                                    }}
-                                                >
-                                                    <option value="">Select District</option>
-                                                    {districts.map(d => <option key={d} value={d}>{d}</option>)}
-                                                </select>
-
-                                                {/* 4. Municipality */}
-                                                <select
-                                                    className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-                                                    value={selectedMunicipality}
-                                                    disabled={!selectedDistrict}
-                                                    onChange={(e) => {
-                                                        setSelectedMunicipality(e.target.value);
-                                                        setSelectedSchool(null);
-                                                    }}
-                                                >
-                                                    <option value="">Select Municipality</option>
-                                                    {municipalities.map(m => <option key={m} value={m}>{m}</option>)}
-                                                </select>
-
-                                                {/* 5. School (Final Step) */}
-                                                <select
-                                                    className="w-full p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm font-semibold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
-                                                    value={selectedSchool?.school_id || ''}
-                                                    disabled={!selectedMunicipality}
-                                                    onChange={handleSchoolSelect}
-                                                >
-                                                    <option value="">Select School</option>
-                                                    {availableSchools.map(s => <option key={s.school_id} value={s.school_id}>{s.school_name} - {s.school_id}</option>)}
-                                                </select>
-                                            </div>
-                                        )}
-                                    </div>
-
-
-
-
-
-                                    {/* AUTO-GENERATED CREDENTIALS */}
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Your Username (School ID)</label>
-                                        <input
-                                            type="text"
-                                            value={selectedSchool?.school_id || ''}
-                                            readOnly
-                                            className="w-full bg-slate-200 border-none rounded-lg px-3 py-2 text-slate-800 text-lg font-mono font-bold mb-2 cursor-not-allowed text-center tracking-widest"
-                                        />
-                                        <p className="text-[10px] text-slate-500 text-center">You will use this ID to log in.</p>
-                                    </div>
-
-                                    {/* SCHOOL CONTACT DETAILS */}
-                                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                                        <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                            <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">2</span>
-                                            Account Recovery & Contact Info
-                                        </h3>
-
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Official School Email</label>
-                                                <div className="flex items-center w-full max-w-full">
-                                                    <input
-                                                        type="text"
-                                                        value={formData.schoolEmail ? formData.schoolEmail.split('@')[0] : ''}
-                                                        onChange={(e) => {
-                                                            const username = e.target.value.replace(/[^a-zA-Z0-9._-]/g, '');
-                                                            setFormData(prev => ({ ...prev, schoolEmail: username + '@deped.gov.ph' }));
-                                                        }}
-                                                        placeholder="username"
-                                                        className="flex-1 min-w-0 bg-white border border-r-0 border-slate-200 text-sm rounded-l-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden text-ellipsis"
-                                                        required
-                                                    />
-                                                    <span className="bg-slate-100 border border-l-0 border-slate-200 text-slate-500 text-xs sm:text-sm font-bold px-2 sm:px-3 py-3 rounded-r-xl select-none whitespace-nowrap">
-                                                        @deped.gov.ph
-                                                    </span>
+                                    {/* Progress Indicator */}
+                                    <div className="flex items-center justify-between mb-8 px-2 relative">
+                                        {[1, 2, 3, 4, 5].filter(s => s <= maxSteps).map((s) => (
+                                            <div key={s} className="flex flex-col items-center gap-2 relative z-10">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-500 border-2
+                                                    ${currentStep === s ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 scale-110' : 
+                                                      currentStep > s ? 'bg-green-500 border-green-500 text-white' : 
+                                                      'bg-white border-slate-200 text-slate-400'}`}>
+                                                    {currentStep > s ? '✓' : s}
                                                 </div>
-                                                <p className="text-[10px] text-slate-400 mt-1 ml-1">Used for password resets and notifications.</p>
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${currentStep === s ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                    {s === 1 ? 'Role' : s === 2 ? 'Contact' : (s === 3 ? (formData.role === 'School Head' ? 'School' : 'Assign') : (maxSteps === 5 ? (s === 4 ? 'Geotag' : 'Security') : 'Security'))}
+                                                </span>
                                             </div>
-
-                                            {/* CONTACT INFO REMOVED - MOVED TO TOP */}
+                                        ))}
+                                        {/* Background Progress Line */}
+                                        <div className="absolute top-[20px] left-10 right-10 h-[2px] bg-slate-100 -z-0">
+                                            <div 
+                                                className="h-full bg-blue-600 transition-all duration-500" 
+                                                style={{ width: `${((currentStep - 1) / (maxSteps - 1)) * 100}%` }}
+                                            ></div>
                                         </div>
                                     </div>
 
-                                    {/* MAP & LOCATION CONFIRMATION */}
-                                    {selectedSchool && selectedSchool.latitude && selectedSchool.longitude && (
-                                        <div className="animate-in fade-in slide-in-from-top-2 space-y-4">
+                                    {/* STEP 1: IDENTITY & ROLE */}
+                                    {currentStep === 1 && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                            {(!pathId || (pathId !== 'path_school_head' && pathId !== 'path_ro_sd' && pathId !== 'path_engineers' && pathId !== 'path_efd' && pathId !== 'path_agencies')) ? (
+                                                <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                                                    <button type="button" onClick={() => handleTabChange('internal')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'internal' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Internal Personnel</button>
+                                                    <button type="button" onClick={() => handleTabChange('external')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'external' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Implementing Agency</button>
+                                                </div>
+                                            ) : (
+                                                <div className="mb-2 px-3 py-1.5 bg-blue-50 rounded-xl inline-block border border-blue-100 shadow-sm">
+                                                    <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">{activeTab === 'internal' ? 'Internal Personnel Path' : 'Implementing Agency Path'}</span>
+                                                </div>
+                                            )}
 
-                                            {/* MAP */}
-                                            <div className="w-full h-[250px] rounded-xl overflow-hidden border border-slate-200 relative z-0 shadow-inner">
-                                                <MapContainer
-                                                    center={[parseFloat(selectedSchool.latitude), parseFloat(selectedSchool.longitude)]}
-                                                    zoom={17}
-                                                    style={{ height: '100%', width: '100%' }}
-                                                    dragging={true}
-                                                    scrollWheelZoom={true}
-                                                >
-                                                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                                                    <Marker
-                                                        position={[parseFloat(selectedSchool.latitude), parseFloat(selectedSchool.longitude)]}
-                                                        draggable={true}
-                                                        eventHandlers={eventHandlers}
-                                                        ref={markerRef}
-                                                    >
-                                                        <Popup>Target: {selectedSchool.school_name}<br />Drag to adjust.</Popup>
-                                                    </Marker>
-                                                </MapContainer>
-                                            </div>
-
-                                            {/* CONFIRMATION UI */}
-                                            <div className="p-4 rounded-xl border-2 bg-blue-50 border-blue-200">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <h4 className="font-bold text-blue-900 text-sm uppercase">Confirm Location</h4>
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-1">
+                                                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">First Name</label>
+                                                        <input name="firstName" value={formData.firstName} placeholder="Enter First Name" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Last Name</label>
+                                                        <input name="lastName" value={formData.lastName} placeholder="Enter Last Name" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                    </div>
                                                 </div>
 
-                                                <p className="text-xs text-blue-700 mb-2">
-                                                    Drag the pin on the map to precise location of your school if needed.
-                                                </p>
-
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div className="bg-white p-2 rounded border border-blue-100">
-                                                        <div className="text-[10px] uppercase text-slate-400 font-bold">Latitude</div>
-                                                        <div className="text-xs font-mono font-bold text-slate-700">{parseFloat(selectedSchool.latitude).toFixed(6)}</div>
-                                                    </div>
-                                                    <div className="bg-white p-2 rounded border border-blue-100">
-                                                        <div className="text-[10px] uppercase text-slate-400 font-bold">Longitude</div>
-                                                        <div className="text-xs font-mono font-bold text-slate-700">{parseFloat(selectedSchool.longitude).toFixed(6)}</div>
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Your Role</label>
+                                                    <div className="relative">
+                                                        <select
+                                                            name="role"
+                                                            value={formData.role}
+                                                            onChange={handleRoleChange}
+                                                            disabled={pathId === 'path_school_head'}
+                                                            className={`w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer ${pathId === 'path_school_head' ? 'opacity-70 bg-slate-50' : ''}`}
+                                                        >
+                                                            {activeTab === 'internal' ? (
+                                                                <>
+                                                                    {(!pathId || pathId === 'path_ro_sd') && (
+                                                                        <>
+                                                                            <option value="Central Office">CO Personnel</option>
+                                                                            <option value="Regional Office">RO Personnel</option>
+                                                                            <option value="School Division Office">SDO Personnel</option>
+                                                                        </>
+                                                                    )}
+                                                                    {(!pathId || pathId === 'path_school_head') && <option value="School Head">School Head</option>}
+                                                                    {(!pathId || pathId === 'path_engineers') && <option value="Division Engineer">Division Engineer</option>}
+                                                                    {(!pathId || pathId === 'path_efd') && <option value="EFD Engineer">EFD Engineer</option>}
+                                                                    {!pathId && (
+                                                                        <>
+                                                                            <option value="Local Government Unit">Local Government Unit</option>
+                                                                            <option value="Central Office Finance">Central Office Finance</option>
+                                                                        </>
+                                                                    )}
+                                                                </>
+                                                            ) : (
+                                                                <option value="Implementing Agency">Implementing Agency</option>
+                                                            )}
+                                                        </select>
+                                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                                                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
-                                </div>
-
-                            ) : (
-                                /* === GENERIC / OTHER ROLE FLOW === */
-                                <div className="space-y-4 animate-in fade-in">
-                                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                        <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">1</span>
-                                        Personal Information
-                                    </h3>
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <input name="firstName" value={formData.firstName} placeholder="First Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
-                                        <input name="lastName" value={formData.lastName} placeholder="Last Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
-                                    </div>
-
-
-                                    <div>
-                                        <input 
-                                            name="email" 
-                                            type="email" 
-                                            placeholder={(formData.role === 'Local Government Unit' || formData.role === 'Implementing Agency') ? "Email Address" : "DepEd Email Address"} 
-                                            onChange={handleChange} 
-                                            value={formData.email} 
-                                            className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 mb-3" 
-                                            required 
-                                        />
-                                        
-                                        {/* CONTACT NUMBER (Moved here after email) */}
-                                        <div className="relative">
-                                            <input
-                                                name="contactNumber"
-                                                inputMode="numeric"
-                                                value={formData.contactNumber}
-                                                onFocus={() => {
-                                                    if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
-                                                }}
-                                                onChange={(e) => {
-                                                    let val = e.target.value.replace(/\D/g, '');
-                                                    if (!val.startsWith('09')) {
-                                                        if (val.startsWith('9')) val = '0' + val;
-                                                        else if (val.length < 2) val = '09';
-                                                        else val = '09' + val.substring(2);
-                                                    }
-                                                    val = val.slice(0, 11);
-                                                    setFormData(prev => ({ ...prev, contactNumber: val }));
-                                                }}
-                                                placeholder="Mobile No. (09xx xxx xxxx)"
-                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                                maxLength={11}
-                                                required
-                                            />
-                                            <p className="text-[10px] text-blue-600 mt-1 ml-1">Must be 11 digits.</p>
-                                        </div>
-                                    </div>
-
-                                    {/* CENTRAL OFFICE FIELDS */}
-                                    {formData.role === 'Central Office' && (
-                                        <div className="space-y-3 p-4 bg-yellow-50 rounded-xl border border-yellow-100">
-                                            <label className="text-xs font-bold text-yellow-700 uppercase">Bureau Assignment</label>
-                                            <div className="space-y-3">
-                                                <select
-                                                    name="office"
-                                                    value={formData.office} // Mapping Bureau to office
-                                                    onChange={handleChange}
-                                                    className="w-full bg-white border border-yellow-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-yellow-500"
-                                                    required
-                                                >
-                                                    <option value="">Select Bureau / Service</option>
-                                                    {centralOfficeBureaus.map((bureau) => (
-                                                        <option key={bureau} value={bureau}>{bureau}</option>
-                                                    ))}
-                                                </select>
-
-                                                <input
-                                                    name="division"
-                                                    value={formData.division} // Mapping Division to division
-                                                    placeholder="Division"
-                                                    onChange={handleChange}
-                                                    className="w-full bg-white border border-yellow-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-yellow-500"
-                                                    required
-                                                />
-
-                                                <input
-                                                    name="position"
-                                                    value={formData.position}
-                                                    placeholder="Position"
-                                                    onChange={handleChange}
-                                                    className="w-full bg-white border border-yellow-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-yellow-500"
-                                                    required
-                                                />
+                                        {/* STEP 2: CONTACT INFORMATION */}
+                                    {currentStep === 2 && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-start gap-4">
+                                                <div className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-md font-bold text-xs">2</div>
+                                                <div>
+                                                    <h3 className="font-bold text-blue-900">Communication</h3>
+                                                    <p className="text-xs text-blue-700">How we reaching you for recovery and updates.</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
 
-                                    {/* REGIONAL OFFICE FIELDS */}
-                                    {formData.role === 'Regional Office' && (
-                                        <div className="space-y-3 p-4 bg-purple-50 rounded-xl border border-purple-100">
-                                            <label className="text-xs font-bold text-purple-700 uppercase">Region Assignment</label>
-                                            <select
-                                                name="region"
-                                                onChange={handleRegionChange}
-                                                value={formData.region}
-                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
-                                                required
-                                            >
-                                                <option value="">Select Region</option>
-                                                {regions.map((reg) => (
-                                                    <option key={reg} value={reg}>{reg}</option>
-                                                ))}
-                                            </select>
-                                            <select
-                                                name="office"
-                                                value={formData.office}
-                                                onChange={handleChange}
-                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
-                                                required
-                                            >
-                                                <option value="">Select Office</option>
-                                                {regionalOffices.map((office) => (
-                                                    <option key={office} value={office}>{office}</option>
-                                                ))}
-                                            </select>
-
-
-                                            <input
-                                                name="position"
-                                                value={formData.position}
-                                                placeholder="Position"
-                                                onChange={handleChange}
-                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                                                required
-                                            />
-                                        </div>
-                                    )}
-
-                                    {/* SCHOOL DIVISION OFFICE FIELDS */}
-                                    {formData.role === 'School Division Office' && (
-                                        <div className="space-y-3 p-4 bg-orange-50 rounded-xl border border-orange-100">
-                                            <label className="text-xs font-bold text-orange-700 uppercase">Division Assignment</label>
-                                            <select
-                                                name="region"
-                                                onChange={handleRegionChange}
-                                                value={formData.region}
-                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500"
-                                                required
-                                            >
-                                                <option value="">Select Region</option>
-                                                {regions.map((reg) => (
-                                                    <option key={reg} value={reg}>{reg}</option>
-                                                ))}
-                                            </select>
-
-                                            <select
-                                                name="division"
-                                                onChange={handleChange}
-                                                value={formData.division}
-                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                                                disabled={!formData.region}
-                                                required
-                                            >
-                                                <option value="">Select Division</option>
-                                                {divisions.map(div => (
-                                                    <option key={div} value={div}>{div}</option>
-                                                ))}
-                                            </select>
-
-                                            <select
-                                                name="office"
-                                                value={formData.office}
-                                                onChange={handleChange}
-                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500"
-                                                required
-                                            >
-                                                <option value="">Select Office</option>
-                                                {divisionOffices.map((office) => (
-                                                    <option key={office} value={office}>{office}</option>
-                                                ))}
-                                            </select>
-
-                                            <input
-                                                name="position"
-                                                value={formData.position}
-                                                placeholder="Position"
-                                                onChange={handleChange}
-                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
-                                                required
-                                            />
-                                        </div>
-                                    )}
-
-
-                                    {/* ENGINEER & EFD FIELDS */}
-                                    {(formData.role === 'Division Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD Engineer') && (
-                                        <div className="space-y-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
-                                            <h3 className="text-sm font-bold text-teal-800 uppercase flex items-center gap-2">
-                                                <span className="bg-teal-100 text-teal-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>
-                                                {formData.role === 'EFD Engineer' ? 'Position & Contact' : 'Assignment & Contact'}
-                                            </h3>
-
-                                            {/* ASSIGNMENT / POSITION */}
-                                            <div className="space-y-3">
-                                                {formData.role !== 'EFD Engineer' ? (
-                                                    <label className="text-xs font-bold text-teal-700 uppercase">Assignment</label>
-                                                ) : (
-                                                    <label className="text-xs font-bold text-teal-700 uppercase">Position</label>
-                                                )}
-
-                                                {formData.role !== 'EFD Engineer' && (
+                                            <div className="space-y-4 px-1">
+                                                {formData.role === 'School Head' ? (
                                                     <>
-                                                        <select
-                                                            name="region"
-                                                            onChange={handleRegionChange}
-                                                            value={formData.region}
-                                                            className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
-                                                            required
-                                                        >
-                                                            <option value="">Select Region</option>
-                                                            {regions.map((reg) => (
-                                                                <option key={reg} value={reg}>{reg}</option>
-                                                            ))}
-                                                        </select>
-
-                                                        <select
-                                                            name="division"
-                                                            onChange={handleChange}
-                                                            value={formData.division}
-                                                            className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
-                                                            disabled={!formData.region}
-                                                            required
-                                                        >
-                                                            <option value="">Select Division</option>
-                                                            {divisions.map(div => (
-                                                                <option key={div} value={div}>{div}</option>
-                                                            ))}
-                                                        </select>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs font-bold text-slate-500 uppercase ml-1">Official School Email</label>
+                                                            <div className="flex items-center w-full">
+                                                                <input
+                                                                    type="text"
+                                                                    value={formData.schoolEmail ? formData.schoolEmail.split('@')[0] : ''}
+                                                                    onChange={(e) => {
+                                                                        const username = e.target.value.replace(/[^a-zA-Z0-9._-]/g, '');
+                                                                        setFormData(prev => ({ ...prev, schoolEmail: username + '@deped.gov.ph' }));
+                                                                    }}
+                                                                    placeholder="account.username"
+                                                                    className="flex-1 min-w-0 bg-white border border-r-0 border-slate-200 text-sm rounded-l-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                                                    required
+                                                                />
+                                                                <span className="bg-slate-100 border border-l-0 border-slate-200 text-slate-600 text-xs font-bold px-4 py-3 rounded-r-xl select-none whitespace-nowrap">
+                                                                    @deped.gov.ph
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1 text-slate-500 uppercase ml-1">
+                                                            <label className="text-xs font-bold">Mobile Number</label>
+                                                            <div className="relative">
+                                                                <input
+                                                                    name="contactNumber"
+                                                                    inputMode="numeric"
+                                                                    value={formData.contactNumber}
+                                                                    onFocus={() => { if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' })); }}
+                                                                    onChange={(e) => {
+                                                                        let val = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                                                        if (val.length >= 2 && !val.startsWith('09')) val = '09' + val.substring(2);
+                                                                        setFormData(prev => ({ ...prev, contactNumber: val }));
+                                                                    }}
+                                                                    placeholder="09xx xxx xxxx"
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                                    maxLength={11}
+                                                                    required
+                                                                />
+                                                                <div className="absolute top-3.5 right-4 text-blue-500">
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                                                </div>
+                                                            </div>
+                                                            <p className="text-[10px] text-blue-600 ml-1">11 digits starting with 09.</p>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs font-bold text-slate-500 uppercase ml-1">Email Address</label>
+                                                            <input name="email" type="email" placeholder="Enter email address" onChange={handleChange} value={formData.email} className="w-full bg-white border border-slate-200 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs font-bold text-slate-500 uppercase ml-1">Mobile Number</label>
+                                                            <div className="relative">
+                                                                <input
+                                                                    name="contactNumber"
+                                                                    inputMode="numeric"
+                                                                    value={formData.contactNumber}
+                                                                    onFocus={() => { if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' })); }}
+                                                                    onChange={(e) => {
+                                                                        let val = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                                                        if (val.length >= 2 && !val.startsWith('09')) val = '09' + val.substring(2);
+                                                                        setFormData(prev => ({ ...prev, contactNumber: val }));
+                                                                    }}
+                                                                    placeholder="09xx xxx xxxx"
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                                    maxLength={11}
+                                                                    required
+                                                                />
+                                                                <div className="absolute top-3.5 right-4 text-blue-500">
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </>
                                                 )}
-
-                                                <select
-                                                    name="position"
-                                                    value={formData.position}
-                                                    onChange={handleChange}
-                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
-                                                    required
-                                                >
-                                                    <option value="">Select Position</option>
-                                                    <option value="Engineer II">Engineer II</option>
-                                                    <option value="Engineer III">Engineer III</option>
-                                                    <option value="Engineer IV">Engineer IV</option>
-                                                    <option value="Engineer V">Engineer V</option>
-                                                    <option value="Technical Assistant I (COS)">Technical Assistant I (COS)</option>
-                                                    <option value="Technical Assistant II (COS)">Technical Assistant II (COS)</option>
-                                                    <option value="Technical Assistant III (COS)">Technical Assistant III (COS)</option>
-                                                    <option value="Technical Assistant IV (COS)">Technical Assistant IV (COS)</option>
-                                                    <option value="Technical Assistant V (COS)">Technical Assistant V (COS)</option>
-                                                </select>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* LOCAL GOVERNMENT UNIT FIELDS */}
-                                    {formData.role === 'Local Government Unit' && (
-                                        <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
-                                            <h3 className="text-sm font-bold text-orange-800 uppercase flex items-center gap-2">
-                                                <span className="bg-orange-100 text-orange-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>
-                                                LGU Assignment
-                                            </h3>
+                                    {/* STEP 3: ASSIGNMENT & LOCATION */}
+                                    {currentStep === 3 && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                            {formData.role === 'School Head' ? (
+                                                <div className="space-y-4">
+                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                                                        <h4 className="text-xs font-bold text-blue-800 uppercase mb-3 ml-1">Locate Your School</h4>
+                                                        <div className="grid gap-3">
+                                                            <select className="w-full p-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500" value={selectedRegion} onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); setSelectedDistrict(''); setSelectedMunicipality(''); setSelectedSchool(null); }}>
+                                                                <option value="">Select Region</option>
+                                                                {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                                            </select>
+                                                            <select className="w-full p-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={selectedDivision} disabled={!selectedRegion} onChange={(e) => { setSelectedDivision(e.target.value); setSelectedDistrict(''); setSelectedMunicipality(''); setSelectedSchool(null); }}>
+                                                                <option value="">Select Division</option>
+                                                                {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                                                            </select>
+                                                            <select className="w-full p-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={selectedDistrict} disabled={!selectedDivision} onChange={(e) => { setSelectedDistrict(e.target.value); setSelectedMunicipality(''); setSelectedSchool(null); }}>
+                                                                <option value="">Select District</option>
+                                                                {districts.map(d => <option key={d} value={d}>{d}</option>)}
+                                                            </select>
+                                                            <select className="w-full p-3 rounded-xl bg-white border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={selectedMunicipality} disabled={!selectedDistrict} onChange={(e) => { setSelectedMunicipality(e.target.value); setSelectedSchool(null); }}>
+                                                                <option value="">Select Municipality</option>
+                                                                {municipalities.map(m => <option key={m} value={m}>{m}</option>)}
+                                                            </select>
+                                                            <select className="w-full p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" value={selectedSchool?.school_id || ''} disabled={!selectedMunicipality} onChange={handleSchoolSelect}>
+                                                                <option value="">Select School</option>
+                                                                {availableSchools.map(s => <option key={s.school_id} value={s.school_id}>{s.school_name} - {s.school_id}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-4">
+                                                    {/* Generic Dynamic Sections based on role */}
+                                                    {formData.role === 'Implementing Agency' && (
+                                                        <div className="space-y-4 p-4 bg-purple-50/50 rounded-2xl border border-purple-100">
+                                                            <select name="agencyType" value={formData.agencyType || ''} onChange={handleChange} className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500" required>
+                                                                <option value="">Select Agency Type</option>
+                                                                <option value="PGO">PGO (Provincial Government)</option><option value="CGO">CGO (City Government)</option>
+                                                                <option value="MGO">MGO (Municipal Government)</option><option value="DPWH">DPWH</option><option value="CSO">CSO</option>
+                                                            </select>
+                                                            <input name="position" value={formData.position} placeholder="Position/Designation" onChange={handleChange} className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500" required />
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500" required>
+                                                                    <option value="">Select Region</option>
+                                                                    {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                                                </select>
+                                                                <select name="province" onChange={handleProvinceChange} value={formData.province} className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" disabled={!formData.region} required>
+                                                                    <option value="">Select Province</option>
+                                                                    {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                                                </select>
+                                                            </div>
+                                                            {(formData.agencyType === 'CGO' || formData.agencyType === 'MGO') && (
+                                                                <select name="municipality" value={formData.municipality} onChange={handleMunicipalityChange} className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" disabled={!formData.province} required>
+                                                                    <option value="">Select Municipality/City</option>
+                                                                    {municipalityOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                                                                </select>
+                                                            )}
+                                                        </div>
+                                                    )}
 
-                                            {/* ASSIGNMENT */}
-                                            <div className="space-y-3">
-                                                <label className="text-xs font-bold text-orange-700 uppercase">Jurisdiction</label>
+                                                    {['Central Office', 'Regional Office', 'School Division Office'].includes(formData.role) && (
+                                                        <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                                                            <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
+                                                                <option value="">Select Region</option>
+                                                                {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                                            </select>
+                                                            <input name="office" value={formData.office} placeholder="Office/Bureau Name" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                            <input name="position" value={formData.position} placeholder="Position" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                        </div>
+                                                    )}
 
-                                                {/* REGION */}
-                                                <select
-                                                    name="region"
-                                                    onChange={handleRegionChange}
-                                                    value={formData.region}
-                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500"
-                                                    required
-                                                >
-                                                    <option value="">Select Region</option>
-                                                    {regions.map((reg) => (
-                                                        <option key={reg} value={reg}>{reg}</option>
-                                                    ))}
-                                                </select>
+                                                    {formData.role.includes('Engineer') && (
+                                                         <div className="space-y-4 p-4 bg-teal-50/50 rounded-2xl border border-teal-100">
+                                                            <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
+                                                                <option value="">Select Region</option>
+                                                                {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                                            </select>
+                                                            <select name="division" onChange={handleChange} value={formData.division} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
+                                                                <option value="">Select Division</option>
+                                                                {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                                                            </select>
+                                                            <select name="position" value={formData.position} onChange={handleChange} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
+                                                                <option value="">Select Position</option>
+                                                                <option value="Engineer II">Engineer II</option><option value="Engineer III">Engineer III</option>
+                                                                <option value="Technical Assistant">Technical Assistant</option>
+                                                            </select>
+                                                         </div>
+                                                    )}
 
-                                                {/* PROVINCE */}
-                                                <select
-                                                    name="province"
-                                                    onChange={handleProvinceChange}
-                                                    value={formData.province}
-                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                                                    disabled={!formData.region}
-                                                    required
-                                                >
-                                                    <option value="">Select Province</option>
-                                                    {provinceOptions.map((prov) => (
-                                                        <option key={prov} value={prov}>{prov}</option>
-                                                    ))}
-                                                </select>
+                                                    {formData.role === 'Local Government Unit' && (
+                                                         <div className="space-y-4 p-4 bg-orange-50/50 rounded-2xl border border-orange-100">
+                                                            <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500" required>
+                                                                <option value="">Select Region</option>
+                                                                {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                                            </select>
+                                                            <select name="province" onChange={handleProvinceChange} value={formData.province} className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50" disabled={!formData.region} required>
+                                                                <option value="">Select Province</option>
+                                                                {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                                            </select>
+                                                            <input name="position" value={formData.position} placeholder="Position/Designation" onChange={handleChange} className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500" required />
+                                                         </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
-                                                {/* MUNICIPALITY */}
-                                                <select
-                                                    name="city"
-                                                    onChange={handleCityChange}
-                                                    value={formData.city}
-                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                                                    disabled={!formData.province}
-                                                    required
-                                                >
-                                                    <option value="">Select Municipality/City</option>
-                                                    {cityOptions.map((city) => (
-                                                        <option key={city} value={city}>{city}</option>
-                                                    ))}
-                                                </select>
+                                    {/* STEP 4: GEOTAGGING (Only for School Head) */}
+                                    {currentStep === 4 && formData.role === 'School Head' && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                            {selectedSchool && (
+                                                <div className="space-y-6">
+                                                    {/* User ID Emphasis */}
+                                                    <div className="bg-gradient-to-br from-slate-900 to-blue-950 p-6 rounded-[2rem] text-center shadow-2xl relative overflow-hidden group">
+                                                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                                            <svg className="w-20 h-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                                        </div>
+                                                        <label className="block text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3">Your Unique Login Username</label>
+                                                        <div className="text-4xl font-mono font-black text-white tracking-[0.2em] mb-4 drop-shadow-md">{selectedSchool.school_id}</div>
+                                                        <div className="flex items-center justify-center gap-2 py-2 px-4 bg-white/10 rounded-full border border-white/10 inline-flex mx-auto">
+                                                            <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
+                                                            <span className="text-[11px] font-bold text-blue-100 uppercase tracking-widest">Always use this ID to sign in.</span>
+                                                        </div>
+                                                    </div>
 
-                                                <input
-                                                    name="position"
-                                                    value={formData.position}
-                                                    placeholder="Position / Designation"
-                                                    onChange={handleChange}
-                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
-                                                    required
-                                                />
+                                                    {/* Geotagging Map */}
+                                                    <div className="space-y-2">
+                                                        <div className="flex items-center justify-between px-1">
+                                                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Refine School Position</h4>
+                                                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 animate-pulse">DRAG MARKER TO MOVE</span>
+                                                        </div>
+                                                        {selectedSchool.latitude && (
+                                                            <div className="space-y-4">
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl">
+                                                                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Latitude</label>
+                                                                        <div className="text-sm font-mono font-bold text-slate-700">{parseFloat(selectedSchool.latitude).toFixed(6)}</div>
+                                                                    </div>
+                                                                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl">
+                                                                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Longitude</label>
+                                                                        <div className="text-sm font-mono font-bold text-slate-700">{parseFloat(selectedSchool.longitude).toFixed(6)}</div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="w-full h-[250px] rounded-[2rem] overflow-hidden border-4 border-white shadow-2xl relative z-0">
+                                                                    <MapContainer center={[parseFloat(selectedSchool.latitude), parseFloat(selectedSchool.longitude)]} zoom={16} style={{ height: '100%', width: '100%' }}>
+                                                                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                                                        <Marker position={[parseFloat(selectedSchool.latitude), parseFloat(selectedSchool.longitude)]} draggable={true} eventHandlers={eventHandlers} ref={markerRef}>
+                                                                            <Popup>Drag to refine location</Popup>
+                                                                        </Marker>
+                                                                    </MapContainer>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* STEP 4/5: SECURITY */}
+                                    {((currentStep === 4 && formData.role !== 'School Head') || (currentStep === 5 && formData.role === 'School Head')) && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                                            {formData.role !== 'School Head' && (
+                                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200">
+                                                    <label className="block text-xs font-bold text-amber-800 uppercase tracking-widest mb-2">Authorization Code</label>
+                                                    <input name="authCode" type="password" value={formData.authCode} onChange={handleChange} placeholder="Secure registration code" className="w-full bg-white border border-amber-300 rounded-xl px-4 py-3 text-sm font-mono tracking-widest focus:ring-2 focus:ring-amber-500" required />
+                                                    <p className="text-[10px] text-amber-600 mt-2">Required for non-School Head roles.</p>
+                                                </div>
+                                            )}
+
+                                            <div className="space-y-4">
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Account Password</label>
+                                                    <input name="password" type="password" placeholder="Min. 6 characters" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Confirm Password</label>
+                                                    <input name="confirmPassword" type="password" placeholder="Repeat password" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                </div>
                                             </div>
                                         </div>
                                     )}
 
-
-
-                                </div>
-                            )}
-
-                            {/* === 3. EMAIL VERIFICATION & SECURITY (COMMENTED OUT FOR TESTING) === */}
-                            {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
-                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
-                                    <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
-                                        {(formData.role === 'School Head') ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
-                                    </span>
-                                    Account Security
-                                </h3>
-
-                                <div className="mb-6 space-y-3">
-
-                                    
-                                    
-                                    <div className="flex flex-col gap-3">
-                                        <p className="text-xs text-slate-500">
-                                            Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
-                                        </p>
-
-                                        {!isOtpVerified && (
-                                            <button
-                                                type="button"
-                                                onClick={handleSendOtp}
-                                                disabled={otpLoading || !canResend || !formData.email}
-                                                className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-3 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                            >
-                                                {otpLoading ? 'Sending Code...' : !canResend ? `Resend in ${timer}s` : isOtpSent ? 'Resend Verification Code' : 'Send Verification Code'}
+                                    {/* NAVIGATION BUTTONS */}
+                                    <div className="flex gap-4 pt-4">
+                                        {currentStep > 1 && (
+                                            <button type="button" onClick={handleBack} className="flex-1 px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
+                                                Back
                                             </button>
                                         )}
-
-                                        {isOtpSent && !isOtpVerified && (
-                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Enter Code</label>
-                                                <div className="flex justify-between gap-2 mb-3">
-                                                    {otp.map((digit, index) => (
-                                                        <input
-                                                            key={index}
-                                                            type="text"
-                                                            maxLength="1"
-                                                            value={digit}
-                                                            onChange={e => handleOtpChange(e.target, index)}
-                                                            className="w-10 h-12 text-center border-2 border-slate-200 rounded-lg focus:border-blue-500 outline-none text-lg font-bold bg-white"
-                                                        />
-                                                    ))}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleVerifyOtp}
-                                                    className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700"
-                                                >
-                                                    Verify Code
-                                                </button>
-                                            </div>
+                                        {currentStep < maxSteps ? (
+                                            <button type="button" onClick={handleNext} className="flex-[2] px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+                                                Continue
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
+                                            </button>
+                                        ) : (
+                                            <button type="submit" disabled={loading} className="flex-[2] px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-2xl shadow-xl shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+                                                {loading ? 'Registering...' : 'Register Account'}
+                                                {!loading && <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>}
+                                            </button>
                                         )}
-
-                                        {isOtpVerified && (
-                                            <div className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border border-green-200">
-                                                <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                                                Email Verified Successfully
-                                            </div>
-                                        )}
-                                    </div> 
-                                    
-                                </div>
-                            </div> */}
-
-                                    {/* PASSWORD FIELDS */}
-                                    <div className="space-y-3 pt-4 border-t border-slate-100">
-                                        <h3 className="text-sm font-bold text-slate-800 mb-2">Security Credentials</h3>
-                                        <input name="password" type="password" placeholder="Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
-                                        <input name="confirmPassword" type="password" placeholder="Confirm Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
                                     </div>
                                 </>
-                            )}
-
-                            {/* SUBMIT BUTTON */}
-                            {registrationStage === 'form' && (
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 rounded-xl shadow-xl shadow-blue-500/30 transform transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-                                >
-                                    {loading ? 'Processing...' : 'Complete Registration'}
-                                    {!loading && <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>}
-                                </button>
                             )}
 
 

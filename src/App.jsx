@@ -109,7 +109,7 @@ const AnimatedRoutes = () => {
 
   useEffect(() => {
     // List of public paths that don't require authentication
-    const publicPaths = ['/', '/login', '/register', '/adminlogin'];
+    const publicPaths = ['/', '/login', '/register', '/adminlogin', '/chat'];
 
     
     // If auth is finished loading and no user is found on a non-public path, redirect to login
