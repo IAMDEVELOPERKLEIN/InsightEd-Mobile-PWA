@@ -1,31 +1,31 @@
 
-import pkg from 'pg';
-const { Pool } = pkg;
+import pg from 'pg';
 import dotenv from 'dotenv';
+import fs from 'fs';
 dotenv.config();
 
+const { Pool } = pg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-async function checkTable() {
+async function check() {
   try {
-    console.log("Querying engineer_form count...");
-    const start = Date.now();
-    const res = await pool.query('SELECT COUNT(*) FROM engineer_form');
-    const end = Date.now();
-    console.log(`Count: ${res.rows[0].count}, Time: ${end - start}ms`);
-
-    console.log("Querying first 5 projects...");
-    const res2 = await pool.query('SELECT project_id, school_name, engineer_id FROM engineer_form LIMIT 5');
-    console.table(res2.rows);
-
+    const res = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns 
+      WHERE table_name = 'masterlist_26_30'
+      ORDER BY column_name
+    `);
+    const cols = res.rows.map(r => r.column_name).join(', ');
+    fs.writeFileSync('columns.txt', cols);
+    console.log("Wrote columns to columns.txt");
   } catch (err) {
-    console.error("Error querying table:", err);
+    console.error(err);
   } finally {
     await pool.end();
   }
 }
 
-checkTable();
+check();
