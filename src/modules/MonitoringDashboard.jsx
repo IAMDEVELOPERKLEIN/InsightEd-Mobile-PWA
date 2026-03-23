@@ -1761,7 +1761,7 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                 </button>
  
-                                                                {effectiveRole === 'School Division Office' && (
+                                                                {effectiveRole === 'School Division Office' && (userData?.role === 'Super User' || userData?.office === 'School Governance and Operations Division (SGOD)') && (
                                                                     <button 
                                                                         onClick={() => navigate('/esf7/review')}
                                                                         className={`w-full text-left p-2.5 rounded-lg group transition-colors flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50`}
@@ -1898,7 +1898,7 @@ const MonitoringDashboard = () => {
                                                                 ESF7 Submitted <br />
                                                                 <span className="text-amber-600 dark:text-amber-300">({submittedCount} / {displayTotal})</span>
                                                             </p>
-                                                            {effectiveRole === 'School Division Office' && (
+                                                            {effectiveRole === 'School Division Office' && (userData?.role === 'Super User' || userData?.office === 'School Governance and Operations Division (SGOD)') && (
                                                                 <button 
                                                                     onClick={() => navigate('/esf7/review')}
                                                                     className="mt-4 flex items-center justify-center gap-2 py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-600/20 active:scale-95 whitespace-nowrap"

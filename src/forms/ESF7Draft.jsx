@@ -9,7 +9,9 @@ import {
     FiFileText,
     FiLoader,
     FiSearch,
-    FiMonitor
+    FiMonitor,
+    FiCopy,
+    FiShield
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
@@ -54,6 +56,13 @@ const ESF7Draft = () => {
     const [driveLink, setDriveLink] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const handleCopyEmail = () => {
+        navigator.clipboard.writeText('insighted-drive-access@insighted-drive-api.iam.gserviceaccount.com');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     // New State for reflection
     const [existingStatus, setExistingStatus] = useState(null);
@@ -217,7 +226,7 @@ const ESF7Draft = () => {
                                                     <div className="space-y-1">
                                                         <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-tighter italic">Cloud-Only Policy</h4>
                                                         <p className="text-[9px] font-bold text-amber-700/70 leading-relaxed uppercase">
-                                                            InsightEd strictly uses cloud links. Ensure your ESF7 file is on <span className="text-blue-600 underline">Google Drive</span> with permissions enabled.
+                                                            InsightEd strictly uses cloud links. Keep your <span className="text-blue-600 underline">Google Drive</span> file restricted and share it only with the system email for security.
                                                         </p>
                                                     </div>
                                                 </div>
@@ -270,6 +279,34 @@ const ESF7Draft = () => {
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-white border-2 border-slate-100 rounded-[2.5rem] p-10 shadow-xl shadow-slate-200/50 space-y-6"
                             >
+                                {/* Security Advisory */}
+                                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 space-y-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl shrink-0">
+                                            <FiShield className="w-5 h-5" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs font-black text-indigo-900 uppercase tracking-widest">Strictly Private File Sharing</h4>
+                                            <p className="text-[10px] font-bold text-indigo-700/70 leading-relaxed">
+                                                To protect sensitive personnel data, keep your Google Drive file <span className="font-black text-indigo-900">Restricted</span>. Grant viewer access <span className="underline decoration-indigo-300">only</span> to the system email below.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-3 bg-white border-2 border-indigo-50 p-2.5 rounded-xl">
+                                        <div className="flex-1 px-2">
+                                            <span className="text-[10px] font-black text-slate-700 tracking-tight select-all leading-tight break-all">insighted-drive-access@insighted-drive-api.iam.gserviceaccount.com</span>
+                                        </div>
+                                        <button 
+                                            onClick={handleCopyEmail}
+                                            className="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-2"
+                                        >
+                                            {copied ? <FiCheckCircle /> : <FiCopy />}
+                                            {copied ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:border-blue-300 transition-colors">
                                     <FiLink className="text-blue-500 w-6 h-6" />
                                     <input 
@@ -428,9 +465,9 @@ const ESF7Draft = () => {
                                 <FiMonitor className="text-blue-500 w-8 h-8" />
                             </div>
                             <div className="space-y-1">
-                                <h4 className="text-sm font-black text-[#004A99] uppercase tracking-tighter">Cloud-Only Policy</h4>
+                                <h4 className="text-sm font-black text-[#004A99] uppercase tracking-tighter">Private Cloud Policy</h4>
                                 <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                                    InsightEd now strictly uses cloud links for data integrity. Please ensure your ESF7 file is hosted on <span className="text-blue-600 font-bold">Google Drive</span> with viewing permissions enabled.
+                                    InsightEd uses cloud links for data integrity. Please ensure your ESF7 file is hosted on <span className="text-blue-600 font-bold">Google Drive</span> and shared <span className="font-bold text-slate-700">only</span> with the Google Service Account email shown above to maintain privacy.
                                 </p>
                             </div>
                         </div>

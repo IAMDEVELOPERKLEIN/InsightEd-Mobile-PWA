@@ -173,21 +173,21 @@ const Register = () => {
             .then(data => setRegions(data || []))
             .catch(err => console.error("Failed to load regions:", err));
 
-        // Load Offices CSV
-        Papa.parse(OFFICES_CSV_PATH, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-                if (results.data && results.data.length > 0) {
-                    setOfficeData(results.data);
+        // Load Functional Divisions from API
+        fetch('/api/reference/functional-divisions')
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    // Map back to the keys used in CSV filtering to minimize code changes
+                    const mappedData = data.map(item => ({
+                        'Governance Level': item.governance_level,
+                        'Functional Division': item.functional_division
+                    }));
+                    setOfficeData(mappedData);
                     setIsOfficeCsvLoaded(true);
                 }
-            },
-            error: (err) => {
-                console.error("Office CSV Load Error:", err);
-            }
-        });
+            })
+            .catch(err => console.error("Failed to load functional divisions:", err));
     }, []);
 
     // --- 2. CASCADING EFFECTS ---

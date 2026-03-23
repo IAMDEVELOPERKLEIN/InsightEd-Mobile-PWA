@@ -27,7 +27,7 @@ import { z } from 'zod'; // For validation
 import jwt from 'jsonwebtoken';
 import authMiddleware from './middleware/authMiddleware.js';
 import XLSX from 'xlsx';
-
+import { google } from 'googleapis';
 
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
@@ -1050,6 +1050,16 @@ app.get('/api/reference/funding-years', async (req, res) => {
   }
 });
 
+app.get('/api/reference/functional-divisions', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT governance_level, functional_division FROM functional_divisions ORDER BY functional_division ASC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Error fetching functional divisions:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/reference/efd-locations', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -1227,7 +1237,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // 1. Fetch user from PostgreSQL
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
-    const SELECT_COLS = `uid, email, role, region, division, account_category, passcode, password_hash, password_salt, hash_version, first_name, last_name, school_id`;
+    const SELECT_COLS = `uid, email, role, region, division, office, account_category, passcode, password_hash, password_salt, hash_version, first_name, last_name, school_id`;
 
     const query = isSchoolId
       ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
@@ -1332,6 +1342,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         school_id: user.school_id,
+        office: user.office,
         firstName: user.first_name, // Compatibility
         lastName: user.last_name     // Compatibility
       }
@@ -1348,7 +1359,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { uid } = req.user;
     const result = await pool.query(
-      'SELECT uid, email, role, region, division, account_category, first_name, last_name, school_id, passcode FROM users WHERE uid = $1',
+      'SELECT uid, email, role, region, division, office, account_category, first_name, last_name, school_id, passcode FROM users WHERE uid = $1',
       [uid]
     );
 
@@ -1367,7 +1378,8 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       first_name: user.first_name,
       last_name: user.last_name,
       school_id: user.school_id,
-      passcode: user.passcode
+      passcode: user.passcode,
+      office: user.office
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1427,7 +1439,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
     console.log(`[AUTH DEBUG] Pin-Login: ${identifier} (isSchoolId: ${isSchoolId})`);
 
     // Unified Identifier Lookup (Strict Users Table)
-    const selectCols = 'uid, email, role, region, division, account_category, passcode, first_name, last_name, school_id';
+    const selectCols = 'uid, email, role, region, division, office, account_category, passcode, first_name, last_name, school_id';
     const query = isSchoolId
       ? `SELECT ${selectCols} FROM users WHERE school_id = $1`
       : `SELECT ${selectCols} FROM users WHERE LOWER(email) = $1`;
@@ -1488,6 +1500,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
         last_name: user.last_name,
         school_id: user.school_id,
         passcode: user.passcode,
+        office: user.office,
         firstName: user.first_name, // Compatibility
         lastName: user.last_name    // Compatibility
       }
@@ -6087,7 +6100,8 @@ app.post('/api/register-user', async (req, res) => {
         account_category: finalAccountCategory,
         first_name: firstName,
         last_name: lastName,
-        passcode: passcode
+        passcode: passcode,
+        office: office
       },
       message: "User registered and logged in successfully"
     });
@@ -16193,14 +16207,65 @@ app.post('/api/esf7/extract-preview', async (req, res) => {
     }
     if (!fileId) throw new Error("Could not extract File ID from link.");
 
-    // 2. Fetch Binary Data from Node (No CORS issues)
-    const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-    const response = await fetch(downloadUrl);
+    // 2. Authenticate with Google Drive API
+    let credentialsObj;
+    try {
+        credentialsObj = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    } catch (err) {
+        throw new Error("Server configuration error: GOOGLE_SERVICE_ACCOUNT_JSON in .env is invalid or missing.");
+    }
     
-    // Google Drive might require a confirmation for large files, but for standard ESF7 it should be direct.
-    if (!response.ok) throw new Error("Google Drive refused the download. Is the file shared as 'Anyone with the link can view'?");
+    // We try to authenticate impersonating support.stride@deped.gov.ph (requires Domain-Wide Delegation)
+    let auth = new google.auth.GoogleAuth({
+        credentials: {
+            client_email: credentialsObj.client_email,
+            private_key: credentialsObj.private_key,
+        },
+        scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+        clientOptions: {
+            subject: 'support.stride@deped.gov.ph'
+        }
+    });
+
+    const drive = google.drive({ version: 'v3', auth });
     
-    const arrayBuffer = await response.arrayBuffer();
+    let arrayBuffer;
+    try {
+        // Download the file contents
+        const response = await drive.files.get({
+            fileId: fileId,
+            alt: 'media'
+        }, { responseType: 'arraybuffer' });
+        arrayBuffer = response.data;
+    } catch (apiError) {
+        console.error("Google API Error:", apiError.message);
+        if (apiError.message.includes("unauthorized_client")) {
+            // Domain-wide delegation is not configured. Fallback to service account directly.
+            auth = new google.auth.GoogleAuth({
+                credentials: {
+                    client_email: credentialsObj.client_email,
+                    private_key: credentialsObj.private_key,
+                },
+                scopes: ['https://www.googleapis.com/auth/drive.readonly']
+            });
+            const driveFallback = google.drive({ version: 'v3', auth });
+            try {
+                const fbResponse = await driveFallback.files.get({
+                    fileId: fileId,
+                    alt: 'media'
+                }, { responseType: 'arraybuffer' });
+                arrayBuffer = fbResponse.data;
+            } catch (fbError) {
+                console.error("Fallback Google API Error:", fbError.message);
+                throw new Error("Cannot access the file. Ensure you shared it specifically with support.stride@deped.gov.ph as a Viewer.");
+            }
+        } else if (apiError.message.includes("File not found")) {
+             throw new Error("The file could not be found or access was denied. Ensure it is shared correctly.");
+        } else {
+             throw new Error("Google Drive refused the download. Ensure you shared it with the correct extraction email as a Viewer.");
+        }
+    }
+
     const data = new Uint8Array(arrayBuffer);
 
     // 3. Parse with SheetJS

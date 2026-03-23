@@ -50,6 +50,12 @@ const ESF7Review = () => {
                 navigate('/monitoring-dashboard');
                 return;
             }
+
+            // Restrict SDO access to SGOD office only (Exempt Super Users)
+            if (user.role !== 'Super User' && user.office !== 'School Governance and Operations Division (SGOD)') {
+                navigate('/monitoring-dashboard');
+                return;
+            }
             fetchAllData();
         }
     }, [user]);
