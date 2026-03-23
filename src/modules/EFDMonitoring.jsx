@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2, FiImage, FiLayers, FiList, FiCheckSquare } from 'react-icons/fi';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2, FiImage, FiLayers, FiList, FiCheckSquare, FiActivity, FiTarget } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { uploadFileInChunks } from '../utils/chunkedUploader';
 import EditProjectModal from '../components/EditProjectModal';
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
+
 
 const MultiSelectDropdown = ({ label, options, selected, onChange, icon: Icon }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -71,6 +74,7 @@ const EFDMonitoring = () => {
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
+
 
     const categories = [
         "New Construction",
@@ -232,7 +236,7 @@ const EFDMonitoring = () => {
         setMessage({ text: '', type: '' });
 
         const engineer = engineers.find(e => e.uid === selectedEngineer);
-        const engineerName = `${engineer.firstName} ${engineer.lastName}`;
+        const engineerName = `${engineer?.firstName || ''} ${engineer?.lastName || ''}`;
 
         try {
             const response = await fetch('/api/assign-project', {
@@ -432,319 +436,325 @@ const EFDMonitoring = () => {
                         </div>
                     </div>
                 </div>
-
-                {/* Search & Filters Container */}
-                <div className="px-5 mb-8 space-y-4">
-                    {/* Search Panel */}
-                    <div className="relative group">
-                        <input 
-                            type="text"
-                            placeholder="Find project or search by engineer..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition-all placeholder:text-slate-300"
-                        />
-                        <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-500" size={20} />
+                <div className="flex-1 overflow-y-auto no-scrollbar pt-6 pb-24">
+                    <div id="monitoring-table" className="px-5 mb-6 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-[#004A99] text-white rounded-2xl shadow-lg shadow-blue-200">
+                                <LuClipboardList size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800 tracking-tight">Project Inventory</h2>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Monitoring & Tracking</p>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Filter Panel */}
-                    <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4 max-w-7xl mx-auto w-full">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-1 gap-4 px-1">
-                            <div className="flex items-center gap-2">
-                                <FiFilter className="text-blue-500" />
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Filters</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <button 
-                                    onClick={() => setShowUnassignedOnly(!showUnassignedOnly)}
-                                    className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-wider transition-all border shrink-0 ${showUnassignedOnly ? 'bg-orange-500 border-orange-500 text-white' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}
-                                >
-                                    {showUnassignedOnly ? 'Showing Unassigned' : 'Filter Unassigned'}
-                                </button>
-                                {(selectedRegions.length > 0 || selectedDivision || selectedCategories.length > 0 || selectedFundingYears.length > 0 || selectedDonated !== 'All' || selectedDocStatus !== 'All' || searchTerm || showUnassignedOnly) && (
-                                    <button 
-                                        onClick={handleClearFilters}
-                                        className="text-[10px] font-black text-blue-600 hover:text-blue-700 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full transition-all active:scale-95"
-                                    >
-                                        Clear
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Multi-select row */}
-                        <div className="flex flex-wrap gap-3">
-                            <MultiSelectDropdown
-                                label="Regions"
-                                options={allRegions}
-                                selected={selectedRegions}
-                                onChange={(val) => { setSelectedRegions(val); setSelectedDivision(''); }}
-                                icon={FiMapPin}
+                    {/* Search & Filters Container */}
+                    <div className="px-5 mb-8 space-y-4">
+                        <div className="relative group">
+                            <input 
+                                type="text"
+                                placeholder="Find project or search by engineer..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition-all placeholder:text-slate-300"
                             />
-                            <MultiSelectDropdown
-                                label="Categories"
-                                options={categories}
-                                selected={selectedCategories}
-                                onChange={setSelectedCategories}
-                                icon={FiLayers}
-                            />
-                            <MultiSelectDropdown
-                                label="Funding Years"
-                                options={fundingYears.map(String)}
-                                selected={selectedFundingYears.map(String)}
-                                onChange={setSelectedFundingYears}
-                                icon={FiList}
-                            />
+                            <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-500" size={20} />
                         </div>
 
-                        {/* Single-select row */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                            <div className="relative">
-                                <select 
-                                    value={selectedDivision}
-                                    onChange={(e) => setSelectedDivision(e.target.value)}
-                                    disabled={selectedRegions.length !== 1}
-                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all disabled:opacity-40"
-                                >
-                                    <option value="">{selectedRegions.length === 1 ? 'All Divisions' : 'Select 1 Region'}</option>
-                                    {allDivisions.map(d => <option key={d} value={d}>{d}</option>)}
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-                            </div>
-                            <div className="relative">
-                                <select 
-                                    value={selectedDonated}
-                                    onChange={(e) => setSelectedDonated(e.target.value)}
-                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
-                                >
-                                    <option value="All">All Sources</option>
-                                    <option value="Donated">Donated</option>
-                                    <option value="Non-Donated">BEFF (Gov)</option>
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-                            </div>
-                            <div className="relative">
-                                <select 
-                                    value={selectedDocStatus}
-                                    onChange={(e) => setSelectedDocStatus(e.target.value)}
-                                    className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
-                                >
-                                    <option value="All">All Doc Status</option>
-                                    <option value="Complete">Complete (MOA/RTA)</option>
-                                    <option value="Missing RTA">Missing RTA</option>
-                                    <option value="Missing MOA">Missing MOA</option>
-                                    <option value="Missing Both">Missing Both</option>
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-                            </div>
-                            <button 
-                                onClick={handleClearFilters}
-                                className="flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
-                            >
-                                <FiFilter size={12} /> Reset Filters
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Info Card */}
-                <div className="px-5 mb-6">
-                    <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex gap-3 items-start">
-                        <FiInfo className="text-blue-500 mt-0.5" />
-                        <p className="text-[10px] font-bold text-blue-700 leading-relaxed">
-                            Select a project to change its assigned engineer. This will update who is responsible for the project's monitoring and updates.
-                        </p>
-                    </div>
-                </div>
-
-                {/* Projects List - Table Format */}
-                <div className="px-5 max-w-7xl mx-auto w-full pb-24">
-                    <div className="bg-white rounded-[2.5rem] shadow-xl shadow-blue-900/5 border border-slate-100 overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[1000px]">
-                                <thead>
-                                    <tr className="bg-slate-50/50 border-b border-slate-100">
-                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] pl-8">Project Details</th>
-                                        <th className="hidden lg:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Status & Progress</th>
-                                        <th className="hidden md:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Financials</th>
-                                        <th className="hidden sm:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Assignment</th>
-                                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] text-center pr-8">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                    {paginatedProjects.map((p) => {
-                                        const isUnassigned = !p.engineerName;
-                                        const progress = parseInt(p.accomplishmentPercentage || 0);
-                                        
-                                        return (
-                                            <tr 
-                                                key={p.id}
-                                                className={`group hover:bg-blue-50/30 transition-all duration-300 ${selectedProject?.id === p.id ? 'bg-blue-50/50' : ''}`}
-                                            >
-                                                <td className="p-6 pl-8">
-                                                    <div className="flex flex-col gap-1">
-                                                        <h4 className="text-sm font-black text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors">
-                                                            {p.projectName}
-                                                        </h4>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                                                            {p.schoolName}
-                                                        </p>
-                                                        <div className="flex gap-2 mt-2">
-                                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                                                                ID: {p.id}
-                                                            </span>
-                                                            {p.projectCategory && (
-                                                                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
-                                                                    {p.projectCategory}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="p-6">
-                                                    <div className="flex flex-col gap-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className={`w-2 h-2 rounded-full animate-pulse ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                                                            <span className="text-[10px] font-black text-slate-700 uppercase">{p.status || 'Ongoing'}</span>
-                                                        </div>
-                                                        <div className="w-48 space-y-1.5">
-                                                            <div className="flex justify-between items-center text-[9px] font-bold text-slate-400">
-                                                                <span>PROGRESS</span>
-                                                                <span className={progress === 100 ? "text-emerald-500" : "text-blue-600"}>{progress}%</span>
-                                                            </div>
-                                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-50">
-                                                                <div 
-                                                                    className={`h-full rounded-full transition-all duration-1000 ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`}
-                                                                    style={{ width: `${progress}%` }}
-                                                                ></div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="p-6">
-                                                    <div className="flex flex-col gap-1">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Allocation</span>
-                                                            <span className="text-[11px] font-mono font-bold text-slate-700">{formatAllocation(p.projectAllocation)}</span>
-                                                        </div>
-                                                        <div className="flex flex-col mt-1">
-                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tranches Total</span>
-                                                            <span className="text-[11px] font-mono font-bold text-emerald-600">
-                                                                {formatAllocation((Number(p.tranche_1)||0) + (Number(p.tranche_2)||0) + (Number(p.tranche_3)||0))}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="p-6">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-sm ${isUnassigned ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                            {p.engineerName?.[0] || '?'}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className={`text-[10px] font-black ${isUnassigned ? 'text-orange-600 italic' : 'text-slate-700'}`}>
-                                                                {isUnassigned ? 'Unassigned' : `Engr. ${p.engineerName}`}
-                                                            </span>
-                                                            <span className="text-[9px] text-slate-400 font-bold uppercase">{p.division || 'Unknown Division'}</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="p-6 pr-8">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); navigate(`/project-details/${p.id}`); }}
-                                                            className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-white hover:text-blue-600 hover:shadow-lg transition-all border border-transparent hover:border-blue-100"
-                                                            title="View Details"
-                                                        >
-                                                            <FiChevronRight size={18} />
-                                                        </button>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
-                                                            className="p-2.5 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-600 hover:text-white hover:shadow-lg transition-all"
-                                                            title="Project Gallery"
-                                                        >
-                                                            <FiImage size={18} />
-                                                        </button>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
-                                                            className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white hover:shadow-lg transition-all"
-                                                            title="Update Project"
-                                                        >
-                                                            <FiEdit2 size={18} />
-                                                        </button>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
-                                                            className="p-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white hover:shadow-lg transition-all"
-                                                            title="Assign Engineer"
-                                                        >
-                                                            <FiUserPlus size={18} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Pagination Controls */}
-                        {totalPages > 1 && (
-                            <div className="bg-slate-50/30 border-t border-slate-100 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center sm:text-left">
-                                    Showing <span className="text-slate-700">{Math.min(filteredProjects.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-700">{Math.min(filteredProjects.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-700">{filteredProjects.length}</span> projects
+                        <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-4 max-w-7xl mx-auto w-full">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-1 gap-4 px-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <MultiSelectDropdown 
+                                        label="Regions" 
+                                        options={Array.from(new Set(efdLocations.map(l => l.region)))}
+                                        selected={selectedRegions}
+                                        onChange={setSelectedRegions}
+                                        icon={FiMapPin}
+                                    />
+                                    <MultiSelectDropdown 
+                                        label="Categories" 
+                                        options={categories}
+                                        selected={selectedCategories}
+                                        onChange={setSelectedCategories}
+                                        icon={FiLayers}
+                                    />
+                                    <MultiSelectDropdown 
+                                        label="Funding Year" 
+                                        options={fundingYears.map(fy => fy.year?.toString() || 'TBD')}
+                                        selected={selectedFundingYears}
+                                        onChange={setSelectedFundingYears}
+                                        icon={LuCalendar}
+                                    />
                                 </div>
+                                <button 
+                                    onClick={handleClearFilters}
+                                    className="px-4 py-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all flex items-center gap-2"
+                                >
+                                    <FiX size={14} /> Clear All
+                                </button>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-50 px-1">
                                 <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Quick Toggles:</span>
                                     <button
-                                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                                        disabled={currentPage === 1}
-                                        className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 disabled:opacity-30 transition-all shadow-sm"
+                                        onClick={() => setShowUnassignedOnly(!showUnassignedOnly)}
+                                        className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${showUnassignedOnly ? 'bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-200' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}
                                     >
-                                        <FiChevronDown size={18} className="rotate-90" />
+                                        Unassigned Only
                                     </button>
-                                    
-                                    <div className="flex items-center gap-1">
-                                        {[...Array(totalPages)].map((_, i) => {
-                                            const page = i + 1;
-                                            if (totalPages > 5) {
-                                                if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
-                                                    return (
-                                                        <button 
-                                                            key={page}
-                                                            onClick={() => setCurrentPage(page)}
-                                                            className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-400'}`}
-                                                        >
-                                                            {page}
-                                                        </button>
-                                                    );
-                                                } else if (page === currentPage - 2 || page === currentPage + 2) {
-                                                    return <span key={page} className="text-slate-400 text-[10px]">...</span>;
-                                                }
-                                                return null;
-                                            }
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                                <div className="relative">
+                                    <select 
+                                        value={selectedDivision}
+                                        onChange={(e) => setSelectedDivision(e.target.value)}
+                                        disabled={selectedRegions.length !== 1}
+                                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all disabled:opacity-40"
+                                    >
+                                        <option value="">{selectedRegions.length === 1 ? 'All Divisions' : 'Select 1 Region'}</option>
+                                        {allDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                                    </select>
+                                    <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                                </div>
+                                <div className="relative">
+                                    <select 
+                                        value={selectedDonated}
+                                        onChange={(e) => setSelectedDonated(e.target.value)}
+                                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
+                                    >
+                                        <option value="All">All Sources</option>
+                                        <option value="Donated">Donated</option>
+                                        <option value="Non-Donated">BEFF (Gov)</option>
+                                    </select>
+                                    <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                                </div>
+                                <div className="relative">
+                                    <select 
+                                        value={selectedDocStatus}
+                                        onChange={(e) => setSelectedDocStatus(e.target.value)}
+                                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-[11px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none transition-all"
+                                    >
+                                        <option value="All">All Doc Status</option>
+                                        <option value="Complete">Complete (MOA/RTA)</option>
+                                        <option value="Missing RTA">Missing RTA</option>
+                                        <option value="Missing MOA">Missing MOA</option>
+                                        <option value="Missing Both">Missing Both</option>
+                                    </select>
+                                    <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                                </div>
+                                <button 
+                                    onClick={handleClearFilters}
+                                    className="flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+                                >
+                                    <FiFilter size={12} /> Reset Filters
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Info Card */}
+                    <div className="px-5 mb-6">
+                        <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex gap-3 items-start">
+                            <FiInfo className="text-blue-500 mt-0.5" />
+                            <p className="text-[10px] font-bold text-blue-700 leading-relaxed">
+                                Select a project to change its assigned engineer. This will update who is responsible for the project's monitoring and updates.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Projects List - Table Format */}
+                    <div className="px-5 max-w-7xl mx-auto w-full pb-24">
+                        <div className="bg-white rounded-[2.5rem] shadow-xl shadow-blue-900/5 border border-slate-100 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse min-w-[1000px]">
+                                    <thead>
+                                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                                            <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] pl-8">Project Details</th>
+                                            <th className="hidden lg:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Status & Progress</th>
+                                            <th className="hidden md:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Financials</th>
+                                            <th className="hidden sm:table-cell p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Assignment</th>
+                                            <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] text-center pr-8">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {paginatedProjects.map((p) => {
+                                            const isUnassigned = !p.engineerName;
+                                            const progress = parseInt(p.accomplishmentPercentage || 0);
+                                            
                                             return (
-                                                <button 
-                                                    key={page}
-                                                    onClick={() => setCurrentPage(page)}
-                                                    className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-400'}`}
+                                                <tr 
+                                                    key={p.id}
+                                                    className={`group hover:bg-blue-50/30 transition-all duration-300 ${selectedProject?.id === p.id ? 'bg-blue-50/50' : ''}`}
                                                 >
-                                                    {page}
-                                                </button>
+                                                    <td className="p-6 pl-8">
+                                                        <div className="flex flex-col gap-1">
+                                                            <h4 className="text-sm font-black text-slate-800 tracking-tight group-hover:text-blue-600 transition-colors">
+                                                                {p.projectName}
+                                                            </h4>
+                                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                                                {p.schoolName}
+                                                            </p>
+                                                            <div className="flex gap-2 mt-2">
+                                                                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                                                    ID: {p.id}
+                                                                </span>
+                                                                {p.projectCategory && (
+                                                                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                                                                        {p.projectCategory}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-6">
+                                                        <div className="flex flex-col gap-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={`w-2 h-2 rounded-full animate-pulse ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
+                                                                <span className="text-[10px] font-black text-slate-700 uppercase">{p.status || 'Ongoing'}</span>
+                                                            </div>
+                                                            <div className="w-48 space-y-1.5">
+                                                                <div className="flex justify-between items-center text-[9px] font-bold text-slate-400">
+                                                                    <span>PROGRESS</span>
+                                                                    <span className={progress === 100 ? "text-emerald-500" : "text-blue-600"}>{progress}%</span>
+                                                                </div>
+                                                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-50">
+                                                                    <div 
+                                                                        className={`h-full rounded-full transition-all duration-1000 ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                                                                        style={{ width: `${progress}%` }}
+                                                                    ></div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-6">
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Allocation</span>
+                                                                <span className="text-[11px] font-mono font-bold text-slate-700">{formatAllocation(p.projectAllocation)}</span>
+                                                            </div>
+                                                            <div className="flex flex-col mt-1">
+                                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tranches Total</span>
+                                                                <span className="text-[11px] font-mono font-bold text-emerald-600">
+                                                                    {formatAllocation((Number(p.tranche_1)||0) + (Number(p.tranche_2)||0) + (Number(p.tranche_3)||0))}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-6">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-sm ${isUnassigned ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                                {p.engineerName?.[0] || '?'}
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className={`text-[10px] font-black ${isUnassigned ? 'text-orange-600 italic' : 'text-slate-700'}`}>
+                                                                    {isUnassigned ? 'Unassigned' : `Engr. ${p.engineerName}`}
+                                                                </span>
+                                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{p.division || 'Unknown Division'}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-6 pr-8">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); navigate(`/project-details/${p.id}`); }}
+                                                                className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-white hover:text-blue-600 hover:shadow-lg transition-all border border-transparent hover:border-blue-100"
+                                                                title="View Details"
+                                                            >
+                                                                <FiChevronRight size={18} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
+                                                                className="p-2.5 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-600 hover:text-white hover:shadow-lg transition-all"
+                                                                title="Project Gallery"
+                                                            >
+                                                                <FiImage size={18} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
+                                                                className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white hover:shadow-lg transition-all"
+                                                                title="Update Project"
+                                                            >
+                                                                <FiEdit2 size={18} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
+                                                                className="p-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white hover:shadow-lg transition-all"
+                                                                title="Assign Engineer"
+                                                            >
+                                                                <FiUserPlus size={18} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
                                             );
                                         })}
-                                    </div>
-
-                                    <button
-                                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                                        disabled={currentPage === totalPages}
-                                        className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 disabled:opacity-30 transition-all shadow-sm"
-                                    >
-                                        <FiChevronRight size={18} />
-                                    </button>
-                                </div>
+                                    </tbody>
+                                </table>
                             </div>
-                        )}
+
+                            {/* Pagination Controls */}
+                            {totalPages > 1 && (
+                                <div className="bg-slate-50/30 border-t border-slate-100 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center sm:text-left">
+                                        Showing <span className="text-slate-700">{Math.min(filteredProjects.length, (currentPage - 1) * itemsPerPage + 1)}</span> to <span className="text-slate-700">{Math.min(filteredProjects.length, currentPage * itemsPerPage)}</span> of <span className="text-slate-700">{filteredProjects.length}</span> projects
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                            disabled={currentPage === 1}
+                                            className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 disabled:opacity-30 transition-all shadow-sm"
+                                        >
+                                            <FiChevronDown size={18} className="rotate-90" />
+                                        </button>
+                                        
+                                        <div className="flex items-center gap-1">
+                                            {[...Array(totalPages)].map((_, i) => {
+                                                const page = i + 1;
+                                                if (totalPages > 5) {
+                                                    if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
+                                                        return (
+                                                            <button 
+                                                                key={page}
+                                                                onClick={() => setCurrentPage(page)}
+                                                                className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-400'}`}
+                                                            >
+                                                                {page}
+                                                            </button>
+                                                        );
+                                                    } else if (page === currentPage - 2 || page === currentPage + 2) {
+                                                        return <span key={page} className="text-slate-400 text-[10px]">...</span>;
+                                                    }
+                                                    return null;
+                                                }
+                                                return (
+                                                    <button 
+                                                        key={page}
+                                                        onClick={() => setCurrentPage(page)}
+                                                        className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-blue-400'}`}
+                                                    >
+                                                        {page}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl hover:text-blue-600 disabled:opacity-30 transition-all shadow-sm"
+                                        >
+                                            <FiChevronRight size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                     </div>
                 </div>
+            </div>
 
                 {/* Assignment Modal/Overlay */}
                 {selectedProject && createPortal(
@@ -854,8 +864,6 @@ const EFDMonitoring = () => {
                     />,
                     document.body
                 )}
-
-                {/* Notification */}
                 {message.text && (
                     <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[3000] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 ${message.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                         {message.type === 'success' ? <FiCheck size={20} /> : <FiAlertCircle size={20} />}
