@@ -17,7 +17,7 @@ import PageTransition from '../components/PageTransition';
 
 const NodesDashboard = () => {
     const navigate = useNavigate();
-    const { user, logout } = useAuth();
+    const { user, logout, confirmLogout } = useAuth();
     const [questProgress, setQuestProgress] = useState({ completedUnits: [], xp: 0 });
     const [loading, setLoading] = useState(true);
     const [isNavigating, setIsNavigating] = useState(false);
@@ -174,7 +174,7 @@ const NodesDashboard = () => {
                         <span className="text-[#10346B]">InsightED Nodes</span>
                     </h1>
                     <button 
-                        onClick={logout}
+                        onClick={confirmLogout}
                         className="p-4 bg-slate-50 rounded-3xl border border-slate-100 text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all active:scale-95 shadow-lg shadow-slate-200/50"
                         title="Logout"
                     >
