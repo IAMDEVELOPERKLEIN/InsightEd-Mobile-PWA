@@ -2,9 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
     FiChevronRight, FiAlertCircle, FiInfo, FiSearch, 
-    FiList, FiDatabase, FiLoader 
+    FiList, FiDatabase, FiLoader, FiActivity, FiX, FiLayers,
+    FiTrendingUp, FiCheckCircle, FiTarget, FiDollarSign, FiAlertTriangle, FiArrowLeft
 } from 'react-icons/fi';
+import { 
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList 
+} from 'recharts';
 import BottomNav from './BottomNav';
+// PSIPMiniDashboard removed as per user request
+import { LuActivity } from "react-icons/lu";
 
 const API_BASE = "";
 
@@ -17,6 +23,9 @@ const EFDNewconMonitoring = () => {
     const [search, setSearch] = useState('');
     const [importMsg, setImportMsg] = useState('');
     const [selectedVersion, setSelectedVersion] = useState('2026');
+    const [selectedStoreyType, setSelectedStoreyType] = useState(null); // { storeys, classrooms }
+    const [storeyBreakdown, setStoreyBreakdown] = useState([]);
+    const [storeyOption, setStoreyOption] = useState(null);
     const [userRole, setUserRole] = useState(() => {
         const saved = localStorage.getItem('userRole');
         if (saved === 'hrodi_engineer') return 'HRODI Engineer';
@@ -26,14 +35,36 @@ const EFDNewconMonitoring = () => {
     // Load data on mount
     useEffect(() => {
         loadData();
+        loadBreakdown();
     }, [selectedVersion]);
+
+    const loadBreakdown = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/api/masterlist/storey-breakdown`);
+            if (res.ok) {
+                const data = await res.json();
+                setStoreyBreakdown(data);
+                if (data.length > 0) {
+                    const uniqueStoreys = [...new Set(data.map(i => i.storey))].sort((a, b) => Number(a) - Number(b));
+                    if (uniqueStoreys.length > 0) setStoreyOption(uniqueStoreys[0]);
+                }
+            }
+        } catch (err) {
+            console.error("Load Breakdown Error:", err);
+        }
+    };
 
     const loadData = async () => {
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE}/api/deped-infrariorities?version=${selectedVersion}`);
             const data = await res.json();
-            setRows(data);
+            if (Array.isArray(data)) {
+                setRows(data);
+            } else {
+                console.error("Expected array from API, got:", data);
+                setRows([]);
+            }
         } catch (err) {
             console.error("Load Data Error:", err);
         } finally {
@@ -83,20 +114,29 @@ const EFDNewconMonitoring = () => {
             (r.division || '').toLowerCase().includes(q)
         );
     });
+    
+    const finalFilteredRows = filteredRows.filter(r => {
+        if (!selectedStoreyType) return true;
+        // Use column names from getInitiativesSubquery in api/index.js
+        return (
+            Number(r.number_of_storeys) === Number(selectedStoreyType.storeys) && 
+            Number(r.number_of_classrooms) === Number(selectedStoreyType.classrooms)
+        );
+    });
 
     const totalAmount = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    const filteredAmount = filteredRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const filteredAmount = finalFilteredRows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
     // Pagination logic
     const indexOfLastRow = currentPage * recordsPerPage;
     const indexOfFirstRow = indexOfLastRow - recordsPerPage;
-    const currentRows = filteredRows.slice(indexOfFirstRow, indexOfLastRow);
-    const totalPages = Math.ceil(filteredRows.length / recordsPerPage);
+    const currentRows = finalFilteredRows.slice(indexOfFirstRow, indexOfLastRow);
+    const totalPages = Math.ceil(finalFilteredRows.length / recordsPerPage);
 
     // Reset pagination on search
     useEffect(() => {
         setCurrentPage(1);
-    }, [search]);
+    }, [search, selectedStoreyType]);
 
     if (loading && rows.length === 0) {
         return (
@@ -116,10 +156,130 @@ const EFDNewconMonitoring = () => {
                     className="w-full flex flex-col"
                 >
                     {/* Page Header */}
-                    <div className="mb-8">
+                    <div className="mb-4">
                         <h1 className="text-3xl font-black text-slate-800 tracking-tight">Newcon Priorities</h1>
                         <p className="text-slate-500 mt-1 font-medium italic">Congressional Initiatives & Infrastructure Planning</p>
                     </div>
+
+                    {/* Building Standards Drill-down */}
+                    <div className="mb-10 bg-white p-8 rounded-[3rem] shadow-xl shadow-blue-900/5 border border-slate-100">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 mb-8">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                                    <FiLayers size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                        Building Standards 
+                                        <span className="text-[8px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full uppercase tracking-widest font-black">Interactive Drill-down</span>
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Select prototype to narrow down priorities</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Storey Level:</span>
+                                <div className="flex gap-1">
+                                    {[...new Set(storeyBreakdown.map(i => i.storey))].sort((a,b)=>a-b).map(s => (
+                                        <button
+                                            key={s}
+                                            onClick={() => setStoreyOption(Number(s))}
+                                            className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${storeyOption === Number(s) ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-500 hover:bg-slate-100'}`}
+                                        >
+                                            {s} STY
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <motion.div 
+                            layout
+                            className="h-[350px] w-full mt-4"
+                        >
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={storeyBreakdown
+                                        .filter(item => item.storey === storeyOption)
+                                        .map(item => ({
+                                            name: `${item.storey}STY ${item.classrooms}CL`,
+                                            count: Number(item.count),
+                                            storey: item.storey,
+                                            classrooms: item.classrooms
+                                        }))}
+                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                    onClick={(data) => {
+                                        if (data && data.activePayload && data.activePayload[0]) {
+                                            const payload = data.activePayload[0].payload;
+                                            setSelectedStoreyType({ storeys: payload.storey, classrooms: payload.classrooms });
+                                            setActiveTab('details');
+                                        }
+                                    }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} 
+                                        angle={-25}
+                                        textAnchor="end"
+                                        interval={0}
+                                    />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} 
+                                    />
+                                    <Tooltip 
+                                        cursor={{ fill: '#f8fafc' }}
+                                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                                        labelStyle={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px' }}
+                                    />
+                                    <Bar 
+                                        dataKey="count" 
+                                        radius={[8, 8, 0, 0]} 
+                                        barSize={45} 
+                                        className="cursor-pointer"
+                                    >
+                                        {storeyBreakdown
+                                            .filter(item => item.storey === storeyOption)
+                                            .map((entry, index) => (
+                                                <Cell 
+                                                    key={`cell-${index}`} 
+                                                    fill={selectedStoreyType?.storeys === entry.storey && selectedStoreyType?.classrooms === entry.classrooms ? '#4f46e5' : '#818cf8'} 
+                                                    className="transition-all duration-300 hover:fill-indigo-600"
+                                                />
+                                            ))}
+                                        <LabelList dataKey="count" position="top" style={{ fill: '#6366f1', fontSize: 10, fontWeight: 900 }} />
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </motion.div>
+                    </div>
+
+                    {selectedStoreyType && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: -10 }} 
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mb-6 flex items-center justify-between bg-indigo-600 p-4 rounded-3xl shadow-xl shadow-indigo-200 text-white"
+                        >
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 bg-white/20 rounded-xl">
+                                    <FiLayers size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-100">Active Drill-down</p>
+                                    <h4 className="text-lg font-black uppercase tracking-tight">{selectedStoreyType.storeys} Storey - {selectedStoreyType.classrooms} Classrooms</h4>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setSelectedStoreyType(null)}
+                                className="px-6 py-2 bg-white text-indigo-600 rounded-xl text-xs font-black shadow-lg hover:bg-slate-50 transition-all flex items-center gap-2"
+                            >
+                                <FiArrowLeft /> Back to Overview
+                            </button>
+                        </motion.div>
+                    )}
 
                     <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden flex flex-col flex-1">
                         {/* Panel Header */}
@@ -130,7 +290,7 @@ const EFDNewconMonitoring = () => {
                                 </div>
                                 <div className="min-w-0">
                                     <h3 className="text-white font-black text-xl sm:text-2xl truncate">Masterlist</h3>
-                                    <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest truncate">{rows.length} Total Projects Tracked</p>
+                                    <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest truncate">{finalFilteredRows.length} Projects in View</p>
                                 </div>
                             </div>
                             <div className="flex bg-white/20 rounded-2xl p-1.5 gap-1.5 backdrop-blur-sm shadow-xl w-full sm:w-auto">
@@ -158,7 +318,7 @@ const EFDNewconMonitoring = () => {
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                                 <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-100 rounded-3xl p-6 sm:p-8 shadow-sm group hover:shadow-md transition-all">
                                                     <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 group-hover:text-amber-500">Total Readily Implementable Projects</p>
-                                                    <p className="text-4xl sm:text-5xl font-black text-amber-700">{rows.length.toLocaleString()}</p>
+                                                    <p className="text-4xl sm:text-5xl font-black text-amber-700">{finalFilteredRows.length.toLocaleString()}</p>
                                                 </div>
                                                 <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-3xl p-6 sm:p-8 shadow-sm group hover:shadow-md transition-all">
                                                     <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 group-hover:text-emerald-500">Total Budget</p>

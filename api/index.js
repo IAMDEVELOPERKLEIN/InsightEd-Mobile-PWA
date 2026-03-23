@@ -390,7 +390,7 @@ const initDB = async () => {
           );
 
           CREATE TABLE IF NOT EXISTS engineer_mother_moa (
-            id SERIAL PRIMARY KEY,
+            mother_moa_id SERIAL PRIMARY KEY,
             region TEXT,
             province TEXT,
             municipality_city TEXT,
@@ -400,6 +400,23 @@ const initDB = async () => {
             uploaded_by TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
+
+          -- Migration: Ensure all columns exist in engineer_mother_moa (Robust)
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS region TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS province TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS municipality_city TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS lgu_type TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS lgu_name TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS moa_pdf TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS uploaded_by TEXT;
+
+          -- Migration: Rename id to mother_moa_id if it exists
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_mother_moa' AND column_name='id') THEN
+              ALTER TABLE engineer_mother_moa RENAME COLUMN id TO mother_moa_id;
+            END IF;
+          END $$;
         `);
 
         currentSegment = `${dbLabel} Seg 0.2: engineer_form schema updates`;
@@ -816,6 +833,8 @@ const initMasterlistDB = async () => {
       END $$;
     `);
     await checkAndAddColumn('masterlist_26_30', 'province', 'character varying(100)');
+    await checkAndAddColumn('masterlist_26_30', 'sty_count', 'integer');
+    await checkAndAddColumn('masterlist_26_30', 'cl_count', 'integer');
 
     console.log("     [Segment: masterlist province sync]");
     // Optimization: Add index on school_id first if not present
@@ -1923,8 +1942,8 @@ const checkTableExists = async (tableName) => {
 
 // Helper to get the correct table or subquery for initiatives
 const getInitiativesSubquery = async (version) => {
-  const columns = `ci.id, ci.school_id, ci.project_name, ci.school_name, ci.amount, ci.masterlist_status, ci.region, ci.division, ci.legislative_district, ci.ownership_type_preloaded, ci.ownership_type_confirmed, ci.accessibility_rating, ci.buildable_space_dimensions, ci.has_buildable_space, ci.assigned_to, s.municipality, s.barangay, s.province`;
-  return `(SELECT ${columns}, 'v1' as version_source FROM congressional_initiatives ci LEFT JOIN schools s ON ci.school_id = s.school_id)`;
+  const columns = `ci.id, ci.school_id, ci.project_name, ci.school_name, ci.amount, ci.masterlist_status, ci.region, ci.division, ci.legislative_district, ci.ownership_type_preloaded, ci.ownership_type_confirmed, ci.accessibility_rating, ci.buildable_space_dimensions, ci.has_buildable_space, ci.assigned_to, s.municipality, s.barangay, s.province, m.sty_count as number_of_storeys, m.proposed_no_of_cl as number_of_classrooms`;
+  return `(SELECT ${columns}, 'v1' as version_source FROM congressional_initiatives ci LEFT JOIN schools s ON ci.school_id::text = s.school_id::text LEFT JOIN masterlist_26_30 m ON ci.school_id::text = m.school_id::text)`;
 };
 
 // One-time: import CSV into DB table
@@ -3947,6 +3966,13 @@ app.post('/api/upload-engineer-mother-moa', async (req, res) => {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
+  // Basic GDrive link validation (regex check)
+  const isGDriveLink = /drive\.google\.com/.test(moa_pdf) || /^[a-zA-Z0-9-_]{20,}$/.test(moa_pdf);
+  if (!isGDriveLink) {
+    // console.warn("⚠️ Uploaded content does not appear to be a Google Drive link:", moa_pdf);
+    // We'll still allow it for now, but the requirement is to use GDrive links.
+  }
+
   try {
     await pool.query(`
       INSERT INTO engineer_mother_moa (region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uploaded_by)
@@ -3956,9 +3982,9 @@ app.post('/api/upload-engineer-mother-moa', async (req, res) => {
     // Activity logging
     const uName = await getUserFullName(uid);
     await pool.query(`
-      INSERT INTO activities (uid, user_name, activity_type, details)
-      VALUES ($1, $2, $3, $4)
-    `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Mother MOA for ${lgu_name} (${lgu_type})`]);
+      INSERT INTO activity_logs (user_uid, user_name, action_type, details, target_entity)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Mother MOA for ${lgu_name} (${lgu_type})`, 'Mother MOA']);
 
     res.json({ success: true });
   } catch (err) {

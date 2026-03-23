@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiUpload, FiFileText, FiChevronDown, FiPlus, FiSearch, FiX, FiCheck, FiDownload, FiTrash2, FiAlertCircle, FiList, FiSettings } from 'react-icons/fi';
+import { FiUpload, FiFileText, FiChevronDown, FiPlus, FiSearch, FiX, FiCheck, FiDownload, FiTrash2, FiAlertCircle, FiList, FiSettings, FiEye } from 'react-icons/fi';
 import { TbFileCheck, TbBuildingCommunity, TbMapPin } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
@@ -85,16 +85,22 @@ const EFDMotherMoa = () => {
     const navigate = useNavigate();
     
     // State
-    const [region, setRegion] = useState('');
-    const [province, setProvince] = useState(''); // This acts as the LGU Name base
-    const [municipalityCity, setMunicipalityCity] = useState('');
     const [lguType, setLguType] = useState('');
+    const [region, setRegion] = useState('');
+    const [province, setProvince] = useState(''); 
+    const [municipalityCity, setMunicipalityCity] = useState('');
     
-    const [selectedFile, setSelectedFile] = useState(null);
+    const [moaLink, setMoaLink] = useState('');
+    const [driveLinkValidating, setDriveLinkValidating] = useState(false);
+    const [driveLinkError, setDriveLinkError] = useState('');
+    
+    // Preview state
+    const [previewMoa, setPreviewMoa] = useState(null);
+
     const [isUploading, setIsUploading] = useState(false);
     const [moas, setMoas] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [locations, setLocations] = useState([]); // Master list of locations
+    const [locations, setLocations] = useState([]); 
     const [searchQuery, setSearchQuery] = useState('');
 
     const LGU_TYPES = ['PGO', 'CGO', 'MGO'];
@@ -125,8 +131,13 @@ const EFDMotherMoa = () => {
         fetchData();
     }, []);
 
+    // NCR ProvGov Check
+    const isNcrPgoError = lguType === 'PGO' && region === 'NCR';
+
     // Derived Options for Dropdowns
-    const regionOptions = [...new Set(locations.map(l => l.region))].sort();
+    const regionOptions = useMemo(() => {
+        return [...new Set(locations.map(l => l.region))].sort();
+    }, [locations]);
     
     const provinceOptions = useMemo(() => {
         if (!region) return [];
@@ -139,29 +150,45 @@ const EFDMotherMoa = () => {
         return [...new Set(filtered.map(l => l.municipality || l.city))].filter(Boolean).sort();
     }, [province, locations]);
 
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            if (file.type !== 'application/pdf') {
-                alert("Please upload a PDF file.");
-                return;
-            }
-            setSelectedFile(file);
+    const validateGDriveLink = (link) => {
+        if (!link) return { valid: false, error: "Please provide a Google Drive link." };
+        
+        // Folder check
+        if (link.includes('/folders/') || link.includes('/drive/u/0/folders/')) {
+            return { valid: false, error: "Please upload the link of the specific file in Google Drive, not the folder link." };
         }
+
+        const isGDrive = /drive\.google\.com/.test(link) || /^[a-zA-Z0-9-_]{20,}$/.test(link);
+        if (!isGDrive) return { valid: false, error: "Please provide a valid Google Drive link." };
+
+        return { valid: true, error: "" };
     };
 
-    const convertToBase64 = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = error => reject(error);
-        });
+    const getPreviewUrl = (url) => {
+        if (!url) return '';
+        // If it's a file ID
+        if (/^[a-zA-Z0-9-_]{20,}$/.test(url)) {
+            return `https://drive.google.com/file/d/${url}/preview`;
+        }
+        // If it's a full link, try to convert /view to /preview
+        if (url.includes('drive.google.com')) {
+            if (url.includes('/file/d/')) {
+                const fileId = url.split('/file/d/')[1]?.split('/')[0];
+                return `https://drive.google.com/file/d/${fileId}/preview`;
+            }
+            return url.replace(/\/view(\?.*)?$/, '/preview');
+        }
+        return url;
     };
 
     const handleUpload = async () => {
-        if (!region || !province || !lguType || !selectedFile) {
-            alert("Please complete the required fields (Region, Province, LGU Type and File).");
+        if (!lguType || !region || !province || !moaLink) {
+            alert("Please complete the required fields (LGU Type, Region, Province and GDrive Link).");
+            return;
+        }
+
+        if (isNcrPgoError) {
+            alert("NCR is not part of provincial government office. Select either MGO/CGO.");
             return;
         }
 
@@ -170,9 +197,14 @@ const EFDMotherMoa = () => {
             return;
         }
 
+        const validation = validateGDriveLink(moaLink);
+        if (!validation.valid) {
+            alert(validation.error);
+            return;
+        }
+
         setIsUploading(true);
         try {
-            const base64 = await convertToBase64(selectedFile);
             const res = await fetch('/api/upload-engineer-mother-moa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -181,25 +213,26 @@ const EFDMotherMoa = () => {
                     province,
                     municipality_city: municipalityCity,
                     lgu_type: lguType,
-                    lgu_name: lguType === 'PGO' ? province : municipalityCity, // The actual entity name
-                    moa_pdf: base64,
+                    lgu_name: lguType === 'PGO' ? province : municipalityCity, 
+                    moa_pdf: moaLink, // We store link in the same column
                     uid: user.uid
                 })
             });
 
             if (res.ok) {
-                alert("Successfully uploaded Mother MOA!");
+                alert("Successfully uploaded Mother MOA Link!");
                 // Refresh list
                 const refreshedRes = await fetch('/api/engineer-mother-moas');
                 if (refreshedRes.ok) {
                     const data = await refreshedRes.json();
                     setMoas(data);
                 }
-                // Reset form (except region maybe?)
+                // Reset form
+                setMoaLink('');
+                setLguType('');
+                setRegion('');
                 setProvince('');
                 setMunicipalityCity('');
-                setLguType('');
-                setSelectedFile(null);
             } else {
                 const err = await res.json();
                 throw new Error(err.error || "Upload failed");
@@ -261,15 +294,37 @@ const EFDMotherMoa = () => {
                 <div className="max-w-6xl mx-auto px-6 -mt-12 relative z-20">
                     {/* Upload Card */}
                     <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 p-8 mb-8">
-                        <div className="flex items-center gap-3 mb-8">
-                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
-                                <FiPlus size={20} />
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                                    <FiPlus size={20} />
+                                </div>
+                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">New MOA Upload</h2>
                             </div>
-                            <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">New MOA Upload</h2>
+                            
+                            {isNcrPgoError && (
+                                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl border border-red-100 animate-bounce">
+                                    <FiAlertCircle size={16} />
+                                    <span className="text-[11px] font-black uppercase tracking-wider">NCR is not part of PGO. Select MGO/CGO.</span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
-                            {/* Region */}
+                            {/* 1. LGU Type (NOW FIRST) */}
+                            <SearchableSelect 
+                                label="LGU Type"
+                                options={LGU_TYPES}
+                                selected={lguType}
+                                onSelect={(val) => {
+                                    setLguType(val);
+                                    if (val === 'PGO') setMunicipalityCity('');
+                                }}
+                                icon={FiSettings}
+                                placeholder="Filter types..."
+                            />
+
+                            {/* 2. Region */}
                             <SearchableSelect 
                                 label="Region"
                                 options={regionOptions}
@@ -279,7 +334,7 @@ const EFDMotherMoa = () => {
                                 placeholder="Search regions..."
                             />
 
-                            {/* Province (LGU Name) */}
+                            {/* 3. Province (LGU Name) */}
                             <SearchableSelect 
                                 label="Province"
                                 options={provinceOptions}
@@ -289,17 +344,7 @@ const EFDMotherMoa = () => {
                                 placeholder="Select province..."
                             />
 
-                            {/* LGU Type */}
-                            <SearchableSelect 
-                                label="LGU Type"
-                                options={LGU_TYPES}
-                                selected={lguType}
-                                onSelect={setLguType}
-                                icon={FiSettings}
-                                placeholder="Filter types..."
-                            />
-
-                            {/* Municipality/City (Conditional) */}
+                            {/* 4. Municipality/City (Conditional) */}
                             {(lguType === 'CGO' || lguType === 'MGO') ? (
                                 <SearchableSelect 
                                     label="Municipality/City"
@@ -312,65 +357,58 @@ const EFDMotherMoa = () => {
                             ) : (
                                 <div className="flex-1 min-w-[200px] opacity-40 pointer-events-none">
                                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 ml-1">Municipality/City</label>
-                                    <div className="w-full h-[52px] bg-slate-50 border border-slate-100 rounded-2xl"></div>
+                                    <div className="w-full h-[52px] bg-slate-50 border border-slate-100 rounded-2xl flex items-center px-4 text-slate-400 text-[12px]">
+                                        Disabled for PGO
+                                    </div>
                                 </div>
                             )}
                         </div>
 
                         <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                            {/* File Input */}
-                            <div className="flex-1 max-w-sm">
+                            {/* Google Drive Link Input (REPLACED FILE INPUT) */}
+                            <div className="flex-1">
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 ml-1">
-                                    Documents (PDF only)
+                                    Public Google Drive Link (PDF)
                                 </label>
                                 <div className="relative group">
-                                    <input 
-                                        type="file" 
-                                        accept=".pdf"
-                                        onChange={handleFileChange}
-                                        className="hidden"
-                                        id="moa-upload"
-                                    />
-                                    <label 
-                                        htmlFor="moa-upload"
-                                        className={`w-full flex items-center justify-between px-4 py-3 bg-slate-50 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${selectedFile ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}
-                                    >
-                                        <div className="flex items-center gap-3 truncate">
-                                            {selectedFile ? (
-                                                <FiFileText className="text-blue-500 shrink-0" size={18} />
-                                            ) : (
-                                                <FiUpload className="text-slate-400" size={18} />
-                                            )}
-                                            <span className={`text-[13px] font-semibold truncate ${selectedFile ? 'text-blue-700' : 'text-slate-500'}`}>
-                                                {selectedFile ? selectedFile.name : 'Choose PDF File'}
-                                            </span>
-                                        </div>
-                                        {selectedFile && (
+                                    <div className={`w-full flex items-center px-4 py-3 bg-slate-50 border-2 rounded-2xl transition-all ${moaLink ? 'border-blue-400 bg-blue-50/30' : 'border-slate-100 focus-within:border-blue-300 focus-within:bg-white'}`}>
+                                        <FiUpload className={`${moaLink ? 'text-blue-500' : 'text-slate-400'} shrink-0`} size={18} />
+                                        <input 
+                                            type="text"
+                                            value={moaLink}
+                                            onChange={(e) => setMoaLink(e.target.value)}
+                                            placeholder="Paste shareable GDrive link here..."
+                                            className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-semibold text-slate-700 placeholder:text-slate-300 ml-3"
+                                        />
+                                        {moaLink && (
                                             <button 
-                                                onClick={(e) => { e.preventDefault(); setSelectedFile(null); }}
+                                                onClick={() => setMoaLink('')}
                                                 className="p-1.5 hover:bg-blue-100 rounded-lg text-blue-600 transition-colors"
                                             >
                                                 <FiX size={14} />
                                             </button>
                                         )}
-                                    </label>
+                                    </div>
+                                    <p className="mt-2 text-[10px] text-slate-400 font-medium ml-1">
+                                        Make sure the link is set to <span className="text-blue-600 font-bold">"Anyone with the link can view"</span>
+                                    </p>
                                 </div>
                             </div>
 
                             <button
                                 onClick={handleUpload}
-                                disabled={isUploading || !selectedFile || !region || !province || !lguType}
-                                className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-[13px] uppercase tracking-wider shadow-lg transition-all ${isUploading || !selectedFile || !region || !province || !lguType ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-[#004A99] text-white hover:bg-blue-700 hover:-translate-y-1 active:scale-95 shadow-blue-900/20'}`}
+                                disabled={isUploading || !moaLink || !region || !province || !lguType || isNcrPgoError}
+                                className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-[13px] uppercase tracking-wider shadow-lg transition-all ${isUploading || !moaLink || !region || !province || !lguType || isNcrPgoError ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-[#004A99] text-white hover:bg-blue-700 hover:-translate-y-1 active:scale-95 shadow-blue-900/20'}`}
                             >
                                 {isUploading ? (
                                     <>
                                         <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                                        Uploading...
+                                        Syncing...
                                     </>
                                 ) : (
                                     <>
                                         <FiUpload size={16} />
-                                        Upload Mother MOA
+                                        Submit Archive Link
                                     </>
                                 )}
                             </button>
@@ -422,7 +460,7 @@ const EFDMotherMoa = () => {
                                         </tr>
                                     ) : filteredMoas.length > 0 ? (
                                         filteredMoas.map((moa) => (
-                                            <tr key={moa.id} className="hover:bg-slate-50/80 transition-colors group">
+                                            <tr key={moa.mother_moa_id} className="hover:bg-slate-50/80 transition-colors group">
                                                 <td className="px-8 py-5">
                                                     <div className="flex flex-col">
                                                         <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider">{moa.region}</span>
@@ -457,15 +495,15 @@ const EFDMotherMoa = () => {
                                                     </span>
                                                 </td>
                                                 <td className="px-8 py-5">
-                                                    <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <a 
-                                                            href={moa.moa_pdf}
-                                                            download={`Mother_MOA_${moa.lgu_name}.pdf`}
-                                                            className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                                                            title="Download PDF"
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <button 
+                                                            onClick={() => setPreviewMoa(moa)}
+                                                            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm font-bold text-xs group/btn"
+                                                            title="Preview/View Mother MOA"
                                                         >
-                                                            <FiDownload size={16} />
-                                                        </a>
+                                                            <FiEye size={14} className="group-hover/btn:scale-110 transition-transform" />
+                                                            Preview/View
+                                                        </button>
                                                         <button 
                                                             className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all shadow-sm"
                                                             title="Delete"
@@ -486,7 +524,7 @@ const EFDMotherMoa = () => {
                                                     </div>
                                                     <div>
                                                         <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[10px]">No Documents Found</p>
-                                                        <p className="text-[12px] text-slate-500 font-medium mt-1">Start by uploading your first Mother MOA above.</p>
+                                                        <p className="text-[12px] text-slate-500 font-medium mt-1">Start by adding your first Mother MOA link above.</p>
                                                     </div>
                                                 </div>
                                             </td>
@@ -504,7 +542,64 @@ const EFDMotherMoa = () => {
                 {isUploading && (
                     <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md text-white px-6 py-4 rounded-3xl shadow-2xl flex items-center gap-4 z-[2000] border border-white/10 animate-in fade-in slide-in-from-bottom-5">
                         <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                        <p className="text-[13px] font-black uppercase tracking-widest whitespace-nowrap">Securely processing upload...</p>
+                        <p className="text-[13px] font-black uppercase tracking-widest whitespace-nowrap">Securely processing archive...</p>
+                    </div>
+                )}
+
+                {/* GDrive Preview Modal */}
+                {previewMoa && (
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-8 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white w-full max-w-6xl h-full max-h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-300">
+                            {/* Modal Header */}
+                            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white z-10">
+                                <div className="flex items-center gap-5">
+                                    <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                                        <FiFileText size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-800 text-lg leading-tight">Mother MOA Preview</h3>
+                                        <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-0.5">{previewMoa.lgu_name} • {previewMoa.lgu_type} MOA</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <a 
+                                        href={previewMoa.moa_pdf}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all border border-transparent hover:border-blue-100"
+                                        title="Open in Google Drive"
+                                    >
+                                        <FiUpload size={20} className="rotate-45" /> 
+                                    </a>
+                                    <button 
+                                        onClick={() => setPreviewMoa(null)}
+                                        className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100"
+                                    >
+                                        <FiX size={24} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal Content (Iframe) */}
+                            <div className="flex-1 bg-slate-50 relative">
+                                <iframe 
+                                    src={getPreviewUrl(previewMoa.moa_pdf)}
+                                    className="w-full h-full border-0"
+                                    allow="autoplay"
+                                    title="GDrive Preview"
+                                />
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="px-8 py-4 bg-white border-t border-slate-100 flex items-center justify-between">
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                    Document Registry • ID: {previewMoa.mother_moa_id}
+                                </p>
+                                <p className="text-[10px] text-slate-300 font-medium italic">
+                                    Secure Iframe Previewing Enabled
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
