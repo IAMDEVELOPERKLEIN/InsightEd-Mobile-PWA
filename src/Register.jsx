@@ -1405,21 +1405,30 @@ const Register = () => {
                             </div>
 
                             <h2 className="text-2xl font-bold text-slate-800 mb-2">Registration Successful!</h2>
-                            <p className="text-slate-500 mb-6">Welcome to InsightEd. Your account has been created.</p>
+                            <p className="text-slate-500 mb-6 font-medium italic">Welcome to InsightEd. Your account has been created.</p>
 
-                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl mb-6">
+                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl mb-4">
                                 <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Your School IERN</p>
                                 <h3 className="text-3xl font-black text-blue-900 tracking-tight font-mono">{registeredIern}</h3>
                                 <p className="text-[10px] text-blue-400 mt-2">Please save this reference number.</p>
+                            </div>
+
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-8 flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                                    <FiLock className="text-blue-600" />
+                                </div>
+                                <p className="text-[10px] font-bold text-slate-600 leading-tight text-left uppercase tracking-tight">
+                                    <span className="text-blue-600 font-black">Final Step:</span> You will be prompted to secure your account with a 6-digit passcode.
+                                </p>
                             </div>
 
                             <button
                                 onClick={() => {
                                     navigate(getDashboardPath(formData.role, formData.accountCategory));
                                 }}
-                                className="w-full py-4 rounded-xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
+                                className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
                             >
-                                Continue
+                                Secure My Account
                             </button>
                         </div>
                     </div>
