@@ -115,7 +115,10 @@ const AnimatedRoutes = () => {
     // If auth is finished loading and no user is found on a non-public path, redirect to login
     if (!loading && !user && !publicPaths.includes(location.pathname)) {
       console.log("[App] No user session found on protected route. Redirecting to login...");
-      navigate('/', { replace: true });
+      const lastRole = localStorage.getItem('lastRole');
+      const state = lastRole === 'School Head' ? { pathId: 'path_school_head' } : null;
+      
+      navigate('/login', { replace: true, state });
     }
   }, [user, loading, location.pathname, navigate]);
 
@@ -350,36 +353,36 @@ const AnimatedRoutes = () => {
       <Route path="/engineer-forms" element={<EngineerForms />} />
 
       {/* Utilities */}
-      <Route path="/profile" element={<UserProfile />} />
-      <Route path="/activities" element={<Activity />} />
-      <Route path="/outbox" element={<Outbox />} />
-      <Route path="/engineer-outbox" element={<EngineerOutbox />} />
+      <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+      <Route path="/activities" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
+      <Route path="/outbox" element={<ProtectedRoute><Outbox /></ProtectedRoute>} />
+      <Route path="/engineer-outbox" element={<ProtectedRoute><EngineerOutbox /></ProtectedRoute>} />
 
       {/* School Head Forms */}
-      <Route path="/school-profile" element={<SchoolProfile />} />
-      <Route path="/school-information" element={<SchoolInformation />} />
-      <Route path="/enrolment" element={<Enrolement />} />
-      <Route path="/organized-classes" element={<OrganizedClasses />} />
-      <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
-      <Route path="/school-resources" element={<SchoolResources />} />
-      <Route path="/physical-facilities" element={<PhysicalFacilities />} />
-      <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
-      <Route path="/shifting-modalities" element={<ShiftingModalities />} />
-      <Route path="/learner-statistics" element={<LearnerStatistics />} />
-      <Route path="/project-validation" element={<ProjectValidation />} />
-      <Route path="/leaderboard" element={<Leaderboard />} />
+      <Route path="/school-profile" element={<ProtectedRoute allowedRoles={['School Head']}><SchoolProfile /></ProtectedRoute>} />
+      <Route path="/school-information" element={<ProtectedRoute allowedRoles={['School Head']}><SchoolInformation /></ProtectedRoute>} />
+      <Route path="/enrolment" element={<ProtectedRoute allowedRoles={['School Head']}><Enrolement /></ProtectedRoute>} />
+      <Route path="/organized-classes" element={<ProtectedRoute allowedRoles={['School Head']}><OrganizedClasses /></ProtectedRoute>} />
+      <Route path="/teaching-personnel" element={<ProtectedRoute allowedRoles={['School Head']}><TeachingPersonnel /></ProtectedRoute>} />
+      <Route path="/school-resources" element={<ProtectedRoute allowedRoles={['School Head']}><SchoolResources /></ProtectedRoute>} />
+      <Route path="/physical-facilities" element={<ProtectedRoute allowedRoles={['School Head']}><PhysicalFacilities /></ProtectedRoute>} />
+      <Route path="/teacher-specialization" element={<ProtectedRoute allowedRoles={['School Head']}><TeacherSpecialization /></ProtectedRoute>} />
+      <Route path="/shifting-modalities" element={<ProtectedRoute allowedRoles={['School Head']}><ShiftingModalities /></ProtectedRoute>} />
+      <Route path="/learner-statistics" element={<ProtectedRoute allowedRoles={['School Head']}><LearnerStatistics /></ProtectedRoute>} />
+      <Route path="/project-validation" element={<ProtectedRoute allowedRoles={['School Head']}><ProjectValidation /></ProtectedRoute>} />
+      <Route path="/leaderboard" element={<ProtectedRoute allowedRoles={['School Head']}><Leaderboard /></ProtectedRoute>} />
 
       {/* DepEd Engineer Forms */}
-      <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
-      <Route path="/damage-assessment" element={<DamageAssessment />} />
-      <Route path="/project-monitoring" element={<ProjectMonitoring />} />
-      <Route path="/site-inspection" element={<SiteInspection />} />
-      <Route path="/material-inventory" element={<MaterialInventory />} />
-      <Route path="/new-project" element={<NewProjects />} />
-      <Route path="/project-details/:id" element={<DetailedProjInfo />} />
-      <Route path="/project-gallery" element={<ProjectGallery />} />
-      <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
-      <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
+      <Route path="/engineer-school-resources" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><EngineerSchoolResources /></ProtectedRoute>} />
+      <Route path="/damage-assessment" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><DamageAssessment /></ProtectedRoute>} />
+      <Route path="/project-monitoring" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><ProjectMonitoring /></ProtectedRoute>} />
+      <Route path="/site-inspection" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><SiteInspection /></ProtectedRoute>} />
+      <Route path="/material-inventory" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><MaterialInventory /></ProtectedRoute>} />
+      <Route path="/new-project" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><NewProjects /></ProtectedRoute>} />
+      <Route path="/project-details/:id" element={<ProtectedRoute><DetailedProjInfo /></ProtectedRoute>} />
+      <Route path="/project-gallery" element={<ProtectedRoute><ProjectGallery /></ProtectedRoute>} />
+      <Route path="/project-gallery/:projectId" element={<ProtectedRoute><ProjectGallery /></ProtectedRoute>} />
+      <Route path="/project-gallery/:projectId" element={<ProtectedRoute><ProjectGallery /></ProtectedRoute>} />
 
       {/* Hidden Admin Login Route */}
       <Route path="/adminlogin" element={<Login />} />

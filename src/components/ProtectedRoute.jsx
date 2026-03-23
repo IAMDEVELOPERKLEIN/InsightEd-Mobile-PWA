@@ -12,7 +12,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
     // If not logged in, redirect to login
     if (!user) {
-        return <Navigate to="/login" replace />;
+        const lastRole = localStorage.getItem('lastRole');
+        const state = lastRole === 'School Head' ? { pathId: 'path_school_head' } : null;
+        return <Navigate to="/login" replace state={state} />;
     }
 
     // If role is not allowed, redirect to home

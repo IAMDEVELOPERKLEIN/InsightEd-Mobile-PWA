@@ -119,13 +119,6 @@ const UserProfile = () => {
     });
     const [passwordError, setPasswordError] = useState('');
 
-    // --- REDIRECT IF NOT LOGGED IN ---
-    useEffect(() => {
-        if (!authLoading && !user) {
-            console.log("[UserProfile] No user found, redirecting to login...");
-            navigate('/', { replace: true });
-        }
-    }, [user, authLoading, navigate]);
 
     useEffect(() => {
         const syncUserData = async () => {

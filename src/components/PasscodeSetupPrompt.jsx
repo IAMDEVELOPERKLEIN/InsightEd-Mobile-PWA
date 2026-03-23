@@ -20,6 +20,13 @@ const PasscodeSetupPrompt = () => {
             localStorage.removeItem('needs_pin_setup');
         }
 
+        if (needsSetup) {
+            setStep('prompt');
+            setTempPasscode('');
+            setConfirmPasscode('');
+            setError('');
+        }
+
         setIsOpen(!!needsSetup);
     }, [user]);
 
