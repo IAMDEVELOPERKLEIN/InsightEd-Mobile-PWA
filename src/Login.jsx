@@ -54,6 +54,7 @@ const Login = () => {
     const [resetEmail, setResetEmail] = useState('');
     const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
+    const [isNotFound, setIsNotFound] = useState(false);
     const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
     const [isSchoolHead, setIsSchoolHead] = useState(true);
     
@@ -270,34 +271,39 @@ const Login = () => {
     };
 
     // --- 3. FORGOT PASSWORD HANDLER ---
-    const [isSchoolIdFlow, setIsSchoolIdFlow] = useState(false);
+    const [isMatchedFlow, setIsMatchedFlow] = useState(false);
 
     // Auto-lookup effect for Forgot Password
     useEffect(() => {
-        const checkSchoolId = async () => {
+        const checkIdentifier = async () => {
             const input = resetEmail.trim();
-            // Basic heuristic: 6+ digits, no @ symbol
-            if (input.length >= 6 && !input.includes('@') && /^\d+$/.test(input)) {
-                try {
-                    const res = await fetch(`/api/lookup-masked-email/${input}`);
-                    const data = await res.json();
-                    if (res.ok && data.found) {
-                        setVerificationEmail(data.maskedEmail);
-                        setIsSchoolIdFlow(true);
-                        return;
-                    } else if (res.status === 404) {
-                        setVerificationEmail('NOT_FOUND'); // Sentinel for missing email
-                        setIsSchoolIdFlow(false);
-                        return;
-                    }
-                } catch (e) { console.error("Lookup failed", e); }
+            if (input.length < 3) {
+                setVerificationEmail('');
+                setIsMatchedFlow(false);
+                return;
             }
-            // Reset if regex fails or lookup fails
-            setIsSchoolIdFlow(false);
-            if (!input.includes('@')) setVerificationEmail('');
+
+            try {
+                // Fetch email linked to this identifier (School ID or Email)
+                const res = await fetch(`/api/lookup-email/${encodeURIComponent(input)}`);
+                const data = await res.json();
+                if (res.ok && data.found) {
+                    setVerificationEmail(data.maskedEmail);
+                    setIsMatchedFlow(true);
+                    setIsNotFound(false);
+                } else {
+                    setVerificationEmail('');
+                    setIsMatchedFlow(false);
+                    setIsNotFound(!input.includes('@')); // Only show error for School IDs or specific unmatched identifiers
+                }
+            } catch (e) { 
+                console.error("Lookup failed", e);
+                setIsMatchedFlow(false);
+                setIsNotFound(false);
+            }
         };
 
-        const timer = setTimeout(checkSchoolId, 500); // Debounce 500ms
+        const timer = setTimeout(checkIdentifier, 1000); // Debounce 1.0s
         return () => clearTimeout(timer);
     }, [resetEmail]);
 
@@ -308,52 +314,41 @@ const Login = () => {
         setResetLoading(true);
         const input = resetEmail.trim();
 
-        // CHECK STRATEGY: Is it a School ID (no @)?
-        if (!input.includes('@')) {
-            // --- SCHOOL ID FLOW ---
+        if (isNotFound) {
+            alert("No email address is registered for this School ID in our system. Please contact your Division ICT Coordinator or System Administrator to update your account details.");
+            setResetLoading(false);
+            return;
+        }
 
-            if (verificationEmail === 'NOT_FOUND') {
-                alert("No email address is registered for this School ID in our system. Please contact your Division ICT Coordinator or System Administrator to update your account details.");
-                setResetLoading(false);
-                return;
+        // If we haven't matched yet and it's looking like a School ID, block
+        if (!isMatchedFlow && !input.includes('@')) {
+            alert("Validating ID... Please wait or check the ID.");
+            setResetLoading(false);
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    identifier: input
+                })
+            });
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                alert(`Success! Reset link has been sent to your registered email: ${verificationEmail || input}`);
+                setShowForgotModal(false);
+                setVerificationEmail('');
+                setIsMatchedFlow(false);
+            } else {
+                alert("Failed: " + (data.error || "Unknown error"));
             }
-
-            // If we haven't found the email via lookup yet, block
-            if (!isSchoolIdFlow && !verificationEmail) {
-                alert("Validating School ID... Please wait or check the ID.");
-                setResetLoading(false);
-                return;
-            }
-
-            // CUSTOM BACKEND RESET for School IDs
-            try {
-                const res = await fetch('/api/forgot-password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        schoolId: input,
-                        // If flow is active, backend knows what to do, but we send verificationEmail just in case (though optional now)
-                        verificationEmail: verificationEmail
-                    })
-                });
-                const data = await res.json();
-
-                if (res.ok && data.success) {
-                    alert(`Success! Reset link has been sent to your registered email: ${verificationEmail}`);
-                    setShowForgotModal(false);
-                    setVerificationEmail('');
-                    setIsSchoolIdFlow(false);
-                } else {
-                    alert("Failed: " + (data.error || "Unknown error"));
-                }
-            } catch (err) {
-                console.error("Custom Reset Error:", err);
-                alert("Network error: " + err.message);
-            } finally {
-                setResetLoading(false);
-            }
-        } else {
-            alert("Password reset is currently only available for School IDs via the 'Are you a school head?' flow.");
+        } catch (err) {
+            console.error("Reset Error:", err);
+            alert("Network error: " + err.message);
+        } finally {
             setResetLoading(false);
         }
     };
@@ -644,42 +639,53 @@ const Login = () => {
                 {showForgotModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
                         <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative">
-                            <h2 className="text-xl font-bold text-slate-800 mb-2">Reset Password</h2>
-                            <p className="text-sm text-slate-500 mb-4">Enter your email address and we'll send you a link to reset your password.</p>
+                             <h2 className="text-xl font-bold text-slate-800 mb-2">Reset Password</h2>
+                             <p className="text-sm text-slate-500 mb-4">
+                                 {isSchoolHead 
+                                     ? "Enter your School ID and we'll send a link to your registered email."
+                                     : "Enter your email address and we'll send you a link to reset your password."}
+                             </p>
+ 
+                             <form onSubmit={handlePasswordReset}>
+                                 <div className="mb-4 space-y-3">
+                                     {/* INPUT 1: ID or EMAIL */}
+                                     <input
+                                         type="text"
+                                         value={resetEmail}
+                                         onChange={(e) => setResetEmail(e.target.value)}
+                                         placeholder={isSchoolHead ? "Enter your school ID" : "Enter your email or school ID"}
+                                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                         required
+                                     />
 
-                            <form onSubmit={handlePasswordReset}>
-                                <div className="mb-4 space-y-3">
-                                    {/* INPUT 1: ID or EMAIL */}
-                                    <input
-                                        type="text"
-                                        value={resetEmail}
-                                        onChange={(e) => setResetEmail(e.target.value)}
-                                        placeholder="Enter your email or school ID"
-                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                        required
-                                    />
+                                    {/* NOT FOUND ERROR */}
+                                    {isNotFound && resetEmail.length >= 3 && (
+                                        <div className="text-xs text-red-500 font-medium animate-in fade-in slide-in-from-top-1 ml-1">
+                                            No registered account found for this ID.
+                                        </div>
+                                    )}
 
-                                    {/* INPUT 2: VERIFICATION EMAIL (Only if School ID) */}
-                                    {resetEmail.length > 0 && !resetEmail.includes('@') && (
+                                    {/* INPUT 2: VERIFICATION EMAIL (Extracted from Registration) */}
+                                    {resetEmail.length >= 3 && !isNotFound && (
                                         <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                             <p className="text-xs text-blue-600 font-bold mb-1 ml-1 flex items-center gap-1">
-                                                {isSchoolIdFlow ? (
+                                                {isMatchedFlow ? (
                                                     <>
                                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                                                             <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                                                         </svg>
-                                                        Confirm Registered Email (Masked)
+                                                        Registered Email (Extracted)
                                                     </>
-                                                ) : "Confirm Registered Email"}
+                                                ) : resetEmail.includes('@') ? "Registered Email" : "Confirm Registered Email"}
                                             </p>
                                             <input
                                                 type="text"
-                                                value={verificationEmail}
-                                                onChange={(e) => !isSchoolIdFlow && setVerificationEmail(e.target.value)}
-                                                readOnly={isSchoolIdFlow}
-                                                placeholder={isSchoolIdFlow ? "Fetching..." : "Enter your registered email address"}
+                                                value={isMatchedFlow ? verificationEmail : (resetEmail.includes('@') ? resetEmail : verificationEmail)}
+                                                onChange={(e) => !isMatchedFlow && !resetEmail.includes('@') && setVerificationEmail(e.target.value)}
+                                                readOnly={isMatchedFlow || resetEmail.includes('@')}
+                                                placeholder={isMatchedFlow ? "Fetching..." : "Enter your registered email address"}
                                                 className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-all 
-                                                    ${isSchoolIdFlow
+                                                    ${(isMatchedFlow || resetEmail.includes('@'))
                                                         ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
                                                         : 'bg-blue-50/30 border-blue-100 text-blue-900 focus:ring-2 focus:ring-blue-500 placeholder:text-blue-300'
                                                     }`}

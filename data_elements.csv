@@ -1,0 +1,95 @@
+Module/Component,Data Element,Description
+User Profile,firstName,School Head's first name
+User Profile,lastName,School Head's last name
+User Profile,"region, province, city, barangay",Current assignment/address details of the School Head
+Unit 1: School Identity,school_id,Unique identifier (ESF7 ID) for the school
+Unit 1: School Identity,school_name,Official name of the school
+Unit 1: School Identity,"region, province, municipality, barangay",Address and geographic location of the school
+Unit 1: School Identity,"division, district, leg_district",DepEd organizational classification of the school
+Unit 1: School Identity,curricular_offering,Educational levels offered (e.g., Purely Elementary, K-12)
+Unit 1: School Identity,"latitude, longitude",GPS coordinates of the main campus
+Unit 1: School Identity,iern,Integrated Educational Routing Number (if applicable)
+Unit 1: School Identity,school_head,Name of the assigned school head
+Unit 1: School Identity,contact_number,School or school head's official contact number
+Unit 1: School Identity,ownership,Private or public ownership classification
+Unit 1: School Identity,school_type,Specific typology of the school (e.g., Mother, Annex, Extension)
+Unit 1: School Identity,mother_school_id,Reference to the mother school if it is an annex
+Unit 1: School Identity,"established_month, established_year",Date when the school was officially established
+Unit 1: School Identity,"head_first_name, head_middle_name, head_last_name",Full name details of the registered school head
+Unit 1: School Identity,head_sex,Gender of the school head
+Unit 1: School Identity,head_position_title,Official designation (e.g., Principal I, TIC)
+Unit 1: School Identity,"head_date_of_birth, head_date_hired",Demographic and employment history of the school head
+Unit 2: Learners,kinderEnrollment,Direct count of Kindergarten enrollees
+Unit 2: Learners,orgType,"Organization format of the classes (Monograde, Multigrade, Mixed)"
+Unit 2: Learners,mgCombinations,Configuration definitions mapping which grades are joined in multigrade
+Unit 2: Learners,gradeTotals,Aggregate enrollment numbers isolated per grade level
+Unit 2: Learners,gradeAvailability,Boolean toggles marking which specific grades are currently active
+Unit 2: Learners,"hasSnedSelfContained, sned_self_contained_count",Boolean tracker and total head count for Non-Graded SNED learners
+Unit 2: Learners,snedLanguage,Primary instruction language utilized for the SNED program
+Unit 2: Learners,hasAral (Math/Reading/Science),Boolean indicating participation in the National Learning Recovery Program (ARAL)
+Unit 2: Learners,aral (Math/Reading/Science),Disaggregated enrollee counts per subject for the ARAL program
+Unit 2: Learners,genderTotals,Global aggregate of Male vs. Female enrollees across the school
+Unit 3: Organized Classes,sectionData,Information on individual sections created per active grade
+Unit 3: Organized Classes,totalEnrollment,Running sum verifying correct sectioning distribution
+Unit 4: Learner Profile,demographicsData,"IP (Indigenous Peoples), Muslim, 4Ps, and SPED learner breakdowns"
+Unit 4: Learner Profile,"hasMovement, movementData","Trackers for transferees (In/Out), dropouts, and Balik-Aral students"
+Unit 4: Learner Profile,bmiData,"Nutritional status aggregates (Severely Wasted, Wasted, Normal, Overweight, Obese)"
+Unit 5: Shifting Modality,"hasStandardShifting, mapData",Data detailing double/triple shifting schedules to optimize facility usage
+Unit 5: Shifting Modality,"hasAdms, admData","Trackers for Alternative Delivery Modes (e.g., Modular, Online, Blended)"
+Unit 6: Teaching Personnel,"first_name, last_name",Full name of the instructional staff
+Unit 6: Teaching Personnel,position,"Official teaching designation (e.g., Teacher I, Master Teacher II)"
+Unit 6: Teaching Personnel,specialization,Academic focus or subject area expertise
+Unit 6: Teaching Personnel,funding_source,Entity providing the teacher's salary (e.g., National, SEF, LGU)
+Unit 6: Teaching Personnel,role_designation,"Positional role (e.g., Class Adviser, Non-Advisory)"
+Unit 6: Teaching Personnel,monday_mins...friday_mins,Aggregate daily instruction time in minutes
+Unit 6: Teaching Personnel,workloads,Detailed list mapping Grade Level, Subject, and Duration per assignment
+Unit 7: School Resources,gradesData,Enrollment limits and requirements mapped to available resources
+Unit 7: School Resources,generalRoomsData,Inventory of standard classrooms available for instruction
+Unit 7: School Resources,ictData,"Inventories covering computers, projectors, internet connectivity"
+Unit 7: School Resources,"hasEcart, eCarts",Boolean toggle and counts for mobile electronic carts / tech hubs
+Unit 7: School Resources,washData,"Inventories for toilets, handwashing facilities, and drinking water sources"
+Unit 7: School Resources,utilitiesData,Electricity sources and general utility service details
+Unit 8: Physical Facilities,"buildingTypes, buildings",Structural registry detailing specific building models and counts
+Unit 8: Physical Facilities,"roomsData, spaces",Internal dimension mappings and specific room designations within buildings
+Unit 8: Physical Facilities,repairAssessments,"Safety and dilapidation metrics cataloging needed major/minor repairs"
+Unit 9: School Location,transportation_modes,"Modes used to reach the school (Walking, Boat, Habal-habal, etc.)"
+Unit 9: School Location,"road_paved_pct, road_lighting_pct",Infrastructure quality metrics for access roads
+Unit 9: School Location,public_transpo_availability,Frequency of public vehicle passage (Scale 1-5)
+Unit 9: School Location,"near_cliff_ravine, road_cliff_pct",Geographic safety factors for mountainous routes
+Unit 9: School Location,"near_water, water_proximity",Proximity to rivers, lakes, or seas and distance measurements
+Unit 9: School Location,hazards_experienced,"specific trail hazards (Snake bites, Leeches, Flash floods)"
+Unit 9: School Location,river_crossing_count,Number of rivers that must be traversed on foot
+Unit 9: School Location,points_of_reference,"Time/Distance to Hospital, Bgy Hall, SDO, and Highway"
+Unit 9: School Location,cellular_coverage,Quality of network signal (None to Strong)
+Unit 9: School Location,natural_calamities,"History of Typhoons, Floods, Earthquakes (Incidence count)"
+Unit 9: School Location,anthropogenic_threats,Conflicts or civil unrest history in the vicinity
+Unit 9: School Location,road_passable_pct,Percentage of route accessible by public transport
+Unit 10: Verification,remarks,Final attestations and contextual notes appended by the school head
+Unit 10: Verification,stats,Aggregate summary statistics to be approved prior to submission
+Engineer Form,project_id,Unique sequential identifier for an infrastructure project
+Engineer Form,project_name,Official title or scope of the project
+Engineer Form,"school_id, school_name",Target school location for the project
+Engineer Form,status,"Current standing (e.g., Ongoing, Completed, Not Started)"
+Engineer Form,accomplishment_percentage,Progress metric of project completion (0-100)
+Engineer Form,status_as_of,Timestamp marking the last progress update
+Engineer Form,target_completion_date,Expected date of project turnover
+Engineer Form,actual_completion_date,Real date of project turnover
+Engineer Form,notice_to_proceed,Date authorization was given to start construction
+Engineer Form,contractor_name,Entity carrying out the construction
+Engineer Form,approved_budget_for_contract,Planned fiscal allocation for the project
+Engineer Form,contract_amount,The actual monetary value of the awarded contract
+Engineer Form,"batch_of_funds, funding_year",Capital sourcing and timeline context
+Engineer Form,is_donated,Flag indicating if the project was a third-party donation
+Engineer Form,ipc,Inventory/Internal tracking reference code
+Engineer Form,"latitude, longitude",Geolocation coordinates for the specific project site
+Engineer Form,engineer_name,Name of the supervising engineer
+Engineer Form,uploader_type,"System classification (EFD, Division Engineer, Non-DepEd)"
+Engineer Form,validated_by,Individual who authenticated the project listing
+Engineer Infrastructure,buildingName,Naming or identification number of monitored buildings
+Engineer Infrastructure,constructionYear,Baseline chronological data (Year Built)
+Engineer Infrastructure,"totalClassrooms, condition",Room count and structural integrity rating
+Engineer Infrastructure,"hasElectricity, hasWater",Utility availability checkboxes for structural audits
+Engineer Resources,ResourceType,"Analyzed utility (Electricity, Water Supply, Internet, Solar)"
+Engineer Resources,"Status, ProviderName","Operational status (Functional, Intermittent, Not Working) and provider"
+Engineer Resources,AvgMonthlyCost,Financial metric estimating utility spend
+Engineer Images,"image_data, category",Base64 encoded payload and classification (Internal, External, Defect)
