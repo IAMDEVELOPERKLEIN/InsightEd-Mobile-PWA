@@ -664,7 +664,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <p className="font-bold text-slate-700">{formData.district || "—"}</p>
                                         </div>
                                     </div>
-                                </section>
+                                </div>
+                            </section>
                                 
                                 <section>
                                     <div className="flex items-center gap-2 mb-4 ml-2 mt-8">
