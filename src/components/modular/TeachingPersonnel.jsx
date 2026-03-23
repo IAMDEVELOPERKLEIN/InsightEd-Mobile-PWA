@@ -123,7 +123,7 @@ const inputStyle = "w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl
 
 // ── Main Component ───────────────────────────────────────────────────────────
 
-const TeachingPersonnelUnit = () => {
+const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
     const [schoolId, setSchoolId] = useState("");
     const [teachers, setTeachers] = useState([]);
@@ -242,7 +242,7 @@ const TeachingPersonnelUnit = () => {
     // Initial Load
     useEffect(() => {
         const init = async () => {
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || localStorage.getItem("schoolId");
             if (!storedId) {
                 navigate("/login");
                 return;
@@ -523,7 +523,9 @@ const TeachingPersonnelUnit = () => {
     // Reset to page 1 when searching
     useEffect(() => {
         setCurrentPage(1);
-    }, [rosterSearch]);
+    }, [teachers, rosterSearch]);
+
+    const isReadOnly = propReadOnly;
 
     // Auto-adjust page if we delete the last item on a page
     useEffect(() => {
@@ -560,14 +562,16 @@ const TeachingPersonnelUnit = () => {
                             </p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => handleEdit(teacher)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
-                            <FiEdit2 size={18} />
-                        </button>
-                        <button onClick={() => handleDelete(teacher.id)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all">
-                            <FiTrash2 size={18} />
-                        </button>
-                    </div>
+                     {!isReadOnly && (
+                        <div className="flex gap-2">
+                            <button onClick={() => handleEdit(teacher)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
+                                <FiEdit2 size={18} />
+                            </button>
+                            <button onClick={() => handleDelete(teacher.id)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all">
+                                <FiTrash2 size={18} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-4 mt-6">
@@ -590,6 +594,196 @@ const TeachingPersonnelUnit = () => {
             </motion.div>
         );
     };
+
+    // ── Summary Component ──────────────────────────────────────────────────
+    const Unit6Summary = () => {
+        const totalStaff = teachers.length;
+        const totalMins = teachers.reduce((sum, t) => {
+            return sum + (t.monday_mins || 0) + (t.tuesday_mins || 0) + 
+                   (t.wednesday_mins || 0) + (t.thursday_mins || 0) + 
+                   (t.friday_mins || 0);
+        }, 0);
+        
+        const avgWeeklyMins = totalStaff > 0 ? (totalMins / totalStaff) : 0;
+        const avgDailyMins = avgWeeklyMins / 5;
+
+        // Position breakdown
+        const positions = {};
+        teachers.forEach(t => {
+            const p = t.position || "Teacher I";
+            positions[p] = (positions[p] || 0) + 1;
+        });
+
+        // Funding breakdown
+        const funding = {};
+        teachers.forEach(t => {
+            const f = t.funding_source || "DepEd National";
+            funding[f] = (funding[f] || 0) + 1;
+        });
+
+        return (
+            <div className="min-h-screen bg-slate-50/50 font-sans">
+                {/* Exit Header */}
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                    <div className="max-w-md mx-auto flex items-center gap-3">
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 6</div>
+                            <h1 className="text-sm font-black text-gray-800">Teaching Personnel</h1>
+                        </div>
+                        <div className="w-10" />
+                    </div>
+                </header>
+
+                <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-blue-100"
+                        >
+                            <FiUsers className="w-10 h-10 text-white" />
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-blue-100">
+                            Unit 6 • Human Resources
+                        </span>
+                        <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Personnel Roster</h1>
+                        <p className="text-slate-500 font-medium mt-2 italic">"Instructional staff and workload report"</p>
+                    </div>
+
+                    {/* High Level Metrics */}
+                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-blue-100 relative overflow-hidden group border border-white/10">
+                        <div className="absolute -bottom-10 -right-10 text-9xl opacity-10 group-hover:scale-110 transition-transform duration-700 pointer-events-none">🎓</div>
+                        <div className="relative z-10 text-center">
+                            <p className="text-blue-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Staffing Overview</p>
+                            <div className="flex items-center justify-around py-4 border-y border-white/10 mt-4">
+                                <div className="text-center">
+                                    <p className="text-4xl font-black leading-none">{totalStaff}</p>
+                                    <p className="text-[10px] font-bold text-blue-400 uppercase mt-2 tracking-widest">Registered</p>
+                                </div>
+                                <div className="w-px h-12 bg-white/10" />
+                                <div className="text-center">
+                                    <p className="text-4xl font-black leading-none">{baselineTeachers}</p>
+                                    <p className="text-[10px] font-bold text-blue-400 uppercase mt-2 tracking-widest">Baseline</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Analytics Section */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Workload Analytics</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Avg Daily Load</p>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-2xl font-black text-slate-800">{Math.floor(avgDailyMins / 60)}h</span>
+                                    <span className="text-sm font-bold text-slate-400">{Math.round(avgDailyMins % 60)}m</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-slate-50 rounded-full mt-3 overflow-hidden">
+                                    <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (avgDailyMins / 360) * 100)}%` }} />
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Weekly Commitment</p>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-2xl font-black text-slate-800">{Math.floor(avgWeeklyMins / 60)}h</span>
+                                    <span className="text-sm font-bold text-slate-400">{Math.round(avgWeeklyMins % 60)}m</span>
+                                </div>
+                                <p className="text-[8px] font-bold text-slate-300 uppercase mt-2 italic">Standard is 30h/week</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Position Distribution */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Positions Distribution</h3>
+                        </div>
+                        <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm space-y-3">
+                            {Object.entries(positions).map(([pos, count]) => (
+                                <div key={pos} className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-tight">{pos}</span>
+                                    <div className="flex items-center gap-3 flex-1 px-4">
+                                        <div className="h-1.5 flex-1 bg-slate-50 rounded-full overflow-hidden">
+                                            <div className="h-full bg-indigo-400" style={{ width: `${(count/totalStaff)*100}%` }} />
+                                        </div>
+                                        <span className="text-xs font-black text-indigo-600 w-4">{count}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    {/* Personnel List (Mini Roster) */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Detailed Roster</h3>
+                        </div>
+                        <div className="space-y-3">
+                            {teachers.slice(0, 5).map(t => {
+                                const mins = (t.monday_mins||0) + (t.tuesday_mins||0) + (t.wednesday_mins||0) + (t.thursday_mins||0) + (t.friday_mins||0);
+                                return (
+                                    <div key={t.id} className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-blue-500">
+                                                <FiUser />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-slate-800 text-sm uppercase">{t.last_name}, {t.first_name}</h4>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase">{t.position}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-blue-600">{Math.floor(mins/60)}h {mins%60}m</p>
+                                            <p className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Weekly</p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {teachers.length > 5 && (
+                                <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest pt-2">
+                                    + {teachers.length - 5} more personnel in database
+                                </p>
+                            )}
+                        </div>
+                    </section>
+
+                    {!propReadOnly && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="mt-12"
+                        >
+                            <button 
+                                onClick={() => navigate("/modular/unit-6")}
+                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-blue-100 text-blue-700 font-black text-lg shadow-xl shadow-blue-100/50 hover:border-blue-200 hover:bg-blue-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/5 to-blue-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <FiEdit2 className="w-5 h-5 text-blue-700" />
+                                </div>
+                                <span>Modify Staff Roster</span>
+                            </button>
+                        </motion.div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    if (isReadOnly) {
+        return <Unit6Summary />;
+    }
 
     return (
         <motion.div 
@@ -620,9 +814,11 @@ const TeachingPersonnelUnit = () => {
                         <div className="text-[10px] font-black tracking-widest text-blue-500 uppercase">Unit 6</div>
                         <h1 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Teacher Roster & Workload</h1>
                     </div>
-                    <button onClick={() => setIsSearchOpen(true)} className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200">
-                        <FiPlus size={20} />
-                    </button>
+                     {!isReadOnly && (
+                        <button onClick={() => setIsSearchOpen(true)} className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200">
+                            <FiPlus size={20} />
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -1113,24 +1309,26 @@ const TeachingPersonnelUnit = () => {
             </AnimatePresence>
 
             {/* Finalize Button */}
-            <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
-                <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
-                    <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
-                         <FiSave className="w-6 h-6" />
-                    </button>
-                    <button 
-                      onClick={handleFinalize}
-                      disabled={teachers.length === 0 || isFinalizing}
-                      className="flex-1 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 disabled:opacity-50 disabled:grayscale"
-                    >
-                        {isFinalizing ? (
-                            <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <>Finalize & Submit Unit 6 {teachers.length > 0 && `(${teachers.length})`} <FiChevronRight size={20} /></>
-                        )}
-                    </button>
-                </div>
-            </footer>
+             {!isReadOnly && (
+                <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
+                    <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
+                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                            <FiSave className="w-6 h-6" />
+                        </button>
+                        <button 
+                        onClick={handleFinalize}
+                        disabled={teachers.length === 0 || isFinalizing}
+                        className="flex-1 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 disabled:opacity-50 disabled:grayscale"
+                        >
+                            {isFinalizing ? (
+                                <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <>Finalize & Submit Unit 6 {teachers.length > 0 && `(${teachers.length})`} <FiChevronRight size={20} /></>
+                            )}
+                        </button>
+                    </div>
+                </footer>
+            )}
 
             <AnimatePresence>
                 {showDraftModal && (

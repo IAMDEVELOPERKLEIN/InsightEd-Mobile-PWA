@@ -1760,21 +1760,23 @@ const MonitoringDashboard = () => {
                                                                         <span className="text-[10px] text-slate-400 mt-1 font-normal leading-tight">Includes both registered & unregistered schools.</span>
                                                                     </div>
                                                                 </button>
-
-                                                                <button 
-                                                                    onClick={() => navigate('/esf7/review')}
-                                                                    className={`w-full text-left p-2.5 rounded-lg group transition-colors flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50`}
-                                                                >
-                                                                    <div className="mt-0.5">
-                                                                        <TbFileDownload className="text-slate-400 group-hover:text-amber-500" size={14} />
-                                                                    </div>
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white leading-tight">
-                                                                            ESF7 Review Center
-                                                                        </span>
-                                                                        <span className="text-[10px] text-slate-400 mt-1 font-normal leading-tight">Audit and verify school submissions.</span>
-                                                                    </div>
-                                                                </button>
+ 
+                                                                {effectiveRole === 'School Division Office' && (
+                                                                    <button 
+                                                                        onClick={() => navigate('/esf7/review')}
+                                                                        className={`w-full text-left p-2.5 rounded-lg group transition-colors flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50`}
+                                                                    >
+                                                                        <div className="mt-0.5">
+                                                                            <TbFileDownload className="text-slate-400 group-hover:text-amber-500" size={14} />
+                                                                        </div>
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white leading-tight">
+                                                                                ESF7 Review Center
+                                                                            </span>
+                                                                            <span className="text-[10px] text-slate-400 mt-1 font-normal leading-tight">Audit and verify school submissions.</span>
+                                                                        </div>
+                                                                    </button>
+                                                                )}
 
                                                             </div>
                                                         </div>
@@ -1896,13 +1898,15 @@ const MonitoringDashboard = () => {
                                                                 ESF7 Submitted <br />
                                                                 <span className="text-amber-600 dark:text-amber-300">({submittedCount} / {displayTotal})</span>
                                                             </p>
-                                                            <button 
-                                                                onClick={() => navigate('/esf7/review')}
-                                                                className="mt-4 flex items-center justify-center gap-2 py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-600/20 active:scale-95 whitespace-nowrap"
-                                                            >
-                                                                <FiEye size={14} />
-                                                                Review Center
-                                                            </button>
+                                                            {effectiveRole === 'School Division Office' && (
+                                                                <button 
+                                                                    onClick={() => navigate('/esf7/review')}
+                                                                    className="mt-4 flex items-center justify-center gap-2 py-2 px-4 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-amber-600/20 active:scale-95 whitespace-nowrap"
+                                                                >
+                                                                    <FiEye size={14} />
+                                                                    Review Center
+                                                                </button>
+                                                            )}
                                                         </div>
                                                         <FiFileText size={32} className="text-amber-200" />
                                                     </div>
@@ -2407,42 +2411,10 @@ const MonitoringDashboard = () => {
 
                                             let divisionDistricts = [];
 
-                                            if (drilldownType === 'legislative') {
-                                                // Get keys from API
-                                                const apiKeys = districtStats.map(d => d.leg_district).filter(k => k);
-                                                // Get keys from CSV (if column exists) - Assuming 'leg_district' column in CSV
-                                                const csvKeys = schoolData
-                                                    .filter(s => s.region === targetRegion && s.division === targetDivision)
-                                                    .map(s => s.leg_district) // Ensure CSV has this column
-                                                    .filter(k => k);
-
-                                                divisionDistricts = [...new Set([...apiKeys, ...csvKeys])].sort();
-
-                                                // console.log("Drilldown Legislative Keys:", divisionDistricts);
-                                            } else if (drilldownType === 'municipality') {
-                                                // Get keys from API
-                                                const apiKeys = districtStats.map(d => d.municipality).filter(k => k);
-                                                // Get keys from CSV
-                                                const csvKeys = schoolData
-                                                    .filter(s => s.region === targetRegion && s.division === targetDivision)
-                                                    .map(s => s.municipality)
-                                                    .filter(k => k);
-
-                                                divisionDistricts = [...new Set([...apiKeys, ...csvKeys])].sort();
-                                                // console.log("Drilldown Municipality Keys:", divisionDistricts);
-                                            } else {
-                                                // Default: School District
-                                                const districtsMap = {};
-                                                schoolData
-                                                    .filter(s => 
-                                                        s.region?.toUpperCase().trim() === targetRegion?.toUpperCase().trim() && 
-                                                        s.division?.toUpperCase().trim() === targetDivision?.toUpperCase().trim()
-                                                    )
-                                                    .forEach(s => {
-                                                        const u = s.district?.toUpperCase().trim();
-                                                        if (u && !districtsMap[u]) districtsMap[u] = s.district;
-                                                    });
-                                                divisionDistricts = Object.values(districtsMap).sort();
+                                            if (drilldownType === 'legislative' || drilldownType === 'municipality' || drilldownType === 'school_district') {
+                                                // The API (districtStats) is the source of truth.
+                                                // The backend aliases the grouped column (legislative_district, municipality, or district) as "district".
+                                                divisionDistricts = [...new Set(districtStats.map(d => d.district))].filter(k => k).sort();
                                             }
 
                                             if (divisionDistricts.length === 0) {
@@ -2457,14 +2429,7 @@ const MonitoringDashboard = () => {
                                                         const csvTotal = 0; // No longer used
 
                                                         // 3. Get API Stats for this Group
-                                                        const startStat = districtStats.find(d => {
-                                                            if (drilldownType === 'legislative') {
-                                                                return normalizeLocationName(d.leg_district) === normalizeLocationName(distName);
-                                                            } else if (drilldownType === 'municipality') {
-                                                                return normalizeLocationName(d.municipality) === normalizeLocationName(distName);
-                                                            }
-                                                            return normalizeLocationName(d.district) === normalizeLocationName(distName);
-                                                        });
+                                                        const startStat = districtStats.find(d => normalizeLocationName(d.district) === normalizeLocationName(distName));
 
                                                         const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
                                                         const validatedCount = startStat ? parseInt(startStat.validated_schools || 0) : 0;
@@ -2910,6 +2875,7 @@ const MonitoringDashboard = () => {
                                                                 domain={isRate ? [0, 100] : [0, 'auto']} 
                                                             />
                                                             <YAxis 
+                                                                hide={true}
                                                                 dataKey="name" 
                                                                 type="category" 
                                                                 width={130}

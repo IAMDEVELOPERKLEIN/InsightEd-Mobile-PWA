@@ -49,7 +49,7 @@ const DEFAULT_BUILDING_TYPES = [
     "Gymnasium"
 ];
 
-export default function Unit8PhysicalFacilities() {
+export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: propReadOnly }) {
     const navigate = useNavigate();
 
     // ── Global State ─────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ export default function Unit8PhysicalFacilities() {
 
     useEffect(() => {
         const init = async () => {
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || localStorage.getItem("schoolId");
             if (!storedId) return;
             setSchoolId(storedId);
 
@@ -213,7 +213,7 @@ export default function Unit8PhysicalFacilities() {
                     }));
                     setRepairAssessments(assessments);
                     if (assessments.length > 0) setHasRepair(true);
-                    setIsReadOnly(isCompleted);
+                    setIsReadOnly(isCompleted || propReadOnly);
                 }
             }
         } catch (e) { console.warn("Error fetching master data:", e); }
@@ -730,211 +730,257 @@ export default function Unit8PhysicalFacilities() {
     // ── Summary Dashboard Component ─────────────────────────────────────────
     const SummaryDashboard = () => {
         const totalClassrooms = buildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0);
+        const [showAllRooms, setShowAllRooms] = useState(false);
 
         return (
-            <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden selection:bg-indigo-500/30">
+            <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans pb-40">
                 {/* Top Navigation */}
-                <header className="px-6 py-4 flex items-center justify-between sticky top-0 bg-gray-50/80 backdrop-blur-md z-50 border-b border-gray-200/50">
-                    <div className="flex items-center gap-2">
-                        <button onClick={handleBack} className="w-12 h-12 rounded-full bg-white border border-gray-200 flex items-center justify-center text-gray-500 shadow-sm hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all">
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                    <div className="max-w-md mx-auto flex items-center gap-3">
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
                             <FiArrowLeft className="w-6 h-6" />
                         </button>
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Unit 8</div>
+                            <h1 className="text-sm font-black text-gray-800">Physical Facilities</h1>
+                        </div>
+                        <div className="w-10" />
                     </div>
-                    <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black tracking-[0.2em] text-indigo-500 uppercase">Unit 8 Insight</span>
-                        <h1 className="font-black text-gray-800 text-lg uppercase tracking-wide">Physical Facilities</h1>
-                    </div>
-                    <div className="w-12" />
                 </header>
 
-                {/* Hero Section */}
-                <div className="px-6 pt-8 pb-6 text-center">
-                    <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="w-24 h-24 mx-auto mb-4 relative"
-                    >
-                        <div className="absolute inset-0 bg-indigo-500 rounded-[2rem] rotate-45 opacity-20" />
-                        <div className="absolute inset-0 bg-indigo-500 rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-200">
-                            <span className="text-4xl">🏢</span>
-                        </div>
-                    </motion.div>
-                    <h2 className="text-3xl font-black text-gray-800 tracking-tight">Facilities Audit</h2>
-                    <p className="text-gray-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
-                </div>
+                <div className="max-w-md mx-auto mt-4 px-4 space-y-10">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-[2.5rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-100"
+                        >
+                            <span className="text-4xl text-white">🏢</span>
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
+                            Unit 8 • Architecture Profile
+                        </span>
+                        <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Facilities Summary</h1>
+                        <p className="text-slate-500 font-medium mt-2 italic">"Comprehensive audit of campus infrastructure"</p>
+                    </div>
 
-                <main className="px-6 pb-24 space-y-6 max-w-3xl mx-auto w-full">
-
-                    {/* 1. Top-Level Metric Cards */}
+                    {/* High Level Metrics */}
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
-                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <span className="text-4xl font-black text-indigo-600 mb-2">{spaces.length}</span>
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Buildable Spaces</span>
+                        <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden group">
+                             <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">🏗️</div>
+                             <p className="text-indigo-300 text-[8px] font-black uppercase tracking-widest mb-1">Structures</p>
+                             <div className="flex items-baseline gap-1">
+                                 <span className="text-3xl font-black">{buildings.length}</span>
+                                 <span className="text-[10px] font-bold text-indigo-400">BLDGS</span>
+                             </div>
                         </div>
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
-                            <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <span className="text-4xl font-black text-teal-600 mb-2">{totalClassrooms}</span>
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Usable Rooms</span>
-                        </div>
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
-                            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <span className="text-4xl font-black text-amber-500 mb-2">{groupedRepairsArray.length}</span>
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">For Repair</span>
-                        </div>
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 flex flex-col items-center justify-center text-center relative overflow-hidden group">
-                            <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <span className="text-4xl font-black text-rose-600 mb-2">
-                                {buildings.filter(b => b.status === "For Condemnation" || b.status === "Condemned").length}
-                            </span>
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">For Demolition</span>
+                        <div className="bg-indigo-600 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden group">
+                             <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">🏫</div>
+                             <p className="text-indigo-100 text-[8px] font-black uppercase tracking-widest mb-1">Total Rooms</p>
+                             <div className="flex items-baseline gap-1">
+                                 <span className="text-3xl font-black">{totalClassrooms}</span>
+                                 <span className="text-[10px] font-bold text-indigo-200">UNITS</span>
+                             </div>
                         </div>
                     </div>
 
-                    {/* 2. Phase 1: Buildable Space Map View */}
-                    <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
-                        <h3 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                            <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center"><FiMapPin /></span>
-                            Phase 1: Buildable Spaces
-                        </h3>
-                        <div className="h-[250px] rounded-2xl overflow-hidden shadow-inner mb-4 bg-gray-50 border border-gray-200">
-                            {centerMap ? (
-                                <MapContainer center={centerMap} zoom={18} scrollWheelZoom={false} dragging={false} doubleClickZoom={false} zoomControl={false} className="h-full w-full">
-                                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                                    <RecenterMap center={centerMap} />
-                                    {spaces.map((s, idx) => {
-                                        const bounds = calculateBounds(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m) || 0, parseFloat(s.width_m) || 0);
-                                        return bounds ? (
-                                            <Rectangle key={'ro-' + idx} bounds={bounds} pathOptions={{ color: 'blue', weight: 3, fillOpacity: 0.2 }} />
-                                        ) : null;
-                                    })}
-                                </MapContainer>
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-gray-400 font-medium">Map unavailable</div>
-                            )}
+                    {/* ── PHASE 1: BUILDABLE SPACES ── */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Buildable Footprint</h3>
+                        </div>
+                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden p-2">
+                             <div className="h-[220px] rounded-[2rem] overflow-hidden bg-slate-50 relative">
+                                {centerMap ? (
+                                    <MapContainer center={centerMap} zoom={18} scrollWheelZoom={false} dragging={false} doubleClickZoom={false} zoomControl={false} className="h-full w-full">
+                                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                        <RecenterMap center={centerMap} />
+                                        {spaces.map((s, idx) => {
+                                            const bounds = calculateBounds(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m) || 0, parseFloat(s.width_m) || 0);
+                                            return bounds ? (
+                                                <Rectangle key={'ro-' + idx} bounds={bounds} pathOptions={{ color: '#4f46e5', weight: 3, fillOpacity: 0.2 }} />
+                                            ) : null;
+                                        })}
+                                    </MapContainer>
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold italic">Map Preview Unavailable</div>
+                                )}
+                             </div>
+                             <div className="p-4 space-y-3">
+                                {spaces.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between px-2">
+                                        <div>
+                                            <h4 className="font-black text-slate-800 text-[13px]">{s.space_name}</h4>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{s.length_m}m &times; {s.width_m}m</p>
+                                        </div>
+                                        <span className="text-[11px] font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
+                                            {parseFloat(s.total_area_sqm).toFixed(1)} m&sup2;
+                                        </span>
+                                    </div>
+                                ))}
+                                {spaces.length === 0 && <p className="text-center text-slate-400 text-[10px] font-bold italic py-2">No spaces recorded.</p>}
+                             </div>
+                        </div>
+                    </section>
+
+                    {/* ── PHASE 2: BUILDING INVENTORY ── */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Building Inventory</h3>
                         </div>
                         <div className="space-y-3">
-                            {spaces.map(s => (
-                                <div key={s.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-indigo-200 transition-colors">
-                                    <div>
-                                        <h4 className="font-bold text-gray-800">{s.space_name}</h4>
-                                        <p className="text-xs text-gray-500 font-medium mt-1">{s.length_m}m &times; {s.width_m}m</p>
+                            {buildings.map(b => (
+                                <div key={b.id} className={`bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm relative overflow-hidden group ${b.status === 'Condemned' || b.status === 'For Condemnation' ? 'border-rose-100 shadow-rose-50/50' : ''}`}>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h4 className="font-black text-slate-800 text-lg tracking-tight uppercase">{b.building_name}</h4>
+                                            <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.15em]">{b.category}</p>
+                                        </div>
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                                            b.status === 'Newly Built' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
+                                            b.status === 'Good Condition' ? 'bg-blue-50 border-blue-100 text-blue-600' : 
+                                            'bg-rose-50 border-rose-100 text-rose-600'
+                                        }`}>
+                                            {b.status}
+                                        </span>
                                     </div>
-                                    <span className="text-indigo-600 font-black bg-indigo-100/50 px-3 py-1 rounded-lg border border-indigo-100">{parseFloat(s.total_area_sqm).toFixed(1)} m&sup2;</span>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-slate-50 p-3 rounded-2xl">
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Verticality</p>
+                                            <p className="text-[13px] font-black text-slate-700">{b.storey}nd Floor Level</p>
+                                        </div>
+                                        <div className="bg-slate-50 p-3 rounded-2xl">
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Capacity</p>
+                                            <p className="text-[13px] font-black text-slate-700">{b.classroom} Classrooms</p>
+                                        </div>
+                                    </div>
+                                    {b.remarks && (
+                                        <p className="mt-4 text-[11px] font-medium text-slate-500 italic px-1">&ldquo;{b.remarks}&rdquo;</p>
+                                    )}
                                 </div>
                             ))}
-                            {spaces.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No spaces recorded.</p>}
                         </div>
-                    </div>
+                    </section>
 
-                    {/* 3. Phase 2: Inventory Breakdown */}
-                    <div className="space-y-6">
-                        <h3 className="text-xl font-black text-gray-800 px-2">Phase 2: Inventory Breakdown</h3>
-
-                        {/* Registered Buildings */}
-                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
-                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">🏫</span>
-                                Registered Buildings
-                            </h4>
-                            <div className="space-y-3">
-                                {buildings.map(b => (
-                                    <div key={b.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <h5 className="font-black text-gray-800">{b.building_name}</h5>
-                                            <span className="px-2 py-0.5 bg-white border border-gray-100 rounded-md text-[10px] font-black text-gray-400 uppercase tracking-widest">{b.category}</span>
-                                        </div>
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.storey} Storey(s)</span>
-                                            <span className="px-3 py-1 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 shadow-sm">{b.classroom} Classrooms</span>
-                                        </div>
-                                    </div>
-                                ))}
-                                {buildings.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No structures recorded.</p>}
+                    {/* ── PHASE 3: GRANULAR ROOM AUDIT ── */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Granular Room Audit</h3>
+                        </div>
+                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                            <div className="p-6 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                                <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Master Room List</span>
+                                <span className="bg-indigo-600 px-3 py-1 rounded-full text-[10px] font-black text-white">
+                                    {roomsData.length} AUDITED
+                                </span>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* 4. Action Items */}
-                    <div className="space-y-6">
-                        <h3 className="text-xl font-black text-gray-800 px-2 mt-4">Required Interventions</h3>
-
-                        {/* Repairs */}
-                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-amber-100 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
-                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                                <span className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">🛠️</span>
-                                Repair Assessments
-                            </h4>
-                            <div className="space-y-3">
-                                {groupedRepairsArray.map(r => (
-                                    <div key={r.roomId} className="bg-amber-50/30 p-4 rounded-2xl border border-amber-100/50">
-                                        <h5 className="font-black text-gray-800">{r.building_name} &bull; <span className="text-amber-600">{r.room_name}</span></h5>
-                                        <p className="text-xs font-bold text-gray-400 mt-1 mb-3">Room Dimensions: {r.room_length}m &times; {r.room_width}m</p>
-                                        <div className="bg-white p-3 rounded-xl border border-gray-100 text-sm shadow-sm">
-                                            <span className="font-bold text-gray-700 block mb-1">Damaged Items:</span>
-                                            <p className="text-gray-600 font-medium">
-                                                {r.items.map(i => `${i.item} (${i.recommend_action === 'Routine Repair' ? i.damage_ratio + '%' : i.recommend_action})`).join(', ')}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
-                                {groupedRepairsArray.length === 0 && <p className="text-gray-400 font-medium italic text-sm text-center py-2">No repairs needed.</p>}
+                            <div className="p-2 overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="border-b border-slate-50">
+                                            <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Room Name</th>
+                                            <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest">Level</th>
+                                            <th className="px-4 py-3 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Condition</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {(showAllRooms ? roomsData : roomsData.slice(0, 10)).map(room => (
+                                            <tr key={room.id} className="group hover:bg-slate-50/50 transition-colors">
+                                                <td className="px-4 py-4">
+                                                    <p className="font-black text-slate-800 text-xs">{room.room_name}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400 tracking-tighter uppercase">{room.dimensions || '7x9'}</p>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <span className="font-bold text-slate-600 text-[11px] whitespace-nowrap">{room.grade_level || '--'}</span>
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    <div className={`inline-flex items-center justify-center w-6 h-6 rounded-lg ${
+                                                        room.condition === 'Good Condition' || room.condition === 'Newly Built' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                                                    }`}>
+                                                        {room.condition === 'Good Condition' || room.condition === 'Newly Built' ? <FiCheck className="w-3.5 h-3.5" /> : <FiAlertTriangle className="w-3.5 h-3.5" />}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
+                            {roomsData.length > 10 && (
+                                <button 
+                                    onClick={() => setShowAllRooms(!showAllRooms)}
+                                    className="w-full p-4 text-[10px] font-black text-indigo-500 hover:text-indigo-700 bg-slate-50/30 border-t border-slate-50 transition-colors uppercase tracking-widest"
+                                >
+                                    {showAllRooms ? 'Show Less' : `View All ${roomsData.length} Rooms`}
+                                </button>
+                            )}
                         </div>
+                    </section>
 
-                        {/* Demolitions */}
-                        <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-rose-100 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-rose-500/5 to-transparent rounded-full -mr-16 -mt-16 pointer-events-none" />
-                            <h4 className="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
-                                <span className="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center">🚜</span>
-                                Slated for Demolition
-                            </h4>
-                            <div className="space-y-3">
-                                {buildings.filter(b => b.status === "For Condemnation" || b.status === "Condemned").map(b => (
-                                    <div key={b.id} className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100/50">
-                                        <h5 className="font-black text-gray-800 text-lg mb-1">{b.building_name}</h5>
-                                        <div className="flex gap-2 mb-3">
-                                            <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{b.storey} Storey(s)</span>
-                                            <span className="text-[10px] font-black bg-white/50 px-2 py-0.5 rounded border border-rose-100 text-rose-600">{b.classroom} Classrooms</span>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {b.condemn_age && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Age/Dilapidation</span>}
-                                            {b.condemn_hazard && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Safety Hazard</span>}
-                                            {b.condemn_calamity && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Calamity Damage</span>}
-                                            {b.condemn_upgrade && <span className="bg-white border border-rose-100 text-rose-600 text-[10px] uppercase tracking-wider font-black px-2 py-1 rounded-lg">Site Upgrade</span>}
-                                        </div>
-                                    </div>
-                                ))}
-                                {buildings.filter(b => b.status === "For Condemnation" || b.status === "Condemned").length === 0 && (
-                                    <p className="text-gray-400 font-medium italic text-sm text-center py-2">No demolitions recorded.</p>
-                                )}
-                            </div>
+                    {/* ── PHASE 4: REQUIRED REPAIRS ── */}
+                    <section className="space-y-4 pb-12">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-rose-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Maintenance Assessment</h3>
+                        </div>
+                        <div className="space-y-4">
+                            {groupedRepairsArray.map(r => (
+                                <div key={r.roomId} className="bg-white rounded-[2rem] p-6 border border-rose-100 shadow-sm relative overflow-hidden group">
+                                     <div className="absolute top-0 right-0 p-4 text-4xl opacity-5 group-hover:scale-110 transition-transform">🛠️</div>
+                                     <div className="mb-4">
+                                         <h4 className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{r.room_name}</h4>
+                                         <p className="text-[9px] font-black text-rose-500 uppercase tracking-[0.15em]">{r.building_name} · DIM: {r.room_length}x{r.room_width}</p>
+                                     </div>
+                                     <div className="space-y-3">
+                                         {r.items.map((itm, iidx) => (
+                                             <div key={iidx} className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center group/item hover:bg-slate-100 transition-colors">
+                                                 <div className="flex-1">
+                                                     <div className="flex justify-between items-center mb-1">
+                                                        <span className="text-[10px] font-black text-slate-700 uppercase">{itm.item}</span>
+                                                        <span className="text-[10px] font-black text-rose-600">{itm.damage_ratio}% SCALE</span>
+                                                     </div>
+                                                     <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-rose-500 transition-all duration-1000" style={{ width: `${itm.damage_ratio}%` }} />
+                                                     </div>
+                                                     <p className="text-[9px] font-medium text-slate-400 mt-2 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
+                                                        {itm.recommend_action} · {itm.oms || 'Standard Material'}
+                                                     </p>
+                                                 </div>
+                                             </div>
+                                         ))}
+                                     </div>
+                                </div>
+                            ))}
+                            {groupedRepairsArray.length === 0 && (
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-[2rem] p-8 text-center">
+                                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm text-2xl">✨</div>
+                                    <h4 className="text-emerald-800 font-black text-lg">Structural Integrity Verified</h4>
+                                    <p className="text-emerald-600 text-[11px] font-medium mt-1 uppercase tracking-widest">No major repairs or rehabilitation required</p>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                </div>
+
+                {!propReadOnly && (
+                    <div className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
+                        <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
+                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                                <FiSave className="w-6 h-6" />
+                            </button>
+                            <button
+                                onClick={() => setIsReadOnly(false)}
+                                className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+                            >
+                                <FiUnlock className="w-6 h-6" />
+                                <span>Unlock to Edit Architecture</span>
+                            </button>
                         </div>
                     </div>
-
-                    {/* 5. Unlock Action */}
-                    <div className="pt-6">
-                        <p className="text-center text-xs font-bold text-gray-400 mt-4 mb-20">Your Physical Facilities Audit data is saved and verified.</p>
-                    </div>
-                </main>
-                
-                <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
-                    <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
-                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
-                             <FiSave className="w-6 h-6" />
-                        </button>
-                        <button
-                            onClick={() => setIsReadOnly(false)}
-                            className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
-                        >
-                            <FiUnlock className="w-6 h-6" />
-                            <span>Unlock to Edit Architecture</span>
-                        </button>
-                    </div>
-                </footer>
+                )}
             </div>
         );
     };

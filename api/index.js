@@ -10326,7 +10326,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
       FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1))
+      WHERE UPPER(TRIM(s.region)) ~* ('^' || $1 || '($|[^a-zA-Z0-9])')
     `;
     console.log("DEBUG: Running Monitoring Stats for Region:", region, "Division:", division);
     let params = [region];
@@ -10936,7 +10936,7 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
       FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1))
+      WHERE UPPER(TRIM(s.region)) ~* ('^' || $1 || '($|[^a-zA-Z0-9])')
       GROUP BY UPPER(TRIM(s.division))
       ORDER BY UPPER(TRIM(s.division))
     `;
@@ -11507,7 +11507,7 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       FROM ph_schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
-      WHERE UPPER(TRIM(s.region)) = UPPER(TRIM($1)) AND
+      WHERE UPPER(TRIM(s.region)) ~* ('^' || $1 || '($|[^a-zA-Z0-9])') AND
             UPPER(TRIM(s.division)) = UPPER(TRIM($2))
       GROUP BY UPPER(TRIM(${groupCol}))
       ORDER BY UPPER(TRIM(${groupCol})) ASC
@@ -11546,7 +11546,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
     let params = [];
     // removed: whereClauses.push(`s.iern IS NOT NULL`);
     if (region) {
-      whereClauses.push(`UPPER(TRIM(s.region)) = UPPER(TRIM($${params.length + 1}))`);
+      whereClauses.push(`UPPER(TRIM(s.region)) ~* ('^' || $${params.length + 1} || '($|[^a-zA-Z0-9])')`);
       params.push(region);
     }
 

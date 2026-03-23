@@ -38,9 +38,18 @@ const ESF7Review = () => {
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('queue'); // queue, verified, missing, all
     const [searchTerm, setSearchTerm] = useState('');
+    const [hasDownloaded, setHasDownloaded] = useState(false);
 
     useEffect(() => {
         if (user) {
+            const effectiveRole = (user.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+                ? sessionStorage.getItem('impersonatedRole')
+                : user.role;
+
+            if (effectiveRole !== 'School Division Office') {
+                navigate('/monitoring-dashboard');
+                return;
+            }
             fetchAllData();
         }
     }, [user]);
@@ -72,6 +81,7 @@ const ESF7Review = () => {
     const handleViewRecords = async (schoolId) => {
         setLoading(true);
         setSelectedSchool(schoolId);
+        setHasDownloaded(false);
         try {
             const res = await fetch(`/api/esf7/records/${schoolId}`);
             const data = await res.json();
@@ -111,6 +121,7 @@ const ESF7Review = () => {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "DB_USER_CLEAN");
         XLSX.writeFile(wb, `ESF7_Clean_${selectedSchool}.xlsx`);
+        setHasDownloaded(true);
     };
 
     const handleReturn = async () => {
@@ -345,11 +356,15 @@ const ESF7Review = () => {
                                 </button>
                                 <button 
                                     onClick={handleApprove}
-                                    disabled={actionLoading}
-                                    className="flex-[2] py-5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-black rounded-[2.5rem] shadow-xl shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-3 uppercase italic tracking-tight"
+                                    disabled={actionLoading || !hasDownloaded}
+                                    className={`flex-[2] py-5 font-black rounded-[2.5rem] flex items-center justify-center gap-3 uppercase italic tracking-tight transition-all ${
+                                        !hasDownloaded 
+                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-2 border-slate-200' 
+                                            : 'bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-xl shadow-blue-500/20 active:scale-95'
+                                    }`}
                                 >
                                     {actionLoading ? <FiLoader className="animate-spin" /> : <FiCheckCircle size={20} />}
-                                    <span>Verify & Commit to Cloud</span>
+                                    <span>{!hasDownloaded ? "Download to Enable Verification" : "Verify & Commit to Cloud"}</span>
                                 </button>
                                 <button 
                                     onClick={handleReturn}

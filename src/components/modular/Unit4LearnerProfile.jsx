@@ -64,7 +64,7 @@ const slideVariants = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════
-const Unit4LearnerProfile = () => {
+const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
 
     // ── Core State ────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ const Unit4LearnerProfile = () => {
     // ── Data Fetching ─────────────────────────────────────────────────────
     useEffect(() => {
         const init = async () => {
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || localStorage.getItem("schoolId");
             if (!storedId) return;
             setSchoolId(storedId);
 
@@ -116,7 +116,7 @@ const Unit4LearnerProfile = () => {
 
                     // 1. Determine Allowed Grades
                     const qp = JSON.parse(localStorage.getItem('quest_progress') || '{}');
-                    const co = (qp.curricular_offering || d.curricular_offering || "").toLowerCase();
+                    const co = (propReadOnly ? d.curricular_offering : (qp.curricular_offering || d.curricular_offering)) || "";
                     let offeringAllowed = [];
                     if (co.includes("kinder")) offeringAllowed.push("kinder");
                     if (co.includes("elementary") || co.includes("primary")) {
@@ -188,7 +188,7 @@ const Unit4LearnerProfile = () => {
                         setIsReviewMode(false);
                         setShowWelcomeBack(true);
                         setTimeout(() => setShowWelcomeBack(false), 3000);
-                    } else if (d.unit4_completed) {
+                    } else if (d.unit4_completed || propReadOnly) {
                         if (Array.isArray(d.selected_learner_groups)) setSelectedGroups(d.selected_learner_groups);
                         const demoObj = {};
                         const moveObj = {};
@@ -502,132 +502,216 @@ const Unit4LearnerProfile = () => {
                     </div>
                 </header>
 
-                <div className="max-w-md mx-auto pb-32 mt-4 px-4">
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <motion.div 
-                        initial={{ scale: 0 }} 
-                        animate={{ scale: 1 }} 
-                        className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
-                    >
-                        <FiUsers className="w-10 h-10 text-white" />
-                    </motion.div>
-                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                        Unit 4 • Learner Profile
-                    </span>
-                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
-                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
-                </div>
-
-                {/* Metric Cards Grid */}
-                <div className="grid grid-cols-2 gap-4 mb-10">
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
-                            <FiUsers className="w-6 h-6 text-indigo-600" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Enrolled</span>
-                        <span className="text-3xl font-black text-slate-800 mt-1">{enrollmentTotal}</span>
+                <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-100"
+                        >
+                            <FiUsers className="w-10 h-10 text-white" />
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
+                            Unit 4 • Student Registry
+                        </span>
+                        <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Vulnerability & Health</h1>
+                        <p className="text-slate-500 font-medium mt-2 italic">"Demographic profiling and health status report"</p>
                     </div>
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
-                            <span className="text-xl">🗂️</span>
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Groups Tracked</span>
-                        <span className="text-3xl font-black text-slate-800 mt-1">{displayGroups.length}</span>
-                    </div>
-                </div>
 
-                {/* Subsections */}
-                <div className="space-y-6">
-                    <section>
-                        <div className="flex items-center gap-2 mb-4 ml-2">
-                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Special Groups</h3>
-                        </div>
-                        <div className="grid gap-3">
-                            {displayGroups.length === 0 ? (
-                                <div className="bg-white rounded-2xl p-4 border border-slate-50 text-center shadow-sm">
-                                    <span className="text-slate-400 font-medium italic text-sm">No special groups reported.</span>
+                    {/* Primary Metrics */}
+                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 relative overflow-hidden group border border-white/10">
+                        <div className="absolute -bottom-10 -right-10 text-9xl opacity-10 group-hover:rotate-12 transition-transform duration-700 pointer-events-none">🧬</div>
+                        <div className="relative z-10 text-center">
+                            <p className="text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Registry Coverage</p>
+                            <div className="flex items-center justify-around py-4 border-y border-white/10 mt-4">
+                                <div>
+                                    <p className="text-4xl font-black leading-none">{enrollmentTotal}</p>
+                                    <p className="text-[9px] font-bold text-indigo-400 uppercase mt-2 tracking-widest">Total Students</p>
                                 </div>
-                            ) : (
-                                displayGroups.map(g => {
+                                <div className="w-px h-12 bg-white/10" />
+                                <div>
+                                    <p className="text-4xl font-black leading-none">{displayGroups.length}</p>
+                                    <p className="text-[9px] font-bold text-indigo-400 uppercase mt-2 tracking-widest">Priority Groups</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Special Groups Details */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Detailed Demographics</h3>
+                        </div>
+
+                        {displayGroups.length === 0 ? (
+                            <div className="bg-white rounded-3xl p-8 border border-dashed border-slate-200 text-center text-slate-400">
+                                <p className="font-bold italic">No priority groups reported.</p>
+                            </div>
+                        ) : (
+                            <div className="grid gap-4">
+                                {displayGroups.map(g => {
                                     const total = g.id === 'als' 
                                         ? (parseInt(savedData?.als_total) || 0)
                                         : dynamicGrades.reduce((sum, gr) => sum + (parseInt(savedData?.[`${g.id}_${gr.id}`]) || 0), 0);
+                                    
                                     return (
-                                        <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-2xl">{g.icon}</span>
-                                                <span className="font-bold text-slate-700 text-lg">{g.label}</span>
+                                        <div key={g.id} className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm overflow-hidden group">
+                                            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-50">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-xl shadow-inner group-hover:scale-110 transition-transform">{g.icon}</div>
+                                                    <div>
+                                                        <h4 className="font-black text-slate-800">{g.label}</h4>
+                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Unit 4 Profile</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Total Count</p>
+                                                    <span className="text-xl font-black text-indigo-600">{total}</span>
+                                                </div>
                                             </div>
-                                            <div className="bg-indigo-50 px-3 py-1.5 rounded-xl">
-                                                <span className="font-black text-indigo-700">{total}</span>
-                                            </div>
+
+                                            {/* Grade Breakdown (Horizontal Scroll) */}
+                                            {g.id !== 'als' && (
+                                                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                                    {dynamicGrades.map(gr => {
+                                                        const val = parseInt(savedData?.[`${g.id}_${gr.id}`]) || 0;
+                                                        if (val === 0) return null;
+                                                        return (
+                                                            <div key={gr.id} className="flex-shrink-0 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100 flex items-center gap-2">
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase">{gr.label}</span>
+                                                                <span className="text-xs font-black text-indigo-600">{val}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     );
-                                })
-                            )}
-                        </div>
-                    </section>
-
-                    <section>
-                        <div className="flex items-center gap-2 mb-4 ml-2">
-                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Learner Activity</h3>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                <span className="text-[10px] font-black uppercase text-red-400 tracking-widest block mb-1">Dropouts</span>
-                                <span className="text-2xl font-black text-slate-800">{dropSum}</span>
+                                })}
                             </div>
-                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                <span className="text-[10px] font-black uppercase text-orange-400 tracking-widest block mb-1">Repeaters</span>
-                                <span className="text-2xl font-black text-slate-800">{repSum}</span>
+                        )}
+                    </section>
+
+                    {/* Learner Activity / Movement */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-rose-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Learner Activity</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Dropouts */}
+                            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-3 opacity-5 text-4xl">🔻</div>
+                                <div className="relative z-10">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Dropouts</p>
+                                    <p className="text-3xl font-black text-rose-600">{dropSum}</p>
+                                    <div className="mt-4 pt-4 border-t border-slate-50 space-y-1">
+                                        {dynamicGrades.map(gr => {
+                                            const val = parseInt(savedData?.[`dropout_${gr.id}`]) || 0;
+                                            if (val === 0) return null;
+                                            return (
+                                                <div key={gr.id} className="flex justify-between text-[9px]">
+                                                    <span className="font-bold text-slate-400 uppercase">{gr.label}</span>
+                                                    <span className="font-black text-rose-500">{val}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Repeaters */}
+                            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-3 opacity-5 text-4xl">🔄</div>
+                                <div className="relative z-10">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Repeaters</p>
+                                    <p className="text-3xl font-black text-orange-600">{repSum}</p>
+                                    <div className="mt-4 pt-4 border-t border-slate-50 space-y-1">
+                                        {dynamicGrades.map(gr => {
+                                            const val = parseInt(savedData?.[`repeater_${gr.id}`]) || 0;
+                                            if (val === 0) return null;
+                                            return (
+                                                <div key={gr.id} className="flex justify-between text-[9px]">
+                                                    <span className="font-bold text-slate-400 uppercase">{gr.label}</span>
+                                                    <span className="font-black text-orange-500">{val}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
 
-                    <section>
-                        <div className="bg-white border-2 border-indigo-100 rounded-3xl p-5 shadow-sm mt-6">
-                             <div className="flex justify-between items-center mb-4">
-                                  <div className="flex items-center gap-2">
-                                       <span className="text-xl">🥗</span>
-                                       <span className="font-black text-slate-700 text-sm">Health Profile</span>
-                                   </div>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                   <div className="flex flex-col">
-                                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Normal BMI</span>
-                                       <span className="text-xl font-black text-slate-800">{savedData?.bmi_normal || 0}</span>
-                                   </div>
-                                   <div className="flex flex-col items-end">
-                                       <span className="text-2xl font-black text-emerald-600">
-                                            {enrollmentTotal > 0 ? (((savedData?.bmi_normal || 0) / enrollmentTotal) * 100).toFixed(0) : 0}%
-                                        </span>
-                                   </div>
-                              </div>
+                    {/* Health Profile */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Health Profile (BMI)</h3>
+                        </div>
+                        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-2xl font-black text-emerald-600">
+                                        {enrollmentTotal > 0 ? (((savedData?.bmi_normal || 0) / enrollmentTotal) * 100).toFixed(1) : 0}%
+                                    </p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Standard BMI Weight</p>
+                                </div>
+                                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-2xl shadow-inner">🥗</div>
+                            </div>
+                            
+                            <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                                <div style={{ width: `${( (savedData?.bmi_severely_wasted||0) / enrollmentTotal ) * 100}%` }} className="bg-red-500" title="Severely Wasted" />
+                                <div style={{ width: `${( (savedData?.bmi_wasted||0) / enrollmentTotal ) * 100}%` }} className="bg-amber-400" title="Wasted" />
+                                <div style={{ width: `${( (savedData?.bmi_normal||0) / enrollmentTotal ) * 100}%` }} className="bg-emerald-500" title="Normal" />
+                                <div style={{ width: `${( (savedData?.bmi_overweight_obese||0) / enrollmentTotal ) * 100}%` }} className="bg-rose-400" title="Overweight/Obese" />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-50">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-[10px]">
+                                        <span className="flex items-center gap-1.5 text-slate-400 font-bold uppercase"><div className="w-2 h-2 rounded-full bg-red-500" /> Sev. Wasted</span>
+                                        <span className="font-black text-slate-700">{savedData?.bmi_severely_wasted || 0}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px]">
+                                        <span className="flex items-center gap-1.5 text-slate-400 font-bold uppercase"><div className="w-2 h-2 rounded-full bg-amber-400" /> Wasted</span>
+                                        <span className="font-black text-slate-700">{savedData?.bmi_wasted || 0}</span>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-[10px]">
+                                        <span className="flex items-center gap-1.5 text-slate-400 font-bold uppercase"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Normal</span>
+                                        <span className="font-black text-slate-700">{savedData?.bmi_normal || 0}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px]">
+                                        <span className="flex items-center gap-1.5 text-slate-400 font-bold uppercase"><div className="w-2 h-2 rounded-full bg-rose-400" /> Obese+</span>
+                                        <span className="font-black text-slate-700">{savedData?.bmi_overweight_obese || 0}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </section>
-                </div>
 
-                {/* Unlock Action */}
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="mt-12"
-                >
-                    <button 
-                        onClick={() => { setIsReviewMode(false); setCurrentChapter(1); }}
-                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <FiUnlock className="w-5 h-5 text-indigo-700" />
-                        </div>
-                        <span>Unlock to Edit Profile</span>
-                    </button>
-                </motion.div>
+                    {!propReadOnly && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="mt-12"
+                        >
+                            <button 
+                                onClick={() => { setIsReviewMode(false); setCurrentChapter(1); }}
+                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <FiUnlock className="w-5 h-5 text-indigo-700" />
+                                </div>
+                                <span>Unlock to Edit Profile</span>
+                            </button>
+                        </motion.div>
+                    )}
                 </div>
             </div>
         );
