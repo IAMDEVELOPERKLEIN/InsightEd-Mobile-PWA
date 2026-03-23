@@ -149,6 +149,7 @@ export const AuthProvider = ({ children }) => {
                 const data = await res.json();
                 console.warn("[AuthContext] Verification failed:", data.error);
                 setPasscodeError(data.error || 'Invalid passcode. Please try again.');
+                setPasscodeValue(''); // Clear field on error
             }
         } catch (err) {
             console.error("[AuthContext] Logout verification error:", err);

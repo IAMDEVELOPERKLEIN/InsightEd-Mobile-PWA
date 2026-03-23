@@ -50,10 +50,10 @@ const NSPPDraft = () => {
                     </div>
 
                     <button 
-                        onClick={() => navigate('/nexus-dashboard')}
+                        onClick={() => navigate('/nodes-dashboard')}
                         className="w-full py-4 bg-[#004A99] text-white font-black rounded-2xl shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
                     >
-                        RETURN TO NEXUS
+                        RETURN TO NODES
                     </button>
                 </div>
             </div>

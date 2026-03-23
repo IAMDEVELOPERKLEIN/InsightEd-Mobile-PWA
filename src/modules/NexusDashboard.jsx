@@ -6,17 +6,18 @@ import {
     FiBookOpen, 
     FiAward,
     FiMoreVertical,
+    FiLogOut,
     FiLock
 } from 'react-icons/fi';
 import { TbReportAnalytics, TbTarget } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
 import loadingLogo from '../assets/loading.gif';
 import PageTransition from '../components/PageTransition';
-import BottomNav from './BottomNav';
 
-const NexusDashboard = () => {
+
+const NodesDashboard = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [questProgress, setQuestProgress] = useState({ completedUnits: [], xp: 0 });
     const [loading, setLoading] = useState(true);
     const [isNavigating, setIsNavigating] = useState(false);
@@ -90,7 +91,7 @@ const NexusDashboard = () => {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-white">
                 <div className="w-32 h-32 flex items-center justify-center">
-                    <img src={loadingLogo} className="w-full h-full object-contain drop-shadow-xl" alt="InsightEd Loading" />
+                    <img src={loadingLogo} className="w-full h-full object-contain drop-shadow-xl" alt="InsightED Loading" />
                 </div>
                 {isNavigating && (
                     <motion.p 
@@ -108,7 +109,7 @@ const NexusDashboard = () => {
     const modules = [
         {
             id: 'school-info',
-            title: 'School Profile',
+            title: 'CLOUD',
             subtitle: 'Forms & History',
             emoji: '🏛️',
             icon: <FiBookOpen className="w-8 h-8" />,
@@ -117,7 +118,7 @@ const NexusDashboard = () => {
             bgLight: 'bg-blue-50',
             progress: calculateProgress([1, 2, 3, 4, 5, 6, 7, 8, 9]),
             route: '/my-activity',
-            description: 'School Profile will look into getting to know more about a school.',
+            description: 'CLOUD will look into getting to know more about a school.',
             isLocked: dynamicLocks['school-info'] || false,
         },
         {
@@ -157,7 +158,7 @@ const NexusDashboard = () => {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <div className="w-32 h-32 flex items-center justify-center">
-                    <img src={loadingLogo} className="w-full h-full object-contain drop-shadow-xl" alt="InsightEd Loading" />
+                    <img src={loadingLogo} className="w-full h-full object-contain drop-shadow-xl" alt="InsightED Loading" />
                 </div>
             </div>
         );
@@ -167,10 +168,18 @@ const NexusDashboard = () => {
         <PageTransition>
             <div className="min-h-screen bg-white pb-32 font-sans text-slate-900 overflow-y-auto">
                 
-                <div className="px-8 pt-12 pb-10">
+                <div className="px-8 pt-12 pb-10 flex justify-between items-start">
                     <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-                        Welcome to <span className="text-[#10346B]">InsightED Nexus</span>
+                        Welcome to <br />
+                        <span className="text-[#10346B]">InsightED Nodes</span>
                     </h1>
+                    <button 
+                        onClick={logout}
+                        className="p-4 bg-slate-50 rounded-3xl border border-slate-100 text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all active:scale-95 shadow-lg shadow-slate-200/50"
+                        title="Logout"
+                    >
+                        <FiLogOut size={24} />
+                    </button>
                 </div>
 
                 {/* --- 2X2 GRID MATCHING REFERENCE --- */}
@@ -249,7 +258,7 @@ const NexusDashboard = () => {
                 </div>
 
 
-                <BottomNav userRole="School Head" />
+
             </div>
 
             {/* --- ED WELCOME OVERLAY --- */}
@@ -290,7 +299,7 @@ const NexusDashboard = () => {
 
                                 <div className="space-y-3">
                                     <p className="text-sm font-bold text-slate-600 leading-relaxed">
-                                        Welcome to the <span className="text-[#004A99]">InsightEd Nexus</span>. 
+                                        Welcome to the <span className="text-[#004A99]">InsightED Nodes</span>. 
                                         Great job on finishing your registration!
                                     </p>
                                     <p className="text-[13px] font-medium text-slate-500 leading-relaxed italic">
@@ -324,4 +333,4 @@ const NexusDashboard = () => {
     );
 };
 
-export default NexusDashboard;
+export default NodesDashboard;

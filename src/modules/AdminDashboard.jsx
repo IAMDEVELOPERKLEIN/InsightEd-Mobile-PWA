@@ -671,7 +671,7 @@ const AdminDashboard = () => {
                         <FiGrid size={20} />
                     </div>
                     <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-800">Nexus Module Controls</h3>
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-800">Nodes Module Controls</h3>
                         <p className="text-[10px] text-gray-500">Enable or disable front-page cards for users.</p>
                     </div>
                 </div>
@@ -1409,7 +1409,7 @@ const AdminDashboard = () => {
                 <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden transition-all duration-500 ease-in-out">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                     <div className="relative z-10">
-                        <p className="text-blue-200 text-xs font-bold tracking-widest uppercase mb-1">Administrator</p>
+                        <p className="text-blue-200 text-[10px] font-black tracking-[0.2em] uppercase mb-1">Administrator • Nodes</p>
                         <h1 className="text-2xl font-bold text-white leading-tight mb-2">My Dashboard</h1>
                         <div className="flex items-center gap-3 text-blue-100/80 text-xs">
                             <div className="flex items-center gap-1"><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> System Online</div>

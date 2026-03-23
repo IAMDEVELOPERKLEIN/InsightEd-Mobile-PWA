@@ -168,7 +168,7 @@ const ESF7Review = () => {
 
     return (
         <PageTransition>
-            <div className="min-h-screen bg-slate-50 font-sans pb-20">
+            <div className="min-h-screen bg-slate-50 pb-20">
                 <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
                     <div className="flex items-center gap-4">
                         <button onClick={() => selectedSchool ? setSelectedSchool(null) : navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
