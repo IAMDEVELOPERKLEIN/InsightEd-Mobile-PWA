@@ -5990,20 +5990,25 @@ app.post('/api/register-user', async (req, res) => {
   if (passcode && (passcode.length !== 6 || !/^\d+$/.test(passcode))) {
     return res.status(400).json({ error: "Passcode must be exactly 6 digits if provided." });
   }
-  console.log(`🚀 Registration request for ${email} (${role})`);
+  console.log(`🚀 Registration request received for: ${email} (Role: ${role})`);
 
   try {
     const normalizedEmail = email.trim().toLowerCase();
+    
     // 1. Duplicate Email Check
+    console.log(`[Reg] Checking duplicate email: ${normalizedEmail}`);
     const emailCheckRes = await pool.query("SELECT uid FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
     if (emailCheckRes.rows.length > 0) {
+      console.warn(`[Reg] Email already registered: ${normalizedEmail}`);
       return res.status(400).json({ error: "This email is already registered." });
     }
 
     // NATIVE AUTH: Generate UUID and Hash Password
     const uid = uuidv4();
+    console.log(`[Reg] Generated UID: ${uid}`);
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
+    console.log(`[Reg] Password hashed successfully.`);
 
     // Auto-determine account_category (account_type) based on role if not explicitly provided
     let finalRole = role;
@@ -6022,6 +6027,8 @@ app.post('/api/register-user', async (req, res) => {
     } else if (!finalAccountCategory) {
       finalAccountCategory = finalRole;
     }
+
+    console.log(`[Reg] Final role: ${finalRole}, Category: ${finalAccountCategory}`);
 
     const query = `
             INSERT INTO users (
@@ -6064,33 +6071,37 @@ app.post('/api/register-user', async (req, res) => {
       finalAccountCategory, passwordHash, 'bcrypt', passcode || null
     ];
 
+    console.log(`[Reg] Executing primary DB insert...`);
     await pool.query(query, values);
-    console.log(`… [DB] Synced generic user: ${email} (${role})`);
+    console.log(`✅ [Reg] Primary DB sync successful for: ${normalizedEmail}`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
-
     if (poolNew) {
       try {
-        console.log("”„ Dual-Write: Syncing Generic User...");
+        console.log("[Reg] Dual-Write: Syncing to Secondary DB...");
         await poolNew.query(query, values);
-        console.log("… Dual-Write: Generic User Synced!");
+        console.log("✅ [Reg] Secondary DB sync successful!");
       } catch (dwErr) {
         console.error("❌ Dual-Write Error (Register User):", dwErr.message);
       }
     }
 
     try {
+      console.log(`[Reg] Logging activity for ${uid}...`);
       await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
+      console.log(`✅ [Reg] Activity logged.`);
     } catch (logErr) {
       console.warn('⚠️ logActivity failed (non-fatal):', logErr.message);
     }
 
     // 4. Generate JWT
+    console.log(`[Reg] Signing JWT...`);
     const token = jwt.sign(
       { uid, email: normalizedEmail, role: finalRole },
       process.env.JWT_SECRET || 'STRIDE_INSIGHTED_SECRET_2026_KEY_PROD',
       { expiresIn: '30d' }
     );
+    console.log(`✅ [Reg] JWT signed. Sending response.`);
 
     res.json({
       success: true,
@@ -6109,9 +6120,13 @@ app.post('/api/register-user', async (req, res) => {
       },
       message: "User registered and logged in successfully"
     });
+
   } catch (err) {
-    console.error("❌ Register User Error:", err);
-    res.status(500).json({ error: "Failed to sync user to Database" });
+    console.error("❌ [Reg] CRITICAL FAILURE:", err);
+    res.status(500).json({ 
+      success: false, 
+      error: "Failed to sync user to Database: " + err.message 
+    });
   }
 });
 

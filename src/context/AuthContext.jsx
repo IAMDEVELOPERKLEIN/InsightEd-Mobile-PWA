@@ -77,6 +77,11 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
+        // Persist role momentarily to inform the redirect in App.jsx
+        if (user && user.role) {
+            localStorage.setItem('lastRole', user.role);
+        }
+
         localStorage.removeItem('token');
         localStorage.removeItem('uid');
         localStorage.removeItem('userId');

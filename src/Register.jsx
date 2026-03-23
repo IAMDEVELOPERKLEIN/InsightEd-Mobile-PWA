@@ -60,6 +60,12 @@ const getDashboardPath = (role, accountCategory) => {
         'School Division Office': '/monitoring-dashboard',
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
+        'Implementing Agency': '/agency-dashboard',
+        'PGO': '/agency-dashboard',
+        'CGO': '/lgu-dashboard',
+        'MGO': '/lgu-dashboard',
+        'DPWH': '/agency-dashboard',
+        'CSO': '/agency-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -74,7 +80,6 @@ const Register = () => {
 
     // --- BASIC FORM STATE ---
     const [formData, setFormData] = useState({
-
         firstName: '',
         lastName: '',
         email: '', // Generic roles auth email
@@ -101,7 +106,7 @@ const Register = () => {
     });
 
     const [currentStep, setCurrentStep] = useState(1);
-    const maxSteps = formData.role === 'School Head' ? 5 : 4;
+    const maxSteps = formData.role === 'School Head' ? 5 : (formData.role === 'EFD Engineer' ? 3 : 4);
 
     // --- REGISTRATION STAGES ---
     const [registrationStage, setRegistrationStage] = useState('form'); // 'form' | 'passcode' | 'confirm'
@@ -455,9 +460,23 @@ const Register = () => {
                 alert("Please enter a valid 11-digit mobile number starting with 09.");
                 return false;
             }
-            if (d.role === 'School Head' && !email.toLowerCase().endsWith('@deped.gov.ph')) {
-                alert("Please use your official @deped.gov.ph school email.");
-                return false;
+            if (d.role === 'School Head') {
+                if (!email.toLowerCase().endsWith('@deped.gov.ph')) {
+                    alert("Please use your official @deped.gov.ph school email.");
+                    return false;
+                }
+            } else if (d.role === 'Implementing Agency' || d.role === 'Local Government Unit') {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    alert("Please enter a valid email address with a domain (e.g. user@gmail.com).");
+                    return false;
+                }
+            } else {
+                // All other roles (RO, SDO, Engineers, CO)
+                if (!email.toLowerCase().endsWith('@deped.gov.ph')) {
+                    alert("Only @deped.gov.ph email addresses are allowed for this role.");
+                    return false;
+                }
             }
             return true;
         }
@@ -474,15 +493,37 @@ const Register = () => {
                     alert("Please complete your assignment location details.");
                     return false;
                 }
-                if (d.role === 'Implementing Agency' && (d.agencyType === 'CGO' || d.agencyType === 'MGO') && !d.municipality) {
+                if (d.role === 'Implementing Agency' && (d.agencyType === 'CGO' || d.agencyType === 'MGO') && !d.city) {
                     alert("Please select your Municipality/City.");
                     return false;
                 }
             } else {
-                // RO / SDO / Engineers
-                if (!d.region || !d.office) {
-                    alert("Please complete your assignment details.");
-                    return false;
+                // RO / SDO / Engineers / CO
+                const isCO = d.role === 'Central Office' || d.role === 'Central Office Finance';
+                const isSDO = d.role === 'School Division Office';
+                const isEng = d.role.includes('Engineer');
+
+                if (isCO) {
+                    if (!d.office) {
+                        alert("Please select your Bureau/Service.");
+                        return false;
+                    }
+                } else if (isSDO) {
+                    if (!d.region || !d.division || !d.office || !d.position) {
+                        alert("Please complete your assignment details (Region, Division, Office, and Position).");
+                        return false;
+                    }
+                } else if (isEng) {
+                    if (!d.region || !d.division || !d.position) {
+                        alert("Please complete your assignment details (Region, Division, and Position).");
+                        return false;
+                    }
+                } else {
+                    // RO Personnel
+                    if (!d.region || !d.office || !d.position) {
+                        alert("Please complete your assignment details (Region, Office, and Position).");
+                        return false;
+                    }
                 }
             }
             return true;
@@ -497,7 +538,7 @@ const Register = () => {
             return true;
         }
 
-        const securityStep = d.role === 'School Head' ? 5 : 4;
+        const securityStep = d.role === 'School Head' ? 5 : (d.role === 'EFD Engineer' ? 3 : 4);
         if (step === securityStep) {
             // Security
             if (!formData.password) {
@@ -640,6 +681,13 @@ const Register = () => {
                 alert(`Please complete the Assignment details (Region, Province${needsCity ? ', Municipality' : ''}).`);
                 return;
             }
+
+            const emailToValidate = formData.email || '';
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(emailToValidate)) {
+                alert("Please enter a valid email address with a domain (e.g. user@gmail.com).");
+                return;
+            }
         }
 
         // if (!isOtpVerified) {
@@ -767,7 +815,19 @@ const Register = () => {
                 });
 
                 const regText = await regRes.text();
-                console.log("Generic Registration response text:", regText);
+                console.log(`[Register] Native response (${regRes.status}):`, regText);
+
+                if (!regRes.ok) {
+                    let errorMessage = `Registration Failed (${regRes.status})`;
+                    try {
+                        const errData = JSON.parse(regText);
+                        errorMessage = errData.error || errData.message || errorMessage;
+                    } catch (e) {
+                        errorMessage = regText || errorMessage;
+                    }
+                    throw new Error(errorMessage);
+                }
+
                 if (!regText) throw new Error("Empty response from /api/register-user");
                 regData = JSON.parse(regText);
                 if (!regData.success) {
@@ -781,10 +841,25 @@ const Register = () => {
                 } else {
                     throw new Error("No session token received.");
                 }
+                // For EFD Engineers and others, we now use the Success Modal approach instead of an alert
+                // if they need to be prompted for a passcode or similar.
+                localStorage.setItem('needs_pin_setup', 'true');
+                const finalRole = formData.role === 'Implementing Agency' ? (formData.agencyType || formData.role) : formData.role;
+                localStorage.setItem('userRole', finalRole);
+                if (regData?.user?.uid) {
+                    localStorage.setItem('uid', regData.user.uid);
+                }
+                localStorage.setItem('userEmail', identifier);
+
+                // If EFD Engineer, we show the success modal to bridge to the passcode prompt
+                if (formData.role === 'EFD Engineer') {
+                    setRegisteredIern('EFD-' + Math.random().toString(36).substr(2, 4).toUpperCase()); // Dummy ID for visual
+                    setShowSuccessModal(true);
+                    return;
+                }
 
                 alert("✅ Account created successfully!");
-                localStorage.setItem('needs_pin_setup', 'true');
-                const destPath = getDashboardPath(formData.role, formData.accountCategory);
+                const destPath = getDashboardPath(finalRole, formData.accountCategory);
                 navigate(destPath);
                 return;
             }
@@ -817,7 +892,8 @@ const Register = () => {
                 } else if (formData.role === 'EFD Engineer') {
                     localStorage.setItem('accountCategory', 'EFD Engineer');
                 }
-                const destPath = getDashboardPath(formData.role, formData.accountCategory || ( (formData.role === 'EFD Engineer') ? 'EFD Engineer' : '' ));
+                const finalRole = formData.role === 'Implementing Agency' ? (formData.agencyType || formData.role) : formData.role;
+                const destPath = getDashboardPath(finalRole, formData.accountCategory || ( (formData.role === 'EFD Engineer') ? 'EFD Engineer' : '' ));
                 navigate(destPath);
             }
 
@@ -864,7 +940,7 @@ const Register = () => {
                                                     {currentStep > s ? '✓' : s}
                                                 </div>
                                                 <span className={`text-[10px] font-bold uppercase tracking-wider ${currentStep === s ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                    {s === 1 ? 'Role' : s === 2 ? 'Contact' : (s === 3 ? (formData.role === 'School Head' ? 'School' : 'Assign') : (maxSteps === 5 ? (s === 4 ? 'Geotag' : 'Security') : 'Security'))}
+                                                    {s === 1 ? 'Role' : s === 2 ? 'Contact' : (s === maxSteps ? 'Security' : (s === 3 ? (formData.role === 'School Head' ? 'School' : 'Assign') : 'Geotag'))}
                                                 </span>
                                             </div>
                                         ))}
@@ -1006,7 +1082,26 @@ const Register = () => {
                                                     <>
                                                         <div className="space-y-1">
                                                             <label className="text-xs font-bold text-slate-500 uppercase ml-1">Email Address</label>
-                                                            <input name="email" type="email" placeholder="Enter email address" onChange={handleChange} value={formData.email} className="w-full bg-white border border-slate-200 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                            {['Central Office', 'Regional Office', 'School Division Office', 'Division Engineer', 'EFD Engineer'].includes(formData.role) ? (
+                                                                <div className="flex items-center w-full">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={formData.email ? formData.email.split('@')[0] : ''}
+                                                                        onChange={(e) => {
+                                                                            const username = e.target.value.replace(/[^a-zA-Z0-9._-]/g, '');
+                                                                            setFormData(prev => ({ ...prev, email: username + '@deped.gov.ph' }));
+                                                                        }}
+                                                                        placeholder="account.username"
+                                                                        className="flex-1 min-w-0 bg-white border border-r-0 border-slate-200 text-sm rounded-l-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                                                        required
+                                                                    />
+                                                                    <span className="bg-slate-100 border border-l-0 border-slate-200 text-slate-600 text-xs font-bold px-4 py-3 rounded-r-xl select-none whitespace-nowrap">
+                                                                        @deped.gov.ph
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <input name="email" type="email" placeholder="Enter email address" onChange={handleChange} value={formData.email} className="w-full bg-white border border-slate-200 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                                            )}
                                                         </div>
                                                         <div className="space-y-1">
                                                             <label className="text-xs font-bold text-slate-500 uppercase ml-1">Mobile Number</label>
@@ -1038,7 +1133,7 @@ const Register = () => {
                                     )}
 
                                     {/* STEP 3: ASSIGNMENT & LOCATION */}
-                                    {currentStep === 3 && (
+                                    {currentStep === 3 && formData.role !== 'EFD Engineer' && (
                                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                                             {formData.role === 'School Head' ? (
                                                 <div className="space-y-4">
@@ -1090,9 +1185,9 @@ const Register = () => {
                                                                 </select>
                                                             </div>
                                                             {(formData.agencyType === 'CGO' || formData.agencyType === 'MGO') && (
-                                                                <select name="municipality" value={formData.municipality} onChange={handleMunicipalityChange} className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" disabled={!formData.province} required>
+                                                                <select name="city" value={formData.city} onChange={handleCityChange} className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50" disabled={!formData.province} required>
                                                                     <option value="">Select Municipality/City</option>
-                                                                    {municipalityOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                                                                    {cityOptions.map(m => <option key={m} value={m}>{m}</option>)}
                                                                 </select>
                                                             )}
                                                         </div>
@@ -1100,11 +1195,27 @@ const Register = () => {
 
                                                     {['Central Office', 'Regional Office', 'School Division Office'].includes(formData.role) && (
                                                         <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                                                            <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
-                                                                <option value="">Select Region</option>
-                                                                {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                                            {formData.role !== 'Central Office' && (
+                                                                <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
+                                                                    <option value="">Select Region</option>
+                                                                    {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                                                                </select>
+                                                            )}
+                                                            
+                                                            {formData.role === 'School Division Office' && (
+                                                                <select name="division" onChange={handleChange} value={formData.division} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" disabled={!formData.region} required>
+                                                                    <option value="">Select Division</option>
+                                                                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                                                                </select>
+                                                            )}
+
+                                                            <select name="office" value={formData.office} onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
+                                                                <option value="">Select Office/Bureau</option>
+                                                                {(formData.role === 'Central Office' || formData.role === 'Central Office Finance') && centralOfficeBureaus.map(o => <option key={o} value={o}>{o}</option>)}
+                                                                {formData.role === 'Regional Office' && regionalOffices.map(o => <option key={o} value={o}>{o}</option>)}
+                                                                {formData.role === 'School Division Office' && divisionOffices.map(o => <option key={o} value={o}>{o}</option>)}
                                                             </select>
-                                                            <input name="office" value={formData.office} placeholder="Office/Bureau Name" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
+
                                                             <input name="position" value={formData.position} placeholder="Position" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required />
                                                         </div>
                                                     )}
@@ -1121,8 +1232,15 @@ const Register = () => {
                                                             </select>
                                                             <select name="position" value={formData.position} onChange={handleChange} className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500" required>
                                                                 <option value="">Select Position</option>
-                                                                <option value="Engineer II">Engineer II</option><option value="Engineer III">Engineer III</option>
-                                                                <option value="Technical Assistant">Technical Assistant</option>
+                                                                <option value="Engineer II">Engineer II</option>
+                                                                <option value="Engineer III">Engineer III</option>
+                                                                <option value="Engineer IV">Engineer IV</option>
+                                                                <option value="Engineer V">Engineer V</option>
+                                                                <option value="Technical Assistant I (COS)">Technical Assistant I (COS)</option>
+                                                                <option value="Technical Assistant II (COS)">Technical Assistant II (COS)</option>
+                                                                <option value="Technical Assistant III (COS)">Technical Assistant III (COS)</option>
+                                                                <option value="Technical Assistant IV (COS)">Technical Assistant IV (COS)</option>
+                                                                <option value="Technical Assistant V (COS)">Technical Assistant V (COS)</option>
                                                             </select>
                                                          </div>
                                                     )}
@@ -1198,12 +1316,12 @@ const Register = () => {
                                     )}
 
                                     {/* STEP 4/5: SECURITY */}
-                                    {((currentStep === 4 && formData.role !== 'School Head') || (currentStep === 5 && formData.role === 'School Head')) && (
+                                    {currentStep === maxSteps && (
                                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                                             {formData.role !== 'School Head' && (
                                                 <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200">
                                                     <label className="block text-xs font-bold text-amber-800 uppercase tracking-widest mb-2">Authorization Code</label>
-                                                    <input name="authCode" type="password" value={formData.authCode} onChange={handleChange} placeholder="Secure registration code" className="w-full bg-white border border-amber-300 rounded-xl px-4 py-3 text-sm font-mono tracking-widest focus:ring-2 focus:ring-amber-500" required />
+                                                    <input name="authCode" type="text" value={formData.authCode} onChange={handleChange} placeholder="Secure registration code" className="w-full bg-white border border-amber-300 rounded-xl px-4 py-3 text-sm font-mono tracking-widest focus:ring-2 focus:ring-amber-500" required />
                                                     <p className="text-[10px] text-amber-600 mt-2">Required for non-School Head roles.</p>
                                                 </div>
                                             )}

@@ -57,6 +57,7 @@ const Login = () => {
     const [isNotFound, setIsNotFound] = useState(false);
     const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
     const [isSchoolHead, setIsSchoolHead] = useState(true);
+    const [showBackPrompt, setShowBackPrompt] = useState(false);
     
     // UI flows
     const [rememberedUser, setRememberedUser] = useState(() => {
@@ -410,7 +411,7 @@ const Login = () => {
                         
                         {/* BACK TO LAUNCH PAD */}
                         <button 
-                            onClick={() => navigate('/')}
+                            onClick={() => setShowBackPrompt(true)}
                             className="absolute top-6 left-6 p-2 rounded-xl bg-white/50 text-slate-400 hover:text-[#004A99] hover:bg-white transition-all shadow-sm border border-slate-100 group z-20"
                             title="Back to Launch Pad"
                         >
@@ -797,6 +798,40 @@ const Login = () => {
                     </div>
                 )}
 
+
+                {/* BACK TO NEXUS CONFIRMATION MODAL */}
+                {showBackPrompt && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-white/20">
+                            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-center relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-10">
+                                    <FiArrowLeft className="w-24 h-24 text-white -rotate-45" />
+                                </div>
+                                <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-md border border-white/30 shadow-xl">
+                                    <FiArrowLeft className="w-10 h-10 text-white" />
+                                </div>
+                                <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Return to Nexus?</h2>
+                                <p className="text-blue-100 text-sm font-medium leading-relaxed px-4 text-center">You will need to select your login portal again from the Launch Pad.</p>
+                            </div>
+
+                            <div className="p-8 space-y-4">
+                                <button
+                                    onClick={() => navigate('/')}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-2xl shadow-xl shadow-blue-500/30 transition-all active:scale-[0.98] flex justify-center items-center gap-3 group uppercase tracking-widest text-[10px]"
+                                >
+                                    Yes, Return to Nexus
+                                    <FiArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                                </button>
+                                <button
+                                    onClick={() => setShowBackPrompt(false)}
+                                    className="w-full bg-slate-50 hover:bg-slate-100 text-slate-500 font-bold py-5 rounded-2xl transition-all active:scale-[0.98] uppercase tracking-widest text-[10px] border border-slate-100"
+                                >
+                                    Stay on Login
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </PageTransition>
     );
