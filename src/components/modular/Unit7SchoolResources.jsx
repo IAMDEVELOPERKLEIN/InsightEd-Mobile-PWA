@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave, FiAlertTriangle } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
@@ -61,7 +61,7 @@ const WATER_SOURCES = [
     "No water source"
 ];
 
-const Unit7SchoolResources = () => {
+const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
@@ -143,7 +143,7 @@ const Unit7SchoolResources = () => {
     // ── Data Fetching ───────────────────────────────────────────────────────────
     useEffect(() => {
         const init = async () => {
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || localStorage.getItem("schoolId");
             if (!storedId) {
                 setLoading(false);
                 return;
@@ -340,7 +340,7 @@ const Unit7SchoolResources = () => {
                             setHasMultigradeContext(true);
                         }
 
-                        if (d.unit7_completed) {
+                        if (d.unit7_completed || propReadOnly) {
                             setIsReviewMode(true);
                         }
 
@@ -629,7 +629,7 @@ const Unit7SchoolResources = () => {
         const totalWASH = WASH_CATEGORIES.reduce((acc, cat) => acc + (parseInt(washData[`${cat.key}_total`]) || 0), 0);
         
         return (
-            <div className="min-h-screen bg-slate-50/50 font-sans">
+            <div className="min-h-screen bg-slate-50/50 font-sans pb-40">
                 {/* Exit Header */}
                 <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
                     <div className="max-w-md mx-auto flex items-center gap-3">
@@ -644,111 +644,226 @@ const Unit7SchoolResources = () => {
                     </div>
                 </header>
 
-                <div className="max-w-md mx-auto pb-32 mt-4 px-4">
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <motion.div 
-                        initial={{ scale: 0 }} 
-                        animate={{ scale: 1 }} 
-                        className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
-                    >
-                        <span className="text-4xl text-white">🎒</span>
-                    </motion.div>
-                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-200">
-                        Unit 7 • School Resources
-                    </span>
-                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
-                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
-                </div>
-
-                {/* Metric Cards Grid */}
-                <div className="grid grid-cols-2 gap-4 mb-10">
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                            <FiMonitor className="text-indigo-600 w-6 h-6" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total ICT Devices</span>
-                        <span className="text-3xl font-black text-slate-800 mt-1">{totalUnitsICT}</span>
+                <div className="max-w-md mx-auto mt-4 px-4 space-y-10">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-100"
+                        >
+                            <span className="text-4xl text-white">🎒</span>
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
+                            Unit 7 • Inventory Profile
+                        </span>
+                        <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Resources Summary</h1>
+                        <p className="text-slate-500 font-medium mt-2 italic">"Physical assets and utility infrastructure report"</p>
                     </div>
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                            <FiDroplet className="text-emerald-500 w-6 h-6" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">WASH Fixtures</span>
-                        <span className="text-3xl font-black text-slate-800 mt-1">{totalWASH}</span>
-                    </div>
-                </div>
 
-                {/* Subsections */}
-                <div className="space-y-6">
-                    <section>
-                        <div className="flex items-center gap-2 mb-4 ml-2">
-                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Key Utilities</h3>
+                    {/* High Level Metrics */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden group">
+                             <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">💻</div>
+                             <p className="text-indigo-300 text-[8px] font-black uppercase tracking-widest mb-1">ICT Assets</p>
+                             <div className="flex items-baseline gap-1">
+                                 <span className="text-3xl font-black">{totalUnitsICT}</span>
+                                 <span className="text-[10px] font-bold text-indigo-400">UNITS</span>
+                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest block mb-1">Energy</span>
-                                <span className="text-base font-black text-slate-800 text-center leading-tight">
-                                    {utilitiesData.utility_electricity || "N/A"}
+                        <div className="bg-indigo-600 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden group">
+                             <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">🚰</div>
+                             <p className="text-indigo-100 text-[8px] font-black uppercase tracking-widest mb-1">WASH Fixtures</p>
+                             <div className="flex items-baseline gap-1">
+                                 <span className="text-3xl font-black">{totalWASH}</span>
+                                 <span className="text-[10px] font-bold text-indigo-200">TOTAL</span>
+                             </div>
+                        </div>
+                    </div>
+
+                    {/* ── SEATING & FURNITURE ── */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Seating Inventory</h3>
+                        </div>
+                        
+                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                            <div className="p-6 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                                <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Shared Classrooms</span>
+                                <span className="bg-white px-3 py-1 rounded-full border border-slate-200 text-xs font-black text-slate-700">
+                                    {generalRoomsData.general_rooms_count || 0} ROOMS
                                 </span>
                             </div>
-                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex flex-col items-center">
-                                <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest block mb-1">Internet</span>
-                                <span className="text-base font-black text-slate-800 text-center leading-tight">
-                                    {utilitiesData.utility_internet_yesno ? "Active" : "None"}
-                                </span>
+                            <div className="p-6 space-y-4">
+                                {gradesData.filter(g => g.isVerified).map(g => {
+                                    const total = (parseInt(g.armchairs_func)||0) + ((parseInt(g.tables_func)||0)*2) + ((parseInt(g.desks_func)||0)*2);
+                                    const shortage = total < (parseInt(g.enrolled)||0);
+                                    return (
+                                        <div key={g.id} className="flex items-center justify-between group">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400">
+                                                    {g.grade_level.slice(0,3).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-slate-800 text-[13px]">{g.grade_level}</h4>
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                        {g.enrolled} Enrolled · {total} Functional Seats
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {shortage ? (
+                                                <div className="bg-rose-50 text-rose-600 p-2 rounded-lg" title="Shortage">
+                                                    <FiAlertTriangle className="w-4 h-4" />
+                                                </div>
+                                            ) : (
+                                                <div className="bg-emerald-50 text-emerald-600 p-2 rounded-lg">
+                                                    <FiCheckCircle className="w-4 h-4" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     </section>
-                    
-                    {hasEcart && eCarts.length > 0 && (
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-rose-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Mobile Labs</h3>
+
+                    {/* ── ICT BREAKDOWN ── */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">ICT Distribution</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            {ICT_CATEGORIES.map(cat => {
+                                const total = parseInt(ictData[`${cat.key}_total`]) || 0;
+                                const func = parseInt(ictData[`${cat.key}_func`]) || 0;
+                                if (total === 0) return null;
+                                return (
+                                    <div key={cat.key} className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex flex-col items-center group">
+                                        <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform duration-500">
+                                            {cat.emoji}
+                                        </div>
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{cat.label}</span>
+                                        <div className="mt-1 flex items-baseline gap-1">
+                                            <span className="text-lg font-black text-slate-800">{func}</span>
+                                            <span className="text-[9px] font-bold text-slate-300">/ {total}</span>
+                                        </div>
+                                        <div className="w-full bg-slate-50 h-1 rounded-full mt-3 overflow-hidden">
+                                            <div className="h-full bg-indigo-500" style={{ width: `${(func/total)*100}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+
+                    {/* ── MOBILE LABS (eCARTS) ── */}
+                    {hasEcart && (
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-2 px-2">
+                                <div className="w-1.5 h-6 bg-rose-500 rounded-full" />
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">eCart Packages</h3>
                             </div>
-                            <div className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm">
-                                <div className="flex items-center justify-between">
-                                    <span className="font-bold text-slate-700">eCart Packages</span>
-                                    <span className="bg-rose-100 text-rose-700 font-black px-3 py-1 rounded-xl">{eCarts.length} Active</span>
-                                </div>
+                            <div className="space-y-3">
+                                {eCarts.map((cart, idx) => (
+                                    <div key={idx} className="bg-white rounded-[2rem] p-6 border border-rose-100 shadow-sm relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-4 text-4xl opacity-5 group-hover:scale-110 transition-transform">🛒</div>
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h4 className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{cart.batches_name}</h4>
+                                                <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.15em]">{cart.sources_fund} · {cart.year_received}</p>
+                                            </div>
+                                            <div className={`px-3 py-1 rounded-full border text-[9px] font-black uppercase ${cart.charging_condition === 'Functional' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+                                                {cart.charging_condition}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-[9px] font-bold text-slate-300 uppercase">Laptops</span>
+                                                <span className="font-black text-slate-700">{cart.ecart_laptops || 0}</span>
+                                            </div>
+                                            <div className="w-px h-8 bg-slate-100" />
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-[9px] font-bold text-slate-300 uppercase">Tablets</span>
+                                                <span className="font-black text-slate-700">{cart.ecart_tablets || 0}</span>
+                                            </div>
+                                            <div className="w-px h-8 bg-slate-100" />
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-[9px] font-bold text-slate-300 uppercase">TVs</span>
+                                                <span className="font-black text-slate-700">{cart.ecart_tv || 0}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </section>
                     )}
-                    
-                    <section>
-                        <div className="flex items-center gap-2 mb-4 ml-2">
-                            <div className="w-1 h-4 bg-emerald-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">School Classification</h3>
+
+                    {/* ── WASH & UTILITIES ── */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Wash & Utilities</h3>
                         </div>
-                        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
-                            <span className="font-black text-emerald-800 text-sm">{utilitiesData.sha_category || "Standardized"}</span>
+                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 space-y-8">
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-2xl mb-3 shadow-inner">⚡</div>
+                                <h4 className="text-lg font-black text-slate-800">{utilitiesData.utility_electricity || "Non-Electrified"}</h4>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Power Source Availability</p>
+                                {utilitiesData.has_solar_or_gen && (
+                                    <span className="mt-3 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl text-[9px] font-black uppercase border border-amber-100">
+                                        Active Solar / Gen Set
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="h-px w-full bg-slate-50" />
+
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-2xl mb-3 shadow-inner">🌐</div>
+                                <h4 className="text-lg font-black text-slate-800">
+                                    {utilitiesData.utility_internet_yesno ? "Fully Connected" : "No Internet"}
+                                </h4>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                                    {utilitiesData.utility_internet_yesno ? utilitiesData.utility_internet_funder : "Zero Connectivity"}
+                                </p>
+                            </div>
+
+                            <div className="h-px w-full bg-slate-50" />
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="text-center">
+                                    <p className="text-2xl font-black text-emerald-600">{washData.attached_cr_classrooms || 0}</p>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Attached CRs</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-2xl font-black text-indigo-600">{utilitiesData.sha_category || "N/A"}</p>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">SHA Category</p>
+                                </div>
+                            </div>
                         </div>
                     </section>
-                </div>
 
-                {/* Unlock Action */}
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="mt-12"
-                >
-                    <button 
-                        onClick={() => { setIsReviewMode(false); setCurrentPhase(1); }}
-                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <FiUnlock className="w-5 h-5 text-indigo-700" />
-                        </div>
-                        <span>Unlock to Edit Resources</span>
-                    </button>
-                    <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4">
-                        Note: Unlocking will require re-saving data.
-                    </p>
-                </motion.div>
+                    {!propReadOnly && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="mt-12"
+                        >
+                            <button 
+                                onClick={() => { setIsReviewMode(false); setCurrentPhase(1); }}
+                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <FiUnlock className="w-5 h-5 text-indigo-700" />
+                                </div>
+                                <span>Unlock to Edit Resources</span>
+                            </button>
+                        </motion.div>
+                    )}
                 </div>
             </div>
         );

@@ -1,23 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiInfo, FiUsers, FiTrendingUp, FiLayout, FiBox, FiLayers, FiUser, FiActivity, FiServer, FiHeart } from 'react-icons/fi';
+import { FiArrowLeft, FiInfo, FiUsers, FiTrendingUp, FiLayout, FiBox, FiLayers, FiUser, FiActivity, FiServer, FiHeart, FiCheckCircle } from 'react-icons/fi';
 import { TbSchool, TbReportAnalytics } from "react-icons/tb";
 
-import Enrolment from '../forms/Enrolment';
-import SchoolInformation from '../forms/SchoolInformation';
-import SchoolProfile from '../forms/SchoolProfile';
-import OrganizedClasses from '../forms/OrganizedClasses';
-import LearnerStatistics from '../forms/LearnerStatistics';
-import ShiftingModalities from '../forms/ShiftingModalities';
-import TeachingPersonnel from '../forms/TeachingPersonnel';
-import TeacherSpecialization from '../forms/TeacherSpecialization';
-import SchoolResources from '../forms/SchoolResources';
-import PhysicalFacilities from '../forms/PhysicalFacilities';
-import DataHealthDashboard from '../components/DataHealthDashboard';
+
+// Import Modular Units
+import Unit1SchoolIdentity from '../components/modular/Unit1SchoolIdentity';
+import Unit2Learners from '../components/modular/Unit2Learners';
+import Unit3OrganizedClasses from '../components/modular/Unit3OrganizedClasses';
+import Unit4LearnerProfile from '../components/modular/Unit4LearnerProfile';
+import Unit5ShiftingModality from '../components/modular/Unit5ShiftingModality';
+import TeachingPersonnel from '../components/modular/TeachingPersonnel'; // Unit 6
+import Unit7SchoolResources from '../components/modular/Unit7SchoolResources';
+import Unit8PhysicalFacilities from '../components/modular/Unit8PhysicalFacilities';
+import Unit9SchoolLocation from '../components/modular/Unit9SchoolLocation';
+import Unit10Verification from '../components/modular/Unit10Verification';
 
 const SchoolAuditView = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState('health');
+    const [activeTab, setActiveTab] = useState('u1');
     const [schoolData, setSchoolData] = useState(null);
 
     useEffect(() => {
@@ -29,10 +30,18 @@ const SchoolAuditView = () => {
             return;
         }
 
+        // Set session flag for read-only hooks
+        sessionStorage.setItem("isViewingAsSuperUser", "true");
+
         setSchoolData({
             id: storedId,
             name: storedName || "Unknown School"
         });
+
+        // Clean up flag on unmount
+        return () => {
+            sessionStorage.removeItem("isViewingAsSuperUser");
+        };
     }, [navigate]);
 
     const handleBack = () => {
@@ -56,8 +65,8 @@ const SchoolAuditView = () => {
                         </button>
                         <div>
                             <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-amber-500 text-amber-950">
-                                    Viewer Mode
+                                <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500 text-amber-950">
+                                    Audit Review Mode
                                 </span>
                                 <span className="text-slate-400 text-xs font-mono">ID: {schoolData.id}</span>
                             </div>
@@ -66,18 +75,17 @@ const SchoolAuditView = () => {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        <TabButton active={activeTab === 'health'} onClick={() => setActiveTab('health')} icon={<FiHeart />} label="Data Health" />
-                        <TabButton active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<TbSchool />} label="Profile" />
-                        <TabButton active={activeTab === 'information'} onClick={() => setActiveTab('information')} icon={<FiInfo />} label="Head Info" />
-                        <TabButton active={activeTab === 'enrolment'} onClick={() => setActiveTab('enrolment')} icon={<FiUsers />} label="Enrolment" />
-                        <TabButton active={activeTab === 'classes'} onClick={() => setActiveTab('classes')} icon={<FiLayers />} label="Classes" />
-                        <TabButton active={activeTab === 'statistics'} onClick={() => setActiveTab('statistics')} icon={<FiActivity />} label="Learner Stats" />
-                        <TabButton active={activeTab === 'shifting'} onClick={() => setActiveTab('shifting')} icon={<TbReportAnalytics />} label="Shifting" />
-                        <TabButton active={activeTab === 'personnel'} onClick={() => setActiveTab('personnel')} icon={<FiUser />} label="Personnel" />
-                        <TabButton active={activeTab === 'specialization'} onClick={() => setActiveTab('specialization')} icon={<FiLayout />} label="Specialization" />
-                        <TabButton active={activeTab === 'resources'} onClick={() => setActiveTab('resources')} icon={<FiBox />} label="Resources" />
-                        <TabButton active={activeTab === 'facilities'} onClick={() => setActiveTab('facilities')} icon={<FiServer />} label="Facilities" />
+                    <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
+                        <TabButton active={activeTab === 'u1'} onClick={() => setActiveTab('u1')} icon={<TbSchool />} label="Identity (U1)" />
+                        <TabButton active={activeTab === 'u2'} onClick={() => setActiveTab('u2')} icon={<FiUsers />} label="Enrollment (U2)" />
+                        <TabButton active={activeTab === 'u3'} onClick={() => setActiveTab('u3')} icon={<FiLayers />} label="Classes (U3)" />
+                        <TabButton active={activeTab === 'u4'} onClick={() => setActiveTab('u4')} icon={<FiActivity />} label="Learners (U4)" />
+                        <TabButton active={activeTab === 'u5'} onClick={() => setActiveTab('u5')} icon={<TbReportAnalytics />} label="Modality (U5)" />
+                        <TabButton active={activeTab === 'u6'} onClick={() => setActiveTab('u6')} icon={<FiUser />} label="Personnel (U6)" />
+                        <TabButton active={activeTab === 'u7'} onClick={() => setActiveTab('u7')} icon={<FiBox />} label="Resources (U7)" />
+                        <TabButton active={activeTab === 'u8'} onClick={() => setActiveTab('u8')} icon={<FiServer />} label="Facilities (U8)" />
+                        <TabButton active={activeTab === 'u9'} onClick={() => setActiveTab('u9')} icon={<FiActivity />} label="Location (U9)" />
+                        <TabButton active={activeTab === 'u10'} onClick={() => setActiveTab('u10')} icon={<FiCheckCircle />} label="Verification (U10)" />
                     </div>
                 </div>
             </div>
@@ -91,17 +99,16 @@ const SchoolAuditView = () => {
                         <span className="text-9xl font-black -rotate-45 whitespace-nowrap">AUDIT MODE</span>
                     </div>
 
-                    {activeTab === 'health' && <DataHealthDashboard schoolId={schoolData.id} />}
-                    {activeTab === 'profile' && <SchoolProfile embedded={true} />}
-                    {activeTab === 'information' && <SchoolInformation embedded={true} />}
-                    {activeTab === 'enrolment' && <Enrolment embedded={true} />}
-                    {activeTab === 'classes' && <OrganizedClasses embedded={true} />}
-                    {activeTab === 'statistics' && <LearnerStatistics embedded={true} />}
-                    {activeTab === 'shifting' && <ShiftingModalities embedded={true} />}
-                    {activeTab === 'personnel' && <TeachingPersonnel embedded={true} />}
-                    {activeTab === 'specialization' && <TeacherSpecialization embedded={true} />}
-                    {activeTab === 'resources' && <SchoolResources embedded={true} />}
-                    {activeTab === 'facilities' && <PhysicalFacilities embedded={true} />}
+                    {activeTab === 'u1' && <Unit1SchoolIdentity targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u2' && <Unit2Learners targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u3' && <Unit3OrganizedClasses targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u4' && <Unit4LearnerProfile targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u5' && <Unit5ShiftingModality targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u6' && <TeachingPersonnel targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u7' && <Unit7SchoolResources targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u8' && <Unit8PhysicalFacilities targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u9' && <Unit9SchoolLocation targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u10' && <Unit10Verification targetSchoolId={schoolData.id} />}
                 </div>
             </div>
         </div>

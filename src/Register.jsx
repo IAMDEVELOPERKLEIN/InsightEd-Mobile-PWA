@@ -139,6 +139,8 @@ const Register = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [registeredIern, setRegisteredIern] = useState('');
     const [activeTab, setActiveTab] = useState('internal'); // 'internal' | 'external'
+    const [showNcrModal, setShowNcrModal] = useState(false);
+
 
 
     // --- 1. LOAD INITIAL DATA (Regions + Office CSV) ---
@@ -234,6 +236,50 @@ const Register = () => {
                 .catch(console.error);
         }
     }, [selectedRegion, selectedDivision, selectedDistrict, selectedMunicipality]);
+    
+    // --- EXTERNAL AGENCY AUTO-FILL & VALIDATION ---
+    useEffect(() => {
+        if (activeTab === 'external') {
+            const { agencyType, province, city, region } = formData;
+            
+            // 1. NCR Validation for PGO
+            if (agencyType === 'PGO' && region === 'NCR') {
+                setShowNcrModal(true);
+                setFormData(prev => ({ 
+                    ...prev, 
+                    region: '', 
+                    province: '', 
+                    city: '', 
+                    specificAgency: '' 
+                }));
+                setSelectedRegion('');
+                return;
+            }
+
+            // 2. Auto-fill Specific Agency Name
+            let autoName = '';
+            if (agencyType === 'PGO' && province) {
+                autoName = `PGO - ${province}`;
+            } else if (agencyType === 'CGO' && city) {
+                if (city.toUpperCase() === 'PATEROS') {
+                    // Pateros special case: Switch to MGO
+                    setFormData(prev => ({ ...prev, agencyType: 'MGO', specificAgency: 'MGO - Pateros' }));
+                    return;
+                }
+                autoName = `CGO - ${city}`;
+            } else if (agencyType === 'MGO' && city) {
+                autoName = `MGO - ${city}`;
+            }
+
+            // Only update if it's one of the auto-fill types and if it actually changed to prevent loops
+            if (['PGO', 'CGO', 'MGO'].includes(agencyType)) {
+               if (formData.specificAgency !== autoName) {
+                    setFormData(prev => ({ ...prev, specificAgency: autoName }));
+               }
+            }
+        }
+    }, [activeTab, formData.agencyType, formData.region, formData.province, formData.city]);
+
 
 
 
@@ -423,6 +469,12 @@ const Register = () => {
         }
 
         // --- AUTHORIZATION CODE CHECK (For Non-School Heads and Non-Super Users) ---
+        if (formData.role !== 'School Head' && formData.role !== 'Implementing Agency' && formData.role !== 'Local Government Unit') {
+            if (!formData.email.endsWith('@deped.gov.ph')) {
+                alert("Only @deped.gov.ph email addresses are allowed for this role.");
+                return;
+            }
+        }
         if (formData.role !== 'School Head' && formData.role !== 'Super User') {
             const requiredCode = AUTHORIZATION_CODES[formData.role];
             if (requiredCode && formData.authCode !== requiredCode) {
@@ -459,10 +511,11 @@ const Register = () => {
 
 
         // STRICT EMAIL VALIDATION (Global Check)
-        if (formData.role !== 'School Head' && formData.role !== 'Local Government Unit' && formData.role !== 'Implementing Agency' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
-            alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
-            return;
-        }
+        // This block is replaced by the more specific one above for non-School Head/Implementing Agency/LGU roles.
+        // if (formData.role !== 'School Head' && formData.role !== 'Local Government Unit' && formData.role !== 'Implementing Agency' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
+        //     alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
+        //     return;
+        // }
 
         // Engineer (Division/EFD) Specific Validations
         if (formData.role === 'Division Engineer' || formData.role === 'Non-DepEd Engineer' || formData.role === 'EFD Engineer') {
@@ -473,13 +526,20 @@ const Register = () => {
         }
 
         // Local Government Unit & Implementing Agency Specific Validations
-        if (formData.role === 'Local Government Unit' || formData.role === 'Implementing Agency') {
+        // --- CONTACT NUMBER VALIDATION (Global for Generic Roles) ---
+        if (formData.role !== 'School Head') {
             if (formData.contactNumber.length !== 11) {
                 alert("Please enter a valid 11-digit mobile number.");
                 return;
             }
-            if (!formData.region || !formData.province || !formData.city) {
-                alert("Please complete the Assignment details (Region, Province, Municipality).");
+        }
+
+        if (formData.role === 'Local Government Unit' || formData.role === 'Implementing Agency') {
+            const isExternal = formData.role === 'Implementing Agency';
+            const needsCity = !isExternal || !['PGO', 'DPWH', 'CSO'].includes(formData.agencyType);
+            
+            if (!formData.region || !formData.province || (needsCity && !formData.city)) {
+                alert(`Please complete the Assignment details (Region, Province${needsCity ? ', Municipality' : ''}).`);
                 return;
             }
         }
@@ -600,7 +660,6 @@ const Register = () => {
                         office: formData.office,
                         position: formData.position,
                         contactNumber: formData.contactNumber,
-                        altEmail: formData.altEmail,
                         accountCategory: formData.accountCategory
                     })
                 });
@@ -806,13 +865,24 @@ const Register = () => {
                                                     value={formData.specificAgency || ''}
                                                     placeholder={
                                                         formData.agencyType === 'DPWH' ? "Specify District (e.g., District 1)" :
-                                                        `Specific ${formData.agencyType} Name (e.g., ${formData.province || 'Benguet'})`
+                                                        formData.agencyType === 'CSO' ? "Specify CSO Name" :
+                                                        `Select level to auto-fill name...`
                                                     }
+                                                    readOnly={['PGO', 'CGO', 'MGO'].includes(formData.agencyType)}
                                                     onChange={handleChange}
-                                                    className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                                    className={`w-full border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500 transition-all ${
+                                                        ['PGO', 'CGO', 'MGO'].includes(formData.agencyType) 
+                                                            ? 'bg-slate-100 cursor-not-allowed font-bold text-slate-600' 
+                                                            : 'bg-white'
+                                                    }`}
                                                     required
                                                 />
-                                                <p className="text-[10px] text-purple-400 mt-1 ml-1">Provide the specific name or district of the agency.</p>
+                                                {['PGO', 'CGO', 'MGO'].includes(formData.agencyType) && (
+                                                    <p className="text-[10px] text-purple-400 mt-1 ml-1 italic">This name is automatically generated based on your location.</p>
+                                                )}
+                                                {['DPWH', 'CSO'].includes(formData.agencyType) && (
+                                                    <p className="text-[10px] text-purple-400 mt-1 ml-1">Provide the specific name or district of the agency.</p>
+                                                )}
                                             </div>
                                         )}
                                         
@@ -860,63 +930,24 @@ const Register = () => {
                                         </select>
 
                                         {/* MUNICIPALITY */}
-                                        <select
-                                            name="city"
-                                            onChange={handleCityChange}
-                                            value={formData.city}
-                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                                            disabled={!formData.province}
-                                            required
-                                        >
-                                            <option value="">Select Municipality/City</option>
-                                            {cityOptions.map((city) => (
-                                                <option key={city} value={city}>{city}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* 3. CONTACT INFO (Added to fix mobile number validation) */}
-                                    <div className="space-y-3 pt-3 border-t border-purple-200/50">
-                                        <label className="text-xs font-bold text-purple-700 uppercase">Contact Information</label>
-
-                                        {/* MOBILE */}
-                                        <div>
-                                            <input
-                                                name="contactNumber"
-                                                inputMode="numeric"
-                                                value={formData.contactNumber}
-                                                onFocus={() => {
-                                                    if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
-                                                }}
-                                                onChange={(e) => {
-                                                    let val = e.target.value.replace(/\D/g, '');
-                                                    if (!val.startsWith('09')) {
-                                                        if (val.startsWith('9')) val = '0' + val;
-                                                        else if (val.length < 2) val = '09';
-                                                        else val = '09' + val.substring(2);
-                                                    }
-                                                    val = val.slice(0, 11);
-                                                    setFormData(prev => ({ ...prev, contactNumber: val }));
-                                                }}
-                                                placeholder="Mobile No. (09xx xxx xxxx)"
-                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                                                maxLength={11}
+                                        {!['PGO', 'DPWH', 'CSO'].includes(formData.agencyType) && (
+                                            <select
+                                                name="city"
+                                                onChange={handleCityChange}
+                                                value={formData.city}
+                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                                                disabled={!formData.province}
                                                 required
-                                            />
-                                            <p className="text-[10px] text-purple-600 mt-1 ml-1">Must be 11 digits.</p>
-                                        </div>
-
-                                        {/* ALT EMAIL */}
-                                        <input
-                                            name="altEmail"
-                                            type="email"
-                                            value={formData.altEmail}
-                                            onChange={handleChange}
-                                            placeholder="Alternative Email Address (Optional)"
-                                            className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
-                                        />
+                                            >
+                                                <option value="">Select Municipality/City</option>
+                                                {cityOptions.map((city) => (
+                                                    <option key={city} value={city}>{city}</option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </div>
 
+                                    {/* CONTACT INFO REMOVED - MOVED TO TOP */}
                                 </div>
                             )}
 
@@ -1077,34 +1108,7 @@ const Register = () => {
                                                 <p className="text-[10px] text-slate-400 mt-1 ml-1">Used for password resets and notifications.</p>
                                             </div>
 
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Mobile Number</label>
-                                                <input
-                                                    name="contactNumber"
-                                                    inputMode="numeric"
-                                                    value={formData.contactNumber}
-                                                    onFocus={() => {
-                                                        if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
-                                                    }}
-                                                    onChange={(e) => {
-                                                        let val = e.target.value.replace(/\D/g, '');
-                                                        // STRICT ENFORCEMENT: Must start with 09
-                                                        if (!val.startsWith('09')) {
-                                                            if (val.startsWith('9')) val = '0' + val; // Auto-fix 9...
-                                                            else if (val.length < 2) val = '09'; // Prevent deleting 09
-                                                            else val = '09' + val.substring(2); // Re-attach if messed up middle?? No, safe default. 
-                                                        }
-                                                        // Ensure length limit
-                                                        val = val.slice(0, 11);
-                                                        setFormData(prev => ({ ...prev, contactNumber: val }));
-                                                    }}
-                                                    placeholder="0912 345 6789"
-                                                    className="w-full bg-white border border-slate-200 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
-                                                    maxLength={11}
-                                                    required
-                                                />
-                                                <p className="text-[10px] text-slate-400 mt-1 ml-1">Must be exactly 11 digits.</p>
-                                            </div>
+                                            {/* CONTACT INFO REMOVED - MOVED TO TOP */}
                                         </div>
                                     </div>
 
@@ -1172,7 +1176,44 @@ const Register = () => {
                                     </div>
 
 
-                                    <input name="email" type="email" placeholder={formData.role === 'Local Government Unit' ? "Email Address" : "DepEd Email Address"} onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                    <div>
+                                        <input 
+                                            name="email" 
+                                            type="email" 
+                                            placeholder={(formData.role === 'Local Government Unit' || formData.role === 'Implementing Agency') ? "Email Address" : "DepEd Email Address"} 
+                                            onChange={handleChange} 
+                                            value={formData.email} 
+                                            className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 mb-3" 
+                                            required 
+                                        />
+                                        
+                                        {/* CONTACT NUMBER (Moved here after email) */}
+                                        <div className="relative">
+                                            <input
+                                                name="contactNumber"
+                                                inputMode="numeric"
+                                                value={formData.contactNumber}
+                                                onFocus={() => {
+                                                    if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
+                                                }}
+                                                onChange={(e) => {
+                                                    let val = e.target.value.replace(/\D/g, '');
+                                                    if (!val.startsWith('09')) {
+                                                        if (val.startsWith('9')) val = '0' + val;
+                                                        else if (val.length < 2) val = '09';
+                                                        else val = '09' + val.substring(2);
+                                                    }
+                                                    val = val.slice(0, 11);
+                                                    setFormData(prev => ({ ...prev, contactNumber: val }));
+                                                }}
+                                                placeholder="Mobile No. (09xx xxx xxxx)"
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                maxLength={11}
+                                                required
+                                            />
+                                            <p className="text-[10px] text-blue-600 mt-1 ml-1">Must be 11 digits.</p>
+                                        </div>
+                                    </div>
 
                                     {/* CENTRAL OFFICE FIELDS */}
                                     {formData.role === 'Central Office' && (
@@ -1375,51 +1416,6 @@ const Register = () => {
                                                     <option value="Technical Assistant IV (COS)">Technical Assistant IV (COS)</option>
                                                     <option value="Technical Assistant V (COS)">Technical Assistant V (COS)</option>
                                                 </select>
-
-
-                                            </div>
-
-                                            {/* CONTACT INFO */}
-                                            <div className="space-y-3 pt-3 border-t border-teal-200/50">
-                                                <label className="text-xs font-bold text-teal-700 uppercase">Contact Information</label>
-
-                                                {/* MOBILE */}
-                                                <div>
-                                                    <input
-                                                        name="contactNumber"
-                                                        inputMode="numeric"
-                                                        value={formData.contactNumber}
-                                                        onFocus={() => {
-                                                            if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
-                                                        }}
-                                                        onChange={(e) => {
-                                                            let val = e.target.value.replace(/\D/g, '');
-                                                            if (!val.startsWith('09')) {
-                                                                if (val.startsWith('9')) val = '0' + val;
-                                                                else if (val.length < 2) val = '09';
-                                                                else val = '09' + val.substring(2);
-                                                            }
-                                                            val = val.slice(0, 11);
-                                                            setFormData(prev => ({ ...prev, contactNumber: val }));
-                                                        }}
-                                                        placeholder="Mobile No. (09xx xxx xxxx)"
-                                                        className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500"
-                                                        maxLength={11}
-                                                        required
-                                                    />
-                                                    <p className="text-[10px] text-teal-600 mt-1 ml-1">Must be 11 digits.</p>
-                                                </div>
-
-                                                {/* ALT EMAIL */}
-                                                <input
-                                                    name="altEmail"
-                                                    type="email"
-                                                    value={formData.altEmail}
-                                                    onChange={handleChange}
-                                                    placeholder="Alternative Email Address (Optional)"
-                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500"
-                                                />
-                                                <p className="text-[10px] text-teal-600 ml-1">Backup email for account recovery.</p>
                                             </div>
                                         </div>
                                     )}
@@ -1429,7 +1425,7 @@ const Register = () => {
                                         <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
                                             <h3 className="text-sm font-bold text-orange-800 uppercase flex items-center gap-2">
                                                 <span className="bg-orange-100 text-orange-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>
-                                                LGU Assignment & Contact
+                                                LGU Assignment
                                             </h3>
 
                                             {/* ASSIGNMENT */}
@@ -1487,48 +1483,6 @@ const Register = () => {
                                                     onChange={handleChange}
                                                     className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
                                                     required
-                                                />
-                                            </div>
-
-                                            {/* CONTACT INFO */}
-                                            <div className="space-y-3 pt-3 border-t border-orange-200/50">
-                                                <label className="text-xs font-bold text-orange-700 uppercase">Contact Information</label>
-
-                                                {/* MOBILE */}
-                                                <div>
-                                                    <input
-                                                        name="contactNumber"
-                                                        inputMode="numeric"
-                                                        value={formData.contactNumber}
-                                                        onFocus={() => {
-                                                            if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
-                                                        }}
-                                                        onChange={(e) => {
-                                                            let val = e.target.value.replace(/\D/g, '');
-                                                            if (!val.startsWith('09')) {
-                                                                if (val.startsWith('9')) val = '0' + val;
-                                                                else if (val.length < 2) val = '09';
-                                                                else val = '09' + val.substring(2);
-                                                            }
-                                                            val = val.slice(0, 11);
-                                                            setFormData(prev => ({ ...prev, contactNumber: val }));
-                                                        }}
-                                                        placeholder="Mobile No. (09xx xxx xxxx)"
-                                                        className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
-                                                        maxLength={11}
-                                                        required
-                                                    />
-                                                    <p className="text-[10px] text-orange-600 mt-1 ml-1">Must be 11 digits.</p>
-                                                </div>
-
-                                                {/* ALT EMAIL */}
-                                                <input
-                                                    name="altEmail"
-                                                    type="email"
-                                                    value={formData.altEmail}
-                                                    onChange={handleChange}
-                                                    placeholder="Alternative Email Address (Optional)"
-                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
                                                 />
                                             </div>
                                         </div>
@@ -1633,6 +1587,29 @@ const Register = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* NCR WARNING MODAL */}
+                {showNcrModal && (
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl text-center relative overflow-hidden border border-white/20">
+                            <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-10 h-10">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Invalid Selection</h3>
+                            <p className="text-slate-500 text-sm leading-relaxed mb-8 font-medium">
+                                NCR does not have provinces. Please select a different agency type like <span className="text-slate-800 font-bold underline decoration-blue-500 decoration-2">CGO</span> or <span className="text-slate-800 font-bold underline decoration-blue-500 decoration-2">MGO</span> instead of PGO.
+                            </p>
+                            <button
+                                onClick={() => setShowNcrModal(false)}
+                                className="w-full py-4 bg-[#004A99] text-white font-bold rounded-2xl shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
+                            >
+                                Got it
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* SUCCESS MODAL */}
                 {showSuccessModal && (

@@ -217,7 +217,7 @@ const AnimatedRoutes = () => {
       <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
       <Route path="/school-audit" element={<SchoolAuditView />} />
       <Route path="/esf7-review" element={<Navigate to="/esf7/review" replace />} />
-      <Route path="/esf7/review" element={<ProtectedRoute allowedRoles={['Division Engineer', 'Admin', 'Super User', 'Regional Office', 'School Division Office']}><ESF7Review /></ProtectedRoute>} />
+      <Route path="/esf7/review" element={<ProtectedRoute allowedRoles={['Super User', 'School Division Office']}><ESF7Review /></ProtectedRoute>} />
       <Route path="/dummy-forms" element={<DummyDashboard />} />
 
       <Route path="/dummy-forms" element={<DummyDashboard />} />

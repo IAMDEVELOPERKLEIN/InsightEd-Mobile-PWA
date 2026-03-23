@@ -43,7 +43,7 @@ const SkeletonWizard = () => (
 );
 
 // ── Main Component ───────────────────────────────────────────────────────────
-const Unit1SchoolIdentity = () => {
+const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
     const { user, loading: authLoading } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
@@ -54,7 +54,8 @@ const Unit1SchoolIdentity = () => {
     const [fetchedIern, setFetchedIern] = useState(null);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [isModeLoading, setIsModeLoading] = useState(true);
-    const { isReadOnly, isSuperUser: hookIsSuperUser } = useReadOnly(); // Added
+    const { isReadOnly: hookIsReadOnly, isSuperUser: hookIsSuperUser } = useReadOnly(); // Added
+    const isReadOnly = propReadOnly ?? hookIsReadOnly;
 
     const [formData, setFormData] = useState({
         school_id: "",
@@ -111,7 +112,7 @@ const Unit1SchoolIdentity = () => {
         if (authLoading) return; // Wait for AuthContext to resolve the actual user session
 
         const init = async () => {
-            const storedId = user?.school_id || localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || user?.school_id || localStorage.getItem("schoolId");
             if (!storedId) {
                 const draft = await getUnitDraft(1, "anonymous"); // Fallback or global draft
                 if (draft && draft.formData) {
@@ -243,7 +244,7 @@ const Unit1SchoolIdentity = () => {
 
             // Determine if we should show review mode
             // If they have an active draft, they are actively editing, so don't show review mode.
-            if (d && d.unit1_completed && !draft) {
+            if ((d && d.unit1_completed && !draft) || propReadOnly) {
                 setIsReviewMode(true);
             } else if (draft) {
                 setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
@@ -593,66 +594,74 @@ const Unit1SchoolIdentity = () => {
             <main className="flex-1 relative overflow-y-auto px-6 pt-4 pb-32">
                 <AnimatePresence mode="wait">
                     {isReviewMode ? (
-                        <div key="review" className="max-w-md mx-auto pb-32 mt-4">
+                        <div key="review" className="max-w-md mx-auto pb-32 mt-4 space-y-8">
                             {/* Header */}
                             <div className="text-center mb-10">
                                 <motion.div 
                                     initial={{ scale: 0 }} 
                                     animate={{ scale: 1 }} 
-                                    className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                                    className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-100"
                                 >
-                                    <span className="text-4xl text-white">🏢</span>
+                                    <span className="text-4xl text-white">🏫</span>
                                 </motion.div>
-                                <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                                    Unit 1 • School Identity
+                                <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
+                                    Unit 1 • School Identity Profile
                                 </span>
-                                <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
-                                <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                                <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4">{formData.school_name || "Official School Name"}</h1>
+                                <p className="text-slate-500 font-medium mt-2">ID: <span className="font-black text-slate-800 tracking-wider">{formData.school_id}</span> • IERN: <span className="font-black text-slate-800 tracking-wider">{formData.iern || "PENDING"}</span></p>
                             </div>
 
-                            {/* Metric Cards Grid */}
-                            <div className="grid grid-cols-2 gap-4 mb-10">
-                                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                                        📄
-                                    </div>
-                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">School ID</span>
-                                    <span className="text-2xl font-black text-slate-800 mt-1">{formData.school_id || "N/A"}</span>
+                            {/* Core Stats Bar */}
+                            <div className="bg-slate-50 rounded-[2.5rem] p-6 grid grid-cols-2 gap-6 border border-slate-100">
+                                <div className="space-y-1">
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Classification</span>
+                                    <p className="font-black text-slate-700 text-sm italic">
+                                        {formData.school_type === "with_annex" ? "School with Annex" : 
+                                         formData.school_type === "extension" ? "Extension School" : "Without Annex"}
+                                    </p>
                                 </div>
-                                <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                                        🏷️
-                                    </div>
-                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">IERN</span>
-                                    <span className="text-2xl font-black text-slate-800 mt-1">{formData.iern || "N/A"}</span>
+                                <div className="space-y-1 border-l border-slate-200 pl-6">
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Offering</span>
+                                    <p className="font-black text-indigo-600 text-sm truncate">{formData.curricular_offering || "Unset"}</p>
                                 </div>
                             </div>
 
-                            {/* Detailed Breakdown */}
-                            <div className="space-y-6">
-                                <section>
-                                    <div className="flex items-center gap-2 mb-4 ml-2">
-                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Registry Breakdown</h3>
-                                    </div>
-                                    <div className="grid gap-3">
-                                        <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
-                                            <div className="flex flex-col max-w-[70%]">
-                                                <span className="font-bold text-slate-700 text-lg line-clamp-1">{formData.school_name || "N/A"}</span>
-                                                <span className="text-[10px] text-slate-400 font-medium uppercase">Official Name</span>
-                                            </div>
-                                            <div className="bg-indigo-50 px-3 py-2 rounded-xl text-center">
-                                                <span className="text-xl">🏫</span>
-                                            </div>
+                            {/* Geographical Registry */}
+                            <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-8 text-6xl opacity-10 grayscale group-hover:grayscale-0 transition-all duration-700">📍</div>
+                                <div className="flex items-center gap-2 mb-6">
+                                    <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Geographical Registry</h3>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Region</span>
+                                            <p className="font-bold text-slate-700">{formData.region || "—"}</p>
                                         </div>
-                                        <div className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-slate-700">{formData.division || "N/A"}</span>
-                                                <span className="text-[10px] text-slate-400 font-medium uppercase">Division</span>
-                                            </div>
-                                            <div className="bg-indigo-50 px-3 py-2 rounded-xl">
-                                                <span className="font-black text-indigo-700 text-sm">{formData.region || "Req"}</span>
-                                            </div>
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Province</span>
+                                            <p className="font-bold text-slate-700">{formData.province || "—"}</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Municipality</span>
+                                            <p className="font-bold text-slate-700">{formData.municipality || "—"}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Barangay</span>
+                                            <p className="font-bold text-slate-700">{formData.barangay || "—"}</p>
+                                        </div>
+                                    </div>
+                                    <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-4">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Division</span>
+                                            <p className="font-bold text-slate-700">{formData.division || "—"}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">District</span>
+                                            <p className="font-bold text-slate-700">{formData.district || "—"}</p>
                                         </div>
                                     </div>
                                 </section>
@@ -677,31 +686,79 @@ const Unit1SchoolIdentity = () => {
                                     </div>
                                 </section>
 
-                                <section>
-                                    <div className="flex items-center gap-2 mb-4 ml-2 mt-8">
-                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">School Head</h3>
+                            {/* Administration */}
+                            <section className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-xl shadow-slate-200">
+                                <div className="flex items-center gap-2 mb-8">
+                                    <div className="w-1.5 h-6 bg-blue-400 rounded-full" />
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">School Administration</h3>
+                                </div>
+                                <div className="flex items-start gap-5 mb-8">
+                                    <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-3xl">👤</div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest mb-1">School Head</p>
+                                        <h4 className="text-xl font-black">{[formData.head_first_name, formData.head_middle_name, formData.head_last_name].filter(Boolean).join(' ')}</h4>
+                                        <p className="text-slate-400 text-sm font-bold mt-1 uppercase tracking-wider">{formData.head_position_title || "Designation Unset"}</p>
                                     </div>
-                                    <div className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm space-y-4">
-                                        <div>
-                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Full Name</span>
-                                            <p className="text-xl font-black text-slate-800">
-                                                {[formData.head_first_name, formData.head_middle_name, formData.head_last_name].filter(Boolean).join(' ')}
-                                            </p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
-                                            <div>
-                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Position</span>
-                                                <p className="font-bold text-slate-700">{formData.head_position_title || "N/A"}</p>
-                                            </div>
-                                            <div>
-                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Assigned</span>
-                                                <p className="font-bold text-slate-700">{formData.head_date_hired || "N/A"}</p>
-                                            </div>
-                                        </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-6 pt-6 border-t border-white/10">
+                                    <div>
+                                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest block mb-2">Sex</span>
+                                        <p className="font-black text-sm">{formData.head_sex || "—"}</p>
                                     </div>
-                                </section>
+                                    <div>
+                                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest block mb-2">Assigned</span>
+                                        <p className="font-black text-sm">{formData.head_date_hired ? new Date(formData.head_date_hired).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : "—"}</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* Coordinates Overlay */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-emerald-50 rounded-3xl p-5 border border-emerald-100">
+                                    <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest block mb-1">Latitude</span>
+                                    <p className="font-black text-emerald-900 text-lg tracking-tight">{formData.latitude || "0.000000"}</p>
+                                </div>
+                                <div className="bg-emerald-50 rounded-3xl p-5 border border-emerald-100">
+                                    <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest block mb-1">Longitude</span>
+                                    <p className="font-black text-emerald-900 text-lg tracking-tight">{formData.longitude || "0.000000"}</p>
+                                </div>
                             </div>
+
+                            {/* Ownership & Compliance */}
+                            <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+                                <div className="flex items-center gap-2 mb-6">
+                                    <div className="w-1.5 h-6 bg-purple-500 rounded-full" />
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Legal & Ownership</h3>
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Land Ownership</span>
+                                            <p className="font-black text-slate-800 text-lg capitalize">{formData.ownership?.replace('_', ' ') || "—"}</p>
+                                        </div>
+                                        <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-2xl">⚖️</div>
+                                    </div>
+                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Document Type</span>
+                                        <p className="font-bold text-slate-700 text-sm">{formData.ownership_document_type || "No document provided"}</p>
+                                    </div>
+                                    {formData.google_drive_file_id && (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Digital Archive</span>
+                                                <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase">Verified</span>
+                                            </div>
+                                            <div className="flex items-center gap-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                                                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-xl shadow-inner">📄</div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-slate-700 text-sm truncate">{formData.google_drive_file_name}</p>
+                                                    <button onClick={() => setShowFullscreenPdf(true)} className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline">Preview Link &rarr;</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
 
                             {/* Unlock Action */}
                             <motion.div 
@@ -710,19 +767,23 @@ const Unit1SchoolIdentity = () => {
                                 transition={{ delay: 0.3 }}
                                 className="mt-12"
                             >
-                                <button 
-                                    onClick={() => { setIsReviewMode(false); setCurrentStep(0); }}
-                                    className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                                >
-                                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                                    <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <FiUnlock className="w-5 h-5 text-indigo-700" />
-                                    </div>
-                                    <span>Unlock to Edit Identity</span>
-                                </button>
-                                <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4">
-                                    Note: Unlocking will allow you to update demographic targets.
-                                </p>
+                                {!propReadOnly && (
+                                    <button 
+                                        onClick={() => { setIsReviewMode(false); setCurrentStep(0); }}
+                                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <FiUnlock className="w-5 h-5 text-indigo-700" />
+                                        </div>
+                                        <span>Unlock to Edit Profile</span>
+                                    </button>
+                                )}
+                                {!propReadOnly && (
+                                    <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4 px-8">
+                                        Data is currently synced with the regional cloud registry. 
+                                    </p>
+                                )}
                             </motion.div>
                         </div>
                     ) : (

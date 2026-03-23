@@ -31,12 +31,12 @@ const ALL_GRADES = [
 
 const ELEM_GRADES = ['g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
 
-const Unit2Learners = () => {
+const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
-    const [isReadOnly, setIsReadOnly] = useState(false);
+    const [isReadOnly, setIsReadOnly] = useState(propReadOnly || false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
 
     const { user } = useAuth();
@@ -135,7 +135,7 @@ const Unit2Learners = () => {
     // --- Init / Fetch Data ---
     useEffect(() => {
         const initData = async () => {
-            const storedId = localStorage.getItem('schoolId');
+            const storedId = targetSchoolId || localStorage.getItem('schoolId');
             if (!storedId) {
                 setLoading(false);
                 return;
@@ -637,61 +637,126 @@ const Unit2Learners = () => {
     const Unit2Summary = () => {
         const maleVal = parseInt(genderTotals.male) || 0;
         const femaleVal = parseInt(genderTotals.female) || 0;
+        const malePercent = grandTotal > 0 ? Math.round((maleVal / grandTotal) * 100) : 0;
+        const femalePercent = grandTotal > 0 ? Math.round((femaleVal / grandTotal) * 100) : 0;
         
         return (
-            <div className="max-w-md mx-auto pb-32 mt-4">
+            <div className="max-w-md mx-auto pb-32 mt-4 space-y-8">
                 {/* Header */}
                 <div className="text-center mb-10">
                     <motion.div 
                         initial={{ scale: 0 }} 
                         animate={{ scale: 1 }} 
-                        className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
+                        className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-100"
                     >
                         <span className="text-4xl text-white">👥</span>
                     </motion.div>
-                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-200">
-                        Unit 2 • Learners
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
+                        Unit 2 • Learner Demographics
                     </span>
-                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
-                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+                    <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4">Enrollment Registry</h1>
+                    <p className="text-slate-500 font-medium mt-2 italic px-4">"Total enrollment verified and synced with ESF7 Registry"</p>
                 </div>
 
-                {/* Stat Cards */}
-                <div className="grid grid-cols-2 gap-4 mb-10">
-                    <div className="col-span-2 bg-indigo-600 rounded-[2rem] p-6 text-white shadow-2xl shadow-indigo-200 flex items-center justify-between overflow-hidden relative">
-                        <div className="relative z-10">
-                            <p className="text-indigo-200 text-xs font-black uppercase tracking-widest mb-1">Grand Total</p>
-                            <h2 className="text-5xl font-black leading-none">{grandTotal}</h2>
+                {/* Primary Metric Card */}
+                <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 relative overflow-hidden group border border-white/5">
+                    <div className="absolute top-0 right-0 p-8 text-8xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">📚</div>
+                    <div className="relative z-10">
+                        <p className="text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Total Combined Enrollment</p>
+                        <div className="flex items-baseline gap-2">
+                            <h2 className="text-6xl font-black leading-none tracking-tighter">{grandTotal}</h2>
+                            <span className="text-indigo-400 font-bold text-lg uppercase tracking-widest">Learners</span>
                         </div>
-                        <div className="text-6xl opacity-20 relative z-10">🌍</div>
-                        <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+                        <div className="mt-8 flex items-center gap-4 p-4 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
+                            <div className="flex-1">
+                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2 text-indigo-200">
+                                    <span>Gender Split</span>
+                                    <span>{malePercent}% M / {femalePercent}% F</span>
+                                </div>
+                                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden flex">
+                                    <div style={{ width: `${malePercent}%` }} className="h-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]" />
+                                    <div style={{ width: `${femalePercent}%` }} className="h-full bg-rose-400 shadow-[0_0_10px_rgba(244,114,182,0.5)]" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Gender Breakdown Blocks */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-blue-50 border border-blue-100/50 rounded-3xl p-6 flex flex-col items-center text-center shadow-sm">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center mb-3 shadow-lg shadow-blue-200 text-2xl text-white">👦</div>
+                        <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Male Total</span>
+                        <span className="text-3xl font-black text-blue-700 mt-1">{maleVal}</span>
+                    </div>
+                    <div className="bg-rose-50 border border-rose-100/50 rounded-3xl p-6 flex flex-col items-center text-center shadow-sm">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-500 flex items-center justify-center mb-3 shadow-lg shadow-rose-200 text-2xl text-white">👧</div>
+                        <span className="text-[10px] font-black uppercase text-rose-400 tracking-widest">Female Total</span>
+                        <span className="text-3xl font-black text-rose-700 mt-1">{femaleVal}</span>
+                    </div>
+                </div>
+
+                {/* Special Groups: SNED & ARAL */}
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-8">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Specialized Programs</h3>
                     </div>
                     
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                            👦
+                    {/* SNED Block */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest">SNED Self-Contained</span>
+                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${hasSnedSelfContained ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                {hasSnedSelfContained ? "Active" : "None"}
+                            </span>
                         </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Male</span>
-                        <span className="text-3xl font-black text-blue-600 mt-1">{maleVal}</span>
+                        {hasSnedSelfContained && (
+                            <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between">
+                                <div>
+                                    <p className="text-2xl font-black text-emerald-900 leading-none">{sned_self_contained_count}</p>
+                                    <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">Non-Graded Learners</p>
+                                </div>
+                                <div className="text-3xl">🧩</div>
+                            </div>
+                        )}
                     </div>
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center mb-3 shadow-inner text-xl">
-                            👧
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Female</span>
-                        <span className="text-3xl font-black text-rose-600 mt-1">{femaleVal}</span>
-                    </div>
-                </div>
 
-                {/* Multigrade Combinations */}
-                {mgCombinations.length > 0 && (
-                    <section className="mb-8">
-                        <div className="flex items-center gap-2 mb-4 ml-2">
-                            <div className="w-1 h-4 bg-rose-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Multigrade Joinings</h3>
+                    {/* ARAL Participation */}
+                    <div className="space-y-4 pt-4 border-t border-slate-50">
+                        <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest block mb-4">ARAL Program Participation</span>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className={`p-4 rounded-2xl border text-center ${hasAralMath ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
+                                <p className="text-[9px] font-black uppercase text-indigo-400 mb-2">Math</p>
+                                <p className={`text-xl font-black ${hasAralMath ? 'text-indigo-900' : 'text-slate-300'}`}>
+                                    {hasAralMath ? Object.values(aralMath).reduce((s, v) => s + (parseInt(v) || 0), 0) : 0}
+                                </p>
+                            </div>
+                            <div className={`p-4 rounded-2xl border text-center ${hasAralReading ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
+                                <p className="text-[9px] font-black uppercase text-indigo-400 mb-2">Reading</p>
+                                <p className={`text-xl font-black ${hasAralReading ? 'text-indigo-900' : 'text-slate-300'}`}>
+                                    {hasAralReading ? Object.values(aralReading).reduce((s, v) => s + (parseInt(v) || 0), 0) : 0}
+                                </p>
+                            </div>
+                            <div className={`p-4 rounded-2xl border text-center ${hasAralScience ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
+                                <p className="text-[9px] font-black uppercase text-indigo-400 mb-2">Science</p>
+                                <p className={`text-xl font-black ${hasAralScience ? 'text-indigo-900' : 'text-slate-300'}`}>
+                                    {hasAralScience ? Object.values(aralScience).reduce((s, v) => s + (parseInt(v) || 0), 0) : 0}
+                                </p>
+                            </div>
                         </div>
-                        <div className="grid gap-3">
-                            {mgCombinations.map((c, idx) => {
+                    </div>
+                </section>
+
+                {/* Multigrade Joinings */}
+                {mgCombinations.length > 0 && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 mb-2 ml-2">
+                            <div className="w-1.5 h-6 bg-rose-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Multigrade Joinings</h3>
+                        </div>
+                        <div className="grid gap-4">
+                            {mgCombinations.map((c) => {
                                 const labels = c.grades.map(g => g.replace('g', ''));
                                 let labelStr = "";
                                 if (labels.length === 1) labelStr = `Grade ${labels[0]}`;
@@ -703,24 +768,24 @@ const Unit2Learners = () => {
                                 
                                 const totalJoined = c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0);
                                 return (
-                                    <div key={c.id} className="bg-white rounded-2xl p-4 border-2 border-rose-100 flex items-center justify-between shadow-sm relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-16 h-16 bg-rose-50 rounded-full blur-xl translate-x-4 -translate-y-4" />
-                                        <div className="flex flex-col relative z-10 w-full">
-                                            <div className="flex justify-between items-center mb-3">
-                                                <span className="font-black text-rose-800 text-lg">{labelStr}</span>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[9px] uppercase font-black text-rose-400 tracking-widest mb-1">Joined Enrollment</span>
-                                                    <div className="bg-rose-500 px-4 py-1.5 rounded-xl shadow-md border border-rose-600">
-                                                        <span className="font-black text-white text-lg">{totalJoined}</span>
-                                                    </div>
+                                    <div key={c.id} className="bg-white rounded-[2rem] p-6 border border-rose-100 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-full blur-2xl opacity-50" />
+                                        <div className="relative z-10 flex items-center justify-between">
+                                            <div className="flex-1">
+                                                <h4 className="text-xl font-black text-rose-900 tracking-tight">{labelStr}</h4>
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    {c.grades.map(gId => (
+                                                        <span key={gId} className="text-[9px] bg-slate-50 text-slate-500 border border-slate-100 px-2 py-1 rounded-lg font-black uppercase">
+                                                            G{gId.replace('g','')}: {parseInt(gradeTotals[gId]) || 0}
+                                                        </span>
+                                                    ))}
                                                 </div>
                                             </div>
-                                            <div className="flex flex-wrap gap-2 border-t border-slate-50 pt-3">
-                                                {c.grades.map(g => (
-                                                    <span key={g} className="text-[10px] bg-slate-50 text-slate-500 border border-slate-100 px-2 py-1 rounded-lg font-bold uppercase tracking-widest">
-                                                        {ALL_GRADES.find(x => x.id === g)?.label}: {parseInt(gradeTotals[g]) || 0}
-                                                    </span>
-                                                ))}
+                                            <div className="text-right ml-4">
+                                                <p className="text-[9px] font-black text-rose-400 uppercase mb-1">Total Joined</p>
+                                                <div className="bg-rose-600 text-white px-5 py-2 rounded-2xl font-black text-xl shadow-lg border border-rose-700">
+                                                    {totalJoined}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -731,25 +796,28 @@ const Unit2Learners = () => {
                 )}
 
                 {/* Grade Breakdown */}
-                <section>
-                    <div className="flex items-center gap-2 mb-4 ml-2">
-                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Demographics Breakdown</h3>
+                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Monograde Stats</h3>
                     </div>
                     <div className="grid gap-3">
                         {availableGrades.map((g) => {
                             const count = g.id === 'kinder' ? (parseInt(kinderEnrollment) || 0) : (parseInt(gradeTotals[g.id]) || 0);
                             const isInactive = gradeAvailability[g.id] === false;
-                            if (count === 0 && isInactive) return null;
+                            const isMG = lockedGrades.has(g.id);
+                            
+                            if (isMG) return null; // Skip if handled in MG section above
+                            if (count === 0 && isInactive) return null; // Skip if inactive AND zero
 
                             return (
-                                <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
+                                <div key={g.id} className="flex items-center justify-between p-4 bg-slate-50rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-colors">
                                     <div className="flex flex-col">
-                                        <span className="font-bold text-slate-700 text-lg">{g.label}</span>
-                                        <span className="text-[10px] text-slate-400 font-medium uppercase">{isInactive ? "Inactive" : "Standard Enrollment"}</span>
+                                        <span className="font-black text-slate-700 text-lg tracking-tight group-hover:text-indigo-600 transition-colors leading-none">{g.label}</span>
+                                        <span className="text-[9px] text-indigo-400 font-black uppercase mt-1 tracking-widest">{isInactive ? "Not Offered" : "Standard Class"}</span>
                                     </div>
-                                    <div className="bg-indigo-50 px-4 py-2 rounded-xl">
-                                        <span className="font-black text-indigo-700 text-lg">{count}</span>
+                                    <div className="bg-white px-5 py-2 rounded-xl border border-slate-200 shadow-sm">
+                                        <span className="font-black text-indigo-700 text-xl">{count}</span>
                                     </div>
                                 </div>
                             );
@@ -758,24 +826,28 @@ const Unit2Learners = () => {
                 </section>
 
                 {/* Unlock Action */}
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="mt-12"
-                >
-                    <button 
-                        onClick={() => setIsReadOnly(false)}
-                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                {!propReadOnly && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="mt-12"
                     >
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <FiUnlock className="w-5 h-5 text-indigo-700" />
-                        </div>
-                        <span>Unlock to Edit Enrollment</span>
-                    </button>
-                    <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4">Authorized Access Only</p>
-                </motion.div>
+                        <button 
+                            onClick={() => setIsReadOnly(false)}
+                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <FiUnlock className="w-5 h-5 text-indigo-700" />
+                            </div>
+                            <span>Unlock to Edit Counts</span>
+                        </button>
+                        <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4 px-8">
+                            Modifying these totals will trigger a re-validation across all dependent modules.
+                        </p>
+                    </motion.div>
+                )}
             </div>
         );
     };

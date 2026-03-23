@@ -44,7 +44,7 @@ const getClassSizeOptions = (className) => {
     return ["< 40 learners", "40-45 learners", "> 45 learners"];
 };
 
-const Unit3OrganizedClasses = () => {
+const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(false);
@@ -205,7 +205,7 @@ const Unit3OrganizedClasses = () => {
             setIsFetching(true);
             setFetchError(null);
             
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || localStorage.getItem("schoolId");
             if (!storedId) {
                 setFetchError("School ID not found. Please re-login.");
                 setIsFetching(false);
@@ -273,7 +273,7 @@ const Unit3OrganizedClasses = () => {
                         setTimeout(() => setShowWelcomeBack(false), 3000);
                     } else {
                         setSectionData(mergedData);
-                        if (isActuallySaved || d.unit3_completed) {
+                        if (isActuallySaved || d.unit3_completed || propReadOnly) {
                             setIsReadOnly(true);
                             setCurrentStep(1);
                         } else {
@@ -453,79 +453,156 @@ const Unit3OrganizedClasses = () => {
 
         const averageClassSize = totalClasses > 0 ? Math.round(totalEnrollment / totalClasses) : 0;
 
+        // Calculate global distribution percentages
+        const distribution = (availableGrades || []).reduce((acc, g) => {
+            const data = sectionData[g.id] || {};
+            acc.below += (data.col_below || 0);
+            acc.within += (data.col_within || 0);
+            acc.above += (data.col_above || 0);
+            return acc;
+        }, { below: 0, within: 0, above: 0 });
+
+        const getPercent = (val) => totalClasses > 0 ? Math.round((val / totalClasses) * 100) : 0;
+
         return (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-32">
-                <div className="px-6 py-8">
-                    {/* Header */}
-                    <div className="text-center mb-10">
-                        <div className="w-20 h-20 bg-gradient-to-br from-teal-400 to-cyan-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-teal-200">
-                            <FiLayers className="w-10 h-10 text-white" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-md mx-auto pb-32 mt-4 space-y-8">
+                {/* Header */}
+                <div className="text-center mb-10">
+                    <motion.div 
+                        initial={{ scale: 0 }} 
+                        animate={{ scale: 1 }} 
+                        className="w-20 h-20 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-teal-100"
+                    >
+                        <FiLayers className="w-10 h-10 text-white" />
+                    </motion.div>
+                    <span className="inline-block px-4 py-1.5 rounded-full bg-teal-50 text-teal-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-teal-100">
+                        Unit 3 • Section Organization
+                    </span>
+                    <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4 text-center">Classroom Registry</h1>
+                    <p className="text-slate-500 font-medium mt-2 italic px-4 text-center">"Section distribution and class-size optimization report"</p>
+                </div>
+
+                {/* Main Stats */}
+                <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-teal-100 relative overflow-hidden group border border-white/5">
+                    <div className="absolute top-0 right-0 p-8 text-8xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">📋</div>
+                    <div className="relative z-10">
+                        <p className="text-teal-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center">Overall Class Capacity</p>
+                        <div className="flex items-center justify-around py-4 border-y border-white/10 mt-4">
+                            <div className="text-center">
+                                <p className="text-4xl font-black leading-none">{totalClasses}</p>
+                                <p className="text-[9px] font-bold text-teal-400 uppercase mt-2 tracking-widest">Total Sections</p>
+                            </div>
+                            <div className="w-px h-12 bg-white/10" />
+                            <div className="text-center">
+                                <p className="text-4xl font-black leading-none">{averageClassSize}</p>
+                                <p className="text-[9px] font-bold text-teal-400 uppercase mt-2 tracking-widest">Avg Size</p>
+                            </div>
                         </div>
-                        <span className="inline-block px-4 py-1.5 rounded-full bg-teal-100 text-teal-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                            Unit 3 • Organized Classes
-                        </span>
-                        <h1 className="text-4xl font-black text-slate-800 leading-tight">Classes Summary</h1>
-                        <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
+
+                        {/* Distribution Visualizer */}
+                        <div className="mt-8 space-y-3">
+                            <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-teal-200">
+                                <span>Size Distribution</span>
+                                <span>In Standard: {getPercent(distribution.within)}%</span>
+                            </div>
+                            <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden flex">
+                                <div style={{ width: `${getPercent(distribution.below)}%` }} className="h-full bg-blue-400" title="Below Standard" />
+                                <div style={{ width: `${getPercent(distribution.within)}%` }} className="h-full bg-emerald-400" title="Within Standard" />
+                                <div style={{ width: `${getPercent(distribution.above)}%` }} className="h-full bg-rose-400" title="Above Standard" />
+                            </div>
+                            <div className="flex justify-between gap-2">
+                                <span className="flex items-center gap-1 text-[8px] font-black uppercase text-blue-300">
+                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full" /> Below
+                                </span>
+                                <span className="flex items-center gap-1 text-[8px] font-black uppercase text-emerald-300">
+                                    <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" /> In-Standard
+                                </span>
+                                <span className="flex items-center gap-1 text-[8px] font-black uppercase text-rose-300">
+                                    <div className="w-1.5 h-1.5 bg-rose-400 rounded-full" /> Over
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Detailed Breakdown */}
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-6 bg-teal-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Grade-by-Grade Detail</h3>
+                        </div>
                     </div>
 
-                    {/* Metric Cards */}
-                    <div className="grid grid-cols-2 gap-4 mb-10">
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-cyan-50 flex items-center justify-center mb-3 shadow-inner">
-                                <FiLayers className="w-6 h-6 text-cyan-600" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Classes</span>
-                            <span className="text-3xl font-black text-slate-800 mt-1">{totalClasses}</span>
-                        </div>
-                        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center mb-3 shadow-inner">
-                                <FiUsers className="w-6 h-6 text-teal-600" />
-                            </div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Avg Class Size</span>
-                            <span className="text-3xl font-black text-slate-800 mt-1">{averageClassSize}</span>
-                        </div>
-                    </div>
+                    <div className="grid gap-4">
+                        {(availableGrades || []).map(g => {
+                            const data = sectionData[g.id] || {};
+                            if (!data.is_active && data.is_active !== undefined) return null;
+                            const pills = getClassSizeOptions(g.label);
+                            const isMG = g.id.startsWith("mg_");
+                            
+                            return (
+                                <div key={g.id} className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:border-teal-200 transition-colors">
+                                    <div className="flex items-start justify-between relative z-10">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h4 className="text-xl font-black text-slate-800 tracking-tight">{g.label}</h4>
+                                                {isMG && <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-600 text-[8px] font-black uppercase border border-rose-100 tracking-tighter">Multigrade</span>}
+                                            </div>
+                                            
+                                            <div className="mt-4 space-y-3">
+                                                {/* Threshold Guide */}
+                                                <div className="flex items-center gap-2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                                                    <span>Standard Thresholds:</span>
+                                                    <span className="text-teal-600 font-bold">{pills[1]}</span>
+                                                </div>
 
-                    {/* Breakdown */}
-                    <div className="space-y-6">
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-teal-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Grade-by-Grade Breakdown</h3>
-                            </div>
-                            <div className="grid gap-3">
-                                {(availableGrades || []).map(g => {
-                                    const data = sectionData[g.id] || {};
-                                    if (!data.is_active && data.is_active !== undefined) return null; // Defensive check
-                                    const pills = getClassSizeOptions(g.label);
-                                    return (
-                                        <div key={g.id} className="bg-white rounded-2xl p-4 border border-slate-50 flex items-center justify-between shadow-sm">
-                                            <div className="flex-1">
-                                                <span className="font-bold text-slate-700 text-lg block">{g.label}</span>
-                                                <div className="flex gap-4 mt-2">
-                                                    <div>
-                                                        <span className="font-black text-cyan-700 text-[9px] tracking-widest uppercase block opacity-60">Distribution</span>
-                                                        <div className="flex gap-2">
-                                                            {data.col_below > 0 && <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold">{data.col_below} ({pills[0]})</span>}
-                                                            {data.col_within > 0 && <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-bold">{data.col_within} ({pills[1]})</span>}
-                                                            {data.col_above > 0 && <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[10px] font-bold">{data.col_above} ({pills[2]})</span>}
-                                                            {(!data.col_below && !data.col_within && !data.col_above) && <span className="text-slate-400 text-[10px]">No sections</span>}
+                                                <div className="flex flex-wrap gap-2">
+                                                    {data.col_below > 0 && (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-100">
+                                                                <span className="w-2 h-2 rounded-full bg-blue-400" />
+                                                                <span className="text-[10px] font-black text-blue-700">{data.col_below} Sec</span>
+                                                                <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">({pills[0]})</span>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
+                                                    {data.col_within > 0 && (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-100">
+                                                                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                                                                <span className="text-[10px] font-black text-emerald-700">{data.col_within} Sec</span>
+                                                                <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-tighter">({pills[1]})</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {data.col_above > 0 && (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-100">
+                                                                <span className="w-2 h-2 rounded-full bg-rose-400" />
+                                                                <span className="text-[10px] font-black text-rose-700">{data.col_above} Sec</span>
+                                                                <span className="text-[8px] font-bold text-rose-400 uppercase tracking-tighter">({pills[2]})</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <div className="bg-cyan-50 px-4 py-2 rounded-xl text-center">
-                                                <span className="font-black text-cyan-700 text-[9px] tracking-widest uppercase block opacity-60">Sections</span>
-                                                <span className="font-black text-slate-800 text-lg">{data.total_sections || 0}</span>
+                                        </div>
+                                        <div className="text-right ml-4">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Total Sections</p>
+                                            <div className="bg-slate-900 text-white px-5 py-2 rounded-2xl font-black text-2xl shadow-lg group-hover:bg-teal-600 transition-colors">
+                                                {data.total_sections || 0}
                                             </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        </section>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
+                </div>
 
-                    {/* Unlock Action */}
+                {/* Unlock Action */}
+                {!propReadOnly && (
                     <motion.div 
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -538,12 +615,15 @@ const Unit3OrganizedClasses = () => {
                         >
                             <div className="absolute inset-0 bg-gradient-to-r from-teal-500/0 via-teal-500/5 to-teal-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                             <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <FiUnlock className="w-5 h-5" />
+                                <FiUnlock className="w-5 h-5 text-teal-700" />
                             </div>
-                            <span>Unlock to Edit Classes</span>
+                            <span>Unlock to Edit Registry</span>
                         </button>
+                        <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4 px-8">
+                            Any changes to section counts will impact school-wide teacher-to-student ratio calculations.
+                        </p>
                     </motion.div>
-                </div>
+                )}
             </motion.div>
         );
     };

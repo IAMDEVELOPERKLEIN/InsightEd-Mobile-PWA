@@ -52,7 +52,7 @@ const expandVariants = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-const Unit5ShiftingModality = () => {
+const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
 
     // ── Core state ──────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ const Unit5ShiftingModality = () => {
     // ── Data fetch on mount ─────────────────────────────────────────────────
     useEffect(() => {
         const init = async () => {
-            const storedId = localStorage.getItem("schoolId");
+            const storedId = targetSchoolId || localStorage.getItem("schoolId");
             if (!storedId) return;
             setSchoolId(storedId);
 
@@ -186,7 +186,7 @@ const Unit5ShiftingModality = () => {
                         setIsReviewMode(false); // Force edit mode for drafts
                         setShowWelcomeBack(true);
                         setTimeout(() => setShowWelcomeBack(false), 3000);
-                    } else if (d.unit5_completed) {
+                    } else if (d.unit5_completed || propReadOnly) {
                         setSavedData(d);
                         setHasStandardShifting(d.has_standard_shifting);
                         const prefillMap = {};
@@ -368,72 +368,80 @@ const Unit5ShiftingModality = () => {
                     </div>
                 </header>
 
-                <div className="max-w-md mx-auto pb-32 mt-4 px-4">
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <motion.div 
-                        initial={{ scale: 0 }} 
-                        animate={{ scale: 1 }} 
-                        className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-200"
-                    >
-                        <FiClock className="w-10 h-10 text-white" />
-                    </motion.div>
-                    <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm">
-                        Unit 5 • Modality Profile
-                    </span>
-                    <h1 className="text-4xl font-black text-slate-800 leading-tight">Summary</h1>
-                    <p className="text-slate-500 font-medium mt-2">Verified records as of {new Date().toLocaleDateString()}</p>
-                </div>
-
-                {/* Metric Cards Grid */}
-                <div className="grid grid-cols-2 gap-4 mb-10">
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center mb-3 shadow-inner">
-                            <span className="text-xl">🏫</span>
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Base Setup</span>
-                        <span className="text-xl font-black text-slate-800 mt-1">
-                            {hasStandardShifting ? "Standard" : "Mixed"}
+                <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
+                    {/* Header */}
+                    <div className="text-center mb-10">
+                        <motion.div 
+                            initial={{ scale: 0 }} 
+                            animate={{ scale: 1 }} 
+                            className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-[2rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-100"
+                        >
+                            <FiClock className="w-10 h-10 text-white" />
+                        </motion.div>
+                        <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
+                            Unit 5 • Operations Profile
                         </span>
+                        <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Schedule & Modality</h1>
+                        <p className="text-slate-500 font-medium mt-2 italic">"Instructional delivery and shifting model report"</p>
                     </div>
-                    <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center mb-3 shadow-inner">
-                            <FiAlertTriangle className="w-6 h-6 text-rose-600" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Emergency ADMs</span>
-                        <span className="text-xl font-black text-slate-800 mt-1">
-                            {hasAdms ? "Active Tracker" : "None Utilized"}
-                        </span>
-                    </div>
-                </div>
 
-                {/* Detailed Breakdown */}
-                <div className="space-y-6">
-                    <section>
-                        <div className="flex items-center gap-2 mb-4 ml-2">
-                            <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Schedule Mapping</h3>
-                        </div>
-                        
-                        {hasStandardShifting ? (
-                            <div className="bg-white rounded-2xl p-6 border border-slate-50 text-center shadow-sm">
-                                <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <FiCheckCircle className="w-8 h-8 text-indigo-500" />
+                    {/* Primary Configuration Card */}
+                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 relative overflow-hidden group border border-white/10">
+                        <div className="absolute top-0 right-0 p-8 text-8xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700 pointer-events-none">🗓️</div>
+                        <div className="relative z-10">
+                            <p className="text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center">Core Operational Model</p>
+                            <div className="flex items-center justify-around py-4 border-y border-white/10 mt-4">
+                                <div className="text-center">
+                                    <p className="text-2xl font-black leading-none">{hasStandardShifting ? "Standard" : "Custom"}</p>
+                                    <p className="text-[9px] font-bold text-indigo-400 uppercase mt-2 tracking-widest">Base Setup</p>
                                 </div>
-                                <h4 className="font-black text-slate-800 text-lg mb-1">100% Homogeneous</h4>
-                                <p className="text-sm font-medium text-slate-500">All grades strictly track Single Shift and In-Person classes.</p>
+                                <div className="w-px h-12 bg-white/10" />
+                                <div className="text-center">
+                                    <p className="text-2xl font-black leading-none">{hasAdms ? "Active" : "None"}</p>
+                                    <p className="text-[9px] font-bold text-indigo-400 uppercase mt-2 tracking-widest">Emergency ADMs</p>
+                                </div>
+                            </div>
+                            
+                            {hasStandardShifting && (
+                                <div className="mt-6 flex items-center justify-center gap-3 bg-white/5 py-3 rounded-2xl border border-white/10">
+                                    <FiCheckCircle className="text-emerald-400" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-100">100% Homogeneous Single-Shift</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Schedule Mapping Details */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Grade-Level Mapping</h3>
+                        </div>
+
+                        {hasStandardShifting ? (
+                            <div className="bg-white rounded-[2rem] p-8 border border-slate-100 text-center shadow-sm">
+                                <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl">🏛️</div>
+                                <h4 className="text-xl font-black text-slate-800 mb-1">Standard Uniformity</h4>
+                                <p className="text-xs font-medium text-slate-500 leading-relaxed px-4">
+                                    All grade levels follow the <span className="text-indigo-600 font-bold">Single Shift</span> model with <span className="text-emerald-600 font-bold">In-Person Classes</span> as the primary delivery mode.
+                                </p>
                             </div>
                         ) : (
-                            <div className="grid gap-3">
+                            <div className="grid gap-4">
                                 {filteredGrades.map(g => (
-                                    <div key={g.key} className="bg-white rounded-2xl p-4 border border-slate-50 flex flex-col shadow-sm">
-                                        <span className="font-bold text-slate-700 text-lg mb-2 pl-1 border-l-4 border-indigo-400">{g.label}</span>
-                                        <div className="flex gap-2">
-                                            <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
-                                                <span className="font-bold text-slate-600 text-[10px] uppercase">{mapData[`shift_${g.key}`]}</span>
+                                    <div key={g.key} className="bg-white rounded-[2rem] p-5 border border-slate-100 shadow-sm flex flex-col group hover:border-indigo-200 transition-colors">
+                                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-50">
+                                            <span className="font-black text-slate-800 text-lg">{g.label}</span>
+                                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400">{g.key.toUpperCase().slice(0,3)}</div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col items-center gap-1">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Shifting</span>
+                                                <span className="font-black text-slate-700 text-[10px] uppercase text-center">{mapData[`shift_${g.key}`] || "Not Defined"}</span>
                                             </div>
-                                            <div className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
-                                                <span className="font-bold text-indigo-600 text-[10px] uppercase">{mapData[`mode_${g.key}`]}</span>
+                                            <div className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100 flex flex-col items-center gap-1">
+                                                <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Modality</span>
+                                                <span className="font-black text-indigo-600 text-[10px] uppercase text-center">{mapData[`mode_${g.key}`] || "Not Defined"}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -442,19 +450,36 @@ const Unit5ShiftingModality = () => {
                         )}
                     </section>
 
-                    {hasAdms && (
-                        <section>
-                            <div className="flex items-center gap-2 mb-4 ml-2">
-                                <div className="w-1 h-4 bg-rose-500 rounded-full" />
-                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Active ADMs</h3>
+                    {/* ADM Section */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 px-2">
+                            <div className="w-1.5 h-6 bg-rose-500 rounded-full" />
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Emergency ADM Status</h3>
+                        </div>
+
+                        {!hasAdms ? (
+                            <div className="bg-white rounded-[2rem] p-6 border border-slate-50 shadow-sm flex items-center gap-4">
+                                <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500 text-2xl">🛡️</div>
+                                <div>
+                                    <h4 className="font-black text-slate-800 text-sm">No Active ADMs</h4>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase">Emergency Modes Disabled</p>
+                                </div>
                             </div>
-                            <div className="bg-white rounded-2xl p-5 border border-slate-50 shadow-sm">
+                        ) : (
+                            <div className="bg-white rounded-[2rem] p-6 border border-rose-100 shadow-sm space-y-4">
+                                <div className="flex items-center gap-4 mb-2">
+                                    <div className="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center text-rose-500 text-2xl animate-pulse">🚨</div>
+                                    <div>
+                                        <h4 className="font-black text-slate-800 text-sm">Active Intervention</h4>
+                                        <p className="text-[9px] font-bold text-rose-400 uppercase">Alternative Modes in Use</p>
+                                    </div>
+                                </div>
                                 <div className="flex flex-wrap gap-2">
                                     {Object.entries(admData).map(([k, v]) => {
                                         if (!v) return null;
                                         const match = ADM_CARDS.find(c => c.id === k);
                                         return (
-                                            <div key={k} className="bg-rose-50 text-rose-700 font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-2">
+                                            <div key={k} className="bg-rose-50 text-rose-700 font-bold text-[10px] px-4 py-2 rounded-xl flex items-center gap-2 border border-rose-100">
                                                 {match?.icon && <span className="scale-75">{match.icon}</span>}
                                                 {match?.label}
                                             </div>
@@ -462,28 +487,28 @@ const Unit5ShiftingModality = () => {
                                     })}
                                 </div>
                             </div>
-                        </section>
-                    )}
-                </div>
+                        )}
+                    </section>
 
-                {/* Unlock Action */}
-                <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="mt-12"
-                >
-                    <button 
-                        onClick={() => { setIsReviewMode(false); setCurrentChapter(1); setIsVerified(false); }}
-                        className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <FiUnlock className="w-5 h-5 text-indigo-700" />
-                        </div>
-                        <span>Unlock to Edit Modality</span>
-                    </button>
-                </motion.div>
+                    {!propReadOnly && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="mt-12"
+                        >
+                            <button 
+                                onClick={() => { setIsReviewMode(false); setCurrentChapter(1); setIsVerified(false); }}
+                                className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                            >
+                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <FiUnlock className="w-5 h-5 text-indigo-700" />
+                                </div>
+                                <span>Unlock to Edit Modality</span>
+                            </button>
+                        </motion.div>
+                    )}
                 </div>
             </div>
         );
