@@ -673,9 +673,10 @@ const initFinanceDB = async () => {
     console.log("✅ DB Init: Finance Projects table verified.");
     console.log("   [initFinanceDB] Completed.");
 
-    // 2. DROP OBSOLETE TABLE
+    // 2. DROP OBSOLETE TABLES
     await pool.query(`DROP TABLE IF EXISTS lgu_forms CASCADE; `);
-    console.log("✅ DB Init: Dropped obsolete 'lgu_forms' table.");
+    await pool.query(`DROP TABLE IF EXISTS functional_divisions CASCADE; `);
+    console.log("✅ DB Init: Dropped obsolete 'lgu_forms' and 'functional_divisions' tables.");
 
     // 3. Create/Update LGU Finance Projects Table (lgu_projects)
     await pool.query(`
@@ -1052,7 +1053,7 @@ app.get('/api/reference/funding-years', async (req, res) => {
 
 app.get('/api/reference/functional-divisions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT governance_level, functional_division FROM functional_divisions ORDER BY functional_division ASC');
+    const result = await pool.query('SELECT governance_level, functional_division FROM ph_offices ORDER BY functional_division ASC');
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Error fetching functional divisions:', err);

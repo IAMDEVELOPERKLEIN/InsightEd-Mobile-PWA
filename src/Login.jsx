@@ -611,6 +611,18 @@ const Login = () => {
                             </svg>
                             <span>Help Desk Chat</span>
                         </button>
+
+                        <button
+                            type="button"
+                            onClick={() => navigate('/guide/school-head')}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white text-[11px] font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95 shadow-blue-900/10"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.168.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                            </svg>
+                            <span>Quick Guide</span>
+                        </button>
+
                     </div>
 
                     {/* FOOTER NOTE */}

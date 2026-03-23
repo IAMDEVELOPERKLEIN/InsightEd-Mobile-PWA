@@ -98,6 +98,8 @@ import ESF7Draft from './forms/ESF7Draft';
 import NSPPDraft from './forms/NSPPDraft';
 import ESF7Review from './modules/ESF7Review';
 import LaunchPad from './components/LaunchPad';
+import SchoolHeadQuickStart from './guides/SchoolHeadQuickStart';
+
 
 
 
@@ -177,6 +179,8 @@ const AnimatedRoutes = () => {
       <Route path="/" element={<LaunchPad />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/guide/school-head" element={<SchoolHeadQuickStart />} />
+
 
 
         {/* Dashboards */}
