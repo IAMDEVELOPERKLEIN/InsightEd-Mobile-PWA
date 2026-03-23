@@ -94,8 +94,148 @@ const EFDMotherMoa = () => {
     const [driveLinkValidating, setDriveLinkValidating] = useState(false);
     const [driveLinkError, setDriveLinkError] = useState('');
     
+    // Supplemental MOA state
+    const [isSupplementalModalOpen, setIsSupplementalModalOpen] = useState(false);
+    const [selectedMotherMoa, setSelectedMotherMoa] = useState(null);
+    const [supplementalLink, setSupplementalLink] = useState('');
+    const [isUploadingSupplemental, setIsUploadingSupplemental] = useState(false);
+    const [supplementals, setSupplementals] = useState([]);
+    const [availableProjects, setAvailableProjects] = useState([]);
+    const [selectedIpcs, setSelectedIpcs] = useState([]);
+    const [projectSearch, setProjectSearch] = useState('');
+    
     // Preview state
     const [previewMoa, setPreviewMoa] = useState(null);
+
+    // Utilities
+    const validateDriveLinkAccess = async (url) => {
+        try {
+            const res = await fetch('/api/validate-drive-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            if (res.ok) return { valid: true };
+            const err = await res.json();
+            return { valid: false, error: err.error || "Failed to validate link access" };
+        } catch (e) {
+            return { valid: false, error: "Failed to validate link access" };
+        }
+    };
+
+    const validateGDriveLink = (link) => {
+        if (!link) return { valid: false, error: "Please provide a Google Drive link." };
+        if (link.includes('/folders/') || link.includes('/drive/u/0/folders/')) {
+            return { valid: false, error: "Please upload the link of the specific file in Google Drive, not the folder link." };
+        }
+        const isGDrive = /drive\.google\.com/.test(link) || /^[a-zA-Z0-9-_]{20,}$/.test(link);
+        if (!isGDrive) return { valid: false, error: "Please provide a valid Google Drive link." };
+        return { valid: true, error: "" };
+    };
+
+    const getPreviewUrl = (url) => {
+        if (!url) return '';
+        if (/^[a-zA-Z0-9-_]{20,}$/.test(url)) return `https://drive.google.com/file/d/${url}/preview`;
+        if (url.includes('drive.google.com')) {
+            if (url.includes('/file/d/')) {
+                const fileId = url.split('/file/d/')[1]?.split('/')[0];
+                return `https://drive.google.com/file/d/${fileId}/preview`;
+            }
+            return url.replace(/\/view(\?.*)?$/, '/preview');
+        }
+        return url;
+    };
+
+    const fetchSupplementals = async (motherMoaId) => {
+        try {
+            const res = await fetch(`/api/engineer-supplemental-moas/${motherMoaId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setSupplementals(data || []);
+            }
+        } catch (err) {
+            console.error("Fetch Supplementals Error:", err);
+        }
+    };
+
+    const fetchProjectsForMoa = async (motherMoaId) => {
+        try {
+            const res = await fetch(`/api/projects-for-moa/${motherMoaId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setAvailableProjects(data || []);
+            }
+        } catch (err) {
+            console.error("Fetch Projects for MOA Error:", err);
+        }
+    };
+
+    // Fetch supplementals when previewing
+    useEffect(() => {
+        if (previewMoa) {
+            fetchSupplementals(previewMoa.mother_moa_id);
+        } else {
+            setSupplementals([]);
+        }
+    }, [previewMoa]);
+
+    // Fetch available projects when supplemental modal opens
+    useEffect(() => {
+        if (isSupplementalModalOpen && selectedMotherMoa) {
+            fetchProjectsForMoa(selectedMotherMoa.mother_moa_id);
+        } else {
+            setAvailableProjects([]);
+            setSelectedIpcs([]);
+            setProjectSearch('');
+        }
+    }, [isSupplementalModalOpen, selectedMotherMoa]);
+
+    const handleUploadSupplemental = async () => {
+        if (!selectedMotherMoa || !supplementalLink) {
+            alert("Please provide a GDrive link.");
+            return;
+        }
+
+        const validation = validateGDriveLink(supplementalLink);
+        if (!validation.valid) {
+            alert(validation.error);
+            return;
+        }
+
+        setIsUploadingSupplemental(true);
+        const accessCheck = await validateDriveLinkAccess(supplementalLink);
+        if (!accessCheck.valid) {
+            alert("❌ " + accessCheck.error);
+            setIsUploadingSupplemental(false);
+            return;
+        }
+        try {
+            const res = await fetch('/api/upload-engineer-supplemental-moa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mother_moa_id: selectedMotherMoa.mother_moa_id,
+                    moa_pdf: supplementalLink,
+                    ipc_ids: selectedIpcs,
+                    uid: user.uid
+                })
+            });
+
+            if (res.ok) {
+                alert("Successfully uploaded Supplemental MOA Link!");
+                setIsSupplementalModalOpen(false);
+                setSupplementalLink('');
+                setSelectedMotherMoa(null);
+            } else {
+                const err = await res.json();
+                throw new Error(err.error || "Upload failed");
+            }
+        } catch (err) {
+            alert("Error: " + err.message);
+        } finally {
+            setIsUploadingSupplemental(false);
+        }
+    };
 
     const [isUploading, setIsUploading] = useState(false);
     const [moas, setMoas] = useState([]);
@@ -150,37 +290,6 @@ const EFDMotherMoa = () => {
         return [...new Set(filtered.map(l => l.municipality || l.city))].filter(Boolean).sort();
     }, [province, locations]);
 
-    const validateGDriveLink = (link) => {
-        if (!link) return { valid: false, error: "Please provide a Google Drive link." };
-        
-        // Folder check
-        if (link.includes('/folders/') || link.includes('/drive/u/0/folders/')) {
-            return { valid: false, error: "Please upload the link of the specific file in Google Drive, not the folder link." };
-        }
-
-        const isGDrive = /drive\.google\.com/.test(link) || /^[a-zA-Z0-9-_]{20,}$/.test(link);
-        if (!isGDrive) return { valid: false, error: "Please provide a valid Google Drive link." };
-
-        return { valid: true, error: "" };
-    };
-
-    const getPreviewUrl = (url) => {
-        if (!url) return '';
-        // If it's a file ID
-        if (/^[a-zA-Z0-9-_]{20,}$/.test(url)) {
-            return `https://drive.google.com/file/d/${url}/preview`;
-        }
-        // If it's a full link, try to convert /view to /preview
-        if (url.includes('drive.google.com')) {
-            if (url.includes('/file/d/')) {
-                const fileId = url.split('/file/d/')[1]?.split('/')[0];
-                return `https://drive.google.com/file/d/${fileId}/preview`;
-            }
-            return url.replace(/\/view(\?.*)?$/, '/preview');
-        }
-        return url;
-    };
-
     const handleUpload = async () => {
         if (!lguType || !region || !province || !moaLink) {
             alert("Please complete the required fields (LGU Type, Region, Province and GDrive Link).");
@@ -204,6 +313,14 @@ const EFDMotherMoa = () => {
         }
 
         setIsUploading(true);
+        // Link Access Validation
+        const accessCheck = await validateDriveLinkAccess(moaLink);
+        if (!accessCheck.valid) {
+            alert("❌ " + accessCheck.error);
+            setIsUploading(false);
+            return;
+        }
+
         try {
             const res = await fetch('/api/upload-engineer-mother-moa', {
                 method: 'POST',
@@ -494,8 +611,19 @@ const EFDMotherMoa = () => {
                                                         {new Date(moa.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                                     </span>
                                                 </td>
-                                                <td className="px-8 py-5">
-                                                    <div className="flex items-center justify-center gap-2">
+                                                <td className="px-8 py-5 text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button 
+                                                            onClick={() => {
+                                                                setSelectedMotherMoa(moa);
+                                                                setIsSupplementalModalOpen(true);
+                                                            }}
+                                                            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm font-bold text-xs group/btn"
+                                                            title="Add Supplemental MOA"
+                                                        >
+                                                            <FiPlus size={14} className="group-hover/btn:scale-110 transition-transform" />
+                                                            Add Supplemental
+                                                        </button>
                                                         <button 
                                                             onClick={() => setPreviewMoa(moa)}
                                                             className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm font-bold text-xs group/btn"
@@ -580,15 +708,86 @@ const EFDMotherMoa = () => {
                                 </div>
                             </div>
 
-                            {/* Modal Content (Iframe) */}
-                            <div className="flex-1 bg-slate-50 relative">
-                                <iframe 
-                                    src={getPreviewUrl(previewMoa.moa_pdf)}
-                                    className="w-full h-full border-0"
-                                    allow="autoplay"
-                                    title="GDrive Preview"
-                                />
+                            {/* Modal Content */}
+                            <div className="flex-1 bg-slate-50 relative flex flex-col lg:flex-row overflow-hidden">
+                                {/* Iframe Preview */}
+                                <div className="flex-1 h-full">
+                                    <iframe 
+                                        src={getPreviewUrl(previewMoa.moa_pdf)}
+                                        className="w-full h-full border-0"
+                                        allow="autoplay"
+                                        title="GDrive Preview"
+                                    />
+                                </div>
+
+                                {/* Supplemental MOAs Sidebar */}
+                                {supplementals.length > 0 && (
+                                    <div className="lg:w-80 w-full bg-white border-l border-slate-100 overflow-y-auto p-6 hidden lg:block">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Supplemental Documents</h4>
+                                        <div className="space-y-3">
+                                            {supplementals.map((sup, idx) => (
+                                                <div key={sup.supplamental_moa_id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-emerald-200 transition-all group">
+                                                    <div className="flex items-center gap-3 mb-2">
+                                                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                                            <FiFileText size={16} />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <p className="text-[11px] font-bold text-slate-700">Supplemental #{idx + 1}</p>
+                                                            <p className="text-[9px] text-slate-400">{new Date(sup.created_at).toLocaleDateString()}</p>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Assigned IPCs */}
+                                                    {sup.ipc_ids && sup.ipc_ids.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mb-3">
+                                                            {sup.ipc_ids.map((ipc, i) => (
+                                                                <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[8px] font-black uppercase tracking-tighter border border-blue-100">
+                                                                    {ipc}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    <a 
+                                                        href={sup.moa_pdf}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="w-full flex items-center justify-center gap-2 py-2 bg-white text-emerald-600 border border-emerald-100 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                                    >
+                                                        <FiEye size={12} />
+                                                        View File
+                                                    </a>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Mobile Supplementals Section */}
+                            {supplementals.length > 0 && (
+                                <div className="lg:hidden p-4 bg-slate-50 border-t border-slate-100">
+                                    <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Supplemental Documents Available ({supplementals.length})</h4>
+                                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                                        {supplementals.map((sup, idx) => (
+                                            <a 
+                                                key={idx}
+                                                href={sup.moa_pdf}
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="shrink-0 flex items-center gap-2 px-3 py-2 bg-white border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 whitespace-nowrap"
+                                            >
+                                                <FiFileText size={12} className="text-emerald-500" />
+                                                <div className="flex flex-col items-start leading-none">
+                                                    <span>Sup #{idx + 1}</span>
+                                                    {sup.ipc_ids && sup.ipc_ids.length > 0 && (
+                                                        <span className="text-[7px] text-blue-500 font-black uppercase mt-0.5">{sup.ipc_ids.length} IPCs</span>
+                                                    )}
+                                                </div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Modal Footer */}
                             <div className="px-8 py-4 bg-white border-t border-slate-100 flex items-center justify-between">
@@ -602,6 +801,149 @@ const EFDMotherMoa = () => {
                         </div>
                     </div>
                 )}
+
+                {/* Supplemental Upload Modal */}
+                {isSupplementalModalOpen && selectedMotherMoa && (
+                    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                            <div className="p-8">
+                                <div className="flex items-center justify-between mb-8">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm">
+                                            <FiPlus size={24} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-black text-slate-800 tracking-tight">Add Supplemental</h3>
+                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-0.5">{selectedMotherMoa.lgu_name} Mother MOA</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            setIsSupplementalModalOpen(false);
+                                            setSupplementalLink('');
+                                            setSelectedMotherMoa(null);
+                                        }}
+                                        className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors"
+                                    >
+                                        <FiX size={20} />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">
+                                            Supplemental GDrive Link (PDF)
+                                        </label>
+                                        <div className={`w-full flex items-center px-4 py-3 bg-slate-50 border-2 rounded-2xl transition-all ${supplementalLink ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-100 focus-within:border-emerald-300 focus-within:bg-white'}`}>
+                                            <FiUpload className={`${supplementalLink ? 'text-emerald-500' : 'text-slate-400'} shrink-0`} size={18} />
+                                            <input 
+                                                type="text"
+                                                value={supplementalLink}
+                                                onChange={(e) => setSupplementalLink(e.target.value)}
+                                                placeholder="Paste shareable GDrive link here..."
+                                                className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-semibold text-slate-700 placeholder:text-slate-300 ml-3"
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <p className="mt-2 text-[10px] text-slate-400 font-medium ml-1">
+                                            Must be a <span className="text-emerald-600 font-bold">specific file link</span>, not a folder.
+                                        </p>
+                                    </div>
+                                    
+                                    {/* Project Assignment (IPC) */}
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">
+                                            Assign to Projects (IPC)
+                                        </label>
+                                        <div className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col gap-3">
+                                            {/* Project Search */}
+                                            <div className="relative">
+                                                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                                <input 
+                                                    type="text"
+                                                    placeholder="Search projects..."
+                                                    value={projectSearch}
+                                                    onChange={(e) => setProjectSearch(e.target.value)}
+                                                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[12px] font-semibold text-slate-700 placeholder:text-slate-300 focus:ring-2 focus:ring-emerald-100 transition-all"
+                                                />
+                                            </div>
+
+                                            <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2">
+                                                {availableProjects.filter(p => 
+                                                    p.project_name?.toLowerCase().includes(projectSearch.toLowerCase()) || 
+                                                    p.ipc?.toLowerCase().includes(projectSearch.toLowerCase())
+                                                ).length > 0 ? (
+                                                    availableProjects
+                                                        .filter(p => 
+                                                            p.project_name?.toLowerCase().includes(projectSearch.toLowerCase()) || 
+                                                            p.ipc?.toLowerCase().includes(projectSearch.toLowerCase())
+                                                        )
+                                                        .map((proj) => (
+                                                            <label key={proj.project_id} className="flex items-center gap-3 p-3 bg-white border border-slate-100 rounded-xl cursor-pointer hover:border-emerald-200 hover:shadow-sm transition-all group">
+                                                                <input 
+                                                                    type="checkbox"
+                                                                    checked={selectedIpcs.includes(proj.ipc)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            setSelectedIpcs([...selectedIpcs, proj.ipc]);
+                                                                        } else {
+                                                                            setSelectedIpcs(selectedIpcs.filter(id => id !== proj.ipc));
+                                                                        }
+                                                                    }}
+                                                                    className="w-5 h-5 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500 transition-all"
+                                                                />
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className="text-[13px] font-black text-slate-800 leading-tight group-hover:text-emerald-700 transition-colors">
+                                                                        {proj.project_name}
+                                                                    </span>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[9px] font-black uppercase tracking-tight border border-blue-100">
+                                                                            {proj.ipc}
+                                                                        </span>
+                                                                        {proj.school_name && (
+                                                                            <span className="text-[9px] text-slate-400 font-bold truncate">
+                                                                                {proj.school_name}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </label>
+                                                        ))
+                                                ) : (
+                                                    <div className="py-4 text-center">
+                                                        <p className="text-[10px] text-slate-400 font-medium whitespace-normal">No projects found matching your search.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className="mt-2 text-[9px] text-slate-400 font-medium ml-1">
+                                            Selected: <span className="text-emerald-600 font-bold">{selectedIpcs.length} Projects</span>
+                                        </p>
+                                    </div>
+
+                                    <button
+                                        onClick={handleUploadSupplemental}
+                                        disabled={isUploadingSupplemental || !supplementalLink}
+                                        className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-[13px] uppercase tracking-wider shadow-lg transition-all ${isUploadingSupplemental || !supplementalLink ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:-translate-y-1 active:scale-95 shadow-emerald-900/20'}`}
+                                    >
+                                        {isUploadingSupplemental ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                                                Syncing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FiUpload size={18} />
+                                                Submit Supplemental
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
             </div>
         </PageTransition>
     );

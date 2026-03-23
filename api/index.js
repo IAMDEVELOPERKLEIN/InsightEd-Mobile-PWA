@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import express from 'express';
+import { google } from 'googleapis';
 // Force restart to pick up .env changes - Robust Login Fix v1
 import pg from 'pg';
 import cors from 'cors';
@@ -87,6 +88,22 @@ try {
   }
 } catch (error) {
   console.error("❌ Failed to initialize Azure Blob Storage:", error.message);
+}
+
+// --- GOOGLE DRIVE CLIENT ---
+let drive;
+try {
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/drive.metadata.readonly'],
+    });
+    drive = google.drive({ version: 'v3', auth });
+    console.log("✅ Google Drive API Initialized");
+  }
+} catch (error) {
+  console.error("❌ Failed to initialize Google Drive API:", error.message);
 }
 
 // Destructure Pool from pg
@@ -397,6 +414,7 @@ const initDB = async () => {
             CONSTRAINT unique_project_docs_${dbLabel} UNIQUE(project_id)
           );
 
+
           CREATE TABLE IF NOT EXISTS engineer_mother_moa (
             mother_moa_id SERIAL PRIMARY KEY,
             region TEXT,
@@ -408,6 +426,21 @@ const initDB = async () => {
             uploaded_by TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
+
+          CREATE TABLE IF NOT EXISTS engineer_supplamental_moa (
+            supplamental_moa_id SERIAL PRIMARY KEY,
+            mother_moa_id INTEGER REFERENCES engineer_mother_moa(mother_moa_id) ON DELETE CASCADE,
+            moa_pdf TEXT,
+            ipc_ids JSONB DEFAULT '[]',
+            uploaded_by TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          -- Migration: Ensure all columns exist in engineer_supplamental_moa (Robust)
+          ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS mother_moa_id INTEGER;
+          ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS moa_pdf TEXT;
+          ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS ipc_ids JSONB DEFAULT '[]';
+          ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS uploaded_by TEXT;
 
           -- Migration: Ensure all columns exist in engineer_mother_moa (Robust)
           ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS region TEXT;
@@ -471,6 +504,8 @@ const initDB = async () => {
         await checkAndAddColumn('engineer_form', 'province', 'TEXT', targetPool);
         await checkAndAddColumn('engineer_form', 'city', 'TEXT', targetPool);
         await checkAndAddColumn('engineer_form', 'municipality', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'mother_moa_id', 'INTEGER', targetPool);
+        await checkAndAddColumn('engineer_form', 'supplamental_moa_id', 'INTEGER', targetPool);
 
         await targetPool.query(`
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
@@ -1685,6 +1720,89 @@ app.get('/api/masterlist/storey-breakdown', async (req, res) => {
   }
 });
 
+// GET: Masterlist Prototype Schools (Detailed list for drilldown modal)
+app.get('/api/masterlist/prototype-schools', async (req, res) => {
+  try {
+    const { sty, cl, region, division, municipality, legislative_district, version } = req.query;
+    
+    // Base selection with aliases for the frontend ProjectListModal
+    const base = `
+      SELECT
+        "school_id",
+        "school_name",
+        ("sty_count" || ' STOREY ' || "cl_count" || ' CL construction') AS "project_name",
+        "est_classroom_cost" AS "amount",
+        "est_classroom_shortage" AS "shortage",
+        "assigned_to" AS "masterlist_status",
+        "region",
+        "division",
+        "municipality",
+        "legislative_district"
+      FROM masterlist_26_30
+    `;
+    
+    // We manually build filters to handle case-insensitivity and version
+    let where = [];
+    let params = [];
+    let pIdx = 1;
+
+    if (region) { where.push(`UPPER(TRIM("region")) = UPPER(TRIM($${pIdx++}))`); params.push(region); }
+    if (division) { where.push(`UPPER(TRIM("division")) = UPPER(TRIM($${pIdx++}))`); params.push(division); }
+    if (municipality) { where.push(`UPPER(TRIM("municipality")) = UPPER(TRIM($${pIdx++}))`); params.push(municipality); }
+    if (legislative_district) { where.push(`UPPER(TRIM("legislative_district")) = UPPER(TRIM($${pIdx++}))`); params.push(legislative_district); }
+    if (version) { where.push(`"proposed_funding_year" = $${pIdx++}`); params.push(Number(version)); }
+    if (sty) { where.push(`"sty_count" = $${pIdx++}`); params.push(Number(sty)); }
+    if (cl) { where.push(`"cl_count" = $${pIdx++}`); params.push(Number(cl)); }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const finalQuery = `${base} ${whereClause} ORDER BY "school_name" ASC`;
+    
+    const result = await pool.query(finalQuery, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Masterlist Prototype Schools Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET: Storey breakdown for engineer_form (implementation data)
+app.get('/api/monitoring/engineer-storey-breakdown', async (req, res) => {
+  try {
+    const { region, division } = req.query;
+    let where = [];
+    let params = [];
+    let pIdx = 1;
+
+    if (region) { where.push(`UPPER(TRIM(region)) = UPPER(TRIM($${pIdx++}))`); params.push(region); }
+    if (division) { where.push(`UPPER(TRIM(division)) = UPPER(TRIM($${pIdx++}))`); params.push(division); }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+    const query = `
+      WITH LatestProjects AS (
+        SELECT DISTINCT ON (COALESCE(ipc, project_id::text)) 
+          number_of_storeys, number_of_classrooms, region, division
+        FROM engineer_form
+        ORDER BY COALESCE(ipc, project_id::text), created_at DESC
+      )
+      SELECT 
+        number_of_storeys as storey, 
+        number_of_classrooms as classrooms, 
+        COUNT(*) as count
+      FROM LatestProjects
+      ${whereClause}
+      ${whereClause ? 'AND' : 'WHERE'} number_of_storeys IS NOT NULL AND number_of_classrooms IS NOT NULL
+      GROUP BY number_of_storeys, number_of_classrooms
+      ORDER BY number_of_storeys, number_of_classrooms
+    `;
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Engineer Storey Breakdown Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get schools for a specific storey breakdown (prototype)
 app.get('/api/masterlist/prototype-schools', async (req, res) => {
   try {
@@ -1715,6 +1833,50 @@ app.get('/api/masterlist/prototype-schools', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Masterlist Prototype Schools Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get projects for a specific storey breakdown (prototype) from engineer_form
+app.get('/api/monitoring/engineer-prototype-projects', async (req, res) => {
+  try {
+    const { sty, cl, region, division } = req.query;
+    let params = [Number(sty), Number(cl)];
+    let whereClauses = [`e.sty_count = $1`, `e.cl_count = $2`];
+    let pIdx = 3;
+
+    if (region) { whereClauses.push(`e.region = $${pIdx++}`); params.push(region); }
+    if (division) { whereClauses.push(`e.division = $${pIdx++}`); params.push(division); }
+
+    const query = `
+      WITH LatestProjects AS (
+          SELECT DISTINCT ON (COALESCE(e.ipc, e.project_id::text)) 
+            e.project_id, e.school_name, e.project_name, e.school_id, e.division, e.region, 
+            e.status_of_construction_phase AS status, e.ipc, e.accomplishment_percentage,
+            e.approved_budget_for_contract, e.number_of_storeys, e.number_of_classrooms
+          FROM engineer_form e
+          ORDER BY COALESCE(e.ipc, e.project_id::text), e.project_id DESC
+      )
+      SELECT 
+        p.project_id AS id, 
+        p.school_id, 
+        p.school_name, 
+        p.project_name, 
+        p.approved_budget_for_contract AS amount,
+        p.status AS masterlist_status,
+        p.region, 
+        p.division,
+        p.accomplishment_percentage
+      FROM LatestProjects p
+      WHERE p.number_of_storeys = $1 AND p.number_of_classrooms = $2
+      ${region ? `AND p.region = $${pIdx++}` : ''}
+      ${division ? `AND p.division = $${pIdx++}` : ''}
+      ORDER BY p.school_name ASC
+    `;
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Engineer Prototype Projects Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2062,7 +2224,7 @@ app.post('/api/deped-infrariorities/import', async (req, res) => {
 // GET: Fetch DepEd Priorities 2026 Infrastructure details with optional filters
 app.get('/api/deped-infrariorities', async (req, res) => {
   try {
-    const { region, division, legislative_district, search, version, assigned_to } = req.query;
+    const { region, division, legislative_district, search, version, assigned_to, sty, cl } = req.query;
     const tableSubquery = await getInitiativesSubquery(version);
 
     let where = [];
@@ -2076,6 +2238,12 @@ app.get('/api/deped-infrariorities', async (req, res) => {
     }
     if (assigned_to) {
       where.push(`assigned_to = $${pIdx++}`); params.push(assigned_to);
+    }
+    if (sty) {
+      where.push(`number_of_storeys = $${pIdx++}`); params.push(Number(sty));
+    }
+    if (cl) {
+      where.push(`number_of_classrooms = $${pIdx++}`); params.push(Number(cl));
     }
     if (search) {
       where.push(`(school_name ILIKE $${pIdx} OR school_id ILIKE $${pIdx} OR project_name ILIKE $${pIdx})`);
@@ -2103,7 +2271,7 @@ app.get('/api/deped-infrariorities', async (req, res) => {
 // GET: Summary stats for DepEd Priorities 2026 Infrastructure
 app.get('/api/deped-infrariorities/summary', async (req, res) => {
   try {
-    const { region, division, legislative_district, version } = req.query;
+    const { region, division, legislative_district, version, sty, cl } = req.query;
     const tableSubquery = await getInitiativesSubquery(version);
 
     let where = [];
@@ -2114,6 +2282,12 @@ app.get('/api/deped-infrariorities/summary', async (req, res) => {
     if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
     if (legislative_district && legislative_district !== 'undefined') {
       where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
+    }
+    if (sty) {
+      where.push(`number_of_storeys = $${pIdx++}`); params.push(Number(sty));
+    }
+    if (cl) {
+      where.push(`number_of_classrooms = $${pIdx++}`); params.push(Number(cl));
     }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
@@ -3966,6 +4140,52 @@ app.get('/api/engineer-mother-moas', async (req, res) => {
   }
 });
 
+app.post('/api/validate-drive-link', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'URL is required' });
+
+  try {
+    // 1. Extract File ID
+    let fileId = '';
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match) fileId = match[1];
+    else {
+      const idMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
+      if (idMatch) fileId = idMatch[1];
+    }
+
+    if (!fileId) return res.status(400).json({ error: 'Invalid Google Drive link format. Make sure it is a specific file link.' });
+
+    if (!drive) return res.status(500).json({ error: 'Google Drive API not initialized' });
+
+    // 2. Check Accessibility
+    // We try to fetch file metadata. If it's "Anyone with link", the service account 
+    // (acting as "Anyone") should be able to at least "get" the file metadata.
+    const response = await drive.files.get({
+      fileId: fileId,
+      fields: 'id, name, mimeType'
+    });
+
+    if (response.data) {
+      // If we can see it, it's accessible.
+      res.json({ 
+        success: true, 
+        fileName: response.data.name,
+        mimeType: response.data.mimeType
+      });
+    } else {
+      res.status(403).json({ error: 'Permission Denied. The link must be set to "Anyone with link" in Google Drive settings.' });
+    }
+  } catch (error) {
+    console.error('❌ Drive Validation Error:', error.message);
+    if (error.code === 404) {
+      res.status(404).json({ error: 'File not found or link is private. Please set it to "Anyone with link".' });
+    } else {
+      res.status(500).json({ error: 'Failed to validate link. ' + error.message });
+    }
+  }
+});
+
 // POST /api/upload-engineer-mother-moa
 app.post('/api/upload-engineer-mother-moa', async (req, res) => {
   const { region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uid } = req.body;
@@ -3995,8 +4215,154 @@ app.post('/api/upload-engineer-mother-moa', async (req, res) => {
     `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Mother MOA for ${lgu_name} (${lgu_type})`, 'Mother MOA']);
 
     res.json({ success: true });
+
+    // Background update engineer_form projects for this LGU
+    (async () => {
+      try {
+        const motherMoaIdRes = await pool.query('SELECT mother_moa_id FROM engineer_mother_moa WHERE moa_pdf = $1 ORDER BY created_at DESC LIMIT 1', [moa_pdf]);
+        if (motherMoaIdRes.rows.length > 0) {
+          const mId = motherMoaIdRes.rows[0].mother_moa_id;
+          let updateQuery = `UPDATE engineer_form SET mother_moa_id = $1 WHERE region = $2 AND province = $3`;
+          let params = [mId, region, province];
+          
+          if (lgu_type !== 'PGO' && municipality_city) {
+            updateQuery += ` AND (city = $4 OR municipality = $4)`;
+            params.push(municipality_city);
+          }
+          await pool.query(updateQuery, params);
+          console.log(`✅ Linked existing projects in ${lgu_name} to Mother MOA ${mId}`);
+        }
+      } catch (bkErr) {
+        console.error("❌ Failed to link projects to Mother MOA:", bkErr.message);
+      }
+    })();
   } catch (err) {
     console.error("Upload Mother MOA Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/engineer-supplemental-moas/:mother_moa_id
+app.get('/api/engineer-supplemental-moas/:mother_moa_id', async (req, res) => {
+  const { mother_moa_id } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT s.*, u.first_name, u.last_name 
+      FROM engineer_supplamental_moa s
+      LEFT JOIN users u ON s.uploaded_by = u.uid
+      WHERE s.mother_moa_id = $1
+      ORDER BY s.created_at DESC
+    `, [mother_moa_id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Supplemental MOA Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET /api/projects-for-moa/:mother_moa_id
+app.get('/api/projects-for-moa/:mother_moa_id', async (req, res) => {
+  const { mother_moa_id } = req.params;
+  try {
+    // 1. Get Mother MOA LGU info
+    const motherRes = await pool.query(`
+      SELECT region, province, municipality_city, lgu_type 
+      FROM engineer_mother_moa 
+      WHERE mother_moa_id = $1
+    `, [mother_moa_id]);
+
+    if (motherRes.rows.length === 0) {
+      return res.status(404).json({ error: "Mother MOA not found" });
+    }
+
+    const { region, province, municipality_city, lgu_type } = motherRes.rows[0];
+
+    // 2. Query engineer_form based on LGU
+    let query = `
+      SELECT ipc, project_name, school_name, project_id 
+      FROM engineer_form 
+      WHERE region = $1 AND province = $2
+    `;
+    let params = [region, province];
+
+    if (lgu_type !== 'PGO' && municipality_city) {
+      query += ` AND (city = $3 OR municipality = $3)`;
+      params.push(municipality_city);
+    }
+
+    query += ` ORDER BY project_name ASC`;
+
+    const projectsRes = await pool.query(query, params);
+    res.json(projectsRes.rows);
+  } catch (err) {
+    console.error("Fetch Projects for MOA Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST /api/upload-engineer-supplemental-moa
+app.post('/api/upload-engineer-supplemental-moa', async (req, res) => {
+  const { mother_moa_id, moa_pdf, uid, ipc_ids } = req.body;
+  
+  if (!mother_moa_id || !moa_pdf || !uid) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  // Basic GDrive link validation (regex check) - matching existing mother moa logic
+  const isGDriveLink = /drive\.google\.com/.test(moa_pdf) || /^[a-zA-Z0-9-_]{20,}$/.test(moa_pdf);
+  
+  // Folder check - user requested specific link
+  const isFolder = moa_pdf.includes('/folders/') || moa_pdf.includes('/drive/u/0/folders/');
+  
+  if (!isGDriveLink) {
+    return res.status(400).json({ error: "Please provide a valid Google Drive link." });
+  }
+  
+  if (isFolder) {
+    return res.status(400).json({ error: "Please upload the link of the specific file in Google Drive, not the folder link." });
+  }
+
+  try {
+    // Check if mother MOA exists
+    const motherRes = await pool.query('SELECT lgu_name, lgu_type FROM engineer_mother_moa WHERE mother_moa_id = $1', [mother_moa_id]);
+    if (motherRes.rows.length === 0) {
+      return res.status(404).json({ error: "Mother MOA not found" });
+    }
+    const motherMoa = motherRes.rows[0];
+
+    await pool.query(`
+      INSERT INTO engineer_supplamental_moa (mother_moa_id, moa_pdf, uploaded_by, ipc_ids)
+      VALUES ($1, $2, $3, $4)
+    `, [mother_moa_id, moa_pdf, uid, JSON.stringify(ipc_ids || [])]);
+
+    // Activity logging
+    const uName = await getUserFullName(uid);
+    await pool.query(`
+      INSERT INTO activity_logs (user_uid, user_name, action_type, details, target_entity)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Supplemental MOA for Mother MOA ${mother_moa_id} (${motherMoa.lgu_name} - ${motherMoa.lgu_type})`, 'Supplemental MOA']);
+
+    res.json({ success: true });
+
+    // Update engineer_form for assigned IPCs
+    (async () => {
+      try {
+        const suppRes = await pool.query('SELECT supplamental_moa_id FROM engineer_supplamental_moa WHERE moa_pdf = $1 ORDER BY created_at DESC LIMIT 1', [moa_pdf]);
+        if (suppRes.rows.length > 0 && ipc_ids && ipc_ids.length > 0) {
+          const sId = suppRes.rows[0].supplamental_moa_id;
+          await pool.query(`
+            UPDATE engineer_form 
+            SET supplamental_moa_id = $1, mother_moa_id = $2 
+            WHERE ipc = ANY($3)
+          `, [sId, mother_moa_id, ipc_ids]);
+          console.log(`✅ Linked projects ${ipc_ids.join(', ')} to Supplemental MOA ${sId}`);
+        }
+      } catch (bkErr) {
+        console.error("❌ Failed to link projects to Supplemental MOA:", bkErr.message);
+      }
+    })();
+  } catch (err) {
+    console.error("Upload Supplemental MOA Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -7212,22 +7578,41 @@ app.post('/api/save-project', async (req, res) => {
     // --- MIGRATION: ADD PDF COLUMNS IF NOT EXIST ---
     // MOVED TO initDB() AT STARTUP TO ENSURE COLUMNS EXIST IMMEDATELY
 
-    // 1. Generate IPC (INF-YYYY-XXXXX)
+    // 1. Generate IPC (INF-YYYY-XXXXX or INF-IMPORT-YYYY-XXXXX)
     const year = new Date().getFullYear();
-    const ipcResult = await client.query(
-      "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
-      [`INF-${year}-%`]
-    );
+    let newIpc;
 
-    let nextSeq = 1;
-    if (ipcResult.rows.length > 0) {
-      const lastIpc = ipcResult.rows[0].ipc;
-      const parts = lastIpc.split('-');
-      if (parts.length === 3 && !isNaN(parts[2])) {
-        nextSeq = parseInt(parts[2]) + 1;
+    if (data.isImported) {
+      const ipcResult = await client.query(
+        "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+        [`INF-IMPORT-${year}-%`]
+      );
+
+      let nextSeq = 1;
+      if (ipcResult.rows.length > 0) {
+        const lastIpc = ipcResult.rows[0].ipc;
+        const parts = lastIpc.split('-');
+        if (parts.length === 4 && !isNaN(parts[3])) {
+          nextSeq = parseInt(parts[3]) + 1;
+        }
       }
+      newIpc = `INF-IMPORT-${year}-${String(nextSeq).padStart(5, '0')}`;
+    } else {
+      const ipcResult = await client.query(
+        "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+        [`INF-${year}-%`]
+      );
+
+      let nextSeq = 1;
+      if (ipcResult.rows.length > 0) {
+        const lastIpc = ipcResult.rows[0].ipc;
+        const parts = lastIpc.split('-');
+        if (parts.length === 3 && !isNaN(parts[2])) {
+          nextSeq = parseInt(parts[2]) + 1;
+        }
+      }
+      newIpc = `INF-${year}-${String(nextSeq).padStart(5, '0')}`;
     }
-    const newIpc = `INF-${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 2. Prepare Project Data
     const engineerName = await getUserFullName(data.uid);
@@ -8133,7 +8518,7 @@ app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => 
 app.get('/api/projects', async (req, res) => {
   try {
     // We catch the engineer_id sent from EngineerDashboard.jsx
-    const { status, region, division, search, engineer_id, is_donated, implementing_agency } = req.query;
+    const { status, region, division, search, engineer_id, is_donated, implementing_agency, sty, cl } = req.query;
     let queryParams = [];
     let whereClauses = [];
 
@@ -8166,10 +8551,10 @@ app.get('/api/projects', async (req, res) => {
           ORDER BY COALESCE(e.ipc, e.project_id::text), e.project_id DESC
       )
       SELECT
-        p.project_id AS "id", p.school_name AS "schoolName", p.project_name AS "projectName",
-        p.school_id AS "schoolId", p.division, p.region, p.status AS "status", p.ipc, p.engineer_name AS "engineerName",
-        p.accomplishment_percentage AS "accomplishmentPercentage",
-        p.approved_budget_for_contract AS "projectAllocation", 
+        p.project_id AS "id", p.school_name AS "schoolName", p.school_name AS "school_name", p.project_name AS "projectName", p.project_name AS "project_name",
+        p.school_id AS "schoolId", p.school_id AS "school_id", p.division, p.region, p.status AS "status", p.ipc, p.engineer_name AS "engineerName",
+        p.accomplishment_percentage AS "accomplishmentPercentage", p.accomplishment_percentage AS "accomplishment_percentage",
+        p.approved_budget_for_contract AS "projectAllocation", p.approved_budget_for_contract AS "amount", 
         p.contract_amount AS "contractAmount", p.contract_amount AS "contract_amount",
         p.batch_of_funds AS "batchOfFunds",
         p.contractor_name AS "contractorName", p.other_remarks AS "otherRemarks",
@@ -8250,6 +8635,15 @@ app.get('/api/projects', async (req, res) => {
     if (search) {
       queryParams.push(`%${search}%`);
       whereClauses.push(`(p.school_name ILIKE $${queryParams.length} OR p.project_name ILIKE $${queryParams.length})`);
+    }
+
+    if (sty) {
+      queryParams.push(Number(sty));
+      whereClauses.push(`p.number_of_storeys = $${queryParams.length}`);
+    }
+    if (cl) {
+      queryParams.push(Number(cl));
+      whereClauses.push(`p.number_of_classrooms = $${queryParams.length}`);
     }
 
     if (whereClauses.length > 0) {

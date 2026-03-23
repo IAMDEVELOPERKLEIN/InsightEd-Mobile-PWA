@@ -209,7 +209,8 @@ const NewProjects = () => {
 
         // --- HRODI FIELDS ---
         implementingAgency: '',
-        implementingAgencySpecific: ''
+        implementingAgencySpecific: '',
+        isImported: false
     });
 
     // --- NEW: GEOLOCATION LOGIC ---
@@ -292,7 +293,8 @@ const NewProjects = () => {
             projectCategory: proj.projectCategory || '',
             scopeOfWork: proj.scopeOfWork || '',
             latitude: proj.latitude || '',
-            longitude: proj.longitude || ''
+            longitude: proj.longitude || '',
+            isImported: true
         }));
         setIsImportModalOpen(false);
         alert(`✅ Imported data for: ${proj.projectName}`);
