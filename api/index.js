@@ -131,6 +131,7 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // --- PDF COMPRESSION COMPATIBILITY ---
 const execAsync = util.promisify(exec);
@@ -138,8 +139,15 @@ const execAsync = util.promisify(exec);
 // --- SCHOOL DOCS STORAGE ---
 const schoolDocsStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = 'uploads/school_docs/';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    // Use absolute path for production consistency
+    const dir = path.join(__dirname, '..', 'uploads/school_docs/');
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (e) {
+        console.error("Critical: Failed to create upload directory:", e.message);
+      }
+    }
     cb(null, dir);
   },
   filename: (req, file, cb) => {
@@ -189,17 +197,21 @@ app.post('/api/schools/:iern/ownership-docs', schoolDocsUpload.single('file'), a
       data: { id: dbRes.rows[0].id, filePath: relativePath }
     });
 
-    // 3. Background Compression (75 DPI)
+    // 3. Background Compression (96 DPI)
     const inputPath = path.resolve(req.file.path);
     const outputPath = path.resolve(req.file.path.replace('.pdf', '_opt.pdf'));
     const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
     
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const cmd = `"${pythonCmd}" "${scriptPath}" "${inputPath}" "${outputPath}" 75`;
+    const cmd = `"${pythonCmd}" "${scriptPath}" "${inputPath}" "${outputPath}" 96`;
 
     exec(cmd, async (err, stdout, stderr) => {
         if (err) {
-            console.error(`❌ Background Compression Failed for ${iern}:`, stderr || err.message);
+            console.error(`❌ Background Compression Failed for ${iern}:`);
+            console.error(`Command: ${cmd}`);
+            console.error(`Error: ${err.message}`);
+            console.error(`Stderr: ${stderr}`);
+            console.error(`Stdout: ${stdout}`);
             return;
         }
         
@@ -207,7 +219,7 @@ app.post('/api/schools/:iern/ownership-docs', schoolDocsUpload.single('file'), a
             // Replace original with optimized one
             if (fs.existsSync(outputPath)) {
                 fs.renameSync(outputPath, inputPath);
-                console.log(`✅ Background Compression Success for ${iern} (75 DPI)`);
+                console.log(`✅ Background Compression Success for ${iern} (96 DPI)`);
                 await pool.query('UPDATE school_ownership_docs SET status = $1 WHERE id = $2', ['optimized', dbRes.rows[0].id]);
             }
         } catch (renameErr) {
@@ -218,6 +230,44 @@ app.post('/api/schools/:iern/ownership-docs', schoolDocsUpload.single('file'), a
   } catch (err) {
     console.error('Database Error during upload:', err);
     res.status(500).json({ error: 'Failed to record document metadata' });
+  }
+});
+
+// --- DELETE ROUTE: SCHOOL OWNERSHIP DOCUMENTS ---
+app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
+  const { iern, id } = req.params;
+  
+  try {
+    // 1. Get file path from DB
+    const dbRes = await pool.query(
+      'SELECT file_path FROM school_ownership_docs WHERE id = $1 AND iern = $2',
+      [id, iern]
+    );
+
+    if (dbRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const relativePath = dbRes.rows[0].file_path;
+    const absolutePath = path.join(__dirname, '..', relativePath);
+
+    // 2. Delete file from disk using promises for robustness
+    try {
+      if (fs.existsSync(absolutePath)) {
+        await fs.promises.unlink(absolutePath);
+      }
+    } catch (unlinkErr) {
+      // Graceful error handling if file is missing or locked
+      console.warn(`⚠️ Warning: Physical file not found or could not be deleted at ${absolutePath}:`, unlinkErr.message);
+    }
+
+    // 3. Delete from database (only after physical file attempt)
+    await pool.query('DELETE FROM school_ownership_docs WHERE id = $1', [id]);
+
+    res.json({ success: true, message: 'Document deleted successfully' });
+  } catch (err) {
+    console.error('Delete Error:', err);
+    res.status(500).json({ error: 'Failed to delete document' });
   }
 });
 
@@ -829,6 +879,8 @@ const initDB = async () => {
     for (const col of unitCols) {
       await checkAndAddColumn('ph_schools', col, 'SMALLINT DEFAULT 0');
     }
+
+    await checkAndAddColumn('ph_teachers_list', 'designations', 'TEXT');
 
     console.log("✅ DB Init: All migrations completed successfully.");
 
@@ -14842,6 +14894,16 @@ app.get('/api/ph_schools/:schoolId', async (req, res) => {
       }
       // --- END FALLBACK ---
 
+      // --- OWNERSHIP DOCUMENT DETAILS ---
+      const docRes = await pool.query(
+        'SELECT id, file_path FROM school_ownership_docs WHERE iern = $1 ORDER BY created_at DESC LIMIT 1',
+        [row.iern || schoolId]
+      );
+      if (docRes.rows.length > 0) {
+        row.ownership_doc_id = docRes.rows[0].id;
+        row.local_file_path = docRes.rows[0].file_path;
+      }
+
       console.log(`[GET /api/ph_schools/${schoolId}] RETURNING unit5_completed: `, row.unit5_completed);
       res.json({ exists: true, data: row });
     } else {
@@ -15856,7 +15918,7 @@ app.put('/api/teachers/:teacherId', async (req, res) => {
     first_name, middle_name, last_name, position,
     specialization, sex, experience_bracket, funding_source, role_designation,
     monday_mins, tuesday_mins, wednesday_mins, thursday_mins, friday_mins,
-    workloads
+    workloads, designations
   } = req.body;
 
   const client = await pool.connect();
@@ -15869,16 +15931,16 @@ app.put('/api/teachers/:teacherId', async (req, res) => {
       SET 
         first_name = $1, middle_name = $2, last_name = $3, position = $4,
         specialization = $5, sex = $6, experience_bracket = $7, 
-        funding_source = $8, role_designation = $9,
-        monday_mins = $10, tuesday_mins = $11, wednesday_mins = $12,
-        thursday_mins = $13, friday_mins = $14,
+        funding_source = $8, role_designation = $9, designations = $10,
+        monday_mins = $11, tuesday_mins = $12, wednesday_mins = $13,
+        thursday_mins = $14, friday_mins = $15,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $15
+      WHERE id = $16
       RETURNING *
     `;
     const profileValues = [
       first_name, middle_name, last_name, position,
-      specialization, sex, experience_bracket, funding_source, role_designation,
+      specialization, sex, experience_bracket, funding_source, role_designation, designations,
       monday_mins || 0, tuesday_mins || 0, wednesday_mins || 0,
       thursday_mins || 0, friday_mins || 0,
       teacherId
@@ -16006,23 +16068,24 @@ app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
   const { schoolId } = req.params;
   const {
     first_name, last_name, position, sex,
-    specialization, experience_bracket, funding_source, role_designation
+    specialization, experience_bracket, funding_source, role_designation, designations
   } = req.body;
 
   try {
     const query = `
       INSERT INTO ph_teachers_list (
         school_id, first_name, last_name, position, sex, 
-        specialization, experience_bracket, funding_source, role_designation
+        specialization, experience_bracket, funding_source, role_designation, designations
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     const values = [
       schoolId, first_name, last_name, position || 'Teacher I', sex || '',
       specialization || '', experience_bracket || '',
       funding_source || 'DepEd Nationally Funded',
-      role_designation || 'Non-Advisory'
+      role_designation || 'Non-Advisory',
+      designations || ''
     ];
     const result = await pool.query(query, values);
     res.json({ success: true, data: result.rows[0] });
@@ -17520,6 +17583,27 @@ app.post('/api/esf7/approve', async (req, res) => {
   }
 });
 
+
+// --- FINAL GLOBAL ERROR HANDLER ---
+// Ensures all errors (including Multer limit errors) return JSON in production
+app.use((err, req, res, next) => {
+  console.error('SERVER_ERROR:', err.message || err);
+  
+  if (res.headersSent) return next(err);
+
+  // Handle specific Multer errors
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File size too large. Limit is 50MB.' });
+    }
+    return res.status(400).json({ error: `Upload Error: ${err.message}` });
+  }
+
+  res.status(err.status || 500).json({ 
+    error: err.message || 'Internal Server Error',
+    status: 'error'
+  });
+});
 
 // Start the server if this file is run directly
 const executedFile = process.argv[1] || '';

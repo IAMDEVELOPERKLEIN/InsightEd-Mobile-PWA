@@ -22,6 +22,14 @@ const GRADE_LEVELS = [
   "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "Multigrade"
 ];
 
+const DESIGNATION_OPTIONS = [
+  "School Coordinator",
+  "Trainer/Adviser",
+  "Chairmanship",
+  "Assistant School Head Designate",
+  "Department Head"
+];
+
 const MATATAG_SUBJECTS = {
   "Kindergarten": [
     { name: "Kindergarten Block", code: "K-BLOCK" }
@@ -141,6 +149,8 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [newTeacherFirst, setNewTeacherFirst] = useState("");
     const [newTeacherLast, setNewTeacherLast] = useState("");
     const [newTeacherPosition, setNewTeacherPosition] = useState("Teacher I");
+    const [newTeacherRole, setNewTeacherRole] = useState("Non-Advisory");
+    const [newTeacherDesignations, setNewTeacherDesignations] = useState([]);
 
     // Pagination & Filter State
     const [currentPage, setCurrentPage] = useState(1);
@@ -182,7 +192,10 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             const res = await fetch(`/api/ph_schools/unit6/${schoolId}`, { 
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ partial: !isFullyComplete })
+                body: JSON.stringify({ 
+                partial: !isFullyComplete,
+                total_teachers_registered: teachers.length
+            })
             });
             const json = await res.json();
             if (json.success) {
@@ -223,7 +236,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 // Clear Draft on Finalize
                 await clearUnitDraft(6, schoolId);
 
-                navigate(NEXT_UNIT_PATH);
+                navigate("/modular-dashboard");
             }
         } catch (err) { alert("Finalization failed."); }
         setIsFinalizing(false);
@@ -343,7 +356,8 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             sex: "Male",
             experience_bracket: "0-1",
             funding_source: "DepEd Nationally Funded",
-            role_designation: "Non-Advisory",
+            role_designation: newTeacherRole,
+            designations: newTeacherDesignations.join(","),
             monday_hrs: 0, monday_mins_remain: 0,
             tuesday_hrs: 0, tuesday_mins_remain: 0,
             wednesday_hrs: 0, wednesday_mins_remain: 0,
@@ -365,6 +379,8 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 setNewTeacherFirst("");
                 setNewTeacherLast("");
                 setNewTeacherPosition("Teacher I");
+                setNewTeacherRole("Non-Advisory");
+                setNewTeacherDesignations([]);
                 handleEdit(json.data); // Open edit modal for the newly added teacher
             }
         } catch (err) {
@@ -389,7 +405,8 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         setActiveTeacher({
             ...teacher,
             ...capacityFields,
-            workloads: teacher.workloads || []
+            workloads: teacher.workloads || [],
+            designationList: (teacher.designations || "").split(",").filter(Boolean)
         });
         setIsEditOpen(true);
     };
@@ -417,12 +434,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             const payload = {
                 ...activeTeacher,
                 ...dailyMins,
-                /*
-                workloads: activeTeacher.workloads.map(w => ({
-                    ...w,
-                    duration_minutes: (parseInt(w.hours) || 0) * 60 + (parseInt(w.minutes) || 0)
-                }))
-                */
+                designations: (activeTeacher.designationList || []).join(",")
             };
             
             const res = await fetch(`/api/teachers/${tid}`, {
@@ -668,7 +680,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                 </div>
                                 <div className="w-px h-12 bg-white/10" />
                                 <div className="text-center">
-                                    <p className="text-4xl font-black leading-none">{baselineTeachers}</p>
+                                    <p className="text-4xl font-black leading-none">{totalStaff}</p>
                                     <p className="text-[10px] font-bold text-blue-400 uppercase mt-2 tracking-widest">Baseline</p>
                                 </div>
                             </div>
@@ -849,7 +861,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                             <p className="text-xs font-bold text-slate-600 italic">Total Registered Teachers</p>
                         </div>
                     </div>
-                    <div className="text-2xl font-black text-indigo-600">{baselineTeachers}</div>
+                    <div className="text-2xl font-black text-indigo-600">{teachers.length}</div>
                 </div>
 
                 {loading ? (
@@ -994,6 +1006,50 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                         <option value="Others">Others</option>
                                     </select>
                                 </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className={labelStyle}>Advisorship</label>
+                                        <select 
+                                            value={newTeacherRole}
+                                            onChange={(e) => setNewTeacherRole(e.target.value)}
+                                            className={inputStyle}
+                                        >
+                                            <option value="Non-Advisory">Non-Advisory</option>
+                                            <option value="Advisory">Advisory</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className={labelStyle}>Sex</label>
+                                        <select className={inputStyle} defaultValue="Male">
+                                            <option value="Male">Male</option>
+                                            <option value="Female">Female</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className={labelStyle}>Designations</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {DESIGNATION_OPTIONS.map(opt => {
+                                            const isSelected = newTeacherDesignations.includes(opt);
+                                            return (
+                                                <button 
+                                                    key={opt}
+                                                    onClick={() => setNewTeacherDesignations(prev => 
+                                                        isSelected ? prev.filter(p => p !== opt) : [...prev, opt]
+                                                    )}
+                                                    className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border-2 ${
+                                                        isSelected 
+                                                            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100' 
+                                                            : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200'
+                                                    }`}
+                                                >
+                                                    {opt}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
 
                                 <button 
                                     onClick={handleManualAdd}
@@ -1076,13 +1132,36 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className={labelStyle}>Role Designation</label>
+                                                <label className={labelStyle}>Advisorship</label>
                                                 <select value={activeTeacher.role_designation || ""} onChange={(e) => setActiveTeacher(p => ({ ...p, role_designation: e.target.value }))} className={inputStyle}>
                                                     <option value="Non-Advisory">Non-Advisory</option>
                                                     <option value="Advisory">Advisory</option>
-                                                    <option value="SNED/Special">SNED/Special</option>
-                                                    <option value="Head/Coordinator">Head/Coordinator</option>
                                                 </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className={labelStyle}>Designations</label>
+                                            <div className="grid grid-cols-1 gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                                {DESIGNATION_OPTIONS.map(opt => {
+                                                    const isSelected = (activeTeacher.designationList || []).includes(opt);
+                                                    return (
+                                                        <label key={opt} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 cursor-pointer hover:bg-blue-50 transition-colors">
+                                                            <span className="text-xs font-bold text-slate-600 uppercase">{opt}</span>
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isSelected}
+                                                                onChange={() => {
+                                                                    const current = activeTeacher.designationList || [];
+                                                                    const next = isSelected 
+                                                                        ? current.filter(c => c !== opt)
+                                                                        : [...current, opt];
+                                                                    setActiveTeacher(p => ({ ...p, designationList: next }));
+                                                                }}
+                                                                className="w-5 h-5 rounded-lg border-2 border-slate-200 text-blue-500 focus:ring-blue-500"
+                                                            />
+                                                        </label>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                         <div>
@@ -1184,7 +1263,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                                 <div className="space-y-4">
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div className={`p-6 rounded-3xl border-2 transition-colors ${isOver ? 'bg-orange-50 border-orange-100' : 'bg-green-50 border-green-100'}`}>
-                                                            <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isOver ? 'text-orange-400' : 'text-green-400'}`}>Daily Teaching Load</div>
+                                                            <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isOver ? 'text-orange-400' : 'text-green-400'}`}>Average Teaching Load</div>
                                                             <div className={`text-2xl font-black ${isOver ? 'text-orange-600' : 'text-green-600'}`}>
                                                                 {Math.floor(dailyAverageMins / 60)}h {Math.floor(dailyAverageMins % 60)}m
                                                             </div>

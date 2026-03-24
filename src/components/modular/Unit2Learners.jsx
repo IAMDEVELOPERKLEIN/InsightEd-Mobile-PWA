@@ -191,23 +191,29 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         const text = storedOffering.toLowerCase();
                         let filteredIds = [];
 
-                        if (text.includes("integrated") || text.includes("k-12") || text.includes("k to 12") || text.includes("k-10") || text.includes("k to 10") || text.includes("comprehensive")) {
-                            filteredIds = ALL_GRADES.map(g => g.id);
+                        if (text === "purely elementary") {
+                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+                        } else if (text === "elementary school and junior high school (k-10)") {
+                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+                        } else if (text === "junior high and senior high") {
+                            filteredIds = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+                        } else if (text === "all offering (k to 12)") {
+                            filteredIds = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+                        } else if (text === "purely junior high school") {
+                            filteredIds = ['g7', 'g8', 'g9', 'g10'];
+                        } else if (text === "purely senior high school") {
+                            filteredIds = ['g11', 'g12'];
                         } else {
-                            if (text.includes("elementary") || text.includes("primary") || text.includes("grade")) {
+                            // Fallback for legacy data or partial matches
+                            if (text.includes("elementary") || text.includes("primary")) {
                                 filteredIds.push('kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
                             }
-                            if (text.includes("jhs") || text.includes("junior") || text.includes("secondary") || text.includes("high school")) {
+                            if (text.includes("jhs") || text.includes("junior") || text.includes("high school")) {
                                 filteredIds.push('g7', 'g8', 'g9', 'g10');
                             }
-                            if (text.includes("shs") || text.includes("senior") || text.includes("secondary")) {
+                            if (text.includes("shs") || text.includes("senior")) {
                                 filteredIds.push('g11', 'g12');
                             }
-                        }
-
-                        // Fallback safety
-                        if (filteredIds.length === 0 && text.trim().length > 0) {
-                            filteredIds = ALL_GRADES.map(g => g.id);
                         }
 
                         filteredIds = [...new Set(filteredIds)];
@@ -334,18 +340,18 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     const handleGenderChange = (field, val) => {
         const numVal = parseInt(val) || 0;
-        const clampedVal = Math.min(numVal, grandTotal);
-        const remainder = Math.max(0, grandTotal - clampedVal);
+        const cappedVal = Math.min(Math.max(0, numVal), grandTotal);
+        const otherVal = grandTotal - cappedVal;
 
         if (field === 'male') {
-            setGenderTotals({ 
-                male: clampedVal.toString(), 
-                female: remainder.toString() 
+            setGenderTotals({
+                male: val === "" ? "" : cappedVal.toString(),
+                female: val === "" ? "" : otherVal.toString()
             });
         } else {
-            setGenderTotals({ 
-                female: clampedVal.toString(), 
-                male: remainder.toString() 
+            setGenderTotals({
+                male: val === "" ? "" : otherVal.toString(),
+                female: val === "" ? "" : cappedVal.toString()
             });
         }
     };

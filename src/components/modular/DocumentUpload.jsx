@@ -1,18 +1,35 @@
 import React, { useState, useEffect } from "react";
-import { FiUploadCloud, FiFile, FiCheckCircle, FiLoader, FiAlertCircle, FiX } from "react-icons/fi";
+import { FiUploadCloud, FiFile, FiCheckCircle, FiLoader, FiAlertCircle, FiX, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 
-const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null }) => {
+const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null, initialDocId = null }) => {
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
-    const [status, setStatus] = useState("idle"); // idle, uploading, optimizing, success, error
+    const [status, setStatus] = useState(initialFile ? "success" : "idle"); // idle, uploading, optimizing, success, error
     const [progress, setProgress] = useState(0);
     const [errorMessage, setErrorMessage] = useState("");
     const [uploadedPath, setUploadedPath] = useState(initialFile);
+    const [documentId, setDocumentId] = useState(initialDocId);
+
+    // Sync initial props if they change (e.g. on mount/load)
+    useEffect(() => {
+        if (initialFile) {
+            setUploadedPath(initialFile);
+            setDocumentId(initialDocId);
+            setStatus("success");
+        }
+    }, [initialFile, initialDocId]);
 
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
         if (selectedFile && selectedFile.type === "application/pdf") {
+            const maxSize = 50 * 1024 * 1024; // 50MB
+            if (selectedFile.size > maxSize) {
+                setErrorMessage("File exceeds 50MB. Please choose a smaller PDF.");
+                setFile(null);
+                e.target.value = null;
+                return;
+            }
             setFile(selectedFile);
             setErrorMessage("");
             setStatus("idle");
@@ -39,18 +56,24 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null }) 
                 body: formData,
             });
 
-            const result = await response.json();
+            const text = await response.text();
+            let result;
+            try {
+                result = JSON.parse(text);
+            } catch (e) {
+                console.error("Non-JSON Response received:", text);
+                throw new Error(`Server Error (${response.status}): The server returned an invalid response. This often happens due to file size limits or proxy timeouts.`);
+            }
 
             if (!response.ok) {
                 throw new Error(result.error || "Upload failed");
             }
 
             setUploadedPath(result.data.filePath);
+            setDocumentId(result.data.id);
             setStatus("optimizing");
-            onUploadSuccess(result.data.filePath);
+            onUploadSuccess(result.data.filePath, result.data.id);
 
-            // Simulation of optimization status check (optional/mocked for now)
-            // In a real app, we might poll an endpoint to check if status === 'optimized'
             setTimeout(() => {
                 setStatus("success");
             }, 3000);
@@ -68,7 +91,38 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null }) 
         setFile(null);
         setStatus("idle");
         setUploadedPath(null);
+        setDocumentId(null);
         setErrorMessage("");
+        onUploadSuccess(null, null);
+    };
+
+    const handleDelete = async () => {
+        if (!documentId || !iern) {
+            clearFile();
+            onUploadSuccess(null);
+            return;
+        }
+
+        if (!window.confirm("Are you sure you want to permanently delete this document and its record?")) return;
+
+        setUploading(true);
+        setStatus("uploading"); // Reusing for consistency
+        try {
+            const response = await fetch(`/api/schools/${iern}/ownership-docs/${documentId}`, {
+                method: "DELETE",
+            });
+
+            if (!response.ok) throw new Error("Deletion failed");
+
+            clearFile();
+        } catch (err) {
+            console.error("Delete error:", err);
+            alert("Failed to delete document: " + err.message);
+            setStatus("error");
+            setErrorMessage(err.message);
+        } finally {
+            setUploading(false);
+        }
     };
 
     return (
@@ -147,16 +201,19 @@ const DocumentUpload = ({ iern, docType, onUploadSuccess, initialFile = null }) 
                                     {status === "optimizing" ? "Optimizing PDF..." : "Document Secured"}
                                 </p>
                                 <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-none mt-1">
-                                    {status === "optimizing" ? "Applying 75 DPI compression" : "Local server storage active"}
+                                    {status === "optimizing" ? "Applying 96 DPI compression" : "Local server storage active"}
                                 </p>
                             </div>
                             {status === "success" && (
-                                <button
-                                    onClick={clearFile}
-                                    className="ml-auto p-2 text-emerald-300 hover:text-emerald-600 transition-colors"
-                                >
-                                    <FiEdit2 className="w-5 h-5" />
-                                </button>
+                                <div className="ml-auto flex gap-2">
+                                    <button
+                                        onClick={handleDelete}
+                                        className="p-2 text-emerald-300 hover:text-rose-500 transition-all active:scale-90"
+                                        title="Delete Document"
+                                    >
+                                        <FiTrash2 className="w-5 h-5" />
+                                    </button>
+                                </div>
                             )}
                         </div>
 
