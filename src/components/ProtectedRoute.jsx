@@ -26,6 +26,10 @@ const ProtectedRoute = ({ children, allowedRoles, allowedGroups }) => {
 
     // Group-based check
     if (allowedGroups && !allowedGroups.includes(userGroup)) {
+        // Super User override for group checks (they should access all domain dashboards)
+        if (isSuperUser) {
+            return children;
+        }
         return <Navigate to="/" replace />;
     }
 

@@ -11039,14 +11039,19 @@ app.get('/api/monitoring/stats', async (req, res) => {
 
 // --- HROD DASHBOARD MONITORING ENDPOINT ---
 app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
-  const { region, division, district, group_by = 'region' } = req.query;
+  const { region, division, district, municipality, group_by = 'region' } = req.query;
   try {
     let selectGroup = '';
+    let extraSelect = '';
     switch(group_by.toLowerCase()) {
       case 'division': selectGroup = 'TRIM(s.division)'; break;
       case 'district': selectGroup = 'TRIM(s.district)'; break;
       case 'municipality': selectGroup = 'TRIM(s.municipality)'; break;
       case 'region': selectGroup = 'TRIM(s.region)'; break;
+      case 'school': 
+        selectGroup = 'TRIM(s.school_name)'; 
+        extraSelect = ', s.school_id';
+        break;
       default: selectGroup = 'TRIM(s.region)';
     }
 
@@ -11066,10 +11071,15 @@ app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
       filterClause += ` AND UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`;
       params.push(district);
     }
+    if (municipality) {
+      filterClause += ` AND UPPER(TRIM(s.municipality)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(municipality);
+    }
 
     const query = `
       SELECT 
-        ${selectGroup} as group_name,
+        ${selectGroup} as group_name
+        ${extraSelect},
         COUNT(s.school_id) as total_schools,
         COUNT(s.iern) as registered_schools,
         COALESCE(SUM(CASE WHEN s.unit_completion >= 100 THEN 1 ELSE 0 END), 0) as unit_completed,
@@ -11079,7 +11089,7 @@ app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
       FROM ph_schools s
       LEFT JOIN esf7_database e ON s.school_id = e.school_id
       ${filterClause}
-      GROUP BY ${selectGroup}
+      GROUP BY ${selectGroup} ${extraSelect}
       HAVING ${selectGroup} IS NOT NULL AND ${selectGroup} <> ''
       ORDER BY 
         CASE 
@@ -11118,6 +11128,7 @@ app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
         progress: r.total_schools > 0 ? Math.round((parseInt(r.unit_completed) / parseInt(r.total_schools)) * 100) : 0
       }))
     });
+
   } catch (err) {
     console.error("HROD Dashboard Error:", err);
     res.status(500).json({ error: "Internal Server Error", details: err.message });

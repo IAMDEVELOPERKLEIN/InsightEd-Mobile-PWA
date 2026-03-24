@@ -177,16 +177,17 @@ const Login = () => {
             let isRoleCompatible = true;
             
             if (pathId === 'path_school_head') {
-                isRoleCompatible = authUser.role === 'School Head';
+                isRoleCompatible = authUser.role === 'School Head' || authUser.role === 'Super User' || authUser.role === 'Super Admin';
             } else if (pathId === 'path_ro_sd') {
-                isRoleCompatible = ['Regional Office', 'School Division Office'].includes(authUser.role);
+                isRoleCompatible = ['Regional Office', 'School Division Office', 'Super User', 'Super Admin'].includes(authUser.role);
             } else if (pathId === 'path_engineers') {
-                isRoleCompatible = ['DepEd Engineer', 'Division Engineer', 'Engineer', 'Non-DepEd Engineer'].includes(authUser.role);
+                isRoleCompatible = ['DepEd Engineer', 'Division Engineer', 'Engineer', 'Non-DepEd Engineer', 'Super User', 'Super Admin'].includes(authUser.role);
             } else if (pathId === 'path_agencies') {
-                isRoleCompatible = ['Implementing Agency', 'PGO', 'CGO', 'MGO', 'DPWH', 'CSO'].includes(authUser.role);
+                isRoleCompatible = ['Implementing Agency', 'PGO', 'CGO', 'MGO', 'DPWH', 'CSO', 'Super User', 'Super Admin'].includes(authUser.role);
             } else if (pathId === 'path_efd') {
-                isRoleCompatible = ['EFD', 'EFD Engineer', 'HRODI', 'Central Office'].includes(authUser.role);
+                isRoleCompatible = ['EFD', 'EFD Engineer', 'HRODI', 'Central Office', 'Super User', 'Super Admin'].includes(authUser.role);
             }
+
 
             // Only auto-redirect if no portal was chosen, OR if the current role is compatible with the chosen portal
             if (!pathId || isRoleCompatible) {

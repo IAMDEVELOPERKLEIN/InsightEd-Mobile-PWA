@@ -6,7 +6,7 @@ import PageTransition from '../components/PageTransition';
 import { 
     FiTrendingUp, FiCheckCircle, FiClock, FiFileText, 
     FiUsers, FiHome, FiBarChart2, FiActivity, FiMapPin,
-    FiFilter, FiChevronRight, FiSearch, FiAward, FiInfo, FiLayers
+    FiFilter, FiChevronRight, FiSearch, FiAward, FiInfo, FiLayers, FiLogOut, FiExternalLink
 } from 'react-icons/fi';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, 
@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const EducationalDashboard = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     
     // DASHBOARD STATE
     const [data, setData] = useState({ summary: null, breakdown: [] });
@@ -27,11 +27,14 @@ const EducationalDashboard = () => {
         region: user?.region || localStorage.getItem('userRegion') || '',
         division: user?.division || localStorage.getItem('userDivision') || '',
         district: '',
+        municipality: '',
     });
+
 
     useEffect(() => {
         fetchDashboardData();
-    }, [groupBy, filters.region, filters.division, filters.district]);
+    }, [groupBy, filters.region, filters.division, filters.district, filters.municipality]);
+
 
     const fetchDashboardData = async () => {
         setLoading(true);
@@ -40,6 +43,8 @@ const EducationalDashboard = () => {
             if (filters.region) url += `&region=${encodeURIComponent(filters.region)}`;
             if (filters.division) url += `&division=${encodeURIComponent(filters.division)}`;
             if (filters.district) url += `&district=${encodeURIComponent(filters.district)}`;
+            if (filters.municipality) url += `&municipality=${encodeURIComponent(filters.municipality)}`;
+
             
             const res = await fetch(url);
             if (res.ok) {
@@ -63,23 +68,39 @@ const EducationalDashboard = () => {
         } else if (groupBy === 'district') {
             setFilters(prev => ({ ...prev, district: item.group_name }));
             setGroupBy('municipality');
+        } else if (groupBy === 'municipality') {
+            setFilters(prev => ({ ...prev, municipality: item.group_name }));
+            setGroupBy('school');
+        } else if (groupBy === 'school') {
+            // DEEP LINK TO SCHOOL AUDIT
+            sessionStorage.setItem('targetSchoolId', item.school_id);
+            sessionStorage.setItem('targetSchoolName', item.group_name);
+            sessionStorage.setItem("isViewingAsSuperUser", "true");
+            navigate('/school-audit');
         }
     };
 
     const resetFilters = () => {
-        setFilters({ region: '', division: '', district: '' });
+        setFilters({ region: '', division: '', district: '', municipality: '' });
         setGroupBy('region');
     };
 
-    // --- CHART DATA PREP ---
-    const topPerformers = data.breakdown.slice(0, 5);
-    const chartData = data.breakdown.slice(0, 10).map(item => ({
-        name: item.group_name.length > 15 ? item.group_name.substring(0, 12) + '...' : item.group_name,
-        fullName: item.group_name,
-        Registered: item.registered_schools,
-        Completed: item.unit_completed,
-        Total: item.total_schools
-    }));
+
+    // --- OPTIMIZED DATA PREP ---
+    const topPerformers = React.useMemo(() => {
+        return data.breakdown.slice(0, 5);
+    }, [data.breakdown]);
+
+    const chartData = React.useMemo(() => {
+        return data.breakdown.slice(0, 15).map(item => ({
+            name: item.group_name.length > 12 ? item.group_name.substring(0, 10) + '...' : item.group_name,
+            fullName: item.group_name,
+            Registered: item.registered_schools,
+            Completed: item.unit_completed,
+            Total: item.total_schools
+        }));
+    }, [data.breakdown]);
+
 
     return (
         <PageTransition>
@@ -103,7 +124,18 @@ const EducationalDashboard = () => {
                                     Educational Monitoring & Alignment
                                 </p>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right flex items-center gap-4">
+                                <button 
+                                    onClick={() => {
+                                        if (window.confirm("Are you sure you want to log out?")) {
+                                            logout();
+                                            navigate('/login');
+                                        }
+                                    }}
+                                    className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 text-white hover:bg-red-500/20 hover:border-red-500/50 transition-all shadow-inner"
+                                >
+                                    <FiLogOut size={20} />
+                                </button>
                                 <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20 flex items-center gap-2">
                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
                                     <span className="text-white text-[10px] font-black uppercase tracking-wider">Live System Sync</span>
@@ -185,6 +217,19 @@ const EducationalDashboard = () => {
                                         <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-[10px] font-black whitespace-nowrap uppercase italic">{filters.division}</span>
                                     </>
                                 )}
+                                {filters.district && (
+                                    <>
+                                        <FiChevronRight className="text-slate-300 shrink-0" size={12} />
+                                        <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-[10px] font-black whitespace-nowrap uppercase italic">{filters.district}</span>
+                                    </>
+                                )}
+                                {filters.municipality && (
+                                    <>
+                                        <FiChevronRight className="text-slate-300 shrink-0" size={12} />
+                                        <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-[10px] font-black whitespace-nowrap uppercase italic">{filters.municipality}</span>
+                                    </>
+                                )}
+
                             </div>
                         </div>
                     )}
@@ -205,7 +250,24 @@ const EducationalDashboard = () => {
                                     <FiActivity className="text-blue-500" size={24} />
                                 </div>
                                 
-                                <div className="h-[300px] w-full">
+                                <div className="h-[300px] w-full relative group">
+                                    <AnimatePresence mode="wait">
+                                        {loading ? (
+                                            <motion.div 
+                                                key="loading"
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-slate-900/60 backdrop-blur-[2px] rounded-2xl"
+                                            >
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest animate-pulse">Syncing Level...</span>
+                                                </div>
+                                            </motion.div>
+                                        ) : null}
+                                    </AnimatePresence>
+
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" opacity={0.5} />
@@ -226,6 +288,7 @@ const EducationalDashboard = () => {
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </div>
+
                             </motion.div>
                         </div>
 
@@ -306,21 +369,27 @@ const EducationalDashboard = () => {
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                                     {data.breakdown.map((item) => (
                                         <tr 
-                                            key={item.group_name} 
+                                            key={item.school_id || item.group_name} 
                                             className="hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors group cursor-pointer"
                                             onClick={() => handleDrillDown(item)}
                                         >
                                             <td className="px-8 py-6">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-400 font-black text-xs uppercase italic">
-                                                        {item.group_name.charAt(0)}
+                                                        {groupBy === 'school' ? <FiActivity /> : item.group_name.charAt(0)}
                                                     </div>
                                                     <div className="space-y-0.5">
-                                                        <p className="text-[13px] font-black text-slate-800 dark:text-white uppercase leading-none">{item.group_name}</p>
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Registered: {item.registered_schools}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-[13px] font-black text-slate-800 dark:text-white uppercase leading-none">{item.group_name}</p>
+                                                            {groupBy === 'school' && <FiExternalLink className="text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" size={12} />}
+                                                        </div>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                                            {groupBy === 'school' ? `ID: ${item.school_id}` : `Registered: ${item.registered_schools}`}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </td>
+
                                             <td className="px-8 py-6 text-center">
                                                 <span className="text-sm font-black text-slate-700 dark:text-slate-300 italic">{item.total_schools}</span>
                                             </td>
@@ -364,10 +433,11 @@ const EducationalDashboard = () => {
                     </div>
                 </div>
 
-                <BottomNav userRole={user?.role} />
+                {/* Removed BottomNav as requested for National Portal view */}
             </div>
         </PageTransition>
     );
 };
+
 
 export default EducationalDashboard;
