@@ -782,6 +782,25 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init app_feedback table:`, migErr.message);
     }
+
+    // --- 21. SCHOOL OWNERSHIP DOCUMENTS TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS school_ownership_docs (
+                id SERIAL PRIMARY KEY,
+                iern TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                file_name TEXT,
+                doc_type TEXT,
+                status TEXT DEFAULT 'pending', -- pending, optimized
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_school_ownership_iern FOREIGN KEY (iern) REFERENCES ph_schools(iern) ON DELETE CASCADE
+            );
+        `);
+        console.log(`✅ [${dbLabel}] School Ownership Documents Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init school_ownership_docs table:`, migErr.message);
+    }
 };
 
 export { initOtpTable, runMigrations };
