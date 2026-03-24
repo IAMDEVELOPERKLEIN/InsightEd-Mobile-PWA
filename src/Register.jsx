@@ -44,32 +44,44 @@ const AUTHORIZATION_CODES = {
 import locationData from './locations.json';
 
 const getDashboardPath = (role, accountCategory) => {
-    // Division/Non-DepEd Engineer redirect depends on their account category
-    if (role === 'Division Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
+    // 1. SPECIFIC ROLE OVERRIDES (Highest Priority)
+    const roleMap = {
+        'School Head': '/nodes-dashboard',
+        'Regional Office': '/monitoring-dashboard',
+        'School Division Office': '/monitoring-dashboard',
+        'Central Office': '/monitoring-dashboard',
+        'Admin': '/admin-dashboard',
+        'Human Resource': '/hr-dashboard',
+        'Super User': '/super-user-selector',
+        'Super Admin': '/educational-dashboard',
+        'Local Government Unit': '/lgu-dashboard',
+        'Central Office Finance': '/finance-dashboard',
+        'Finance': '/finance-dashboard',
+        'Implementing Agency': '/agency-dashboard',
+        'EFD': '/efd-dashboard',
+        'EFD Engineer': '/engineer-dashboard',
+        'HRODI': '/efd-dashboard',
+        'PGO': '/agency-dashboard',
+        'CGO': '/agency-dashboard',
+        'MGO': '/agency-dashboard',
+        'DPWH': '/agency-dashboard',
+        'CSO': '/agency-dashboard',
+    };
+
+    if (roleMap[role]) return roleMap[role];
+
+    // 2. ENGINEER SPECIAL REDIRECTS
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
         return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
             ? '/non-deped-dashboard'
             : '/engineer-dashboard';
     }
-    const roleMap = {
-        'EFD Engineer': '/project-summary-dashboard',
-        'Local Government Unit': '/project-summary-dashboard',
-        'School Head': '/nodes-dashboard',
-        'Human Resource': '/educational-dashboard',
-        'Admin': '/educational-dashboard',
-        'Central Office': '/educational-dashboard',
-        'Regional Office': '/educational-dashboard',
-        'School Division Office': '/educational-dashboard',
-        'Central Office Finance': '/project-summary-dashboard',
-        'Super User': '/educational-dashboard',
-        'Implementing Agency': '/project-summary-dashboard',
-        'PGO': '/project-summary-dashboard',
-        'CGO': '/project-summary-dashboard',
-        'MGO': '/project-summary-dashboard',
-        'DPWH': '/project-summary-dashboard',
-        'CSO': '/project-summary-dashboard',
-    };
-    return roleMap[role] || '/';
+
+    return '/'; // Final fallback
 };
+
+
+
 
 const RecenterMap = ({ lat, lng }) => {
     const map = useMap();
@@ -981,7 +993,7 @@ const Register = () => {
                                                                             <option value="Central Office">CO Personnel</option>
                                                                             <option value="Regional Office">RO Personnel</option>
                                                                             <option value="School Division Office">SDO Personnel</option>
-//                                                                             <option value="Super User">Super User 2.0</option>
+                                                                            {/* <option value="Super User">Super User 2.0</option> */}
                                                                         </>
                                                                     )}
                                                                     {(!pathId || pathId === 'path_school_head') && <option value="School Head">School Head</option>}
@@ -995,10 +1007,12 @@ const Register = () => {
                                                                     )}
                                                                 </>
                                                             ) : (
-                                                                <option value="Implementing Agency">Implementing Agency</option>
-                                                                <option value="Local Government Unit">LGU Representative</option>
-                                                                <option value="Central Office Finance">CO Finance</option>
-                                                            </optgroup>
+                                                                <>
+                                                                    <option value="Implementing Agency">Implementing Agency</option>
+                                                                    <option value="Local Government Unit">LGU Representative</option>
+                                                                    <option value="Central Office Finance">CO Finance</option>
+                                                                </>
+                                                            )}
                                                         </select>
                                                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
                                                             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>

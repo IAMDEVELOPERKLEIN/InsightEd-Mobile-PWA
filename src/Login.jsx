@@ -13,13 +13,47 @@ import { getRoleGroup, ROLE_GROUPS } from './config/roleGroups';
 
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role, accountCategory) => {
-    // Determine Group
+    // 1. SPECIFIC ROLE OVERRIDES (Highest Priority)
+    const roleMap = {
+        'School Head': '/nodes-dashboard',
+        'Regional Office': '/monitoring-dashboard',
+        'School Division Office': '/monitoring-dashboard',
+        'Central Office': '/monitoring-dashboard',
+        'Admin': '/admin-dashboard',
+        'Human Resource': '/hr-dashboard',
+        'Super User': '/super-user-selector',
+        'Super Admin': '/educational-dashboard',
+        'Local Government Unit': '/lgu-dashboard',
+        'Central Office Finance': '/finance-dashboard',
+        'Finance': '/finance-dashboard',
+        'Implementing Agency': '/agency-dashboard',
+        'EFD': '/efd-dashboard',
+        'EFD Engineer': '/engineer-dashboard',
+        'HRODI': '/efd-dashboard',
+        'PGO': '/agency-dashboard',
+        'CGO': '/agency-dashboard',
+        'MGO': '/agency-dashboard',
+        'DPWH': '/agency-dashboard',
+        'CSO': '/agency-dashboard',
+    };
+
+    if (roleMap[role]) return roleMap[role];
+
+    // 2. ENGINEER SPECIAL REDIRECTS
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
+        return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
+            ? '/non-deped-dashboard'
+            : '/engineer-dashboard';
+    }
+
+    // 3. GROUP-BASED FALLBACK
     const userGroup = getRoleGroup(role);
-
-    // Super User Special Redirect
-    if (role === 'Super User') return '/super-user-selector';
-
-    // Group-based Redirection (Super User 2.0)
+    if (userGroup === ROLE_GROUPS.MANAGEMENT) {
+        return '/monitoring-dashboard';
+    }
+    if (userGroup === ROLE_GROUPS.INFRA_OPERATIONAL) {
+        return '/engineer-dashboard'; // Default infra fallback
+    }
     if (userGroup === ROLE_GROUPS.EDUCATIONAL_ADMIN) {
         return '/educational-dashboard';
     }
@@ -27,36 +61,11 @@ const getDashboardPath = (role, accountCategory) => {
         return '/project-summary-dashboard';
     }
 
-    // Fallback/Special role overrides
-    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
-        return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
-            ? '/non-deped-dashboard'
-            : '/project-summary-dashboard';
-    }
-
-    const roleMap = {
-        'Local Government Unit': '/project-summary-dashboard',
-        'School Head': '/nodes-dashboard',
-        'Human Resource': '/educational-dashboard',
-        'Regional Office': '/educational-dashboard',
-        'School Division Office': '/educational-dashboard',
-        'Admin': '/educational-dashboard',
-        'Super User': '/educational-dashboard',
-        'Super Admin': '/educational-dashboard',
-        'Central Office': '/educational-dashboard',
-        'Central Office Finance': '/project-summary-dashboard',
-        'Implementing Agency': '/project-summary-dashboard',
-        'EFD': '/project-summary-dashboard',
-        'EFD Engineer': '/project-summary-dashboard',
-        'HRODI': '/project-summary-dashboard',
-        'PGO': '/project-summary-dashboard',
-        'CGO': '/project-summary-dashboard',
-        'MGO': '/project-summary-dashboard',
-        'DPWH': '/project-summary-dashboard',
-        'CSO': '/project-summary-dashboard',
-    };
-    return roleMap[role] || '/';
+    return '/'; // Final fallback
 };
+
+
+
 
 const Login = () => {
     const [loginId, setLoginId] = useState('');

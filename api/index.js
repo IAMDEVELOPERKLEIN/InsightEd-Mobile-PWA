@@ -11037,6 +11037,93 @@ app.get('/api/monitoring/stats', async (req, res) => {
   }
 });
 
+// --- HROD DASHBOARD MONITORING ENDPOINT ---
+app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
+  const { region, division, district, group_by = 'region' } = req.query;
+  try {
+    let selectGroup = '';
+    switch(group_by.toLowerCase()) {
+      case 'division': selectGroup = 'TRIM(s.division)'; break;
+      case 'district': selectGroup = 'TRIM(s.district)'; break;
+      case 'municipality': selectGroup = 'TRIM(s.municipality)'; break;
+      case 'region': selectGroup = 'TRIM(s.region)'; break;
+      default: selectGroup = 'TRIM(s.region)';
+    }
+
+    // Dynamic filters based on hierarchy
+    let filterClause = 'WHERE 1=1';
+    const params = [];
+
+    if (region) {
+      filterClause += ` AND UPPER(TRIM(s.region)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(region);
+    }
+    if (division) {
+      filterClause += ` AND UPPER(TRIM(s.division)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(division);
+    }
+    if (district) {
+      filterClause += ` AND UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(district);
+    }
+
+    const query = `
+      SELECT 
+        ${selectGroup} as group_name,
+        COUNT(s.school_id) as total_schools,
+        COUNT(s.iern) as registered_schools,
+        COALESCE(SUM(CASE WHEN s.unit_completion >= 100 THEN 1 ELSE 0 END), 0) as unit_completed,
+        COALESCE(COUNT(DISTINCT e.school_id) FILTER (WHERE e.status = 'VERIFIED' OR e.status = 'PENDING_SDO'), 0) as esf7_completed,
+        -- NSPP placeholder (0 for now as module is coming soon)
+        0 as nspp_completed
+      FROM ph_schools s
+      LEFT JOIN esf7_database e ON s.school_id = e.school_id
+      ${filterClause}
+      GROUP BY ${selectGroup}
+      HAVING ${selectGroup} IS NOT NULL AND ${selectGroup} <> ''
+      ORDER BY 
+        CASE 
+          WHEN COUNT(s.school_id) > 0 THEN (COALESCE(SUM(CASE WHEN s.unit_completion >= 100 THEN 1 ELSE 0 END), 0)::float / COUNT(s.school_id)::float)
+          ELSE 0 
+        END DESC,
+        group_name ASC
+    `;
+
+    const result = await pool.query(query, params);
+    
+    // Calculate overall totals for the response
+    const totals = {
+      total_schools: 0,
+      registered_schools: 0,
+      unit_completed: 0,
+      esf7_completed: 0,
+      nspp_completed: 0
+    };
+
+    result.rows.forEach(row => {
+      totals.total_schools += parseInt(row.total_schools);
+      totals.registered_schools += parseInt(row.registered_schools);
+      totals.unit_completed += parseInt(row.unit_completed);
+      totals.esf7_completed += parseInt(row.esf7_completed);
+    });
+
+    res.json({
+      summary: totals,
+      breakdown: result.rows.map(r => ({
+        ...r,
+        total_schools: parseInt(r.total_schools),
+        registered_schools: parseInt(r.registered_schools),
+        unit_completed: parseInt(r.unit_completed),
+        esf7_completed: parseInt(r.esf7_completed),
+        progress: r.total_schools > 0 ? Math.round((parseInt(r.unit_completed) / parseInt(r.total_schools)) * 100) : 0
+      }))
+    });
+  } catch (err) {
+    console.error("HROD Dashboard Error:", err);
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
+  }
+});
+
 // --- DEBUG: Temp endpoint to check ph_schools iern data ---
 app.get('/api/debug/iern-check', async (req, res) => {
   const { region = 'Region V' } = req.query;

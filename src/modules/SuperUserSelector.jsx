@@ -195,10 +195,44 @@ const SuperUserSelector = () => {
                 </div>
 
                 <div className="space-y-12">
+                    {/* SECTION: Super User 2.0 Specific */}
+                    <section>
+                        <div className="flex items-center gap-4 mb-8">
+                            <h2 className="text-lg sm:text-xl font-bold text-slate-700 whitespace-nowrap">Super User 2.0 Exclusive</h2>
+                            <div className="h-px bg-slate-200 w-full"></div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                            {/* NEW CARD: National HROD Dashboard */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-[#10346B] to-[#004A99] shadow-2xl rounded-2xl p-6 flex flex-col items-center text-center text-white border border-white/20">
+                                <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4 text-white">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v16a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold mb-2 uppercase tracking-tight italic">HROD Dashboard</h3>
+                                <p className="text-sm text-blue-100/70 mb-6 flex-grow">National Management & Trends</p>
+                                <button onClick={() => navigate('/educational-dashboard')} className="w-full py-2 bg-white text-[#10346B] rounded-lg font-black hover:bg-blue-50 transition">
+                                    Launch HROD
+                                </button>
+                            </motion.div>
+
+                            {/* NEW CARD: National Project Summary Dashboard */}
+                            <motion.div whileHover={{ scale: 1.02 }} className="bg-gradient-to-br from-indigo-900 to-indigo-700 shadow-2xl rounded-2xl p-6 flex flex-col items-center text-center text-white border border-white/20">
+                                <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4 text-white">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold mb-2 uppercase tracking-tight italic">Infra Project Summary</h3>
+                                <p className="text-sm text-blue-100/70 mb-6 flex-grow">National Infrastructure Status</p>
+                                <button onClick={() => navigate('/project-summary-dashboard')} className="w-full py-2 bg-emerald-500 text-white rounded-lg font-black hover:bg-emerald-600 transition">
+                                    Launch Infra
+                                </button>
+                            </motion.div>
+                        </div>
+
+                    </section>
+
                     {/* SECTION: General Access */}
                     <section>
                         <div className="flex items-center gap-4 mb-8">
-                            <h2 className="text-lg sm:text-xl font-bold text-slate-700 whitespace-nowrap">General Access</h2>
+                            <h2 className="text-lg sm:text-xl font-bold text-slate-700 whitespace-nowrap">Operational Access</h2>
                             <div className="h-px bg-slate-200 w-full"></div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -208,11 +242,12 @@ const SuperUserSelector = () => {
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                                 </div>
                                 <h3 className="text-xl font-bold text-slate-800 mb-2">Central Office</h3>
-                                <p className="text-sm text-slate-500 mb-6 flex-grow">View National Aggregated Data</p>
+                                <p className="text-sm text-slate-500 mb-6 flex-grow">Operational Monitoring Portal</p>
                                 <button onClick={() => handleSelection('Central Office')} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
                                     Select
                                 </button>
                             </motion.div>
+
 
                             {/* CARD 2: Regional Office */}
                             <motion.div whileHover={{ scale: 1.02 }} className="bg-white/80 backdrop-blur-xl border border-white/50 shadow-xl rounded-2xl p-6 flex flex-col items-center text-center">
