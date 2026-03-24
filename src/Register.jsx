@@ -4,9 +4,10 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import logo from './assets/InsightEd1.png';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { FiLock } from 'react-icons/fi';
 import PageTransition from './components/PageTransition';
 import Papa from 'papaparse';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -68,6 +69,46 @@ const getDashboardPath = (role, accountCategory) => {
         'CSO': '/project-summary-dashboard',
     };
     return roleMap[role] || '/';
+};
+
+const RecenterMap = ({ lat, lng }) => {
+    const map = useMap();
+
+    // Fix for off-center pins: invalidate size when the container element changes size
+    useEffect(() => {
+        if (!map) return;
+        const resizeObserver = new ResizeObserver(() => {
+            map.invalidateSize();
+        });
+        const container = map.getContainer();
+        resizeObserver.observe(container);
+        return () => resizeObserver.unobserve(container);
+    }, [map]);
+
+    useEffect(() => {
+        if (lat && lng) {
+            const performCenter = () => {
+                if (map) {
+                    map.invalidateSize();
+                    map.setView([lat, lng], 16);
+                }
+            };
+
+            // Aggressive centering strategy: 
+            // Call multiple times to catch the end of any CSS transitions (framer-motion, etc)
+            performCenter();
+            const t1 = setTimeout(performCenter, 100);
+            const t2 = setTimeout(performCenter, 500);
+            const t3 = setTimeout(performCenter, 1000);
+
+            return () => {
+                clearTimeout(t1);
+                clearTimeout(t2);
+                clearTimeout(t3);
+            };
+        }
+    }, [lat, lng, map]);
+    return null;
 };
 
 const Register = () => {
@@ -144,9 +185,6 @@ const Register = () => {
     const markerRef = useRef(null);
 
     // --- REGISTRATION SUCCESS STATE ---
-    const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const [registeredIern, setRegisteredIern] = useState('');
-    const [activeTab, setActiveTab] = useState('internal'); // 'internal' | 'external'
     const [showNcrModal, setShowNcrModal] = useState(false);
 
 
@@ -157,19 +195,14 @@ const Register = () => {
         if (pathId) {
             console.log("[Register] Enforcing path-based restrictions:", pathId);
             if (pathId === 'path_school_head') {
-                setActiveTab('internal');
                 setFormData(prev => ({ ...prev, role: 'School Head' }));
             } else if (pathId === 'path_ro_sd') {
-                setActiveTab('internal');
                 setFormData(prev => ({ ...prev, role: 'Regional Office' }));
             } else if (pathId === 'path_engineers') {
-                setActiveTab('internal');
                 setFormData(prev => ({ ...prev, role: 'Division Engineer' }));
             } else if (pathId === 'path_agencies') {
-                setActiveTab('external');
                 setFormData(prev => ({ ...prev, role: 'Implementing Agency' }));
             } else if (pathId === 'path_efd') {
-                setActiveTab('internal');
                 setFormData(prev => ({ ...prev, role: 'EFD Engineer' }));
             }
         }
@@ -245,10 +278,11 @@ const Register = () => {
         }
     }, [selectedRegion, selectedDivision, selectedDistrict, selectedMunicipality]);
     
-    // --- EXTERNAL AGENCY AUTO-FILL & VALIDATION ---
     useEffect(() => {
-        if (activeTab === 'external') {
-            const { agencyType, province, city, region } = formData;
+            const { role, agencyType, province, city, region } = formData;
+            const isExternalAgency = role === 'Implementing Agency' || ['PGO', 'CGO', 'MGO', 'DPWH', 'CSO'].includes(role);
+            
+            if (isExternalAgency) {
             
             // 1. NCR Validation for PGO
             if (agencyType === 'PGO' && region === 'NCR') {
@@ -286,7 +320,7 @@ const Register = () => {
                }
             }
         }
-    }, [activeTab, formData.agencyType, formData.region, formData.province, formData.city]);
+    }, [formData.role, formData.agencyType, formData.region, formData.province, formData.city]);
 
 
 
@@ -356,17 +390,6 @@ const Register = () => {
         setSelectedSchool(null);
     };
 
-    const handleTabChange = (tab) => {
-        setActiveTab(tab);
-        setFormData(prev => ({
-            ...prev,
-            role: tab === 'external' ? 'Implementing Agency' : 'Regional Office',
-            region: '', division: '', province: '', city: '', barangay: '', office: '', position: '',
-            schoolEmail: '', contactNumber: '', altEmail: '', accountCategory: '', authCode: '',
-            agencyType: '', specificAgency: ''
-        }));
-        setSelectedSchool(null);
-    };
 
     const handleSchoolSelect = (e) => {
         const schoolId = e.target.value;
@@ -785,7 +808,19 @@ const Register = () => {
                 regData = JSON.parse(regText);
 
                 if (regData.success && regData.token) {
+                    localStorage.setItem('needs_pin_setup', 'true');
                     login(regData.user, regData.token);
+                    
+                    // Direct navigation for School Heads (bypass success modal)
+                    localStorage.setItem('userRole', formData.role);
+                    if (selectedSchool?.school_id) {
+                        localStorage.setItem('schoolId', selectedSchool.school_id);
+                    }
+                    if (regData?.user?.uid) {
+                        localStorage.setItem('uid', regData.user.uid);
+                    }
+                    navigate('/nodes-dashboard');
+                    return;
                 } else {
                     throw new Error(regData.error || "Registration succeeded but no session was established. Please log in.");
                 }
@@ -841,8 +876,8 @@ const Register = () => {
                 } else {
                     throw new Error("No session token received.");
                 }
-                // For EFD Engineers and others, we now use the Success Modal approach instead of an alert
-                // if they need to be prompted for a passcode or similar.
+
+                // Direct navigation for ALL generic roles (bypass success modal)
                 localStorage.setItem('needs_pin_setup', 'true');
                 const finalRole = formData.role === 'Implementing Agency' ? (formData.agencyType || formData.role) : formData.role;
                 localStorage.setItem('userRole', finalRole);
@@ -851,49 +886,16 @@ const Register = () => {
                 }
                 localStorage.setItem('userEmail', identifier);
 
-                // If EFD Engineer, we show the success modal to bridge to the passcode prompt
-                if (formData.role === 'EFD Engineer') {
-                    setRegisteredIern('EFD-' + Math.random().toString(36).substr(2, 4).toUpperCase()); // Dummy ID for visual
-                    setShowSuccessModal(true);
-                    return;
-                }
-
-                alert("✅ Account created successfully!");
-                const destPath = getDashboardPath(finalRole, formData.accountCategory);
-                navigate(destPath);
+                const finalCategory = formData.accountCategory || ( (formData.role === 'EFD Engineer') ? 'EFD Engineer' : '' );
+                navigate(getDashboardPath(finalRole, finalCategory));
                 return;
             }
 
-            // STEP D: Success
-            if ((formData.role === 'School Head') && regData?.iern) {
-                setRegisteredIern(regData.iern);
-                // Set role and schoolId in localStorage for immediate access by Dashboard/BottomNav/Modular Units
-                localStorage.setItem('userRole', formData.role);
-                if (selectedSchool?.school_id) {
-                    localStorage.setItem('schoolId', selectedSchool.school_id);
-                }
-                
-                // Set user email and uid for subsequent steps (like PasscodeSetupPrompt)
-                localStorage.setItem('userEmail', contactEmail);
-                if (regData?.user?.uid) {
-                    localStorage.setItem('uid', regData.user.uid);
-                }
-
-                // Mark for PIN setup as TRUE so the global modal triggers on dashboard
+            // Standard success fallback logic (legacy)
+            if (regData) {
                 localStorage.setItem('needs_pin_setup', 'true');
-
-                setShowSuccessModal(true);
-            } else {
-                // Set role in localStorage for immediate access by Dashboard/BottomNav
-                localStorage.setItem('userRole', formData.role);
-                // Save accountCategory so other components can read it
-                if (formData.accountCategory) {
-                    localStorage.setItem('accountCategory', formData.accountCategory);
-                } else if (formData.role === 'EFD Engineer') {
-                    localStorage.setItem('accountCategory', 'EFD Engineer');
-                }
-                const finalRole = formData.role === 'Implementing Agency' ? (formData.agencyType || formData.role) : formData.role;
-                const destPath = getDashboardPath(finalRole, formData.accountCategory || ( (formData.role === 'EFD Engineer') ? 'EFD Engineer' : '' ));
+                const finalRole = formData.role;
+                const destPath = getDashboardPath(finalRole, formData.accountCategory || '');
                 navigate(destPath);
             }
 
@@ -918,10 +920,10 @@ const Register = () => {
 
                         {/* Header */}
                         {registrationStage === 'form' && (
-                            <div className="text-center mb-8">
+                            <div className="text-center mb-6">
                                 <img src={logo} alt="InsightED Ratio" className="h-20 mx-auto mb-4 object-contain drop-shadow-sm" />
                                 <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Create Account</h2>
-                                <p className="text-slate-500 font-medium">Join the InsightED network</p>
+                                <p className="text-slate-500 font-medium">Step {currentStep} of {maxSteps}</p>
                             </div>
                         )}
 
@@ -929,44 +931,27 @@ const Register = () => {
 
                             {registrationStage === 'form' && (
                                 <>
-                                    {/* Progress Indicator */}
-                                    <div className="flex items-center justify-between mb-8 px-2 relative">
-                                        {[1, 2, 3, 4, 5].filter(s => s <= maxSteps).map((s) => (
-                                            <div key={s} className="flex flex-col items-center gap-2 relative z-10">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-500 border-2
-                                                    ${currentStep === s ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 scale-110' : 
-                                                      currentStep > s ? 'bg-green-500 border-green-500 text-white' : 
-                                                      'bg-white border-slate-200 text-slate-400'}`}>
-                                                    {currentStep > s ? '✓' : s}
-                                                </div>
-                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${currentStep === s ? 'text-blue-600' : 'text-slate-400'}`}>
-                                                    {s === 1 ? 'Role' : s === 2 ? 'Contact' : (s === maxSteps ? 'Security' : (s === 3 ? (formData.role === 'School Head' ? 'School' : 'Assign') : 'Geotag'))}
-                                                </span>
-                                            </div>
-                                        ))}
-                                        {/* Background Progress Line */}
-                                        <div className="absolute top-[20px] left-10 right-10 h-[2px] bg-slate-100 -z-0">
+                                    {/* MODERN PROGRESS BAR INDICATOR */}
+                                    <div className="mb-8 px-2 animate-in fade-in slide-in-from-top-4 duration-700">
+                                        <div className="relative h-2 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
                                             <div 
-                                                className="h-full bg-blue-600 transition-all duration-500" 
-                                                style={{ width: `${((currentStep - 1) / (maxSteps - 1)) * 100}%` }}
+                                                className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-700 ease-out" 
+                                                style={{ width: `${(currentStep / maxSteps) * 100}%` }}
                                             ></div>
+                                        </div>
+                                        <div className="flex justify-between mt-2 px-1">
+                                            <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none">
+                                                {currentStep === 1 ? 'Primary Details' : currentStep === 2 ? 'Credentials' : currentStep === 3 ? (formData.role === 'School Head' ? 'School Selection' : 'Area Alignment') : currentStep === 4 ? 'Location/Geotag' : 'Final Security'}
+                                            </span>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
+                                                {Math.round((currentStep / maxSteps) * 100)}% Complete
+                                            </span>
                                         </div>
                                     </div>
 
                                     {/* STEP 1: IDENTITY & ROLE */}
                                     {currentStep === 1 && (
                                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                                            {(!pathId || (pathId !== 'path_school_head' && pathId !== 'path_ro_sd' && pathId !== 'path_engineers' && pathId !== 'path_efd' && pathId !== 'path_agencies')) ? (
-                                                <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                                                    <button type="button" onClick={() => handleTabChange('internal')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'internal' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Internal Personnel</button>
-                                                    <button type="button" onClick={() => handleTabChange('external')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${activeTab === 'external' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Implementing Agency</button>
-                                                </div>
-                                            ) : (
-                                                <div className="mb-2 px-3 py-1.5 bg-blue-50 rounded-xl inline-block border border-blue-100 shadow-sm">
-                                                    <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest">{activeTab === 'internal' ? 'Internal Personnel Path' : 'Implementing Agency Path'}</span>
-                                                </div>
-                                            )}
-
                                             <div className="space-y-4">
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div className="space-y-1">
@@ -996,7 +981,7 @@ const Register = () => {
                                                                             <option value="Central Office">CO Personnel</option>
                                                                             <option value="Regional Office">RO Personnel</option>
                                                                             <option value="School Division Office">SDO Personnel</option>
-                                                                            <option value="Super User">Super User 2.0</option>
+//                                                                             <option value="Super User">Super User 2.0</option>
                                                                         </>
                                                                     )}
                                                                     {(!pathId || pathId === 'path_school_head') && <option value="School Head">School Head</option>}
@@ -1011,7 +996,9 @@ const Register = () => {
                                                                 </>
                                                             ) : (
                                                                 <option value="Implementing Agency">Implementing Agency</option>
-                                                            )}
+                                                                <option value="Local Government Unit">LGU Representative</option>
+                                                                <option value="Central Office Finance">CO Finance</option>
+                                                            </optgroup>
                                                         </select>
                                                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
                                                             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
@@ -1303,6 +1290,7 @@ const Register = () => {
                                                                 <div className="w-full h-[250px] rounded-[2rem] overflow-hidden border-4 border-white shadow-2xl relative z-0">
                                                                     <MapContainer center={[parseFloat(selectedSchool.latitude), parseFloat(selectedSchool.longitude)]} zoom={16} style={{ height: '100%', width: '100%' }}>
                                                                         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                                                        <RecenterMap lat={parseFloat(selectedSchool.latitude)} lng={parseFloat(selectedSchool.longitude)} />
                                                                         <Marker position={[parseFloat(selectedSchool.latitude), parseFloat(selectedSchool.longitude)]} draggable={true} eventHandlers={eventHandlers} ref={markerRef}>
                                                                             <Popup>Drag to refine location</Popup>
                                                                         </Marker>
@@ -1395,45 +1383,6 @@ const Register = () => {
                     </div>
                 )}
 
-                {/* SUCCESS MODAL */}
-                {showSuccessModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-                        <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
-
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600 text-3xl">
-                                ✅
-                            </div>
-
-                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Registration Successful!</h2>
-                            <p className="text-slate-500 mb-6 font-medium italic">Welcome to InsightEd. Your account has been created.</p>
-
-                            <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl mb-4">
-                                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Your School IERN</p>
-                                <h3 className="text-3xl font-black text-blue-900 tracking-tight font-mono">{registeredIern}</h3>
-                                <p className="text-[10px] text-blue-400 mt-2">Please save this reference number.</p>
-                            </div>
-
-                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-8 flex items-center gap-3">
-                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-                                    <FiLock className="text-blue-600" />
-                                </div>
-                                <p className="text-[10px] font-bold text-slate-600 leading-tight text-left uppercase tracking-tight">
-                                    <span className="text-blue-600 font-black">Final Step:</span> You will be prompted to secure your account with a 6-digit passcode.
-                                </p>
-                            </div>
-
-                            <button
-                                onClick={() => {
-                                    navigate(getDashboardPath(formData.role, formData.accountCategory));
-                                }}
-                                className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold text-lg shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition transform active:scale-[0.98]"
-                            >
-                                Secure My Account
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
         </PageTransition>
     );

@@ -49,6 +49,19 @@ function DraggableMarker({ position, setPosition, onLocationSelect, disabled }) 
 }
 
 function MapEvents({ setPosition, onLocationSelect, disabled }) {
+    const map = useMap();
+
+    // Fix for off-center pins: invalidate size when the container element changes size
+    useEffect(() => {
+        if (!map) return;
+        const resizeObserver = new ResizeObserver(() => {
+            map.invalidateSize();
+        });
+        const container = map.getContainer();
+        resizeObserver.observe(container);
+        return () => resizeObserver.unobserve(container);
+    }, [map]);
+
     useMapEvents({
         click(e) {
             if (!disabled) {
@@ -60,26 +73,41 @@ function MapEvents({ setPosition, onLocationSelect, disabled }) {
     return null;
 }
 
-// COMPONENT: Auto-center map when position changes
-function RecenterAutomatically({ position }) {
+// COMPONENT: Aggressively center map and invalidate size (handles CSS transitions)
+function RobustCenter({ position }) {
     const map = useMap();
     useEffect(() => {
-        // Normalize: supports {lat, lng} object or [lat, lng] array
         const lat = position.lat || position[0];
         const lng = position.lng || position[1];
+        
+        if (!lat || !lng || (lat === PHILIPPINES_CENTER[0] && lng === PHILIPPINES_CENTER[1])) return;
 
-        // Check if valid and NOT the default center
-        if (lat && lng && (lat !== PHILIPPINES_CENTER[0] || lng !== PHILIPPINES_CENTER[1])) {
-            map.flyTo([lat, lng], 18, {
-                animate: true,
-                duration: 1.5
-            });
-        }
+        const performCenter = () => {
+            if (map) {
+                map.invalidateSize();
+                map.setView([lat, lng], 16);
+            }
+        };
+
+        // Aggressive centering strategy: 
+        // Call multiple times to catch the end of any CSS transitions (framer-motion, etc)
+        performCenter();
+        const t1 = setTimeout(performCenter, 100);
+        const t2 = setTimeout(performCenter, 500);
+        const t3 = setTimeout(performCenter, 1000);
+
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            clearTimeout(t3);
+        };
     }, [position, map]);
     return null;
 }
 
-const LocationPickerMap = ({ latitude, longitude, onLocationSelect, disabled = false, userLocation = null }) => {
+const LocationPickerMap = ({ latitude, longitude, onLocationSelect, onChange, disabled = false, userLocation = null, className = "h-[400px]" }) => {
+    // Support both prop names for compatibility
+    const handleLocationSelect = onLocationSelect || onChange;
     // Initial position state
     const [position, setPosition] = useState(PHILIPPINES_CENTER);
 
@@ -91,7 +119,7 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, disabled = f
     }, [latitude, longitude]);
 
     return (
-        <div className="w-full h-[400px] rounded-xl overflow-hidden border border-slate-200 shadow-inner relative z-0">
+        <div className={`w-full rounded-xl overflow-hidden border border-slate-200 shadow-inner relative z-0 ${className}`}>
             {/* Map */}
             <MapContainer
                 center={position.lat ? position : PHILIPPINES_CENTER}
@@ -107,14 +135,14 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, disabled = f
                 {/* Click Listener */}
                 <MapEvents setPosition={setPosition} onLocationSelect={onLocationSelect} disabled={disabled} />
 
-                {/* Auto Zoom */}
-                <RecenterAutomatically position={position} />
+                {/* Aggressive Recenter */}
+                <RobustCenter position={position} />
 
                 {/* School Marker */}
                 <DraggableMarker
                     position={position}
                     setPosition={setPosition}
-                    onLocationSelect={onLocationSelect}
+                    onLocationSelect={handleLocationSelect}
                     disabled={disabled}
                 />
 

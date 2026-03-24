@@ -33,8 +33,8 @@ const DEMOGRAPHIC_CARDS = [
 ];
 
 const MOVEMENT_TYPES = [
-    { id: "dropout",  icon: "🔻", label: "Dropouts (Last Year)", color: "red" },
-    { id: "repeater", icon: "🔄", label: "Repeaters (This Year)", color: "orange" },
+    { id: "dropout",  icon: "🔻", label: "Dropouts for Previous SY", color: "red" },
+    { id: "repeater", icon: "🔄", label: "Dropouts for Current SY",  color: "orange" },
 ];
 
 const colorClasses = {
@@ -605,7 +605,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-3 opacity-5 text-4xl">🔻</div>
                                 <div className="relative z-10">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Dropouts</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Prev. SY Dropouts</p>
                                     <p className="text-3xl font-black text-rose-600">{dropSum}</p>
                                     <div className="mt-4 pt-4 border-t border-slate-50 space-y-1">
                                         {dynamicGrades.map(gr => {
@@ -625,7 +625,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-3 opacity-5 text-4xl">🔄</div>
                                 <div className="relative z-10">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Repeaters</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Curr. SY Dropouts</p>
                                     <p className="text-3xl font-black text-orange-600">{repSum}</p>
                                     <div className="mt-4 pt-4 border-t border-slate-50 space-y-1">
                                         {dynamicGrades.map(gr => {
@@ -925,7 +925,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
                                             Learner Movement
                                         </h1>
-                                        <p className="text-slate-500 font-medium italic mb-10 px-4">"Did you have any Dropouts last year, or Repeaters this year?"</p>
+                                        <p className="text-slate-500 font-medium italic mb-10 px-4">"Did you have any Dropouts in previous or current school years?"</p>
                                         
                                         <div className="flex gap-4 px-2">
                                             <button onClick={() => setHasMovement(true)} 
@@ -969,11 +969,8 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Status</span>
                                                     <span className={`text-lg font-bold ${colorClasses[currentMovement.color].text}`}>
-                                                        Recording Cycle
+                                                        {currentMovement.label}
                                                     </span>
-                                                </div>
-                                                <div className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest ${colorClasses[currentMovement.color].bg} ${colorClasses[currentMovement.color].text}`}>
-                                                    {movementIdx + 1} of 2
                                                 </div>
                                             </div>
 

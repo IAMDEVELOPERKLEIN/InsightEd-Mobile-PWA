@@ -29,7 +29,6 @@ import jwt from 'jsonwebtoken';
 import authMiddleware from './middleware/authMiddleware.js';
 import XLSX from 'xlsx';
 
-
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15348,9 +15347,6 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
     `;
     const result = await pool.query(query, values);
 
-    // Also update ph_schools with timestamp and completion flag
-    await pool.query('UPDATE ph_schools SET unit9_completed = TRUE, unit9 = 1, unit9_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1', [validatedData.school_id]).catch(() => {});
-
     // Auto-update school_summary instantly
     try {
       if (poolNew) await updateSchoolSummary(schoolId, poolNew);
@@ -15359,6 +15355,7 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     console.error("Generic School Update Error:", err);
+    res.status(500).json({ status: 'error', error: "Failed to save school resources", details: err.message });
   }
 });
 
