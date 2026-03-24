@@ -79,7 +79,10 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         // Persist role momentarily to inform the redirect in App.jsx
         if (user && user.role) {
+            console.log("[AuthContext] Setting lastRole for redirect:", user.role);
             localStorage.setItem('lastRole', user.role);
+        } else {
+            console.warn("[AuthContext] No user role found during logout!");
         }
 
         localStorage.removeItem('token');
@@ -164,8 +167,13 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const [isPasscodeSetupOpen, setIsPasscodeSetupOpen] = useState(false);
+
     return (
-        <AuthContext.Provider value={{ user, setUser, login, logout, confirmLogout, loading }}>
+        <AuthContext.Provider value={{ 
+            user, setUser, login, logout, confirmLogout, loading,
+            isPasscodeSetupOpen, setIsPasscodeSetupOpen
+        }}>
             {children}
 
             {/* SECURE LOGOUT MODAL */}

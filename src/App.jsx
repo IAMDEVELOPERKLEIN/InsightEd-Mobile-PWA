@@ -118,7 +118,25 @@ const AnimatedRoutes = () => {
     if (!loading && !user && !publicPaths.includes(location.pathname)) {
       console.log("[App] No user session found on protected route. Redirecting to login...");
       const lastRole = localStorage.getItem('lastRole');
-      const state = lastRole === 'School Head' ? { pathId: 'path_school_head' } : null;
+      console.log("[App] Retrieved lastRole for redirection:", lastRole);
+      
+      // Role to PathId Mapping for Portal Redirection
+      const roleToPathId = {
+        'School Head': 'path_school_head',
+        'Regional Office': 'path_ro_sd',
+        'School Division Office': 'path_ro_sd',
+        'DepEd Engineer': 'path_engineers',
+        'Division Engineer': 'path_engineers',
+        'Engineer': 'path_engineers',
+        'Non-DepEd Engineer': 'path_engineers',
+        'Implementing Agency': 'path_agencies',
+        'PGO': 'path_agencies', 'CGO': 'path_agencies', 'MGO': 'path_agencies', 'DPWH': 'path_agencies', 'CSO': 'path_agencies',
+        'EFD': 'path_efd', 'EFD Engineer': 'path_efd', 'HRODI': 'path_efd', 'Central Office': 'path_efd'
+      };
+
+      const pathId = lastRole ? roleToPathId[lastRole] : null;
+      console.log("[App] Calculated pathId:", pathId);
+      const state = pathId ? { pathId } : null;
       
       navigate('/login', { replace: true, state });
     }

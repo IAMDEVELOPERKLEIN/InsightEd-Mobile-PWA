@@ -254,16 +254,7 @@ const ModularDashboard = () => {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Modular Data Flow</p>
                     </div>
 
-                    <div className="flex flex-col items-end">
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${userRank.badgeClass}`}>
-                            {userRank.icon}
-                            <span className="text-xs font-black uppercase tracking-wider">{userRank.title}</span>
-                        </div>
-                        <div className="flex items-center gap-1 mt-1 text-[#004A99]">
-                            <span className="text-[10px] font-bold text-[#FDB913] uppercase">XP</span>
-                            <span className="text-sm font-black tracking-tight">{questProgress.xp}</span>
-                        </div>
-                    </div>
+                    <div className="w-10 h-10" />
                 </div>
             </header>
 

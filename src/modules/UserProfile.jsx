@@ -9,7 +9,7 @@ import { useTheme } from '../context/ThemeContext'; // Import Hook
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import SW Hook
 
 // Icons
-import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool, FiShield } from "react-icons/fi"; // Added FiShield
+import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud, FiTool, FiShield, FiLock } from "react-icons/fi"; // Added FiShield and FiLock
 import { TbAlertTriangle } from "react-icons/tb";
 
 const FAQ_DATA = [
@@ -70,13 +70,12 @@ const getInitials = (first, last) => {
 const UserProfile = () => {
     const navigate = useNavigate();
     const auth = useAuth();
-    const user = auth?.user;
-    const authLoading = auth?.loading;
+    const { user, authLoading, setIsPasscodeSetupOpen } = useAuth();
     const { isDarkMode, toggleTheme } = useTheme();
     const { checkForUpdates, isUpdateAvailable, updateApp, hardReset } = useServiceWorker(); // Added hardReset
 
     // --- STATE MANAGEMENT ---
-    const [userData, setUserData] = useState({});
+    const [userData, setUserData] = useState(null);
     const [schoolId, setSchoolId] = useState(null);
     const [iern, setIern] = useState(null);
     const [homeRoute, setHomeRoute] = useState('/');
@@ -789,19 +788,24 @@ const UserProfile = () => {
                     <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
                 </button>
                 
-                <div className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent">
+                {/* Passcode Protection */}
+                <button 
+                    onClick={() => setIsPasscodeSetupOpen(true)}
+                    className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
+                >
                     <div className="flex items-center gap-4">
-                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300">
-                            <FiShield size={20} />
+                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
+                            <FiLock size={20} />
                         </div>
-                        <div>
+                        <div className="text-left">
                             <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">Passcode Protection</span>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-widest leading-none">
-                                {user?.passcode ? 'Active' : 'Prompt Required'}
+                            <span className={`text-[10px] font-semibold uppercase tracking-wide ${user?.passcode ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                {user?.passcode ? 'Active' : 'Secure Now'}
                             </span>
                         </div>
                     </div>
-                </div>
+                    <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
+                </button>
             </div>
 
             <div className="bg-white dark:bg-slate-800 rounded-xl py-2 mb-5 shadow-sm overflow-hidden transition-colors border border-transparent dark:border-slate-700">

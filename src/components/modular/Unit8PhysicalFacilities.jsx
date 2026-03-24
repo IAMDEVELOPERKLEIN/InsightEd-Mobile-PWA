@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiEdit2, FiCheck, FiArrowRight, FiArrowLeft, FiChevronLeft, FiPlus, FiTrash2, FiMapPin, FiSave, FiSearch, FiChevronDown, FiUnlock, FiAlertTriangle, FiClock, FiAlertOctagon, FiCloudLightning, FiTrendingUp } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
+import BottomNav from "../../modules/BottomNav";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -733,7 +734,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         const [showAllRooms, setShowAllRooms] = useState(false);
 
         return (
-            <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans pb-40">
+            <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans pb-60">
                 {/* Top Navigation */}
                 <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
                     <div className="max-w-md mx-auto flex items-center gap-3">
@@ -966,7 +967,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 </div>
 
                 {!propReadOnly && (
-                    <div className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
+                    <div className="fixed bottom-[85px] left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
                         <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
                             <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                                 <FiSave className="w-6 h-6" />
@@ -991,7 +992,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden pb-10">
+        <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden pb-40">
             {/* Welcome Back Toast */}
             <AnimatePresence>
                 {showWelcomeBack && (
@@ -1713,7 +1714,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 </main>
 
                 {/* Wizard Navigation Buttons */}
-                <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
+                <footer className="fixed bottom-[85px] left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
                     <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
                         <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none shrink-0">
                              <FiSave className="w-6 h-6" />
@@ -1783,6 +1784,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     </div>
                 )}
             </AnimatePresence>
+
+            <BottomNav userRole="School Head" />
         </div>
     );
 }

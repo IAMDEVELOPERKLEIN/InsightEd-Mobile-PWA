@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiShield, FiLock, FiCheckCircle, FiArrowLeft, FiX } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 
 const PasscodeSetupPrompt = () => {
-    const { user, setUser } = useAuth();
+    const { user, setUser, isPasscodeSetupOpen, setIsPasscodeSetupOpen } = useAuth();
+    const location = useLocation();
     const [isOpen, setIsOpen] = useState(false);
     const [step, setStep] = useState('prompt'); // 'prompt' | 'setup' | 'confirm' | 'success'
     const [tempPasscode, setTempPasscode] = useState('');
@@ -13,28 +15,43 @@ const PasscodeSetupPrompt = () => {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
+        // Public paths where the prompt should NOT appear automatically
+        const publicPaths = ['/', '/login', '/register', '/adminlogin', '/chat', '/guide/school-head'];
+        const isPublicPath = publicPaths.includes(location.pathname);
+
         // Check if user is logged in but has no passcode
-        const needsSetup = user && !user.passcode && localStorage.getItem('needs_pin_setup') === 'true';
+        let needsSetup = (user && !user.passcode && localStorage.getItem('needs_pin_setup') === 'true') || isPasscodeSetupOpen;
         
-        if (user && user.passcode) {
+        // Block auto-trigger on public paths
+        if (isPublicPath && !isPasscodeSetupOpen) {
+            needsSetup = false;
+        }
+
+        if (user && user.passcode && !isPasscodeSetupOpen) {
             localStorage.removeItem('needs_pin_setup');
         }
 
         if (needsSetup) {
-            setStep('prompt');
+            // If it's a manual trigger (isPasscodeSetupOpen), we might want to skip the 'prompt' step
+            // or just start from the beginning.
+            setStep(isPasscodeSetupOpen ? 'setup' : 'prompt');
             setTempPasscode('');
             setConfirmPasscode('');
             setError('');
             
-            // Slight delay to ensure other welcome modals (like Nexus) don't overlap immediately
-            const timer = setTimeout(() => {
-                 setIsOpen(true);
-            }, 800);
-            return () => clearTimeout(timer);
+            if (isPasscodeSetupOpen) {
+                setIsOpen(true);
+            } else {
+                // Slight delay to ensure other welcome modals (like Nexus) don't overlap immediately
+                const timer = setTimeout(() => {
+                    setIsOpen(true);
+                }, 800);
+                return () => clearTimeout(timer);
+            }
         } else {
             setIsOpen(false);
         }
-    }, [user]);
+    }, [user, isPasscodeSetupOpen, location.pathname]);
 
     const handleKeyPress = (num) => {
         setError('');
@@ -87,7 +104,12 @@ const PasscodeSetupPrompt = () => {
             if (res.ok) {
                 // Update local user state
                 setUser(prev => ({ ...prev, passcode: tempPasscode }));
+                // Reset everything
                 localStorage.removeItem('needs_pin_setup');
+                setIsPasscodeSetupOpen(false);
+                setTempPasscode('');
+                setConfirmPasscode('');
+                setError('');
                 setStep('success');
                 setTimeout(() => {
                     setIsOpen(false);

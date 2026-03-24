@@ -23,8 +23,8 @@ const SHIFT_OPTIONS = [
 
 const MODE_OPTIONS = [
     { id: "In-Person Classes", label: "In-Person" },
-    { id: "Blended (3 days in-person, 2 days distance)", label: "Blended (3-2)" },
-    { id: "Blended (4 days in-person, 1 day distance)", label: "Blended (4-1)" },
+    { id: "Blended (3 days in-person, 2 days distance)", label: "Blended (3F2F-2OC)" },
+    { id: "Blended (4 days in-person, 1 day distance)", label: "Blended (4F2F-1OC)" },
     { id: "Full Distance Learning", label: "Full Distance" }
 ];
 
@@ -615,7 +615,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                                     return (
                                                         <button key={opt.id} onClick={() => setMapData(p => ({ ...p, [`shift_${key}`]: opt.id }))}
                                                             className={`${pillBase} ${isActive ? pillActive : pillInactive}`}>
-                                                            {opt.label.replace(" Shift", "nShift")}
+                                                            {opt.label}
                                                         </button>
                                                     );
                                                 })}
@@ -796,8 +796,8 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
             <SuccessModal 
                 isOpen={showSuccess} 
-                onClose={() => navigate("/modular/unit-6")} 
-                redirectUrl="/modular/unit-6"
+                onClose={() => navigate("/modular-dashboard")} 
+                redirectUrl="/modular-dashboard"
                 title="Amazing!" 
                 message="You've successfully mapped out your Shifting and Modalities." 
                 buttonText="Back to Quest Board" 

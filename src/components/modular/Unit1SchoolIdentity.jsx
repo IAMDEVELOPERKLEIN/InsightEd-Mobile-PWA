@@ -91,6 +91,12 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         head_position_title: "",
         head_date_of_birth: "",
         head_date_hired: "",
+        head_dob_month: "",
+        head_dob_day: "",
+        head_dob_year: "",
+        head_hired_month: "",
+        head_hired_day: "",
+        head_hired_year: "",
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -195,16 +201,36 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     mother_school_id: d.mother_school_id || merged.mother_school_id,
                     extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
                     ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
-                    established_month: d.established_month || merged.established_month,
-                    established_year: d.established_year || merged.established_year,
+                    head_position_title: d.head_position_title || merged.head_position_title,
+                    ...(() => {
+                        const dobVal = (d.head_date_of_birth) ? d.head_date_of_birth.split('T')[0] : merged.head_date_of_birth;
+                        const hiredVal = (d.head_date_hired) ? d.head_date_hired.split('T')[0] : merged.head_date_hired;
+                        const dobParts = dobVal ? dobVal.split('-') : [];
+                        const hiredParts = hiredVal ? hiredVal.split('-') : [];
+                        
+                        return {
+                            head_date_of_birth: dobVal,
+                            head_date_hired: hiredVal,
+                            head_dob_year: dobParts[0] || "",
+                            head_dob_month: dobParts[1] ? new Date(dobVal).toLocaleString('default', { month: 'long' }) : "",
+                            head_dob_day: dobParts[2] ? parseInt(dobParts[2]).toString() : "",
+                            head_hired_year: hiredParts[0] || "",
+                            head_hired_month: hiredParts[1] ? new Date(hiredVal).toLocaleString('default', { month: 'long' }) : "",
+                            head_hired_day: hiredParts[2] ? parseInt(hiredParts[2]).toString() : "",
+                        };
+                    })(),
                     head_first_name: d.head_first_name || merged.head_first_name,
                     head_middle_name: d.head_middle_name || merged.head_middle_name,
                     head_last_name: d.head_last_name || merged.head_last_name,
                     head_sex: d.head_sex || merged.head_sex,
-                    head_position_title: d.head_position_title || merged.head_position_title,
-                    head_date_of_birth: (d.head_date_of_birth) ? d.head_date_of_birth.split('T')[0] : merged.head_date_of_birth,
-                    head_date_hired: (d.head_date_hired) ? d.head_date_hired.split('T')[0] : merged.head_date_hired,
+                    established_month: d.established_month || merged.established_month,
+                    established_year: d.established_year || merged.established_year,
                 };
+            }
+
+            // Also handle initial parsing from iernRow if d doesn't exist
+            if (!d && iernRow) {
+                // iernRow might not have these files, but let's be safe
             }
 
             // Draft explicitly overrides everything
@@ -288,6 +314,29 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         fetch(`/api/locations/districts?region=${encodeURIComponent(formData.region)}&division=${encodeURIComponent(formData.division)}`)
             .then(r => r.json()).then(setDistrictOptions).catch(() => {});
     }, [formData.region, formData.division]);
+
+    // ── Date Sync Logic ──────────────────────────────────────────────────────
+    useEffect(() => {
+        if (formData.head_dob_month && formData.head_dob_day && formData.head_dob_year) {
+            const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            const m = (months.indexOf(formData.head_dob_month) + 1).toString().padStart(2, '0');
+            const d = formData.head_dob_day.padStart(2, '0');
+            const y = formData.head_dob_year;
+            const res = `${y}-${m}-${d}`;
+            if (res !== formData.head_date_of_birth) setFormData(prev => ({ ...prev, head_date_of_birth: res }));
+        }
+    }, [formData.head_dob_month, formData.head_dob_day, formData.head_dob_year]);
+
+    useEffect(() => {
+        if (formData.head_hired_month && formData.head_hired_day && formData.head_hired_year) {
+            const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            const m = (months.indexOf(formData.head_hired_month) + 1).toString().padStart(2, '0');
+            const d = formData.head_hired_day.padStart(2, '0');
+            const y = formData.head_hired_year;
+            const res = `${y}-${m}-${d}`;
+            if (res !== formData.head_date_hired) setFormData(prev => ({ ...prev, head_date_hired: res }));
+        }
+    }, [formData.head_hired_month, formData.head_hired_day, formData.head_hired_year]);
 
     useEffect(() => {
         if (!isModeLoading) {
@@ -980,26 +1029,55 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <option value="Assistant School Principal II">Assistant School Principal II</option>
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date of Birth</label>
-                                                    <input
-                                                        type="date"
-                                                        name="head_date_of_birth"
-                                                        value={formData.head_date_of_birth}
-                                                        onChange={handleChange}
-                                                        className={chunkyInput}
-                                                    />
+                                            <div className="space-y-4">
+                                                {/* Date of Birth Selection */}
+                                                <div className="space-y-2">
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date of Birth</label>
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        <select name="head_dob_month" value={formData.head_dob_month} onChange={handleChange} className={chunkySelect + " !text-sm"}>
+                                                            <option value="" disabled hidden>Month</option>
+                                                            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                                                <option key={m} value={m}>{m}</option>
+                                                            ))}
+                                                        </select>
+                                                        <select name="head_dob_day" value={formData.head_dob_day} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                            <option value="" disabled hidden>Day</option>
+                                                            {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(d => (
+                                                                <option key={d} value={d}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                        <select name="head_dob_year" value={formData.head_dob_year} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                            <option value="" disabled hidden>Year</option>
+                                                            {Array.from({ length: 120 }, (_, i) => (new Date().getFullYear() - i).toString()).map(y => (
+                                                                <option key={y} value={y}>{y}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 text-xs">Date Assigned</label>
-                                                    <input
-                                                        type="date"
-                                                        name="head_date_hired"
-                                                        value={formData.head_date_hired}
-                                                        onChange={handleChange}
-                                                        className={chunkyInput}
-                                                    />
+
+                                                {/* Date Assigned Selection */}
+                                                <div className="space-y-2">
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date Assigned</label>
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm"}>
+                                                            <option value="" disabled hidden>Month</option>
+                                                            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                                                <option key={m} value={m}>{m}</option>
+                                                            ))}
+                                                        </select>
+                                                        <select name="head_hired_day" value={formData.head_hired_day} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                            <option value="" disabled hidden>Day</option>
+                                                            {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(d => (
+                                                                <option key={d} value={d}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                        <select name="head_hired_year" value={formData.head_hired_year} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                            <option value="" disabled hidden>Year</option>
+                                                            {Array.from({ length: 70 }, (_, i) => (new Date().getFullYear() - i).toString()).map(y => (
+                                                                <option key={y} value={y}>{y}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1013,8 +1091,9 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <LocationPickerMap
                                                 latitude={formData.latitude}
                                                 longitude={formData.longitude}
-                                                onChange={(lat, lng) => setFormData(prev => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }))}
+                                                onLocationSelect={(lat, lng) => setFormData(prev => ({ ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }))}
                                                 readOnly={false}
+                                                className="h-full"
                                             />
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
@@ -1070,15 +1149,6 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         {formData.ownership && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
-                                                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl">
-                                                    <p className="text-xs text-blue-600 font-semibold mb-1">Selected Ownership Type</p>
-                                                    <p className="text-lg font-bold text-blue-800">
-                                                        {formData.ownership === "deped" && "DepEd Owned"}
-                                                        {formData.ownership === "privately_owned" && "Privately Owned"}
-                                                        {formData.ownership === "lgu_owned" && "LGU Owned"}
-                                                    </p>
-                                                </div>
-
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document to be uploaded</label>
                                                 <select 
                                                     name="ownership_document_type" 

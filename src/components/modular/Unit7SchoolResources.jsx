@@ -96,9 +96,9 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // PHASE 2 State
     const [ictData, setIctData] = useState({
-        laptops_total: "", laptops_func: "",
-        tablets_total: "", tablets_func: "",
-        desktops_total: "", desktops_func: "",
+        laptops_total: "", laptops_func: "", laptops_teaching: "", laptops_working: "",
+        tablets_total: "", tablets_func: "", tablets_teaching: "", tablets_working: "",
+        desktops_total: "", desktops_func: "", desktops_teaching: "", desktops_working: "",
         smart_tvs_total: "", smart_tvs_func: "",
         projectors_total: "", projectors_func: "",
         printers_total: "", printers_func: "",
@@ -139,6 +139,10 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         sha_category: "",
     });
     const [hasMultigradeContext, setHasMultigradeContext] = useState(false);
+
+    // Validation Confirmation State
+    const [validationConfirm, setValidationConfirm] = useState("");
+    useEffect(() => { setValidationConfirm(""); }, [currentPhase]);
 
     // ── Data Fetching ───────────────────────────────────────────────────────────
     useEffect(() => {
@@ -430,18 +434,19 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const ictStats = useMemo(() => {
         let isValid = true; const errors = {}; const broken = {};
         ICT_CATEGORIES.forEach(cat => {
+            const isAdvanced = ["laptops", "tablets", "desktops"].includes(cat.key);
             const total = parseInt(ictData[`${cat.key}_total`]) || 0;
-            const func = parseInt(ictData[`${cat.key}_func`]) || 0;
+            const func = isAdvanced ? (parseInt(ictData[`${cat.key}_working`]) || 0) : (parseInt(ictData[`${cat.key}_func`]) || 0);
+            const teaching = isAdvanced ? (parseInt(ictData[`${cat.key}_teaching`]) || 0) : 0;
             const tStr = ictData[`${cat.key}_total`];
-            const fStr = ictData[`${cat.key}_func`];
+            const fStr = isAdvanced ? ictData[`${cat.key}_working`] : ictData[`${cat.key}_func`];
+            const teachStr = isAdvanced ? ictData[`${cat.key}_teaching`] : "";
 
             if (fStr !== "" && func > total) { isValid = false; errors[cat.key] = true; } 
+            else if (isAdvanced && teachStr !== "" && teaching > total) { isValid = false; errors[cat.key] = true; }
             else { errors[cat.key] = false; }
-
-            const unserviceable = total - func;
-            if (unserviceable > 0 && tStr !== "" && fStr !== "") { broken[cat.key] = unserviceable; } 
-            else { broken[cat.key] = 0; }
-
+            
+            broken[cat.key] = total - func;
             if ((tStr !== "" && fStr === "") || (tStr === "" && fStr !== "")) isValid = false;
         });
         return { isValid, errors, broken };
@@ -479,24 +484,79 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     const washStats = useMemo(() => {
         let isValid = true; const errors = {};
-        
         WASH_CATEGORIES.forEach(cat => {
             const total = parseInt(washData[`${cat.key}_total`]) || 0;
             const func = parseInt(washData[`${cat.key}_func`]) || 0;
             const tStr = washData[`${cat.key}_total`];
             const fStr = washData[`${cat.key}_func`];
-
             if (fStr !== "" && func > total) { isValid = false; errors[cat.key] = true; } 
             else { errors[cat.key] = false; }
-
             if ((tStr !== "" && fStr === "") || (tStr === "" && fStr !== "")) isValid = false;
         });
-
-        // Water source is required
         if (!washData.water_source) isValid = false;
-
         return { isValid, errors };
     }, [washData]);
+
+    const hasShortageOrExcess = useMemo(() => {
+        if (currentPhase === 1) {
+            return gradesData.some(g => {
+                const total = (parseInt(g.armchairs_func)||0) + ((parseInt(g.tables_func)||0)*2) + ((parseInt(g.desks_func)||0)*2);
+                return total !== (parseInt(g.enrolled)||0);
+            });
+        }
+        if (currentPhase === 2) {
+            return ICT_CATEGORIES.some(cat => {
+                const total = parseInt(ictData[`${cat.key}_total`]) || 0;
+                const func = parseInt(ictData[`${cat.key}_func`]) || 0;
+                return total !== func && (ictData[`${cat.key}_total`] !== "" || ictData[`${cat.key}_func`] !== "");
+            });
+        }
+        if (currentPhase === 4) {
+            const noPiped = washData.water_source === "Natural resources (Deep well, Spring, Rainwater)" || washData.water_source === "No water source";
+            if (noPiped) return true;
+            return WASH_CATEGORIES.some(cat => {
+                const total = parseInt(washData[`${cat.key}_total`]) || 0;
+                const func = parseInt(washData[`${cat.key}_func`]) || 0;
+                return total !== func && (washData[`${cat.key}_total`] !== "" || washData[`${cat.key}_func`] !== "");
+            });
+        }
+        if (currentPhase === 5) {
+            const noNet = utilitiesData.utility_internet_yesno === false;
+            const noGrid = utilitiesData.utility_electricity === "Off-grid supply" || utilitiesData.utility_electricity === "No electricity";
+            return noNet || noGrid;
+        }
+        return false;
+    }, [currentPhase, gradesData, ictData, washData, utilitiesData]);
+
+    const isValidationRequired = hasShortageOrExcess && (currentPhase === 1 || currentPhase === 2 || currentPhase === 4 || currentPhase === 5);
+    const isValidationConfirmed = !isValidationRequired || validationConfirm.toLowerCase() === "confirm";
+
+    const ConfirmationBox = () => (
+        <AnimatePresence>
+            {isValidationRequired && !isValidationConfirmed && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="mb-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-3xl shadow-sm">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center text-lg">⚠️</div>
+                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest leading-tight">
+                            {currentPhase >= 4 ? "Critical Status Confirmation" : "Discrepancy Detected"}
+                        </p>
+                    </div>
+                    <p className="text-[10px] font-bold text-amber-600 mb-3 px-1 leading-relaxed">
+                        {currentPhase >= 4 
+                            ? "You have indicated a lack of basic utilities (Power, Water, or Internet). Please type \"confirm\" to verify." 
+                            : "Inventory count doesn't match baseline. Type \"confirm\" to validate your computation."}
+                    </p>
+                    <input 
+                        type="text" 
+                        value={validationConfirm} 
+                        onChange={(e) => setValidationConfirm(e.target.value)} 
+                        placeholder="Type 'confirm' here..."
+                        className="w-full p-3 bg-white border-2 border-amber-300 rounded-2xl text-center text-sm font-black text-amber-700 placeholder:text-amber-200 focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
 
     const handlePhase4Proceed = () => { setCurrentPhase(5); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
@@ -1033,32 +1093,78 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     {ICT_CATEGORIES.map(cat => {
                                         const hasError = ictStats.errors[cat.key];
                                         const unserviceable = ictStats.broken[cat.key];
+                                        const isAdvanced = ["laptops", "tablets", "desktops"].includes(cat.key);
+                                        const total = parseInt(ictData[`${cat.key}_total`]) || 0;
+
                                         return (
                                             <div key={cat.key} className={`bg-white border-2 rounded-3xl p-5 transition-all shadow-sm ${hasError ? "border-red-300" : "border-gray-100"}`}>
                                                 <div className="flex items-center gap-2 mb-3">
                                                     <span className="text-2xl">{cat.emoji}</span>
                                                     <h3 className="text-lg font-black text-gray-800">{cat.label}</h3>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-2 gap-3 mb-4">
                                                     <div>
                                                         <p className="text-[10px] font-black text-gray-400 uppercase text-center mb-1">Total Units</p>
                                                         <input type="number" name={`${cat.key}_total`} value={ictData[`${cat.key}_total`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-gray-50 text-gray-800 focus:!border-gray-400 focus:!bg-white`} />
                                                     </div>
-                                                    <div>
-                                                        <p className={`text-[10px] font-black uppercase text-center mb-1 ${hasError ? "text-red-500" : "text-emerald-500"}`}>Functional</p>
-                                                        <input type="number" name={`${cat.key}_func`} value={ictData[`${cat.key}_func`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 ${hasError ? "!bg-red-50 !border-red-400 text-red-700" : "!bg-emerald-50 text-emerald-700 focus:!border-emerald-400"}`} />
-                                                    </div>
+                                                    {!isAdvanced && (
+                                                        <div>
+                                                            <p className={`text-[10px] font-black uppercase text-center mb-1 ${hasError ? "text-red-500" : "text-emerald-500"}`}>Functional</p>
+                                                            <input type="number" name={`${cat.key}_func`} value={ictData[`${cat.key}_func`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 ${hasError ? "!bg-red-50 !border-red-400 text-red-700" : "!bg-emerald-50 text-emerald-700 focus:!border-emerald-400"}`} />
+                                                        </div>
+                                                    )}
                                                 </div>
+
                                                 <AnimatePresence>
-                                                    {hasError && (
-                                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
-                                                            <div className="bg-red-50 text-red-600 text-xs font-bold p-3 rounded-xl border border-red-100 flex items-center gap-2">
-                                                                <FiX className="w-4 h-4 flex-shrink-0" />
-                                                                Functional cannot exceed Total Units!
+                                                    {isAdvanced && total > 0 && (
+                                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden space-y-4">
+                                                            {/* Usage Breakdown */}
+                                                            <div className="bg-indigo-50/50 rounded-2xl p-4 border border-indigo-100">
+                                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-3">Personnel Usage Breakdown</p>
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div>
+                                                                        <p className="text-[9px] font-bold text-indigo-600 mb-1 ml-1">Teaching</p>
+                                                                        <input type="number" name={`${cat.key}_teaching`} value={ictData[`${cat.key}_teaching`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[9px] font-bold text-slate-400 mb-1 ml-1">Non-Teaching</p>
+                                                                        <div className={`${chunkyInput} !mt-0 !bg-slate-50 text-slate-400 border-dashed flex items-center justify-center`}>
+                                                                            {Math.max(0, total - (parseInt(ictData[`${cat.key}_teaching`]) || 0))}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Condition Breakdown */}
+                                                            <div className="bg-emerald-50/50 rounded-2xl p-4 border border-emerald-100">
+                                                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-3">Operational Condition</p>
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div>
+                                                                        <p className="text-[9px] font-bold text-emerald-700 mb-1 ml-1">Working</p>
+                                                                        <input type="number" name={`${cat.key}_working`} value={ictData[`${cat.key}_working`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-white focus:!border-indigo-400`} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[9px] font-bold text-red-400 mb-1 ml-1">Not Working</p>
+                                                                        <div className={`${chunkyInput} !mt-0 !bg-red-50 text-red-400 border-dashed flex items-center justify-center`}>
+                                                                            {Math.max(0, total - (parseInt(ictData[`${cat.key}_working`]) || 0))}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </motion.div>
                                                     )}
-                                                    {!hasError && unserviceable > 0 && (
+                                                </AnimatePresence>
+
+                                                <AnimatePresence>
+                                                    {hasError && (
+                                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mt-3">
+                                                            <div className="bg-red-50 text-red-600 text-xs font-bold p-3 rounded-xl border border-red-100 flex items-center gap-2">
+                                                                <FiX className="w-4 h-4 flex-shrink-0" />
+                                                                Check your input! Quantities cannot exceed total units.
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                    {!hasError && unserviceable > 0 && !isAdvanced && (
                                                         <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
                                                             <div className="bg-amber-50 text-amber-700 text-xs font-bold p-3 rounded-xl border border-amber-200 flex items-center gap-2">
                                                                 <span>⚠️</span>
@@ -1354,17 +1460,20 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 </div>
             </main>
 
-            <div className="fixed bottom-0 left-0 w-full p-5 bg-white border-t border-gray-100 flex justify-center z-40 shadow-[0_-2px_12px_rgba(0,0,0,0.02)]">
+            <div className="fixed bottom-0 left-0 w-full p-5 bg-white border-t border-gray-100 flex flex-col items-center z-40 shadow-[0_-2px_12px_rgba(0,0,0,0.02)]">
+                <div className="w-full max-w-md">
+                    <ConfirmationBox />
+                </div>
                 <div className="w-full max-w-md flex items-center gap-3">
                     <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                          <FiSave className="w-6 h-6" />
                     </button>
                     {currentPhase === 1 ? (
-                        <button disabled={!isPhase1Valid} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                        <button disabled={!isPhase1Valid || !isValidationConfirmed} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                             Continue to Phase 2 <FiChevronRight className="w-5 h-5" />
                         </button>
                     ) : currentPhase === 2 ? (
-                        <button disabled={!ictStats.isValid} onClick={handlePhase2Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                        <button disabled={!ictStats.isValid || !isValidationConfirmed} onClick={handlePhase2Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                             Continue to Mobile Labs (eCart) <FiChevronRight className="w-5 h-5" />
                         </button>
                     ) : currentPhase === 3 ? (
@@ -1372,7 +1481,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             Continue to Phase 4 (WASH) <FiChevronRight className="w-5 h-5" />
                         </button>
                     ) : currentPhase === 4 ? (
-                        <button disabled={!washStats.isValid} onClick={handlePhase4Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                        <button disabled={!washStats.isValid || !isValidationConfirmed} onClick={handlePhase4Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                             Continue to Phase 5 (Utilities) <FiChevronRight className="w-5 h-5" />
                         </button>
                     ) : (
@@ -1399,7 +1508,15 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div className="space-y-3">
                                         <div><p className="text-xs font-bold text-gray-500 mb-1 ml-1">Batch / Package Name</p><input type="text" name="batches_name" value={ecartForm.batches_name} onChange={handleEcartFormChange} placeholder="e.g. Batch 44" className={`${chunkyInput} !mt-0 !text-left !px-5`} /></div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            <div><p className="text-xs font-bold text-gray-500 mb-1 ml-1">Year Received</p><input type="number" name="year_received" value={ecartForm.year_received} onChange={handleEcartFormChange} placeholder="e.g. 2021" min="1990" max="2050" className={`${chunkyInput} !mt-0`} /></div>
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Year Received</p>
+                                                <select name="year_received" value={ecartForm.year_received} onChange={handleEcartFormChange} className={`${chunkySelect} !mt-0 text-base py-4.5`}>
+                                                    <option value="" disabled>Select Year...</option>
+                                                    {Array.from({ length: 2026 - 2000 + 1 }, (_, i) => 2026 - i).map(year => (
+                                                        <option key={year} value={year}>{year}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                             <div>
                                                 <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Funding Source</p>
                                                 <select name="sources_fund" value={ecartForm.sources_fund} onChange={handleEcartFormChange} className={`${chunkySelect} !mt-0 text-base py-4.5`}>

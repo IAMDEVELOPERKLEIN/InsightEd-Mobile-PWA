@@ -57,6 +57,7 @@ const Login = () => {
     const [isNotFound, setIsNotFound] = useState(false);
     const [loginMode, setLoginMode] = useState('password'); // 'password' | 'passcode'
     const [isSchoolHead, setIsSchoolHead] = useState(true);
+    const [isPortalEnforced, setIsPortalEnforced] = useState(false); // NEW: Track if a portal is active
     const [showBackPrompt, setShowBackPrompt] = useState(false);
     
     // UI flows
@@ -72,17 +73,26 @@ const Login = () => {
     // NEW: Handle path-based role restrictions from Launch Pad
     useEffect(() => {
         const pathId = location.state?.pathId;
+        const lastRole = localStorage.getItem('lastRole');
+        
+        console.log("[Login] Initializing portal state. State pathId:", pathId, "Stored lastRole:", lastRole);
+
         if (pathId) {
-            console.log("[Login] Received path identifier:", pathId);
-            if (pathId === 'path_school_head') {
-                setIsSchoolHead(true);
-            } else {
-                // All other paths (RO/SD, Engineers, etc.) use Email login
-                setIsSchoolHead(false);
-            }
+            console.log("[Login] Received path identifier from state:", pathId);
+            setIsSchoolHead(pathId === 'path_school_head');
+            setIsPortalEnforced(true);
+        } else if (lastRole) {
+            // Mapping from role to portal type
+            const isSH = lastRole === 'School Head';
+            console.log("[Login] Fallback to lastRole portal layout. isSchoolHead:", isSH);
+            setIsSchoolHead(isSH);
+            setIsPortalEnforced(true);
+            // Clear lastRole so it doesn't affect future fresh logins
+            localStorage.removeItem('lastRole');
         } else if (location.state?.roleType) {
             // Fallback for legacy roleType state if any
             setIsSchoolHead(location.state.roleType === 'School Head');
+            setIsPortalEnforced(true);
         }
     }, [location.state]);
 
@@ -139,12 +149,34 @@ const Login = () => {
         document.documentElement.classList.remove('dark');
         
         if (authUser && !authLoading) {
-            const destPath = getDashboardPath(authUser.role, authUser.account_category);
-            navigate(destPath);
+            // If the user explicitly chose a portal from LaunchPad, check for role compatibility
+            const pathId = location.state?.pathId;
+            let isRoleCompatible = true;
+            
+            if (pathId === 'path_school_head') {
+                isRoleCompatible = authUser.role === 'School Head';
+            } else if (pathId === 'path_ro_sd') {
+                isRoleCompatible = ['Regional Office', 'School Division Office'].includes(authUser.role);
+            } else if (pathId === 'path_engineers') {
+                isRoleCompatible = ['DepEd Engineer', 'Division Engineer', 'Engineer', 'Non-DepEd Engineer'].includes(authUser.role);
+            } else if (pathId === 'path_agencies') {
+                isRoleCompatible = ['Implementing Agency', 'PGO', 'CGO', 'MGO', 'DPWH', 'CSO'].includes(authUser.role);
+            } else if (pathId === 'path_efd') {
+                isRoleCompatible = ['EFD', 'EFD Engineer', 'HRODI', 'Central Office'].includes(authUser.role);
+            }
+
+            // Only auto-redirect if no portal was chosen, OR if the current role is compatible with the chosen portal
+            if (!pathId || isRoleCompatible) {
+                const destPath = getDashboardPath(authUser.role, authUser.account_category);
+                navigate(destPath);
+            } else {
+                // If not compatible, we stay on login page to allow switching accounts/re-logging
+                setLoading(false);
+            }
         } else if (!authLoading) {
             setLoading(false);
         }
-    }, [authUser, authLoading, navigate]);
+    }, [authUser, authLoading, navigate, location.state]);
 
     const handleSwitchAccount = () => {
         setRememberedUser(null);
@@ -428,8 +460,8 @@ const Login = () => {
                             <p className="text-slate-500 text-sm mt-2 font-medium">Department of Education</p>
                         </div>
 
-                        {/* TOGGLE SECTION: Are you a School Head? (Hidden if path is pre-selected) */}
-                        {(!rememberedUser || usePassword) && !location.state?.pathId ? (
+                        {/* TOGGLE SECTION: Are you a School Head? (Hidden if path is pre-selected or logout redirect) */}
+                        {(!rememberedUser || usePassword) && !isPortalEnforced ? (
                             <div className="flex items-center justify-between mb-8 px-2 animate-in fade-in duration-500">
                                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Are you a School Head?</span>
                                 <button
