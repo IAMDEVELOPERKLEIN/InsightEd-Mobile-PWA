@@ -135,10 +135,91 @@ app.use(express.json({ limit: '500mb' }));
 // --- PDF COMPRESSION COMPATIBILITY ---
 const execAsync = util.promisify(exec);
 
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads');
-}
+// --- SCHOOL DOCS STORAGE ---
+const schoolDocsStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = 'uploads/school_docs/';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `iern_${req.params.iern}_${Date.now()}${ext}`;
+    cb(null, uniqueName);
+  }
+});
+
+const schoolDocsUpload = multer({ 
+  storage: schoolDocsStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Only PDF files are allowed!'), false);
+  }
+});
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
 const upload = multer({ dest: 'uploads/' });
+
+// --- UPLOAD ROUTE: SCHOOL OWNERSHIP DOCUMENTS ---
+app.post('/api/schools/:iern/ownership-docs', schoolDocsUpload.single('file'), async (req, res) => {
+  const { iern } = req.params;
+  const { doc_type } = req.body;
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No PDF file uploaded' });
+  }
+
+  const relativePath = `/uploads/school_docs/${req.file.filename}`;
+  
+  try {
+    // 1. Save to database
+    const dbRes = await pool.query(
+      `INSERT INTO school_ownership_docs (iern, file_path, file_name, doc_type) 
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [iern, relativePath, req.file.originalname, doc_type]
+    );
+
+    // 2. Respond immediately (Background task starts later)
+    res.status(200).json({ 
+      success: true, 
+      message: 'Upload successful. Optimization starting in background.',
+      data: { id: dbRes.rows[0].id, filePath: relativePath }
+    });
+
+    // 3. Background Compression (75 DPI)
+    const inputPath = path.resolve(req.file.path);
+    const outputPath = path.resolve(req.file.path.replace('.pdf', '_opt.pdf'));
+    const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
+    
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const cmd = `"${pythonCmd}" "${scriptPath}" "${inputPath}" "${outputPath}" 75`;
+
+    exec(cmd, async (err, stdout, stderr) => {
+        if (err) {
+            console.error(`❌ Background Compression Failed for ${iern}:`, stderr || err.message);
+            return;
+        }
+        
+        try {
+            // Replace original with optimized one
+            if (fs.existsSync(outputPath)) {
+                fs.renameSync(outputPath, inputPath);
+                console.log(`✅ Background Compression Success for ${iern} (75 DPI)`);
+                await pool.query('UPDATE school_ownership_docs SET status = $1 WHERE id = $2', ['optimized', dbRes.rows[0].id]);
+            }
+        } catch (renameErr) {
+            console.error(`❌ Failed to replace compressed file for ${iern}:`, renameErr.message);
+        }
+    });
+
+  } catch (err) {
+    console.error('Database Error during upload:', err);
+    res.status(500).json({ error: 'Failed to record document metadata' });
+  }
+});
 
 const processPdfFile = async (file) => {
     if (!file) return null;

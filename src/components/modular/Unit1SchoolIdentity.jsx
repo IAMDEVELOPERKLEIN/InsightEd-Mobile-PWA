@@ -9,6 +9,7 @@ import LocationPickerMap from "../LocationPickerMap";
 import locationData from "../../locations.json";
 import useReadOnly from "../../hooks/useReadOnly";
 import { normalizeOffering } from "../../utils/dataNormalization";
+import DocumentUpload from "./DocumentUpload";
 
 const TOTAL_STEPS = 7;
 
@@ -78,6 +79,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         google_drive_file_id: "",
         google_drive_file_name: "",
         google_drive_thumbnail_url: "",
+        local_file_path: "",
         school_type: "",
         mother_school_id: "",
         extension_mother_school_name: "",
@@ -201,6 +203,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     mother_school_id: d.mother_school_id || merged.mother_school_id,
                     extension_mother_school_name: d.extension_mother_school_name || merged.extension_mother_school_name,
                     ownership_document_type: d.ownership_document_type || merged.ownership_document_type,
+                    local_file_path: d.local_file_path || merged.local_file_path,
                     head_position_title: d.head_position_title || merged.head_position_title,
                     ...(() => {
                         const dobVal = (d.head_date_of_birth) ? d.head_date_of_birth.split('T')[0] : merged.head_date_of_birth;
@@ -470,7 +473,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 { key: 'latitude', label: 'Map Pin (Latitude)' },
                 { key: 'longitude', label: 'Map Pin (Longitude)' },
                 { key: 'school_name', label: 'School Name' },
-                { key: 'google_drive_file_id', label: 'Ownership Document' },
+                { key: 'local_file_path', label: 'Ownership Document' },
                 { key: 'established_month', label: 'Month Established' },
                 { key: 'established_year', label: 'Year Established' }
             ];
@@ -519,6 +522,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 head_position_title: formData.head_position_title,
                 head_date_of_birth: formData.head_date_of_birth,
                 head_date_hired: formData.head_date_hired,
+                local_file_path: formData.local_file_path,
             };
             
             const res = await fetch("/api/ph_schools/unit1", {
@@ -592,7 +596,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const isStep5Valid = formData.latitude !== "" && formData.longitude !== "";
     const isStep6Valid = formData.ownership && 
         formData.ownership_document_type && 
-        formData.google_drive_file_id && 
+        formData.local_file_path && 
         formData.school_type &&
         formData.established_month &&
         formData.established_year && (
@@ -794,7 +798,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Document Type</span>
                                         <p className="font-bold text-slate-700 text-sm">{formData.ownership_document_type || "No document provided"}</p>
                                     </div>
-                                    {formData.google_drive_file_id && (
+                                    {formData.local_file_path && (
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Digital Archive</span>
@@ -803,8 +807,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <div className="flex items-center gap-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
                                                 <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-xl shadow-inner">📄</div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-bold text-slate-700 text-sm truncate">{formData.google_drive_file_name}</p>
-                                                    <button onClick={() => setShowFullscreenPdf(true)} className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline">Preview Link &rarr;</button>
+                                                    <p className="font-bold text-slate-700 text-sm truncate">{formData.local_file_path.split('/').pop()}</p>
+                                                    <a href={formData.local_file_path} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-[10px] font-black uppercase tracking-tighter mt-0.5 hover:underline">View Document &rarr;</a>
                                                 </div>
                                             </div>
                                         </div>
@@ -1147,11 +1151,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             </select>
                                         </div>
 
-                                        {/* Ownership Document - Google Drive Link */}
+                                        {/* Ownership Document Upload */}
                                         {formData.ownership && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
-                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document to be uploaded</label>
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Document Type</label>
                                                 <select 
                                                     name="ownership_document_type" 
                                                     value={formData.ownership_document_type} 
@@ -1186,100 +1190,26 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     )}
                                                 </select>
                                                 
-                                                {/* Google Drive Link Input */}
-                                                <div className="space-y-2">
-                                                    <input
-                                                        type="text"
-                                                        placeholder="Paste Google Drive link (must be publicly shared)"
-                                                        value={formData.google_drive_link}
-                                                        onChange={handleGoogleDriveLink}
-                                                        className={chunkyInput}
+                                                {/* Local Document Upload (Replaces GDrive) */}
+                                                <div className="pt-2">
+                                                    <DocumentUpload 
+                                                        iern={formData.iern || formData.school_id} 
+                                                        docType={formData.ownership_document_type}
+                                                        initialFile={formData.local_file_path}
+                                                        onUploadSuccess={(path) => setFormData(prev => ({ ...prev, local_file_path: path }))}
                                                     />
-                                                    <button
-                                                        type="button"
-                                                        onClick={openGoogleDrivePicker}
-                                                        className="w-full p-4 mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-3xl transition-all"
-                                                    >
-                                                        📁 Browse Google Drive
-                                                    </button>
-                                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between gap-3">
-                                                        <p className="text-xs text-blue-700 font-semibold flex-1">💡 Tip: Make sure your file is accessible to the public by sharing it with "Anyone with the link" in Google Drive.</p>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setShowGDriveGuide(true)}
-                                                            className="flex-shrink-0 p-2 hover:bg-blue-100 rounded-full transition-colors"
-                                                            title="View guide"
-                                                        >
-                                                            <FiInfo className="w-5 h-5 text-blue-600" />
-                                                        </button>
+                                                    
+                                                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 mt-4">
+                                                        <p className="text-[11px] text-blue-700 font-bold flex-1">
+                                                            💡 Tip: Your PDF will be optimized to 75 DPI in the background once uploaded to ensure fast loading for everyone.
+                                                        </p>
                                                     </div>
                                                 </div>
-
-                                                {/* Validate Button */}
-                                                {formData.google_drive_link && !formData.google_drive_file_id && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => validateAndFetchGoogleDriveLink(formData.google_drive_link)}
-                                                        disabled={driveLinkValidating}
-                                                        className="w-full p-4 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-3xl transition-all disabled:opacity-50"
-                                                    >
-                                                        {driveLinkValidating ? "Validating..." : "Validate & Preview"}
-                                                    </button>
-                                                )}
-
-                                                {/* Error Message */}
-                                                {driveLinkError && (
-                                                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                                                        className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex items-center gap-3">
-                                                        <span className="text-xl">❌</span>
-                                                        <p className="text-sm font-bold text-red-700">{driveLinkError}</p>
-                                                    </motion.div>
-                                                )}
-
-                                                {/* Thumbnail Preview */}
-                                                {formData.google_drive_file_id && formData.google_drive_thumbnail_url && (
-                                                    <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                                                        className="space-y-3 p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-xl">✅</span>
-                                                            <p className="text-sm font-bold text-emerald-700">Document verified & ready</p>
-                                                        </div>
-                                                        <div className="relative w-full h-40 bg-white rounded-xl overflow-hidden border border-emerald-200 shadow-sm group">
-                                                            <iframe
-                                                                src={`https://drive.google.com/file/d/${formData.google_drive_file_id}/preview`}
-                                                                loading="lazy"
-                                                                className="w-full h-full border-0"
-                                                                allowFullScreen
-                                                                referrerPolicy="no-referrer"
-                                                                title="Document preview"
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setShowFullscreenPdf(true)}
-                                                                className="absolute top-2 right-2 p-2 bg-white rounded-lg shadow-lg hover:shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-200 text-emerald-600 hover:text-emerald-700"
-                                                                title="View fullscreen"
-                                                            >
-                                                                <FiMaximize2 className="w-5 h-5" />
-                                                            </button>
-                                                        </div>
-                                                        <p className="text-xs text-emerald-600">
-                                                            <strong>File:</strong> {formData.google_drive_file_name}
-                                                        </p>
-                                                        <a
-                                                            href={formData.google_drive_link}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="inline-block text-xs text-blue-600 underline"
-                                                        >
-                                                            Open in Google Drive →
-                                                        </a>
-                                                    </motion.div>
-                                                )}
                                             </motion.div>
                                         )}
 
                                         {/* School Type Question */}
-                                        {formData.google_drive_file_id && (
+                                        {formData.local_file_path && (
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">School Type</label>
