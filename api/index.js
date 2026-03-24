@@ -4337,23 +4337,6 @@ app.post('/api/upload-engineer-mother-moa', upload.fields([{ name: 'moa_pdf', ma
     `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Mother MOA for ${lgu_name} (${lgu_type})`, 'Mother MOA']);
 
     res.json({ success: true });
-
-    // Background update engineer_form projects for this LGU
-    (async () => {
-      try {
-        let updateQuery = `UPDATE engineer_form SET mother_moa_id = $1 WHERE region = $2 AND province = $3`;
-        let params = [mId, region, province];
-        
-        if (lgu_type !== 'PGO' && municipality_city) {
-          updateQuery += ` AND (city = $4 OR municipality = $4)`;
-          params.push(municipality_city);
-        }
-        await pool.query(updateQuery, params);
-        console.log(`✅ Linked existing projects in ${lgu_name} to Mother MOA ${mId}`);
-      } catch (bkErr) {
-        console.error("❌ Failed to link projects to Mother MOA:", bkErr.message);
-      }
-    })();
   } catch (err) {
     console.error("Mother MOA Upload Error:", err);
     res.status(500).json({ error: "Internal Server Error: " + err.message });

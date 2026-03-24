@@ -932,8 +932,8 @@ const EFDMotherMoa = () => {
 
                                     <button
                                         onClick={handleUploadSupplemental}
-                                        disabled={isUploadingSupplemental || !supplementalLink}
-                                        className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-[13px] uppercase tracking-wider shadow-lg transition-all ${isUploadingSupplemental || !supplementalLink ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:-translate-y-1 active:scale-95 shadow-emerald-900/20'}`}
+                                        disabled={isUploadingSupplemental || !supplementalFile}
+                                        className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-[13px] uppercase tracking-wider shadow-lg transition-all ${isUploadingSupplemental || !supplementalFile ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:-translate-y-1 active:scale-95 shadow-emerald-900/20'}`}
                                     >
                                         {isUploadingSupplemental ? (
                                             <>

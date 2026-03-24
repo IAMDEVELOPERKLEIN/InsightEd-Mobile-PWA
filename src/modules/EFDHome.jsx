@@ -497,7 +497,11 @@ const EFDHome = () => {
                     <div className="relative z-10">
                         <div className="flex justify-between items-center mb-8">
                             <div>
-                                <h1 className="text-2xl font-black tracking-tight leading-none">EFD Engineer Dashboard</h1>
+                                <p className="text-sm font-bold text-blue-200 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                    Infrastructure Management
+                                </p>
+                                <h1 className="text-2xl font-black tracking-tight leading-none">HRODI Engineer Dashboard</h1>
                                 <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
                                     {userData?.region || 'Central Office'} • Infrastructure Monitoring
                                 </p>
