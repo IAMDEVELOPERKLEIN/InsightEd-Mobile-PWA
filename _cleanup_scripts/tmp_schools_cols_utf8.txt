@@ -1,0 +1,18 @@
+﻿[dotenv@17.2.3] injecting env (4) from .env -- tip: ΓÜÖ∩╕Å  specify custom .env file path with { path: '/custom/path/.env' }
+[
+  'school_id',
+  'region',
+  'division',
+  'district',
+  'school_name',
+  'street_address',
+  'mother_school_id',
+  'province',
+  'municipality',
+  'leg_district',
+  'barangay',
+  'latitude',
+  'longitude',
+  'curricular_offering',
+  'special_order'
+]

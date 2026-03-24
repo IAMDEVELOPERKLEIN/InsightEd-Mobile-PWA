@@ -25,10 +25,6 @@ const EFDNewconMonitoring = () => {
     const [importMsg, setImportMsg] = useState('');
     const [selectedVersion, setSelectedVersion] = useState('2026');
     const [dataMode, setDataMode] = useState('masterlist'); // 'masterlist' | '2026'
-    const [drillDownLevel, setDrillDownLevel] = useState('storey'); // 'storey' | 'prototype'
-    const [selectedStorey, setSelectedStorey] = useState(null);
-    const [selectedStoreyType, setSelectedStoreyType] = useState(null);
-    const [storeyBreakdown, setStoreyBreakdown] = useState([]);
     const [region, setRegion] = useState(''); // Added missing state or placeholder
     const [division, setDivision] = useState(''); // Added missing state or placeholder
     const [userRole, setUserRole] = useState(() => {
@@ -40,26 +36,7 @@ const EFDNewconMonitoring = () => {
     // Load data on mount
     useEffect(() => {
         loadData();
-    }, [selectedVersion]);
-
-    useEffect(() => {
-        loadBreakdown();
-    }, [dataMode]);
-
-    const loadBreakdown = async () => {
-        try {
-            const endpoint = dataMode === 'masterlist' 
-                ? '/api/masterlist/storey-breakdown' 
-                : '/api/monitoring/engineer-storey-breakdown';
-            const res = await fetch(`${API_BASE}${endpoint}`);
-            if (res.ok) {
-                const data = await res.json();
-                setStoreyBreakdown(data);
-            }
-        } catch (err) {
-            console.error("Load Breakdown Error:", err);
-        }
-    };
+    }, [selectedVersion, dataMode]);
 
     const loadData = async (filterSty = null, filterCl = null) => {
         setLoading(true);
@@ -107,15 +84,7 @@ const EFDNewconMonitoring = () => {
         }
     };
 
-    useEffect(() => {
-        if (selectedStoreyType) {
-            loadData(selectedStoreyType.storeys, selectedStoreyType.classrooms);
-        } else if (selectedStorey) {
-            loadData(selectedStorey, null);
-        } else {
-            loadData();
-        }
-    }, [selectedStoreyType, selectedStorey, dataMode, selectedVersion]);
+
 
     const handleAssign = async (id, agency) => {
         try {
@@ -125,11 +94,7 @@ const EFDNewconMonitoring = () => {
                 body: JSON.stringify({ id, assigned_to: agency, version: selectedVersion })
             });
             if (res.ok) {
-                if (selectedStoreyType) {
-                    loadData(selectedStoreyType.storeys, selectedStoreyType.classrooms);
-                } else {
-                    loadData();
-                }
+                loadData();
             }
         } catch (err) {
             console.error("Assignment error:", err);
@@ -151,32 +116,7 @@ const EFDNewconMonitoring = () => {
         }
     };
 
-    const storeyAggregated = React.useMemo(() => {
-        const counts = {};
-        storeyBreakdown.forEach(item => {
-            const s = Number(item.storey);
-            counts[s] = (counts[s] || 0) + Number(item.count);
-        });
-        return Object.entries(counts).map(([s, count]) => ({
-            name: `${s}sty`,
-            count,
-            storey: Number(s)
-        })).sort((a, b) => a.storey - b.storey);
-    }, [storeyBreakdown]);
 
-    const prototypeAggregated = React.useMemo(() => {
-        if (!selectedStorey) return [];
-        return storeyBreakdown
-            .filter(item => Number(item.storey) === selectedStorey)
-            .map(item => ({
-                name: `${item.storey}sty ${item.classrooms}cl`,
-                count: Number(item.count),
-                storey: item.storey,
-                classrooms: item.classrooms
-            })).sort((a, b) => a.classrooms - b.classrooms);
-    }, [storeyBreakdown, selectedStorey]);
-
-    const activeChartData = drillDownLevel === 'storey' ? storeyAggregated : prototypeAggregated;
 
     const filteredRows = rows.filter(r => {
         if (!search) return true;
@@ -221,7 +161,20 @@ const EFDNewconMonitoring = () => {
                                     <FiAlertCircle size={24} />
                                 </div>
                                 <div className="min-w-0">
-                                    <h3 className="text-white font-black text-xl sm:text-2xl truncate">{dataMode === 'masterlist' ? 'Masterlist' : '2026'}</h3>
+                                    <div className="flex bg-white/20 p-1 rounded-xl mb-1 mt-1 w-max">
+                                        <button 
+                                            onClick={() => setDataMode('masterlist')}
+                                            className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${dataMode === 'masterlist' ? 'bg-white text-amber-600 shadow-sm' : 'text-white hover:bg-white/50'}`}
+                                        >
+                                            Masterlist
+                                        </button>
+                                        <button 
+                                            onClick={() => setDataMode('2026')}
+                                            className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${dataMode === '2026' ? 'bg-white text-amber-600 shadow-sm' : 'text-white hover:bg-white/50'}`}
+                                        >
+                                            2026
+                                        </button>
+                                    </div>
                                     <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest truncate">{finalFilteredRows.length} Projects in View</p>
                                 </div>
                             </div>
@@ -383,240 +336,7 @@ const EFDNewconMonitoring = () => {
                         </div>
                     </div>
 
-                    {selectedStoreyType && (
-                        <motion.div 
-                            initial={{ opacity: 0, y: -10 }} 
-                            animate={{ opacity: 1, y: 0 }}
-                            className="mb-10 flex items-center justify-between bg-indigo-600 p-4 rounded-3xl shadow-xl shadow-indigo-200 text-white"
-                        >
-                            <div className="flex items-center gap-4">
-                                <div className="p-2 bg-white/20 rounded-xl">
-                                    <FiLayers size={20} />
-                                </div>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-100">Active Drill-down</p>
-                                    <h4 className="text-lg font-black uppercase tracking-tight">{selectedStoreyType.storeys} Storey - {selectedStoreyType.classrooms} Classrooms</h4>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => { setSelectedStoreyType(null); setShowModal(false); }}
-                                className="px-6 py-2 bg-white text-indigo-600 rounded-xl text-xs font-black shadow-lg hover:bg-slate-50 transition-all flex items-center gap-2"
-                            >
-                                <FiArrowLeft /> Back to Overview
-                            </button>
-                        </motion.div>
-                    )}
 
-                    <div className="mb-10 bg-white p-8 rounded-[3rem] shadow-xl shadow-blue-900/5 border border-slate-100">
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 mb-8">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                                    <FiLayers size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                                        Building Standards 
-                                    </h3>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                                        {drillDownLevel === 'storey' ? 'Select storey level to explore classrooms' : `Classroom prototypes for ${selectedStorey} Storey buildings`}
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-3">
-                                <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
-                                    <button 
-                                        onClick={() => { setDataMode('masterlist'); setDrillDownLevel('storey'); setSelectedStorey(null); setSelectedStoreyType(null); }}
-                                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === 'masterlist' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                        Masterlist
-                                    </button>
-                                    <button 
-                                        onClick={() => { setDataMode('2026'); setDrillDownLevel('storey'); setSelectedStorey(null); setSelectedStoreyType(null); }}
-                                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === '2026' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                        2026
-                                    </button>
-                                </div>
-
-                                <select 
-                                    className="bg-white border-2 border-slate-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-400 transition-all cursor-pointer hover:border-indigo-200 shadow-sm"
-                                    value={selectedStorey || ''}
-                                    onChange={(e) => {
-                                        const val = e.target.value ? Number(e.target.value) : null;
-                                        setSelectedStorey(val);
-                                        setDrillDownLevel(val ? 'prototype' : 'storey');
-                                        setSelectedStoreyType(null);
-                                    }}
-                                >
-                                    <option value="">All Storeys</option>
-                                    {storeyAggregated.map(s => <option key={s.storey} value={s.storey}>{s.storey} Storey</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="h-[400px] w-full mt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    layout="vertical"
-                                    data={activeChartData}
-                                    margin={{ top: 5, right: 60, left: 100, bottom: 5 }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                                    <XAxis type="number" hide />
-                                    <YAxis 
-                                        dataKey="name" 
-                                        type="category" 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tick={{ fill: '#475569', fontSize: 10, fontWeight: 900 }} 
-                                        width={90}
-                                    />
-                                    <Tooltip 
-                                        cursor={{ fill: '#f8fafc' }}
-                                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                                        labelStyle={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px' }}
-                                    />
-                                    <Bar 
-                                        dataKey="count" 
-                                        radius={[0, 8, 8, 0]} 
-                                        barSize={32} 
-                                        className="cursor-pointer"
-                                        onClick={(payload) => {
-                                            if (payload) {
-                                                if (drillDownLevel === 'storey') {
-                                                    setSelectedStorey(payload.storey);
-                                                    setDrillDownLevel('prototype');
-                                                } else {
-                                                    setSelectedStoreyType({ storeys: payload.storey, classrooms: payload.classrooms });
-                                                    setShowModal(true);
-                                                }
-                                            }
-                                        }}
-                                    >
-                                        {activeChartData.map((entry, index) => (
-                                            <Cell 
-                                                key={`cell-${index}`} 
-                                                fill={
-                                                    drillDownLevel === 'storey' 
-                                                        ? '#818cf8' 
-                                                        : (selectedStoreyType?.classrooms === entry.classrooms ? '#4f46e5' : '#c7d2fe')
-                                                } 
-                                                className="transition-all duration-300 hover:opacity-80"
-                                            />
-                                        ))}
-                                        <LabelList dataKey="count" position="right" offset={10} style={{ fill: '#6366f1', fontSize: 11, fontWeight: 900 }} />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {showModal && selectedStoreyType && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-                            <motion.div 
-                                initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                                animate={{ scale: 1, opacity: 1, y: 0 }}
-                                className="bg-white w-full max-w-6xl max-h-[90vh] rounded-[2.5rem] shadow-2xl shadow-blue-900/40 overflow-hidden flex flex-col"
-                            >
-                                <div className="bg-gradient-to-r from-indigo-600 to-blue-600 p-8 flex items-center justify-between shrink-0">
-                                    <div className="flex items-center gap-5">
-                                        <div className="p-4 bg-white/20 rounded-2xl text-white">
-                                            <FiLayers size={28} />
-                                        </div>
-                                        <div>
-                                            <h2 className="text-2xl font-black text-white tracking-tight uppercase">
-                                                {selectedStoreyType.storeys} Storey - {selectedStoreyType.classrooms} Classrooms
-                                            </h2>
-                                            <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest mt-1">
-                                                Found {rows.length} projects in this category
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => setShowModal(false)}
-                                        className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all"
-                                    >
-                                        <FiX size={24} />
-                                    </button>
-                                </div>
-
-                                <div className="flex-1 p-8 overflow-hidden flex flex-col">
-                                    <div className="mb-6 relative max-w-md">
-                                        <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                        <input
-                                            type="text"
-                                            placeholder="Search within this list..."
-                                            value={modalSearch}
-                                            onChange={e => setModalSearch(e.target.value)}
-                                            className="w-full pl-12 pr-4 py-4 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
-                                        />
-                                    </div>
-
-                                    <div className="flex-1 overflow-auto rounded-3xl border border-slate-100 shadow-inner bg-slate-50/50">
-                                        <table className="w-full text-xs border-separate border-spacing-0">
-                                            <thead>
-                                                <tr className="bg-slate-100/80 backdrop-blur-md sticky top-0 z-20">
-                                                    {(dataMode === 'masterlist' 
-                                                        ? ['School ID', 'School Name', 'Project Name', 'Amount', 'Shortage'] 
-                                                        : ['School ID', 'School Name', 'Project Name', 'Amount', 'Status', 'Progress', 'Region', 'Division']
-                                                    ).map(h => (
-                                                        <th key={h} className="px-6 py-5 text-left font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap">{h}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {rows
-                                                    .filter(r => !modalSearch || 
-                                                        (r.school_name?.toLowerCase().includes(modalSearch.toLowerCase()) || 
-                                                          r.project_name?.toLowerCase().includes(modalSearch.toLowerCase()) || 
-                                                          r.school_id?.toString().includes(modalSearch)))
-                                                    .map((r, i) => (
-                                                        <tr key={i} className="group hover:bg-white transition-colors bg-white/40">
-                                                            <td className="px-6 py-4 font-mono font-bold text-slate-600">{r.school_id || '—'}</td>
-                                                            <td className="px-6 py-4 font-black text-slate-800" title={r.school_name}>{r.school_name || '—'}</td>
-                                                            <td className="px-6 py-4 font-medium text-slate-600" title={r.project_name}>{r.project_name || '—'}</td>
-                                                            <td className="px-6 py-4 font-black text-emerald-700 whitespace-nowrap">₱{(Number(r.amount)/1_000_000).toFixed(1)}M</td>
-                                                            
-                                                            {dataMode === 'masterlist' ? (
-                                                                <td className="px-6 py-4">
-                                                                    <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full font-black text-[10px] uppercase tracking-wider">
-                                                                        {r.shortage || 0} CL Shortage
-                                                                    </span>
-                                                                </td>
-                                                            ) : (
-                                                                <>
-                                                                    <td className="px-6 py-4">
-                                                                        <span className={`px-3 py-1 rounded-full font-black text-[9px] uppercase tracking-wider ${
-                                                                            r.status?.toLowerCase().includes('completed') ? 'bg-emerald-100 text-emerald-700' :
-                                                                            r.status?.toLowerCase().includes('on-going') ? 'bg-blue-100 text-blue-700' :
-                                                                            'bg-slate-100 text-slate-600'
-                                                                        }`}>{r.status || '—'}</span>
-                                                                    </td>
-                                                                    <td className="px-6 py-4">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div className="flex-1 h-1.5 bg-emerald-100 rounded-full overflow-hidden min-w-[60px]">
-                                                                                <div 
-                                                                                    className="h-full bg-emerald-500 transition-all duration-500" 
-                                                                                    style={{ width: `${r.accomplishment_percentage || 0}%` }}
-                                                                                />
-                                                                            </div>
-                                                                            <span className="text-emerald-700 font-bold">{r.accomplishment_percentage || 0}%</span>
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-6 py-4 text-slate-500 font-bold whitespace-nowrap">{r.region || '—'}</td>
-                                                                    <td className="px-6 py-4 text-slate-500 font-bold whitespace-nowrap">{r.division || '—'}</td>
-                                                                </>
-                                                            )}
-                                                        </tr>
-                                                    ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        </div>
-                    )}
                 </motion.div>
             </main>
             <BottomNav userRole={userRole} />

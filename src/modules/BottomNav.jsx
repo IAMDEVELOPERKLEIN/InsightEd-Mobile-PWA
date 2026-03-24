@@ -120,7 +120,7 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Mother MOA', path: '/efd-mother-moa', icon: TbFileCheck },
-            { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
+            // { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],

@@ -16,9 +16,11 @@ import fs from 'fs'; // Added for seed
 import csv from 'csv-parser'; // Added for seed
 import { BlobServiceClient } from '@azure/storage-blob'; // --- AZURE BLOB STORAGE ---
 import busboy from 'busboy'; // --- FAST FILE PARSER ---
+import multer from 'multer';
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
+import util from 'util';
 import { FirebaseScrypt } from 'firebase-scrypt'; // For lazy migration
 import bcrypt from 'bcrypt'; // For new standard hashes
 import { teachChatbot, chatWithKnowledge, setPool, updateKnowledgeEntry, deleteKnowledgeEntry } from './chatbot.js';
@@ -130,7 +132,63 @@ app.use(cors({
 
 app.use(express.json({ limit: '500mb' }));
 
-// ==================================================================
+// --- PDF COMPRESSION COMPATIBILITY ---
+const execAsync = util.promisify(exec);
+
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads');
+}
+const upload = multer({ dest: 'uploads/' });
+
+const processPdfFile = async (file) => {
+    if (!file) return null;
+    
+    // Multer saves files WITHOUT extensions - PyMuPDF needs .pdf to detect format
+    const renamedInput = file.path + '.pdf';
+    fs.renameSync(file.path, renamedInput);
+    
+    // Use absolute paths so Python can always find the files
+    const inputPath = path.resolve(renamedInput);
+    const outputPath = path.resolve(`${file.path}_compressed.pdf`);
+    const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
+    
+    console.log(`📄 Processing PDF: ${inputPath}`);
+    
+    try {
+        // Build the command with absolute paths
+        const cmd = (pythonCmd) => `${pythonCmd} "${scriptPath}" "${inputPath}" "${outputPath}"`;
+        
+        let stdout = '';
+        try {
+            const res = await execAsync(cmd('python'));
+            stdout = res.stdout;
+        } catch (err1) {
+            try {
+                const res = await execAsync(cmd('py'));
+                stdout = res.stdout;
+            } catch (err2) {
+                try {
+                    const res = await execAsync(cmd('python3'));
+                    stdout = res.stdout;
+                } catch (err3) {
+                    throw err1;
+                }
+            }
+        }
+        
+        console.log("✅ PDF Compression Output:", stdout);
+        const compressedBuffer = fs.readFileSync(outputPath);
+        return `data:application/pdf;base64,${compressedBuffer.toString('base64')}`;
+    } catch (err) {
+        console.error("PDF Compression Error - Message:", err.message);
+        console.error("PDF Compression Error - Stderr:", err.stderr);
+        console.error("PDF Compression Error - Stdout:", err.stdout);
+        throw new Error("PDF compression failed: " + (err.stderr || err.message));
+    } finally {
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    }
+};
 //               CORE DASHBOARD ENDPOINTS
 // ==================================================================
 
@@ -415,20 +473,26 @@ const initDB = async () => {
 
 
           CREATE TABLE IF NOT EXISTS engineer_mother_moa (
-            mother_moa_id SERIAL PRIMARY KEY,
+            mother_moa_id TEXT PRIMARY KEY,
             region TEXT,
             province TEXT,
             municipality_city TEXT,
             lgu_type TEXT NOT NULL,
             lgu_name TEXT NOT NULL,
             moa_pdf TEXT,
+            sangguniang_resolution_id TEXT,
+            sangguniang_resolution TEXT,
             uploaded_by TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
 
+          -- Drop duplicate improperly spelled/duplicate tables if they exist
+          DROP TABLE IF EXISTS engineer_suplamental_moa CASCADE;
+          DROP TABLE IF EXISTS engineer_supplemental_moa CASCADE;
+
           CREATE TABLE IF NOT EXISTS engineer_supplamental_moa (
-            supplamental_moa_id SERIAL PRIMARY KEY,
-            mother_moa_id INTEGER REFERENCES engineer_mother_moa(mother_moa_id) ON DELETE CASCADE,
+            supplamental_moa_id TEXT PRIMARY KEY,
+            mother_moa_id TEXT REFERENCES engineer_mother_moa(mother_moa_id) ON DELETE CASCADE,
             moa_pdf TEXT,
             ipc_ids JSONB DEFAULT '[]',
             uploaded_by TEXT,
@@ -436,7 +500,7 @@ const initDB = async () => {
           );
 
           -- Migration: Ensure all columns exist in engineer_supplamental_moa (Robust)
-          ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS mother_moa_id INTEGER;
+          ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS mother_moa_id TEXT;
           ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS moa_pdf TEXT;
           ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS ipc_ids JSONB DEFAULT '[]';
           ALTER TABLE engineer_supplamental_moa ADD COLUMN IF NOT EXISTS uploaded_by TEXT;
@@ -448,6 +512,8 @@ const initDB = async () => {
           ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS lgu_type TEXT;
           ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS lgu_name TEXT;
           ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS moa_pdf TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS sangguniang_resolution_id TEXT;
+          ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS sangguniang_resolution TEXT;
           ALTER TABLE engineer_mother_moa ADD COLUMN IF NOT EXISTS uploaded_by TEXT;
 
           -- Migration: Rename id to mother_moa_id if it exists
@@ -457,6 +523,16 @@ const initDB = async () => {
               ALTER TABLE engineer_mother_moa RENAME COLUMN id TO mother_moa_id;
             END IF;
           END $$;
+
+          -- Migration: Force TEXT types on MOA ID columns
+          ALTER TABLE engineer_supplamental_moa DROP CONSTRAINT IF EXISTS engineer_supplamental_moa_mother_moa_id_fkey;
+
+          ALTER TABLE engineer_mother_moa ALTER COLUMN mother_moa_id TYPE TEXT USING mother_moa_id::text;
+          ALTER TABLE engineer_mother_moa ALTER COLUMN sangguniang_resolution_id TYPE TEXT USING sangguniang_resolution_id::text;
+          ALTER TABLE engineer_supplamental_moa ALTER COLUMN mother_moa_id TYPE TEXT USING mother_moa_id::text;
+          ALTER TABLE engineer_supplamental_moa ALTER COLUMN supplamental_moa_id TYPE TEXT USING supplamental_moa_id::text;
+
+          ALTER TABLE engineer_supplamental_moa ADD CONSTRAINT engineer_supplamental_moa_mother_moa_id_fkey FOREIGN KEY (mother_moa_id) REFERENCES engineer_mother_moa(mother_moa_id) ON DELETE CASCADE;
         `);
 
         currentSegment = `${dbLabel} Seg 0.2: engineer_form schema updates`;
@@ -503,10 +579,17 @@ const initDB = async () => {
         await checkAndAddColumn('engineer_form', 'province', 'TEXT', targetPool);
         await checkAndAddColumn('engineer_form', 'city', 'TEXT', targetPool);
         await checkAndAddColumn('engineer_form', 'municipality', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'mother_moa_id', 'INTEGER', targetPool);
-        await checkAndAddColumn('engineer_form', 'supplamental_moa_id', 'INTEGER', targetPool);
+        await checkAndAddColumn('engineer_form', 'mother_moa_id', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'supplamental_moa_id', 'TEXT', targetPool);
+        await checkAndAddColumn('engineer_form', 'sangguniang_resolution_id', 'TEXT', targetPool);
 
         await targetPool.query(`
+          ALTER TABLE engineer_form DROP CONSTRAINT IF EXISTS engineer_form_mother_moa_id_fkey;
+          ALTER TABLE engineer_form DROP CONSTRAINT IF EXISTS engineer_form_supplamental_moa_id_fkey;
+
+          ALTER TABLE engineer_form ALTER COLUMN mother_moa_id TYPE TEXT USING mother_moa_id::text;
+          ALTER TABLE engineer_form ALTER COLUMN supplamental_moa_id TYPE TEXT USING supplamental_moa_id::text;
+
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS status_design_phase TEXT;
@@ -514,7 +597,7 @@ const initDB = async () => {
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year INTEGER;
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS mode_of_project VARCHAR(50);
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS no_of_units INTEGER DEFAULT 0;
-        `).catch(() => {});
+        `);
 
         currentSegment = `${dbLabel} Seg 5: variation_orders table`;
         await targetPool.query(`
@@ -4157,6 +4240,21 @@ app.get('/api/engineer-mother-moas', async (req, res) => {
   }
 });
 
+// DELETE /api/engineer-mother-moas/:id
+app.delete('/api/engineer-mother-moas/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM engineer_mother_moa WHERE mother_moa_id = $1 RETURNING *', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Mother MOA not found" });
+    }
+    res.json({ success: true, message: "Mother MOA deleted successfully" });
+  } catch (err) {
+    console.error("Delete Mother MOA Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 app.post('/api/validate-drive-link', async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
@@ -4204,25 +4302,36 @@ app.post('/api/validate-drive-link', async (req, res) => {
 });
 
 // POST /api/upload-engineer-mother-moa
-app.post('/api/upload-engineer-mother-moa', async (req, res) => {
-  const { region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uid } = req.body;
+app.post('/api/upload-engineer-mother-moa', upload.fields([{ name: 'moa_pdf', maxCount: 1 }, { name: 'sangguniang_resolution', maxCount: 1 }]), async (req, res) => {
+  const { region, province, municipality_city, lgu_type, lgu_name, uid } = req.body;
   
-  if (!lgu_type || !lgu_name || !moa_pdf || !uid) {
+  if (!lgu_type || !lgu_name || !uid) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  // Basic GDrive link validation (regex check)
-  const isGDriveLink = /drive\.google\.com/.test(moa_pdf) || /^[a-zA-Z0-9-_]{20,}$/.test(moa_pdf);
-  if (!isGDriveLink) {
-    // console.warn("⚠️ Uploaded content does not appear to be a Google Drive link:", moa_pdf);
-    // We'll still allow it for now, but the requirement is to use GDrive links.
-  }
-
   try {
+    let moa_pdf_base64 = null;
+    let sr_base64 = null;
+
+    if (req.files && req.files['moa_pdf'] && req.files['moa_pdf'].length > 0) {
+        moa_pdf_base64 = await processPdfFile(req.files['moa_pdf'][0]);
+    } else {
+        return res.status(400).json({ error: "Mother MOA PDF file is required." });
+    }
+
+    if (req.files && req.files['sangguniang_resolution'] && req.files['sangguniang_resolution'].length > 0) {
+        sr_base64 = await processPdfFile(req.files['sangguniang_resolution'][0]);
+    }
+
+    // Generate unique Sangguniang Resolution ID like INF-SRID-YYYY-XXXX
+    const year = new Date().getFullYear();
+    const srId = `INF-SRID-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const mId = `INF-MMID-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+
     await pool.query(`
-      INSERT INTO engineer_mother_moa (region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uploaded_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [region, province, municipality_city, lgu_type, lgu_name, moa_pdf, uid]);
+      INSERT INTO engineer_mother_moa (mother_moa_id, region, province, municipality_city, lgu_type, lgu_name, moa_pdf, sangguniang_resolution_id, sangguniang_resolution, uploaded_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [mId, region, province, municipality_city, lgu_type, lgu_name, moa_pdf_base64, srId, sr_base64, uid]);
 
     // Activity logging
     const uName = await getUserFullName(uid);
@@ -4232,30 +4341,9 @@ app.post('/api/upload-engineer-mother-moa', async (req, res) => {
     `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Mother MOA for ${lgu_name} (${lgu_type})`, 'Mother MOA']);
 
     res.json({ success: true });
-
-    // Background update engineer_form projects for this LGU
-    (async () => {
-      try {
-        const motherMoaIdRes = await pool.query('SELECT mother_moa_id FROM engineer_mother_moa WHERE moa_pdf = $1 ORDER BY created_at DESC LIMIT 1', [moa_pdf]);
-        if (motherMoaIdRes.rows.length > 0) {
-          const mId = motherMoaIdRes.rows[0].mother_moa_id;
-          let updateQuery = `UPDATE engineer_form SET mother_moa_id = $1 WHERE region = $2 AND province = $3`;
-          let params = [mId, region, province];
-          
-          if (lgu_type !== 'PGO' && municipality_city) {
-            updateQuery += ` AND (city = $4 OR municipality = $4)`;
-            params.push(municipality_city);
-          }
-          await pool.query(updateQuery, params);
-          console.log(`✅ Linked existing projects in ${lgu_name} to Mother MOA ${mId}`);
-        }
-      } catch (bkErr) {
-        console.error("❌ Failed to link projects to Mother MOA:", bkErr.message);
-      }
-    })();
   } catch (err) {
-    console.error("Upload Mother MOA Error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("Mother MOA Upload Error:", err);
+    res.status(500).json({ error: "Internal Server Error: " + err.message });
   }
 });
 
@@ -4399,28 +4487,28 @@ app.get('/api/agency-dashboard/mother-moas', async (req, res) => {
 });
 
 // POST /api/upload-engineer-supplemental-moa
-app.post('/api/upload-engineer-supplemental-moa', async (req, res) => {
-  const { mother_moa_id, moa_pdf, uid, ipc_ids } = req.body;
+app.post('/api/upload-engineer-supplemental-moa', upload.single('moa_pdf'), async (req, res) => {
+  const { mother_moa_id, uid, ipc_ids } = req.body;
   
-  if (!mother_moa_id || !moa_pdf || !uid) {
+  let parsedIpcIds = [];
+  if (ipc_ids) {
+    try {
+      parsedIpcIds = typeof ipc_ids === 'string' ? JSON.parse(ipc_ids) : ipc_ids;
+    } catch(e) { /* ignore */ }
+  }
+
+  if (!mother_moa_id || !uid) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  // Basic GDrive link validation (regex check) - matching existing mother moa logic
-  const isGDriveLink = /drive\.google\.com/.test(moa_pdf) || /^[a-zA-Z0-9-_]{20,}$/.test(moa_pdf);
-  
-  // Folder check - user requested specific link
-  const isFolder = moa_pdf.includes('/folders/') || moa_pdf.includes('/drive/u/0/folders/');
-  
-  if (!isGDriveLink) {
-    return res.status(400).json({ error: "Please provide a valid Google Drive link." });
-  }
-  
-  if (isFolder) {
-    return res.status(400).json({ error: "Please upload the link of the specific file in Google Drive, not the folder link." });
-  }
-
   try {
+    let moa_pdf_base64 = null;
+    if (req.file) {
+        moa_pdf_base64 = await processPdfFile(req.file);
+    } else {
+        return res.status(400).json({ error: "Supplemental MOA PDF file is required." });
+    }
+
     // Check if mother MOA exists
     const motherRes = await pool.query('SELECT lgu_name, lgu_type FROM engineer_mother_moa WHERE mother_moa_id = $1', [mother_moa_id]);
     if (motherRes.rows.length === 0) {
@@ -4428,10 +4516,13 @@ app.post('/api/upload-engineer-supplemental-moa', async (req, res) => {
     }
     const motherMoa = motherRes.rows[0];
 
+    const year = new Date().getFullYear();
+    const sId = `INF-SMID-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+
     await pool.query(`
-      INSERT INTO engineer_supplamental_moa (mother_moa_id, moa_pdf, uploaded_by, ipc_ids)
-      VALUES ($1, $2, $3, $4)
-    `, [mother_moa_id, moa_pdf, uid, JSON.stringify(ipc_ids || [])]);
+      INSERT INTO engineer_supplamental_moa (supplamental_moa_id, mother_moa_id, moa_pdf, uploaded_by, ipc_ids)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [sId, mother_moa_id, moa_pdf_base64, uid, JSON.stringify(parsedIpcIds)]);
 
     // Activity logging
     const uName = await getUserFullName(uid);
@@ -4445,15 +4536,13 @@ app.post('/api/upload-engineer-supplemental-moa', async (req, res) => {
     // Update engineer_form for assigned IPCs
     (async () => {
       try {
-        const suppRes = await pool.query('SELECT supplamental_moa_id FROM engineer_supplamental_moa WHERE moa_pdf = $1 ORDER BY created_at DESC LIMIT 1', [moa_pdf]);
-        if (suppRes.rows.length > 0 && ipc_ids && ipc_ids.length > 0) {
-          const sId = suppRes.rows[0].supplamental_moa_id;
+        if (parsedIpcIds && parsedIpcIds.length > 0) {
           await pool.query(`
             UPDATE engineer_form 
             SET supplamental_moa_id = $1, mother_moa_id = $2 
             WHERE ipc = ANY($3)
-          `, [sId, mother_moa_id, ipc_ids]);
-          console.log(`✅ Linked projects ${ipc_ids.join(', ')} to Supplemental MOA ${sId}`);
+          `, [sId, mother_moa_id, parsedIpcIds]);
+          console.log(`✅ Linked projects ${parsedIpcIds.join(', ')} to Supplemental MOA ${sId}`);
         }
       } catch (bkErr) {
         console.error("❌ Failed to link projects to Supplemental MOA:", bkErr.message);

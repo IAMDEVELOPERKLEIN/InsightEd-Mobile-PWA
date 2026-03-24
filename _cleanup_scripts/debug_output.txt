@@ -1,0 +1,99 @@
+--- ALL PROJECTS WITH AGENCY ---
+[
+  {
+    "project_id": 456,
+    "project_name": "HRODIENGTEST",
+    "region": "Region I",
+    "implementing_agencies": null,
+    "implementing_agency_specific": "bataan ",
+    "moa_len": 450268,
+    "rta_len": 450268,
+    "tranche_1": "100000",
+    "tranche_2": null,
+    "tranche_3": null,
+    "mode_of_project": null
+  },
+  {
+    "project_id": 421,
+    "project_name": "CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING",
+    "region": "Region III",
+    "implementing_agencies": "PGO Benguet",
+    "implementing_agency_specific": null,
+    "moa_len": 0,
+    "rta_len": 0,
+    "tranche_1": "1500000",
+    "tranche_2": null,
+    "tranche_3": null,
+    "mode_of_project": "MOA"
+  },
+  {
+    "project_id": 451,
+    "project_name": "HRODIENGTEST",
+    "region": "Region I",
+    "implementing_agencies": null,
+    "implementing_agency_specific": "bataan ",
+    "moa_len": 0,
+    "rta_len": 0,
+    "tranche_1": null,
+    "tranche_2": null,
+    "tranche_3": null,
+    "mode_of_project": null
+  },
+  {
+    "project_id": 452,
+    "project_name": "HRODIENGTEST",
+    "region": "Region I",
+    "implementing_agencies": null,
+    "implementing_agency_specific": "bataan ",
+    "moa_len": 0,
+    "rta_len": 450268,
+    "tranche_1": null,
+    "tranche_2": null,
+    "tranche_3": null,
+    "mode_of_project": null
+  },
+  {
+    "project_id": 453,
+    "project_name": "HRODIENGTEST",
+    "region": "Region I",
+    "implementing_agencies": null,
+    "implementing_agency_specific": "bataan ",
+    "moa_len": 450268,
+    "rta_len": 0,
+    "tranche_1": null,
+    "tranche_2": null,
+    "tranche_3": null,
+    "mode_of_project": null
+  },
+  {
+    "project_id": 422,
+    "project_name": "CONSTRUCTION OF MODULAR ONE (1) STOREY TWO (2) CLASSROOM SCHOOL BUILDING",
+    "region": "Region III",
+    "implementing_agencies": "PGO Benguet",
+    "implementing_agency_specific": null,
+    "moa_len": 0,
+    "rta_len": 0,
+    "tranche_1": "1500000",
+    "tranche_2": "300000",
+    "tranche_3": null,
+    "mode_of_project": "MOA"
+  }
+]
+
+--- USERS WITH AGENCY ROLES ---
+[
+  {
+    "uid": "abc3af9b-e60a-40d8-964c-5a9c3cd8a569",
+    "email": "testpgo@deped.gov.ph",
+    "role": "PGO",
+    "region": "Region I",
+    "division": "PGO ILOCOS NORTE"
+  },
+  {
+    "uid": "95926894-706f-4645-9c38-e295c27da9d3",
+    "email": "testmgo@deped.gov.ph",
+    "role": "MGO",
+    "region": "Region I",
+    "division": "MGO bataan"
+  }
+]

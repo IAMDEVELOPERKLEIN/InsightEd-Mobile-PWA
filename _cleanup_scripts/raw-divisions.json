@@ -1,0 +1,1097 @@
+[
+  {
+    "Region": "CAR",
+    "Division": "Abra",
+    "count": "317"
+  },
+  {
+    "Region": "CAR",
+    "Division": "Apayao",
+    "count": "200"
+  },
+  {
+    "Region": "CAR",
+    "Division": "Baguio City",
+    "count": "67"
+  },
+  {
+    "Region": "CAR",
+    "Division": "Benguet",
+    "count": "428"
+  },
+  {
+    "Region": "CAR",
+    "Division": "Ifugao",
+    "count": "266"
+  },
+  {
+    "Region": "CAR",
+    "Division": "Kalinga",
+    "count": "194"
+  },
+  {
+    "Region": "CAR",
+    "Division": "Mt. Province",
+    "count": "267"
+  },
+  {
+    "Region": "CAR",
+    "Division": "Tabuk City",
+    "count": "103"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Agusan del Norte",
+    "count": "209"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Agusan del Sur",
+    "count": "518"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Bayugan City",
+    "count": "71"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Bislig City",
+    "count": "70"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Butuan City",
+    "count": "138"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Cabadbaran City",
+    "count": "35"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Dinagat Island",
+    "count": "144"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Siargao",
+    "count": "145"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Surigao City",
+    "count": "87"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Surigao del Norte",
+    "count": "202"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Surigao del Sur",
+    "count": "453"
+  },
+  {
+    "Region": "CARAGA",
+    "Division": "Tandag City",
+    "count": "31"
+  },
+  {
+    "Region": "MIMAROPA",
+    "Division": "Calapan City",
+    "count": "59"
+  },
+  {
+    "Region": "MIMAROPA",
+    "Division": "Marinduque",
+    "count": "229"
+  },
+  {
+    "Region": "MIMAROPA",
+    "Division": "Occidental Mindoro",
+    "count": "363"
+  },
+  {
+    "Region": "MIMAROPA",
+    "Division": "Oriental Mindoro",
+    "count": "541"
+  },
+  {
+    "Region": "MIMAROPA",
+    "Division": "Palawan",
+    "count": "830"
+  },
+  {
+    "Region": "MIMAROPA",
+    "Division": "Puerto Princesa City",
+    "count": "101"
+  },
+  {
+    "Region": "MIMAROPA",
+    "Division": "Romblon",
+    "count": "269"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Caloocan City",
+    "count": "89"
+  },
+  {
+    "Region": "NCR",
+    "Division": "City of San Juan",
+    "count": "13"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Las Pi?�as City",
+    "count": "39"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Makati City",
+    "count": "23"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Malabon City",
+    "count": "42"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Mandaluyong City",
+    "count": "24"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Manila",
+    "count": "105"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Marikina City",
+    "count": "33"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Muntinlupa City",
+    "count": "28"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Navotas",
+    "count": "25"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Paranaque City",
+    "count": "43"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Pasay City",
+    "count": "29"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Pasig City",
+    "count": "44"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Quezon City",
+    "count": "158"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Taguig City and Pateros",
+    "count": "62"
+  },
+  {
+    "Region": "NCR",
+    "Division": "Valenzuela City",
+    "count": "70"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Bacolod City",
+    "count": "70"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Bago City",
+    "count": "47"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Bais City",
+    "count": "57"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Bayawan City",
+    "count": "103"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Cadiz City",
+    "count": "69"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Canlaon City",
+    "count": "38"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Dumaguete City",
+    "count": "25"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Escalante City",
+    "count": "42"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Guihulngan City",
+    "count": "104"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Himamaylan City",
+    "count": "56"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Kabankalan City",
+    "count": "93"
+  },
+  {
+    "Region": "NIR",
+    "Division": "La Carlota City",
+    "count": "30"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Negros Occidental",
+    "count": "576"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Negros Oriental",
+    "count": "515"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Sagay City",
+    "count": "66"
+  },
+  {
+    "Region": "NIR",
+    "Division": "San Carlos City",
+    "count": "65"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Silay City",
+    "count": "39"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Sipalay City",
+    "count": "48"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Siquijor",
+    "count": "78"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Tanjay City",
+    "count": "95"
+  },
+  {
+    "Region": "NIR",
+    "Division": "Victorias City",
+    "count": "26"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Alaminos City",
+    "count": "46"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Batac City",
+    "count": "33"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Candon City",
+    "count": "34"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Dagupan City",
+    "count": "39"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Ilocos Norte",
+    "count": "364"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Ilocos Sur",
+    "count": "505"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Laoag City",
+    "count": "40"
+  },
+  {
+    "Region": "Region I",
+    "Division": "La Union",
+    "count": "386"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Pangasinan II, Binalonan",
+    "count": "561"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Pangasinan I, Lingayen",
+    "count": "662"
+  },
+  {
+    "Region": "Region I",
+    "Division": "San Carlos City",
+    "count": "76"
+  },
+  {
+    "Region": "Region I",
+    "Division": "San Fernando City",
+    "count": "33"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Urdaneta City",
+    "count": "64"
+  },
+  {
+    "Region": "Region I",
+    "Division": "Vigan City",
+    "count": "21"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Batanes",
+    "count": "27"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Cagayan",
+    "count": "809"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Cauayan City",
+    "count": "80"
+  },
+  {
+    "Region": "Region II",
+    "Division": "City of Ilagan",
+    "count": "98"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Isabela",
+    "count": "883"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Nueva Vizcaya",
+    "count": "382"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Quirino",
+    "count": "187"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Santiago City",
+    "count": "41"
+  },
+  {
+    "Region": "Region II",
+    "Division": "Tuguegarao City",
+    "count": "35"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Angeles City",
+    "count": "53"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Aurora",
+    "count": "176"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Balanga City",
+    "count": "23"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Bataan",
+    "count": "215"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Bulacan",
+    "count": "511"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Cabanatuan City",
+    "count": "65"
+  },
+  {
+    "Region": "Region III",
+    "Division": "City of Baliwag",
+    "count": "30"
+  },
+  {
+    "Region": "Region III",
+    "Division": "City of San Jose Del Monte",
+    "count": "59"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Gapan City",
+    "count": "41"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Mabalacat City",
+    "count": "54"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Malolos City",
+    "count": "57"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Meycauayan City",
+    "count": "32"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Nueva Ecija",
+    "count": "756"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Olongapo City",
+    "count": "40"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Pampanga",
+    "count": "566"
+  },
+  {
+    "Region": "Region III",
+    "Division": "San Fernando City",
+    "count": "46"
+  },
+  {
+    "Region": "Region III",
+    "Division": "San Jose City",
+    "count": "60"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Science City of Mu?�oz",
+    "count": "37"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Tarlac",
+    "count": "506"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Tarlac City",
+    "count": "99"
+  },
+  {
+    "Region": "Region III",
+    "Division": "Zambales",
+    "count": "315"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Antipolo City",
+    "count": "67"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Bacoor City",
+    "count": "43"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Batangas",
+    "count": "739"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Batangas City",
+    "count": "109"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Binan City",
+    "count": "40"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Cabuyao City",
+    "count": "29"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Calamba City",
+    "count": "72"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Cavite",
+    "count": "333"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Cavite City",
+    "count": "14"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Dasmarinas City",
+    "count": "45"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "General Trias City",
+    "count": "36"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Imus City",
+    "count": "38"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Laguna",
+    "count": "344"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Lipa City",
+    "count": "85"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Lucena City",
+    "count": "54"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Quezon",
+    "count": "958"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Rizal",
+    "count": "304"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "San Pablo City",
+    "count": "81"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "San Pedro City",
+    "count": "28"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Sta. Rosa City",
+    "count": "28"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Sto. Tomas City",
+    "count": "32"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Tanauan City",
+    "count": "59"
+  },
+  {
+    "Region": "Region IV-A",
+    "Division": "Tayabas City",
+    "count": "35"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Dapitan City",
+    "count": "61"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Dipolog City",
+    "count": "48"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Isabela City",
+    "count": "64"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Pagadian City",
+    "count": "82"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Sulu",
+    "count": "457"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Zamboanga City",
+    "count": "218"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Zamboanga del Norte",
+    "count": "761"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Zamboanga del Sur",
+    "count": "811"
+  },
+  {
+    "Region": "Region IX",
+    "Division": "Zamboanga Sibugay",
+    "count": "507"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Albay",
+    "count": "556"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Camarines Norte",
+    "count": "319"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Camarines Sur",
+    "count": "1098"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Catanduanes",
+    "count": "268"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Iriga City",
+    "count": "51"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Legaspi City",
+    "count": "58"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Ligao City",
+    "count": "67"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Masbate",
+    "count": "704"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Masbate City",
+    "count": "45"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Naga City",
+    "count": "43"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Sorsogon",
+    "count": "531"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Sorsogon City",
+    "count": "83"
+  },
+  {
+    "Region": "Region V",
+    "Division": "Tabaco City",
+    "count": "50"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Aklan",
+    "count": "379"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Antique",
+    "count": "538"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Capiz",
+    "count": "471"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Guimaras",
+    "count": "115"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Iloilo",
+    "count": "1172"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Iloilo City",
+    "count": "65"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Passi City",
+    "count": "45"
+  },
+  {
+    "Region": "Region VI",
+    "Division": "Roxas City",
+    "count": "50"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Bogo City",
+    "count": "38"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Bohol",
+    "count": "1124"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Carcar City",
+    "count": "49"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Cebu",
+    "count": "1142"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Cebu City",
+    "count": "107"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "City of Naga, Cebu",
+    "count": "55"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Danao City",
+    "count": "61"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Lapu-Lapu City",
+    "count": "71"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Mandaue City",
+    "count": "48"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Tagbilaran City",
+    "count": "26"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Talisay City",
+    "count": "44"
+  },
+  {
+    "Region": "Region VII",
+    "Division": "Toledo City",
+    "count": "63"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Baybay City",
+    "count": "82"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Biliran",
+    "count": "143"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Borongan City",
+    "count": "58"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Calbayog City",
+    "count": "174"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Catbalogan City",
+    "count": "58"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Eastern Samar",
+    "count": "466"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Leyte",
+    "count": "1281"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Maasin City",
+    "count": "78"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Northern Samar",
+    "count": "608"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Ormoc City",
+    "count": "98"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Samar (Western Samar)",
+    "count": "741"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Southern Leyte",
+    "count": "343"
+  },
+  {
+    "Region": "Region VIII",
+    "Division": "Tacloban City",
+    "count": "60"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Bukidnon",
+    "count": "653"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Cagayan de Oro City",
+    "count": "115"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Camiguin",
+    "count": "66"
+  },
+  {
+    "Region": "Region X",
+    "Division": "El Salvador",
+    "count": "24"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Gingoog City",
+    "count": "97"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Iligan City",
+    "count": "112"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Lanao del Norte",
+    "count": "383"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Malaybalay City",
+    "count": "87"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Misamis Occidental",
+    "count": "337"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Misamis Oriental",
+    "count": "422"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Oroquieta City",
+    "count": "51"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Ozamis City",
+    "count": "58"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Tangub City",
+    "count": "65"
+  },
+  {
+    "Region": "Region X",
+    "Division": "Valencia City",
+    "count": "65"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Davao City",
+    "count": "437"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Davao del Norte",
+    "count": "264"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Davao del Sur",
+    "count": "262"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Davao De Oro",
+    "count": "417"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Davao Occidental",
+    "count": "217"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Davao Oriental",
+    "count": "333"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Digos City",
+    "count": "48"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Island Garden City of Samal",
+    "count": "75"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Mati City",
+    "count": "72"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Panabo City",
+    "count": "62"
+  },
+  {
+    "Region": "Region XI",
+    "Division": "Tagum City",
+    "count": "39"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "General Santos City",
+    "count": "105"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "Kidapawan City",
+    "count": "76"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "Koronadal City",
+    "count": "54"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "North Cotabato",
+    "count": "782"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "Sarangani",
+    "count": "326"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "South Cotabato",
+    "count": "383"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "Sultan Kudarat",
+    "count": "406"
+  },
+  {
+    "Region": "Region XII",
+    "Division": "Tacurong City",
+    "count": "31"
+  }
+]
