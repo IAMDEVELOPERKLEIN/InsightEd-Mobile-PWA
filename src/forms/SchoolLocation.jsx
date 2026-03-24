@@ -796,7 +796,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                         onClick={nextStep}
                                         className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all text-sm uppercase tracking-widest"
                                     >
-                                        Next Component
+                                        Next
                                     </button>
                                 ) : (
                                     <button 
@@ -810,7 +810,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                         ) : (
                                             <>
                                                 <FaShieldAlt />
-                                                Finish & Save
+                                                Submit Unit Profile
                                             </>
                                         )}
                                     </button>

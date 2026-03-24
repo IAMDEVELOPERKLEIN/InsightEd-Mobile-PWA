@@ -18,19 +18,27 @@ const ProtectedRoute = ({ children, allowedRoles, allowedGroups }) => {
         return <Navigate to="/login" replace state={state} />;
     }
 
+    // Role Normalization: Map DB role names to UI Display Names
+    const normalize = (r) => r === 'school_head' ? 'School Head' : r;
+    const normalizedUserRole = normalize(user.role);
+
     // Determine derived role for Super Users (if impersonating)
-    const isSuperUser = user.role === 'Super User';
+    const isSuperUser = normalizedUserRole === 'Super User';
     const impersonatedRole = sessionStorage.getItem('impersonatedRole');
-    const effectiveRole = (isSuperUser && impersonatedRole) ? impersonatedRole : user.role;
+    const effectiveRole = (isSuperUser && impersonatedRole) ? normalize(impersonatedRole) : normalizedUserRole;
     const userGroup = getRoleGroup(effectiveRole);
 
     // Group-based check
     if (allowedGroups && !allowedGroups.includes(userGroup)) {
+        // Super User override for group checks (they should access all domain dashboards)
+        if (isSuperUser) {
+            return children;
+        }
         return <Navigate to="/" replace />;
     }
 
     // Role-based check
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
         const isViewingAsSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
         if (isSuperUser && isViewingAsSuperUser) {
             // Allow Super User to access any impersonated dashboard

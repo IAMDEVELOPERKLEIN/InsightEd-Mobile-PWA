@@ -126,6 +126,7 @@ const AnimatedRoutes = () => {
       // Role to PathId Mapping for Portal Redirection
       const roleToPathId = {
         'School Head': 'path_school_head',
+        'school_head': 'path_school_head',
         'Regional Office': 'path_ro_sd',
         'School Division Office': 'path_ro_sd',
         'DepEd Engineer': 'path_engineers',

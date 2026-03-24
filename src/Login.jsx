@@ -13,18 +13,47 @@ import { getRoleGroup, ROLE_GROUPS } from './config/roleGroups';
 
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role, accountCategory) => {
-    // Explicit Overrides (Bypass Groups)
-    if (role === 'EFD' || role === 'EFD Engineer' || role === 'HRODI') return '/efd-dashboard';
-    if (role === 'DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') return '/engineer-dashboard';
-    if (role === 'Non-DepEd Engineer' || accountCategory === 'Non-DepEd Engineer') return '/non-deped-dashboard';
+    // 1. SPECIFIC ROLE OVERRIDES (Highest Priority)
+    const roleMap = {
+        'School Head': '/nodes-dashboard',
+        'Regional Office': '/monitoring-dashboard',
+        'School Division Office': '/monitoring-dashboard',
+        'Central Office': '/monitoring-dashboard',
+        'Admin': '/admin-dashboard',
+        'Human Resource': '/hr-dashboard',
+        'Super User': '/super-user-selector',
+        'Super Admin': '/educational-dashboard',
+        'Local Government Unit': '/lgu-dashboard',
+        'Central Office Finance': '/finance-dashboard',
+        'Finance': '/finance-dashboard',
+        'Implementing Agency': '/agency-dashboard',
+        'EFD': '/efd-dashboard',
+        'EFD Engineer': '/engineer-dashboard',
+        'HRODI': '/efd-dashboard',
+        'PGO': '/agency-dashboard',
+        'CGO': '/agency-dashboard',
+        'MGO': '/agency-dashboard',
+        'DPWH': '/agency-dashboard',
+        'CSO': '/agency-dashboard',
+    };
 
-    // Determine Group
+    if (roleMap[role]) return roleMap[role];
+
+    // 2. ENGINEER SPECIAL REDIRECTS
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
+        return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
+            ? '/non-deped-dashboard'
+            : '/engineer-dashboard';
+    }
+
+    // 3. GROUP-BASED FALLBACK
     const userGroup = getRoleGroup(role);
-
-    // Super User Special Redirect
-    if (role === 'Super User') return '/super-user-selector';
-
-    // Group-based Redirection (Super User 2.0)
+    if (userGroup === ROLE_GROUPS.MANAGEMENT) {
+        return '/monitoring-dashboard';
+    }
+    if (userGroup === ROLE_GROUPS.INFRA_OPERATIONAL) {
+        return '/engineer-dashboard'; // Default infra fallback
+    }
     if (userGroup === ROLE_GROUPS.EDUCATIONAL_ADMIN) {
         return '/educational-dashboard';
     }
@@ -55,6 +84,9 @@ const getDashboardPath = (role, accountCategory) => {
     };
     return roleMap[role] || '/';
 };
+
+
+
 
 const Login = () => {
     const [loginId, setLoginId] = useState('');
@@ -166,16 +198,17 @@ const Login = () => {
             let isRoleCompatible = true;
             
             if (pathId === 'path_school_head') {
-                isRoleCompatible = authUser.role === 'School Head';
+                isRoleCompatible = authUser.role === 'School Head' || authUser.role === 'Super User' || authUser.role === 'Super Admin';
             } else if (pathId === 'path_ro_sd') {
-                isRoleCompatible = ['Regional Office', 'School Division Office'].includes(authUser.role);
+                isRoleCompatible = ['Regional Office', 'School Division Office', 'Super User', 'Super Admin'].includes(authUser.role);
             } else if (pathId === 'path_engineers') {
-                isRoleCompatible = ['DepEd Engineer', 'Division Engineer', 'Engineer', 'Non-DepEd Engineer'].includes(authUser.role);
+                isRoleCompatible = ['DepEd Engineer', 'Division Engineer', 'Engineer', 'Non-DepEd Engineer', 'Super User', 'Super Admin'].includes(authUser.role);
             } else if (pathId === 'path_agencies') {
-                isRoleCompatible = ['Implementing Agency', 'PGO', 'CGO', 'MGO', 'DPWH', 'CSO'].includes(authUser.role);
+                isRoleCompatible = ['Implementing Agency', 'PGO', 'CGO', 'MGO', 'DPWH', 'CSO', 'Super User', 'Super Admin'].includes(authUser.role);
             } else if (pathId === 'path_efd') {
-                isRoleCompatible = ['EFD', 'EFD Engineer', 'HRODI', 'Central Office'].includes(authUser.role);
+                isRoleCompatible = ['EFD', 'EFD Engineer', 'HRODI', 'Central Office', 'Super User', 'Super Admin'].includes(authUser.role);
             }
+
 
             // Only auto-redirect if no portal was chosen, OR if the current role is compatible with the chosen portal
             if (!pathId || isRoleCompatible) {

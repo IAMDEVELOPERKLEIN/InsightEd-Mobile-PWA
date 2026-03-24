@@ -44,32 +44,44 @@ const AUTHORIZATION_CODES = {
 import locationData from './locations.json';
 
 const getDashboardPath = (role, accountCategory) => {
-    // Division/Non-DepEd Engineer redirect depends on their account category
-    if (role === 'Division Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
+    // 1. SPECIFIC ROLE OVERRIDES (Highest Priority)
+    const roleMap = {
+        'School Head': '/nodes-dashboard',
+        'Regional Office': '/monitoring-dashboard',
+        'School Division Office': '/monitoring-dashboard',
+        'Central Office': '/monitoring-dashboard',
+        'Admin': '/admin-dashboard',
+        'Human Resource': '/hr-dashboard',
+        'Super User': '/super-user-selector',
+        'Super Admin': '/educational-dashboard',
+        'Local Government Unit': '/lgu-dashboard',
+        'Central Office Finance': '/finance-dashboard',
+        'Finance': '/finance-dashboard',
+        'Implementing Agency': '/agency-dashboard',
+        'EFD': '/efd-dashboard',
+        'EFD Engineer': '/engineer-dashboard',
+        'HRODI': '/efd-dashboard',
+        'PGO': '/agency-dashboard',
+        'CGO': '/agency-dashboard',
+        'MGO': '/agency-dashboard',
+        'DPWH': '/agency-dashboard',
+        'CSO': '/agency-dashboard',
+    };
+
+    if (roleMap[role]) return roleMap[role];
+
+    // 2. ENGINEER SPECIAL REDIRECTS
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
         return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
             ? '/non-deped-dashboard'
             : '/engineer-dashboard';
     }
-    const roleMap = {
-        'EFD Engineer': '/project-summary-dashboard',
-        'Local Government Unit': '/project-summary-dashboard',
-        'School Head': '/nodes-dashboard',
-        'Human Resource': '/educational-dashboard',
-        'Admin': '/educational-dashboard',
-        'Central Office': '/educational-dashboard',
-        'Regional Office': '/educational-dashboard',
-        'School Division Office': '/educational-dashboard',
-        'Central Office Finance': '/project-summary-dashboard',
-        'Super User': '/educational-dashboard',
-        'Implementing Agency': '/project-summary-dashboard',
-        'PGO': '/project-summary-dashboard',
-        'CGO': '/project-summary-dashboard',
-        'MGO': '/project-summary-dashboard',
-        'DPWH': '/project-summary-dashboard',
-        'CSO': '/project-summary-dashboard',
-    };
-    return roleMap[role] || '/';
+
+    return '/'; // Final fallback
 };
+
+
+
 
 const RecenterMap = ({ lat, lng }) => {
     const map = useMap();
@@ -149,6 +161,9 @@ const Register = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const maxSteps = formData.role === 'School Head' ? 5 : (formData.role === 'EFD Engineer' ? 3 : 4);
 
+    // --- AUTH TAB STATE (Internal vs External) ---
+    const [activeTab, setActiveTab] = useState(pathId === 'path_agencies' ? 'external' : 'internal');
+
     // --- REGISTRATION STAGES ---
     const [registrationStage, setRegistrationStage] = useState('form'); // 'form' | 'passcode' | 'confirm'
 
@@ -196,14 +211,19 @@ const Register = () => {
             console.log("[Register] Enforcing path-based restrictions:", pathId);
             if (pathId === 'path_school_head') {
                 setFormData(prev => ({ ...prev, role: 'School Head' }));
+                setActiveTab('internal');
             } else if (pathId === 'path_ro_sd') {
                 setFormData(prev => ({ ...prev, role: 'Regional Office' }));
+                setActiveTab('internal');
             } else if (pathId === 'path_engineers') {
                 setFormData(prev => ({ ...prev, role: 'Division Engineer' }));
+                setActiveTab('internal');
             } else if (pathId === 'path_agencies') {
                 setFormData(prev => ({ ...prev, role: 'Implementing Agency' }));
+                setActiveTab('external');
             } else if (pathId === 'path_efd') {
                 setFormData(prev => ({ ...prev, role: 'EFD Engineer' }));
+                setActiveTab('internal');
             }
         }
 
@@ -981,7 +1001,7 @@ const Register = () => {
                                                                             <option value="Central Office">CO Personnel</option>
                                                                             <option value="Regional Office">RO Personnel</option>
                                                                             <option value="School Division Office">SDO Personnel</option>
-//                                                                             <option value="Super User">Super User 2.0</option>
+                                                                            {/* <option value="Super User">Super User 2.0</option> */}
                                                                         </>
                                                                     )}
                                                                     {(!pathId || pathId === 'path_school_head') && <option value="School Head">School Head</option>}

@@ -624,18 +624,20 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         return (
             <div className="min-h-screen bg-slate-50/50 font-sans">
                 {/* Exit Header */}
-                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                    <div className="max-w-md mx-auto flex items-center gap-3">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiArrowLeft className="w-6 h-6" />
-                        </button>
-                        <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 6</div>
-                            <h1 className="text-sm font-black text-gray-800">Teaching Personnel</h1>
+                {!propReadOnly && (
+                    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                        <div className="max-w-md mx-auto flex items-center gap-3">
+                            <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                            <div className="flex-1 text-center">
+                                <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 6</div>
+                                <h1 className="text-sm font-black text-gray-800">Teaching Personnel</h1>
+                            </div>
+                            <div className="w-10" />
                         </div>
-                        <div className="w-10" />
-                    </div>
-                </header>
+                    </header>
+                )}
 
                 <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
                     {/* Header */}
@@ -803,24 +805,26 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             </AnimatePresence>
 
             {/* Header */}
-            <header className="bg-white border-b border-slate-100 sticky top-0 z-40 px-5 py-4">
-                <div className="max-w-md mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => navigate("/modular-dashboard", { replace: true })} className="p-2 -ml-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
-                            <FiArrowLeft className="w-6 h-6" />
-                        </button>
+            {!isReadOnly && (
+                <header className="bg-white border-b border-slate-100 sticky top-0 z-40 shadow-sm">
+                    <div className="max-w-md mx-auto px-5 py-4 flex items-center justify-between relative">
+                        <div className="flex items-center gap-3 z-10">
+                            <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-colors">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <div className="absolute left-0 right-0 text-center pointer-events-none">
+                            <div className="text-[10px] font-black tracking-widest text-blue-400 uppercase">Unit 6</div>
+                            <h1 className="text-sm font-black text-slate-800">Teaching Personnel</h1>
+                        </div>
+                        <div className="w-10 z-10 text-right">
+                            <button onClick={() => setIsSearchOpen(true)} className="p-2 -mr-2 text-blue-600 hover:text-blue-800 rounded-full hover:bg-blue-50 transition-colors">
+                                <FiPlusCircle className="w-6 h-6" />
+                            </button>
+                        </div>
                     </div>
-                    <div className="text-center">
-                        <div className="text-[10px] font-black tracking-widest text-blue-500 uppercase">Unit 6</div>
-                        <h1 className="text-sm font-black text-slate-800 uppercase tracking-tighter">Teacher Roster & Workload</h1>
-                    </div>
-                     {!isReadOnly && (
-                        <button onClick={() => setIsSearchOpen(true)} className="p-2 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-200">
-                            <FiPlus size={20} />
-                        </button>
-                    )}
-                </div>
-            </header>
+                </header>
+            )}
 
             {/* Welcome Back Toast */}
             <AnimatePresence>
@@ -1309,16 +1313,17 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             </AnimatePresence>
 
             {/* Finalize Button */}
-             {!isReadOnly && (
+            {/* Finalize Button */}
+            {!isReadOnly && (
                 <footer className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
                     <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
                         <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                             <FiSave className="w-6 h-6" />
                         </button>
                         <button 
-                        onClick={handleFinalize}
-                        disabled={teachers.length === 0 || isFinalizing}
-                        className="flex-1 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 disabled:opacity-50 disabled:grayscale"
+                            onClick={handleFinalize}
+                            disabled={teachers.length === 0 || isFinalizing}
+                            className="flex-1 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 disabled:opacity-50 disabled:grayscale"
                         >
                             {isFinalizing ? (
                                 <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />

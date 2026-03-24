@@ -691,18 +691,20 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         return (
             <div className="min-h-screen bg-slate-50/50 font-sans pb-40">
                 {/* Exit Header */}
-                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                    <div className="max-w-md mx-auto flex items-center gap-3">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiArrowLeft className="w-6 h-6" />
-                        </button>
-                        <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 7</div>
-                            <h1 className="text-sm font-black text-gray-800">School Resources</h1>
+                {!propReadOnly && (
+                    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                        <div className="max-w-md mx-auto flex items-center gap-3">
+                            <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                            <div className="flex-1 text-center">
+                                <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 7</div>
+                                <h1 className="text-sm font-black text-gray-800">School Resources</h1>
+                            </div>
+                            <div className="w-10" />
                         </div>
-                        <div className="w-10" />
-                    </div>
-                </header>
+                    </header>
+                )}
 
                 <div className="max-w-md mx-auto mt-4 px-4 space-y-10">
                     {/* Header */}
@@ -932,26 +934,28 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     return (
         <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-gray-50 to-gray-200 flex flex-col font-sans">
             {/* Header */}
-            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3 pb-4">
-                <div className="max-w-md mx-auto flex items-center gap-3">
-                    <button onClick={() => {
-                        if (currentPhase > 1) {
-                            setCurrentPhase(p => p - 1);
-                        } else {
-                            navigate("/modular-dashboard");
-                        }
-                    }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                        <FiArrowLeft className="w-6 h-6" />
-                    </button>
-                    <div className="mx-4 h-4 bg-gray-200 rounded-full overflow-hidden flex-1">
-                        <motion.div
-                            className="h-full bg-indigo-500 rounded-full"
-                            animate={{ width: progressWidth }}
-                            transition={{ duration: 0.4, ease: "easeOut" }}
-                        />
+            {!propReadOnly && (
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3 pb-4">
+                    <div className="max-w-md mx-auto flex items-center gap-3">
+                        <button onClick={() => {
+                            if (currentPhase > 1) {
+                                setCurrentPhase(p => p - 1);
+                            } else {
+                                navigate("/modular-dashboard");
+                            }
+                        }} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                        <div className="mx-4 h-4 bg-gray-200 rounded-full overflow-hidden flex-1">
+                            <motion.div
+                                className="h-full bg-indigo-500 rounded-full"
+                                animate={{ width: progressWidth }}
+                                transition={{ duration: 0.4 }}
+                            />
+                        </div>
                     </div>
-                </div>
-            </header>
+                </header>
+            )}
 
             {/* Welcome Back Toast */}
             <AnimatePresence>
@@ -1460,37 +1464,39 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 </div>
             </main>
 
-            <div className="fixed bottom-0 left-0 w-full p-5 bg-white border-t border-gray-100 flex flex-col items-center z-40 shadow-[0_-2px_12px_rgba(0,0,0,0.02)]">
-                <div className="w-full max-w-md">
-                    <ConfirmationBox />
+            {!propReadOnly && (
+                <div className="fixed bottom-0 left-0 w-full p-5 bg-white border-t border-gray-100 flex flex-col items-center z-40 shadow-[0_-2px_12px_rgba(0,0,0,0.02)]">
+                    <div className="w-full max-w-md">
+                        <ConfirmationBox />
+                    </div>
+                    <div className="w-full max-w-md flex items-center gap-3">
+                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                            <FiSave className="w-6 h-6" />
+                        </button>
+                        {currentPhase === 1 ? (
+                            <button disabled={!isPhase1Valid || !isValidationConfirmed} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                                Continue to Phase 2 <FiChevronRight className="w-5 h-5" />
+                            </button>
+                        ) : currentPhase === 2 ? (
+                            <button disabled={!ictStats.isValid || !isValidationConfirmed} onClick={handlePhase2Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                                Continue to Mobile Labs (eCart) <FiChevronRight className="w-5 h-5" />
+                            </button>
+                        ) : currentPhase === 3 ? (
+                            <button disabled={!isPhase3Valid} onClick={handlePhase3Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                                Continue to Phase 4 (WASH) <FiChevronRight className="w-5 h-5" />
+                            </button>
+                        ) : currentPhase === 4 ? (
+                            <button disabled={!washStats.isValid || !isValidationConfirmed} onClick={handlePhase4Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                                Continue to Phase 5 (Utilities) <FiChevronRight className="w-5 h-5" />
+                            </button>
+                        ) : (
+                            <button disabled={!isPhase5Valid || loading} onClick={handleFinalSubmit} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                                {loading ? "Submitting..." : "Submit School Resources"} <FiCheckCircle className="w-5 h-5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
-                <div className="w-full max-w-md flex items-center gap-3">
-                    <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
-                         <FiSave className="w-6 h-6" />
-                    </button>
-                    {currentPhase === 1 ? (
-                        <button disabled={!isPhase1Valid || !isValidationConfirmed} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                            Continue to Phase 2 <FiChevronRight className="w-5 h-5" />
-                        </button>
-                    ) : currentPhase === 2 ? (
-                        <button disabled={!ictStats.isValid || !isValidationConfirmed} onClick={handlePhase2Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                            Continue to Mobile Labs (eCart) <FiChevronRight className="w-5 h-5" />
-                        </button>
-                    ) : currentPhase === 3 ? (
-                        <button disabled={!isPhase3Valid} onClick={handlePhase3Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                            Continue to Phase 4 (WASH) <FiChevronRight className="w-5 h-5" />
-                        </button>
-                    ) : currentPhase === 4 ? (
-                        <button disabled={!washStats.isValid || !isValidationConfirmed} onClick={handlePhase4Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                            Continue to Phase 5 (Utilities) <FiChevronRight className="w-5 h-5" />
-                        </button>
-                    ) : (
-                        <button disabled={!isPhase5Valid || loading} onClick={handleFinalSubmit} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                            {loading ? "Submitting..." : "Submit School Resources"} <FiCheckCircle className="w-5 h-5" />
-                        </button>
-                    )}
-                </div>
-            </div>
+            )}
 
             {/* ── Add eCart Modal ── */}
             <AnimatePresence>

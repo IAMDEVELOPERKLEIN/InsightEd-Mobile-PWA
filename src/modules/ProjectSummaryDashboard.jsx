@@ -5,7 +5,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { 
     FiTool, FiTrendingUp, FiCheckCircle, FiClock, 
-    FiFileText, FiMapPin, FiBarChart2, FiBriefcase, FiDollarSign, FiActivity
+    FiFileText, FiMapPin, FiBarChart2, FiBriefcase, FiDollarSign, FiActivity, FiLogOut
 } from 'react-icons/fi';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, 
@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const ProjectSummaryDashboard = () => {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -83,9 +83,22 @@ const ProjectSummaryDashboard = () => {
                                     <p className="text-indigo-200/60 text-[10px] font-bold uppercase tracking-widest">Infrastructure & Financial Ops</p>
                                 </div>
                             </div>
-                            <div className="text-right text-white">
-                                <p className="font-bold text-sm leading-tight">{user?.firstName || user?.first_name || 'Engineer'}</p>
-                                <p className="text-indigo-400 text-[10px] font-medium uppercase">{user?.role || 'Division Engineer'}</p>
+                            <div className="flex items-center gap-4 text-right text-white">
+                                <div className="hidden sm:block">
+                                    <p className="font-bold text-sm leading-tight">{user?.firstName || user?.first_name || 'Engineer'}</p>
+                                    <p className="text-indigo-400 text-[10px] font-medium uppercase">{user?.role || 'Division Engineer'}</p>
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                        if (window.confirm("Are you sure you want to log out?")) {
+                                            logout();
+                                            navigate('/login');
+                                        }
+                                    }}
+                                    className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 text-white hover:bg-red-500/20 hover:border-red-500/50 transition-all shadow-inner"
+                                >
+                                    <FiLogOut size={18} />
+                                </button>
                             </div>
                         </div>
 
@@ -217,10 +230,11 @@ const ProjectSummaryDashboard = () => {
                     </div>
                 </div>
 
-                <BottomNav userRole={user?.role} />
+                {/* Removed BottomNav as requested for National Portal view */}
             </div>
         </PageTransition>
     );
 };
+
 
 export default ProjectSummaryDashboard;

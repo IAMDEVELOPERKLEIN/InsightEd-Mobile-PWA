@@ -55,7 +55,7 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Local Government Unit': [
-            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/lgu-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/lgu-dashboard', icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
@@ -74,37 +74,38 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
-            { label: 'Home', path: '/educational-dashboard', icon: FiGrid },
+            { label: 'Home', path: '/admin-dashboard', icon: FiGrid },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
-            { label: 'Home', path: '/educational-dashboard', icon: FiGrid },
+            { label: 'Home', path: '/hr-dashboard', icon: FiGrid },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
-            { label: 'InsightED', path: '/educational-dashboard', icon: TbHomeEdit },
+            { label: 'InsightED', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
-            { label: 'Home', path: '/educational-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
-            { label: 'Home', path: '/educational-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
+
         'Central Office Finance': [
-            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
@@ -125,7 +126,7 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Implementing Agency': [
-            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/agency-dashboard', icon: TbHomeEdit },
             { label: 'Deployment', path: '/agency-dashboard', state: { activeTab: 'deployment' }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },

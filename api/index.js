@@ -10733,7 +10733,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     const isUnit8Completed = inventoryCount > 0;
 
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
-    await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2 WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
+    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP;`);
+    await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
 
     await client.query('COMMIT');
     res.json({ success: true, message: "Facilities and details saved!" });
@@ -11118,6 +11119,104 @@ app.get('/api/monitoring/stats', async (req, res) => {
   } catch (err) {
     console.error("Monitoring Stats Error:", err);
     res.status(500).json({ error: "Failed to fetch stats", details: err.message });
+  }
+});
+
+// --- HROD DASHBOARD MONITORING ENDPOINT ---
+app.get('/api/monitoring/hrod-dashboard', async (req, res) => {
+  const { region, division, district, municipality, group_by = 'region' } = req.query;
+  try {
+    let selectGroup = '';
+    let extraSelect = '';
+    switch(group_by.toLowerCase()) {
+      case 'division': selectGroup = 'TRIM(s.division)'; break;
+      case 'district': selectGroup = 'TRIM(s.district)'; break;
+      case 'municipality': selectGroup = 'TRIM(s.municipality)'; break;
+      case 'region': selectGroup = 'TRIM(s.region)'; break;
+      case 'school': 
+        selectGroup = 'TRIM(s.school_name)'; 
+        extraSelect = ', s.school_id';
+        break;
+      default: selectGroup = 'TRIM(s.region)';
+    }
+
+    // Dynamic filters based on hierarchy
+    let filterClause = 'WHERE 1=1';
+    const params = [];
+
+    if (region) {
+      filterClause += ` AND UPPER(TRIM(s.region)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(region);
+    }
+    if (division) {
+      filterClause += ` AND UPPER(TRIM(s.division)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(division);
+    }
+    if (district) {
+      filterClause += ` AND UPPER(TRIM(s.district)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(district);
+    }
+    if (municipality) {
+      filterClause += ` AND UPPER(TRIM(s.municipality)) = UPPER(TRIM($${params.length + 1}))`;
+      params.push(municipality);
+    }
+
+    const query = `
+      SELECT 
+        ${selectGroup} as group_name
+        ${extraSelect},
+        COUNT(s.school_id) as total_schools,
+        COUNT(s.iern) as registered_schools,
+        COALESCE(SUM(CASE WHEN s.unit_completion >= 100 THEN 1 ELSE 0 END), 0) as unit_completed,
+        COALESCE(COUNT(DISTINCT e.school_id) FILTER (WHERE e.status = 'VERIFIED' OR e.status = 'PENDING_SDO'), 0) as esf7_completed,
+        -- NSPP placeholder (0 for now as module is coming soon)
+        0 as nspp_completed
+      FROM ph_schools s
+      LEFT JOIN esf7_database e ON s.school_id = e.school_id
+      ${filterClause}
+      GROUP BY ${selectGroup} ${extraSelect}
+      HAVING ${selectGroup} IS NOT NULL AND ${selectGroup} <> ''
+      ORDER BY 
+        CASE 
+          WHEN COUNT(s.school_id) > 0 THEN (COALESCE(SUM(CASE WHEN s.unit_completion >= 100 THEN 1 ELSE 0 END), 0)::float / COUNT(s.school_id)::float)
+          ELSE 0 
+        END DESC,
+        group_name ASC
+    `;
+
+    const result = await pool.query(query, params);
+    
+    // Calculate overall totals for the response
+    const totals = {
+      total_schools: 0,
+      registered_schools: 0,
+      unit_completed: 0,
+      esf7_completed: 0,
+      nspp_completed: 0
+    };
+
+    result.rows.forEach(row => {
+      totals.total_schools += parseInt(row.total_schools);
+      totals.registered_schools += parseInt(row.registered_schools);
+      totals.unit_completed += parseInt(row.unit_completed);
+      totals.esf7_completed += parseInt(row.esf7_completed);
+    });
+
+    res.json({
+      summary: totals,
+      breakdown: result.rows.map(r => ({
+        ...r,
+        total_schools: parseInt(r.total_schools),
+        registered_schools: parseInt(r.registered_schools),
+        unit_completed: parseInt(r.unit_completed),
+        esf7_completed: parseInt(r.esf7_completed),
+        progress: r.total_schools > 0 ? Math.round((parseInt(r.unit_completed) / parseInt(r.total_schools)) * 100) : 0
+      }))
+    });
+
+  } catch (err) {
+    console.error("HROD Dashboard Error:", err);
+    res.status(500).json({ error: "Internal Server Error", details: err.message });
   }
 });
 
@@ -14465,6 +14564,16 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0`,
       `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9 INTEGER DEFAULT 0`,
       `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_updated_at TIMESTAMP`,
     ];
     for (const sql of ensureCols) {
       await pool.query(sql).catch(() => { }); // silently skip if already exists
@@ -16519,8 +16628,10 @@ app.post('/api/user/progress', async (req, res) => {
     // If schoolId was provided, update the flag directly
     if (schoolId && unitId) {
       const col = `unit${unitId}_completed`;
+      const updateAtCol = `unit${unitId}_updated_at`;
       await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} BOOLEAN DEFAULT FALSE`);
-      await pool.query(`UPDATE ph_schools SET ${col} = TRUE WHERE school_id = $1`, [schoolId]);
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${updateAtCol} TIMESTAMP`);
+      await pool.query(`UPDATE ph_schools SET ${col} = TRUE, ${updateAtCol} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, [schoolId]);
 
       // Also update the new integer-based column (unit1-unit8) for the dashboard
       const unitNum = parseInt(unitId);

@@ -73,6 +73,8 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [isReadOnly, setIsReadOnly] = useState(false);
     const [totalEnrollment, setTotalEnrollment] = useState(0);
 
+    const effectiveReadOnly = propReadOnly || isReadOnly;
+
     const parseClassStructure = (d) => {
         let activeClasses = [];
         let parsedData = {};
@@ -602,12 +604,12 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 </div>
 
                 {/* Unlock Action */}
-                {!propReadOnly && (
+                {!propReadOnly && isReadOnly && (
                     <motion.div 
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.3 }}
-                        className="mt-12"
+                        className="mt-12 px-6"
                     >
                         <button 
                             onClick={() => setIsReadOnly(false)}
@@ -617,11 +619,8 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                             <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center group-hover:scale-110 transition-transform">
                                 <FiUnlock className="w-5 h-5 text-teal-700" />
                             </div>
-                            <span>Unlock to Edit Registry</span>
+                            <span>Unlock to Audit Registry</span>
                         </button>
-                        <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4 px-8">
-                            Any changes to section counts will impact school-wide teacher-to-student ratio calculations.
-                        </p>
                     </motion.div>
                 )}
             </motion.div>
@@ -646,34 +645,36 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             </AnimatePresence>
 
             {/* Header */}
-            <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-md mx-auto px-5 py-4 flex items-center justify-between relative">
-                    <div className="flex items-center gap-2 z-10">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-50 transition-colors">
-                            <FiArrowLeft className="w-6 h-6" />
-                        </button>
+            {!effectiveReadOnly && (
+                <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+                    <div className="max-w-md mx-auto px-5 py-4 flex items-center justify-between relative">
+                        <div className="flex items-center gap-2 z-10">
+                            <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-50 transition-colors">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <div className="absolute left-0 right-0 text-center pointer-events-none">
+                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 3</div>
+                            <h1 className="text-sm font-black text-gray-800">Section Registry</h1>
+                        </div>
+                        <div className="w-10 z-10 text-right">
+                            <span className="text-xs font-bold text-slate-400">
+                                {currentStep > totalSteps ? 'Final' : currentStep > 0 ? `${currentStep} / ${totalSteps}` : 'Intro'}
+                            </span>
+                        </div>
                     </div>
-                    <div className="absolute left-0 right-0 text-center pointer-events-none">
-                        <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 3</div>
-                        <h1 className="text-sm font-black text-gray-800">Section Registry</h1>
-                    </div>
-                    <div className="w-10 z-10 text-right">
-                         <span className="text-xs font-bold text-slate-400">
-                             {currentStep > totalSteps ? 'Final' : currentStep > 0 ? `${currentStep} / ${totalSteps}` : 'Intro'}
-                         </span>
-                    </div>
-                </div>
 
-                {/* Progress Bar */}
-                {!isReadOnly && !isFetching && !fetchError && (
-                    <div className="w-full h-1 bg-slate-100">
-                        <div 
-                            className="h-full bg-indigo-500 transition-all duration-300 ease-out"
-                            style={{ width: `${progressPercent}%` }}
-                        />
-                    </div>
-                )}
-            </header>
+                    {/* Progress Bar */}
+                    {!isReadOnly && !isFetching && !fetchError && (
+                        <div className="w-full h-1 bg-slate-100">
+                            <div 
+                                className="h-full bg-indigo-500 transition-all duration-300 ease-out"
+                                style={{ width: `${progressPercent}%` }}
+                            />
+                        </div>
+                    )}
+                </header>
+            )}
 
             <main className="max-w-md mx-auto p-5 pb-10 mt-4">
                 
@@ -696,7 +697,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                              Try Again
                          </button>
                      </div>
-                ) : isReadOnly ? (
+                ) : effectiveReadOnly ? (
                     <Unit3ClassesSummary />
                 ) : (
                     <>
@@ -855,7 +856,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             </main>
 
             {/* Stepper Navigation */}
-            {!isReadOnly && (
+            {!effectiveReadOnly && (
                 <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-100 flex justify-center z-40 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] px-5 py-6 pb-safe">
                     <div className="w-full max-w-md flex items-center justify-between gap-4">
                         

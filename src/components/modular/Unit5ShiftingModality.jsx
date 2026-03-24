@@ -103,6 +103,8 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
     // ── Saved data (Review Mode) ────────────────────────────────────────────
     const [savedData, setSavedData] = useState(null);
+    const effectiveReadOnly = propReadOnly || isReviewMode;
+
     // ── Navigation ──────────────────────────────────────────────────────────
     // Added specific local state properly decoupled from the memoized Curriculum list
     const [filteredGrades, setFilteredGrades] = useState([]);
@@ -176,7 +178,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     setFilteredGrades(finalGrades);
 
                     // MASTER PRECEDENCE: Draft > Database
-                    if (draft) {
+                    if (draft && !propReadOnly) {
                         setCurrentChapter(draft.currentChapter || 1);
                         setHasStandardShifting(draft.hasStandardShifting);
                         setGradeIdx(draft.gradeIdx || 0);
@@ -207,7 +209,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             }
         };
         init();
-    }, []);
+    }, [propReadOnly, targetSchoolId]);
 
     // ── Validation ──────────────────────────────────────────────────────────
     const isStep1Valid = hasStandardShifting !== null;
@@ -355,18 +357,20 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         return (
             <div className="min-h-screen bg-slate-50/50 font-sans">
                 {/* Exit Header */}
-                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                    <div className="max-w-md mx-auto flex items-center gap-3">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiArrowLeft className="w-6 h-6" />
-                        </button>
-                        <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 5</div>
-                            <h1 className="text-sm font-black text-gray-800">Shifting & Modality</h1>
+                {!propReadOnly && (
+                    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                        <div className="max-w-md mx-auto flex items-center gap-3">
+                            <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                            <div className="flex-1 text-center">
+                                <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 5</div>
+                                <h1 className="text-sm font-black text-gray-800">Shifting & Modality</h1>
+                            </div>
+                            <div className="w-10" />
                         </div>
-                        <div className="w-10" />
-                    </div>
-                </header>
+                    </header>
+                )}
 
                 <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
                     {/* Header */}
@@ -519,16 +523,18 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     // ══════════════════════════════════════════════
     return (
         <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-indigo-50/30 to-purple-50 flex flex-col font-sans relative overflow-x-hidden">
-            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                <div className="max-w-md mx-auto flex items-center gap-3">
-                    <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
-                        <FiArrowLeft className="w-6 h-6 text-gray-400 hover:text-gray-600" />
-                    </button>
-                    <div className="mx-4 h-4 bg-gray-200 rounded-full overflow-hidden flex-1">
-                        <motion.div className="h-full bg-indigo-500 rounded-full" animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.4 }} />
+            {!propReadOnly && (
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                    <div className="max-w-md mx-auto flex items-center gap-3">
+                        <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                            <FiArrowLeft className="w-6 h-6 text-gray-400 hover:text-gray-600" />
+                        </button>
+                        <div className="mx-4 h-4 bg-gray-200 rounded-full overflow-hidden flex-1">
+                            <motion.div className="h-full bg-indigo-500 rounded-full" animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.4 }} />
+                        </div>
                     </div>
-                </div>
-            </header>
+                </header>
+            )}
 
             {/* Welcome Back Toast */}
             <AnimatePresence>
@@ -750,49 +756,51 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             </main>
 
             {/* ── Sticky Footer ── */}
-            <div className="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t border-gray-100 flex justify-center z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.02)]">
-                <div className="w-full max-w-md flex gap-3 px-2">
-                    {currentChapter === 1 ? (
-                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
-                            <FiSave className="w-6 h-6" />
-                        </button>
-                    ) : (
-                        <div className="flex gap-2">
-                            <button onClick={handleBack}
-                                className="w-16 h-16 flex justify-center items-center rounded-3xl bg-slate-100 text-slate-500 border-2 border-slate-200 active:translate-y-[2px] transition-all outline-none">
-                                <FiArrowLeft className="w-6 h-6" />
-                            </button>
-                            <button onClick={() => setShowDraftModal(true)}
-                                className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
-                            >
+            {!propReadOnly && (
+                <div className="fixed bottom-0 left-0 w-full p-4 bg-white/90 backdrop-blur-md border-t border-gray-100 flex justify-center z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.02)]">
+                    <div className="w-full max-w-md flex gap-3 px-2">
+                        {currentChapter === 1 ? (
+                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                                 <FiSave className="w-6 h-6" />
                             </button>
-                        </div>
-                    )}
-                    {currentChapter < 4 && (
-                        <button
-                            onClick={handleNext}
-                            disabled={
-                                (currentChapter === 1 && !isStep1Valid) ||
-                                (currentChapter === 2 && !isGradeInputValid()) ||
-                                (currentChapter === 3 && !isStep3Valid)
-                            }
-                            className="flex-1 py-4 rounded-2xl font-black text-lg bg-indigo-600 text-white shadow-lg shadow-indigo-200 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100 flex items-center justify-center gap-2"
-                        >
-                            {currentChapter === 1 ? (hasStandardShifting ? "Continue to ADMs" : "Start Mapping") : currentChapter === 3 ? "Review Data" : "Next Grade"}
-                        </button>
-                    )}
-                    {currentChapter === 4 && (
-                        <button
-                            onClick={handleSubmit}
-                            disabled={!isVerified || loading}
-                            className="flex-[2] py-4 rounded-2xl font-black text-lg bg-emerald-500 text-white shadow-lg shadow-emerald-200 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100 flex items-center justify-center gap-2"
-                        >
-                            {loading ? <span className="animate-pulse">Saving...</span> : <span><FiCheck className="inline w-5 h-5 mr-1 mb-0.5" /> Submit Data</span>}
-                        </button>
-                    )}
+                        ) : (
+                            <div className="flex gap-2">
+                                <button onClick={handleBack}
+                                    className="w-16 h-16 flex justify-center items-center rounded-3xl bg-slate-100 text-slate-500 border-2 border-slate-200 active:translate-y-[2px] transition-all outline-none">
+                                    <FiArrowLeft className="w-6 h-6" />
+                                </button>
+                                <button onClick={() => setShowDraftModal(true)}
+                                    className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
+                                >
+                                    <FiSave className="w-6 h-6" />
+                                </button>
+                            </div>
+                        )}
+                        {currentChapter < 4 && (
+                            <button
+                                onClick={handleNext}
+                                disabled={
+                                    (currentChapter === 1 && !isStep1Valid) ||
+                                    (currentChapter === 2 && !isGradeInputValid()) ||
+                                    (currentChapter === 3 && !isStep3Valid)
+                                }
+                                className="flex-1 py-4 rounded-2xl font-black text-lg bg-indigo-600 text-white shadow-lg shadow-indigo-200 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100 flex items-center justify-center gap-2"
+                            >
+                                {currentChapter === 1 ? (hasStandardShifting ? "Continue to ADMs" : "Start Mapping") : currentChapter === 3 ? "Review Data" : "Next Grade"}
+                            </button>
+                        )}
+                        {currentChapter === 4 && (
+                            <button
+                                onClick={handleSubmit}
+                                disabled={!isVerified || loading}
+                                className="flex-[2] py-4 rounded-2xl font-black text-lg bg-emerald-500 text-white shadow-lg shadow-emerald-200 active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100 flex items-center justify-center gap-2"
+                            >
+                                {loading ? <span className="animate-pulse">Saving...</span> : <span><FiCheck className="inline w-5 h-5 mr-1 mb-0.5" /> Submit Data</span>}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             <SuccessModal 
                 isOpen={showSuccess} 
