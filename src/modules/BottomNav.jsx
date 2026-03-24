@@ -8,6 +8,7 @@ import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight
 import { LuCompass } from "react-icons/lu";
 import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign, FiGrid } from "react-icons/fi";
 import { motion } from 'framer-motion';
+import { getRoleGroup, ROLE_GROUPS } from '../config/roleGroups';
 
 const BottomNav = ({ userRole: propRole }) => {
     const { user, logout, confirmLogout } = useAuth();
@@ -41,6 +42,9 @@ const BottomNav = ({ userRole: propRole }) => {
         if (impRole) effectiveRole = impRole;
     }
 
+    // Determine Group
+    const userGroup = getRoleGroup(effectiveRole);
+
     // --- CONFIGURATION BY ROLE ---
     const navConfigs = {
 
@@ -51,6 +55,7 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Local Government Unit': [
+            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/lgu-dashboard', icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
@@ -63,43 +68,43 @@ const BottomNav = ({ userRole: propRole }) => {
         ],
 
         'Division Engineer': [
-            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
-            { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/educational-dashboard', icon: FiGrid },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
-            { label: 'Home', path: '/hr-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/educational-dashboard', icon: FiGrid },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
-            { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
+            { label: 'InsightED', path: '/educational-dashboard', icon: TbHomeEdit },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
-            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
+            { label: 'Home', path: '/educational-dashboard', icon: TbHomeEdit },
             { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
-            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
+            { label: 'Home', path: '/educational-dashboard', icon: TbHomeEdit },
             { label: 'Infra', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office Finance': [
-            { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
@@ -112,7 +117,7 @@ const BottomNav = ({ userRole: propRole }) => {
         ],
 
         'EFD Engineer': [
-            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Mother MOA', path: '/efd-mother-moa', icon: TbFileCheck },
             { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
@@ -120,14 +125,27 @@ const BottomNav = ({ userRole: propRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Implementing Agency': [
-            { label: 'Home', path: '/agency-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
+            { label: 'Home', path: '/project-summary-dashboard', icon: TbHomeEdit },
             { label: 'Deployment', path: '/agency-dashboard', state: { activeTab: 'deployment' }, icon: TbClipboardList },
             { label: 'Chat', path: '/chat', icon: FiMessageSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
     };
 
-    const currentNavItems = navConfigs[effectiveRole];
+    // Override first item based on Group if applicable
+    let currentNavItems = navConfigs[effectiveRole];
+
+    if (currentNavItems && currentNavItems.length > 0) {
+        if (userGroup === ROLE_GROUPS.EDUCATIONAL_ADMIN) {
+            // Group 1: Ensure first item is the Dashboard
+            // For now, keep existing Home but if we create a dedicated Group 1 Dashboard we link it here
+            // currentNavItems[0] = { label: 'Dashboard', path: '/educational-dashboard', icon: FiGrid };
+        } else if (userGroup === ROLE_GROUPS.TECHNICAL_FINANCE) {
+            // Group 2: Ensure first item is Project Summary
+            // currentNavItems[0] = { label: 'Projects', path: '/project-summary', icon: TbClipboardList };
+        }
+    }
+
 
     // --- SUPER USER INJECTION ---
     // REMOVED: Moved to Floating Button

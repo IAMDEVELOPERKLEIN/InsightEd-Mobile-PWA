@@ -1272,7 +1272,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     // 1. Fetch user from PostgreSQL
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
-    const SELECT_COLS = `uid, email, role, region, division, office, account_category, passcode, password_hash, password_salt, hash_version, first_name, last_name, school_id`;
+    const SELECT_COLS = `uid, email, role, region, division, office, account_category, passcode, password_hash, password_salt, hash_version, first_name, last_name, school_id, province, city`;
 
     const query = isSchoolId
       ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
@@ -1378,6 +1378,8 @@ app.post('/api/auth/migrate-login', async (req, res) => {
         last_name: user.last_name,
         school_id: user.school_id,
         office: user.office,
+        province: user.province,
+        city: user.city,
         firstName: user.first_name, // Compatibility
         lastName: user.last_name     // Compatibility
       }
@@ -1394,7 +1396,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const { uid } = req.user;
     const result = await pool.query(
-      'SELECT uid, email, role, region, division, office, account_category, first_name, last_name, school_id, passcode FROM users WHERE uid = $1',
+      'SELECT uid, email, role, region, division, office, account_category, first_name, last_name, school_id, passcode, province, city FROM users WHERE uid = $1',
       [uid]
     );
 
@@ -1414,7 +1416,9 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       last_name: user.last_name,
       school_id: user.school_id,
       passcode: user.passcode,
-      office: user.office
+      office: user.office,
+      province: user.province,
+      city: user.city
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4259,14 +4263,42 @@ app.post('/api/upload-engineer-mother-moa', async (req, res) => {
 app.get('/api/engineer-supplemental-moas/:mother_moa_id', async (req, res) => {
   const { mother_moa_id } = req.params;
   try {
-    const result = await pool.query(`
+    // 1. Fetch supplemental MOAs
+    const suppResult = await pool.query(`
       SELECT s.*, u.first_name, u.last_name 
       FROM engineer_supplamental_moa s
       LEFT JOIN users u ON s.uploaded_by = u.uid
       WHERE s.mother_moa_id = $1
       ORDER BY s.created_at DESC
     `, [mother_moa_id]);
-    res.json(result.rows);
+
+    // 2. Extract all unique IPCs from all supplemental MOAs
+    const allIpcs = new Set();
+    suppResult.rows.forEach(row => {
+      const ids = row.ipc_ids || [];
+      ids.forEach(id => allIpcs.add(id));
+    });
+
+    // 3. Fetch project names for these IPCs
+    const projectMap = {};
+    if (allIpcs.size > 0) {
+      const projectsRes = await pool.query(
+        'SELECT ipc, project_name FROM engineer_form WHERE ipc = ANY($1)',
+        [Array.from(allIpcs)]
+      );
+      projectsRes.rows.forEach(p => { projectMap[p.ipc] = p.project_name; });
+    }
+
+    // 4. Transform results to include project detail objects instead of just strings
+    const detailedSupplementals = suppResult.rows.map(row => {
+      const detailedIpcs = (row.ipc_ids || []).map(id => ({
+        ipc: id,
+        project_name: projectMap[id] || "Unknown Project"
+      }));
+      return { ...row, ipcs: detailedIpcs };
+    });
+
+    res.json(detailedSupplementals);
   } catch (err) {
     console.error("Fetch Supplemental MOA Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
@@ -4310,6 +4342,59 @@ app.get('/api/projects-for-moa/:mother_moa_id', async (req, res) => {
   } catch (err) {
     console.error("Fetch Projects for MOA Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// GET /api/agency-dashboard/mother-moas (Filtered for Dashboard)
+app.get('/api/agency-dashboard/mother-moas', async (req, res) => {
+  const { agency, region, province, city } = req.query;
+  try {
+    let filterClause = '';
+    let params = [];
+    let paramCount = 1;
+
+    if (agency && agency !== 'All') {
+      const agencyClean = agency.replace(/^MGO\s+|PGO\s+|CGO\s+/i, '').trim();
+      if (agencyClean) {
+        filterClause += ` AND (lgu_name ILIKE $${paramCount} OR lgu_type ILIKE $${paramCount})`;
+        params.push(`%${agencyClean}%`);
+        paramCount++;
+      }
+    }
+
+    if (region && region !== 'All') {
+      const regionClean = region.replace(/^Region\s+|^Reg-\s*|^R-\s*/i, '').trim();
+      // Ensure exact match or bounded match so 'CAR' doesn't match 'CARAGA'
+      filterClause += ` AND TRIM(REGEXP_REPLACE(region, '(?i)^Region\\s+|^Reg-\\s*|^R-\\s*', '')) ILIKE $${paramCount}`;
+      params.push(regionClean);
+      paramCount++;
+    }
+
+    if (province && province !== 'All' && province !== 'null') {
+      // PGOs only see their province
+      filterClause += ` AND province ILIKE $${paramCount}`;
+      params.push(`%${province}%`);
+      paramCount++;
+    }
+
+    if (city && city !== 'All' && city !== 'null') {
+      // MGO/CGOs only see their municipality/city
+      filterClause += ` AND lgu_name ILIKE $${paramCount}`;
+      params.push(`%${city}%`);
+      paramCount++;
+    }
+
+    const query = `
+      SELECT mother_moa_id as moa_id, region, province, lgu_name as implementing_agency, moa_pdf as moa_link
+      FROM engineer_mother_moa
+      WHERE 1=1 ${filterClause}
+      ORDER BY mother_moa_id DESC
+    `;
+    const result = await pool.query(query, params);
+    res.json({ success: true, motherMoas: result.rows });
+  } catch (err) {
+    console.error("❌ Fetch Mother MOAs Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch mother MOAs" });
   }
 });
 
@@ -8435,7 +8520,7 @@ app.patch('/api/finance-dashboard/projects/:id/tranches', async (req, res) => {
 //               IMPLEMENTING AGENCY DASHBOARD ENDPOINTS
 // ==================================================================
 app.get('/api/agency-dashboard/projects', async (req, res) => {
-  const { agency, region } = req.query;
+  const { agency, region, province, city } = req.query;
   try {
     let filterClause = '';
     let params = [];
@@ -8443,14 +8528,29 @@ app.get('/api/agency-dashboard/projects', async (req, res) => {
 
     if (agency && agency !== 'All') {
       const agencyClean = agency.replace(/^MGO\s+|PGO\s+|CGO\s+/i, '').trim();
-      filterClause += ` AND (implementing_agency ILIKE $${paramCount} OR implementing_agency_specific ILIKE $${paramCount})`;
-      params.push(`%${agencyClean}%`);
-      paramCount++;
+      if (agencyClean) {
+        filterClause += ` AND (implementing_agency ILIKE $${paramCount} OR implementing_agency_specific ILIKE $${paramCount})`;
+        params.push(`%${agencyClean}%`);
+        paramCount++;
+      }
     }
 
     if (region && region !== 'All') {
-      filterClause += ` AND region = $${paramCount}`;
-      params.push(region);
+      // Precise wildcard to ensure 'CAR' != 'CARAGA' if they are passing raw strings
+      filterClause += ` AND CASE WHEN $${paramCount} = 'CAR' THEN region = 'CAR' ELSE region ILIKE '%' || $${paramCount} || '%' END`;
+      params.push(region.replace(/^Region\s+|^Reg-\s*|^R-\s*/i, '').trim());
+      paramCount++;
+    }
+
+    if (province && province !== 'All' && province !== 'null') {
+      filterClause += ` AND province ILIKE $${paramCount}`;
+      params.push(`%${province}%`);
+      paramCount++;
+    }
+
+    if (city && city !== 'All' && city !== 'null') {
+      filterClause += ` AND (municipality ILIKE $${paramCount} OR city ILIKE $${paramCount} OR implementing_agency ILIKE $${paramCount})`;
+      params.push(`%${city}%`);
       paramCount++;
     }
 
@@ -10812,7 +10912,12 @@ app.get('/api/monitoring/stats', async (req, res) => {
       params.push(req.query.district);
     }
 
-    statsQuery += ` GROUP BY s.region ${division ? ', s.division' : ''} ${req.query.district ? ', s.district' : ''}`;
+    if (req.query.school_id) {
+       statsQuery += ` AND s.school_id = $${params.length + 1}`;
+       params.push(req.query.school_id);
+    }
+
+    statsQuery += ` GROUP BY s.region ${division ? ', s.division' : ''} ${req.query.district ? ', s.district' : ''} ${req.query.school_id ? ', s.school_id' : ''}`;
 
     const result = await pool.query(statsQuery, params);
 

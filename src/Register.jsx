@@ -51,22 +51,22 @@ const getDashboardPath = (role, accountCategory) => {
             : '/engineer-dashboard';
     }
     const roleMap = {
-        'EFD Engineer': '/efd-dashboard',
-        'Local Government Unit': '/lgu-dashboard',
+        'EFD Engineer': '/project-summary-dashboard',
+        'Local Government Unit': '/project-summary-dashboard',
         'School Head': '/nodes-dashboard',
-        'Human Resource': '/hr-dashboard',
-        'Admin': '/super-user-selector',
-        'Central Office': '/monitoring-dashboard',
-        'Regional Office': '/monitoring-dashboard',
-        'School Division Office': '/monitoring-dashboard',
-        'Central Office Finance': '/finance-dashboard',
-        'Super User': '/super-user-selector',
-        'Implementing Agency': '/agency-dashboard',
-        'PGO': '/agency-dashboard',
-        'CGO': '/lgu-dashboard',
-        'MGO': '/lgu-dashboard',
-        'DPWH': '/agency-dashboard',
-        'CSO': '/agency-dashboard',
+        'Human Resource': '/educational-dashboard',
+        'Admin': '/educational-dashboard',
+        'Central Office': '/educational-dashboard',
+        'Regional Office': '/educational-dashboard',
+        'School Division Office': '/educational-dashboard',
+        'Central Office Finance': '/project-summary-dashboard',
+        'Super User': '/educational-dashboard',
+        'Implementing Agency': '/project-summary-dashboard',
+        'PGO': '/project-summary-dashboard',
+        'CGO': '/project-summary-dashboard',
+        'MGO': '/project-summary-dashboard',
+        'DPWH': '/project-summary-dashboard',
+        'CSO': '/project-summary-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -522,7 +522,7 @@ const Register = () => {
                 }
             } else {
                 // RO / SDO / Engineers / CO
-                const isCO = d.role === 'Central Office' || d.role === 'Central Office Finance';
+                const isCO = d.role === 'Central Office' || d.role === 'Central Office Finance' || d.role === 'Super User';
                 const isSDO = d.role === 'School Division Office';
                 const isEng = d.role.includes('Engineer');
 
@@ -637,7 +637,7 @@ const Register = () => {
                 return;
             }
         }
-        if (formData.role !== 'School Head' && formData.role !== 'Super User') {
+        if (formData.role !== 'School Head') {
             const requiredCode = AUTHORIZATION_CODES[formData.role];
             if (requiredCode && formData.authCode !== requiredCode) {
                 alert(`Invalid Authorization Code for ${formData.role}. Please send an email to support.stride@deped.gov.ph to obtain the secure code.`);
@@ -974,20 +974,27 @@ const Register = () => {
                                                             disabled={pathId === 'path_school_head'}
                                                             className={`w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer ${pathId === 'path_school_head' ? 'opacity-70 bg-slate-50' : ''}`}
                                                         >
-                                                            <optgroup label="DepEd Personnel">
-                                                                <option value="School Head">School Head</option>
-                                                                <option value="Central Office">Central Office (CO)</option>
-                                                                <option value="Regional Office">Regional Office (RO)</option>
-                                                                <option value="School Division Office">Division Office (SDO)</option>
-                                                            </optgroup>
-                                                            
-                                                            <optgroup label="Technical & Engineering">
-                                                                <option value="EFD Engineer">EFD Engineer (CO)</option>
-                                                                <option value="Division Engineer">Division Engineer (SDO)</option>
-                                                                <option value="Non-DepEd Engineer">Non-DepEd Engineer</option>
-                                                            </optgroup>
-
-                                                            <optgroup label="Partner Agencies & Others">
+                                                            {activeTab === 'internal' ? (
+                                                                <>
+                                                                    {(!pathId || pathId === 'path_ro_sd') && (
+                                                                        <>
+                                                                            <option value="Central Office">CO Personnel</option>
+                                                                            <option value="Regional Office">RO Personnel</option>
+                                                                            <option value="School Division Office">SDO Personnel</option>
+//                                                                             <option value="Super User">Super User 2.0</option>
+                                                                        </>
+                                                                    )}
+                                                                    {(!pathId || pathId === 'path_school_head') && <option value="School Head">School Head</option>}
+                                                                    {(!pathId || pathId === 'path_engineers') && <option value="Division Engineer">Division Engineer</option>}
+                                                                    {(!pathId || pathId === 'path_efd') && <option value="EFD Engineer">EFD Engineer</option>}
+                                                                    {!pathId && (
+                                                                        <>
+                                                                            <option value="Local Government Unit">Local Government Unit</option>
+                                                                            <option value="Central Office Finance">Central Office Finance</option>
+                                                                        </>
+                                                                    )}
+                                                                </>
+                                                            ) : (
                                                                 <option value="Implementing Agency">Implementing Agency</option>
                                                                 <option value="Local Government Unit">LGU Representative</option>
                                                                 <option value="Central Office Finance">CO Finance</option>
@@ -1063,7 +1070,7 @@ const Register = () => {
                                                     <>
                                                         <div className="space-y-1">
                                                             <label className="text-xs font-bold text-slate-500 uppercase ml-1">Email Address</label>
-                                                            {['Central Office', 'Regional Office', 'School Division Office', 'Division Engineer', 'EFD Engineer'].includes(formData.role) ? (
+                                                             {['Central Office', 'Regional Office', 'School Division Office', 'Division Engineer', 'EFD Engineer', 'Super User'].includes(formData.role) ? (
                                                                 <div className="flex items-center w-full">
                                                                     <input
                                                                         type="text"
@@ -1174,9 +1181,9 @@ const Register = () => {
                                                         </div>
                                                     )}
 
-                                                    {['Central Office', 'Regional Office', 'School Division Office'].includes(formData.role) && (
+                                                     {['Central Office', 'Regional Office', 'School Division Office', 'Super User'].includes(formData.role) && (
                                                         <div className="space-y-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                                                            {formData.role !== 'Central Office' && (
+                                                             {!['Central Office', 'Central Office Finance', 'Super User'].includes(formData.role) && (
                                                                 <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
                                                                     <option value="">Select Region</option>
                                                                     {regions.map(r => <option key={r} value={r}>{r}</option>)}
@@ -1192,7 +1199,7 @@ const Register = () => {
 
                                                             <select name="office" value={formData.office} onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
                                                                 <option value="">Select Office/Bureau</option>
-                                                                {(formData.role === 'Central Office' || formData.role === 'Central Office Finance') && centralOfficeBureaus.map(o => <option key={o} value={o}>{o}</option>)}
+                                                                {(formData.role === 'Central Office' || formData.role === 'Central Office Finance' || formData.role === 'Super User') && centralOfficeBureaus.map(o => <option key={o} value={o}>{o}</option>)}
                                                                 {formData.role === 'Regional Office' && regionalOffices.map(o => <option key={o} value={o}>{o}</option>)}
                                                                 {formData.role === 'School Division Office' && divisionOffices.map(o => <option key={o} value={o}>{o}</option>)}
                                                             </select>

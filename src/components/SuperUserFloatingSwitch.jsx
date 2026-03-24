@@ -11,7 +11,7 @@ const SuperUserFloatingSwitch = () => {
     const [exporting, setExporting] = useState(false);
 
     // Pages where the Export button should appear
-    const exportPages = ['/monitoring-dashboard', '/engineer-dashboard', '/lgu-projects'];
+    const exportPages = ['/monitoring-dashboard', '/engineer-dashboard', '/lgu-projects', '/educational-dashboard', '/project-summary-dashboard'];
 
     useEffect(() => {
         const checkUser = () => {
@@ -103,7 +103,18 @@ const SuperUserFloatingSwitch = () => {
 
             {/* Switch View Button */}
             <button
-                onClick={() => navigate('/super-user-selector')}
+                onClick={() => {
+                    const isGroup1 = location.pathname === '/educational-dashboard';
+                    if (isGroup1) {
+                        // Switch to Group 2
+                        sessionStorage.setItem('impersonatedRole', 'EFD Engineer'); // Default role for Group 2
+                        navigate('/project-summary-dashboard');
+                    } else {
+                        // Switch back to Group 1
+                        sessionStorage.setItem('impersonatedRole', 'Central Office'); // Default role for Group 1
+                        navigate('/educational-dashboard');
+                    }
+                }}
                 style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -123,7 +134,7 @@ const SuperUserFloatingSwitch = () => {
                 onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
             >
                 <TbArrowsLeftRight size={20} />
-                <span>Switch View</span>
+                <span>{location.pathname === '/educational-dashboard' ? 'Switch to Infrastructure' : 'Switch to HROD'}</span>
             </button>
         </div>
     );
