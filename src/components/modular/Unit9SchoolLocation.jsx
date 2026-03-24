@@ -13,11 +13,17 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [initialDraft, setInitialDraft] = React.useState(null);
     const [showWelcomeBack, setShowWelcomeBack] = React.useState(false);
     const [loading, setLoading] = React.useState(true);
-    const [isReadOnly, setIsReadOnly] = React.useState(propReadOnly);
+    const [isReadOnly, setIsReadOnly] = React.useState(propReadOnly ?? false);
     const [locationData, setLocationData] = React.useState(null);
     const [showDraftModal, setShowDraftModal] = React.useState(false);
 
     const schoolId = targetSchoolId || localStorage.getItem('schoolId');
+
+    useEffect(() => {
+        if (propReadOnly !== undefined) {
+            setIsReadOnly(propReadOnly);
+        }
+    }, [propReadOnly]);
 
     useEffect(() => {
         const init = async () => {
@@ -28,7 +34,8 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
             try {
                 // If read-only, fetch the actual data for the dashboard
-                if (propReadOnly) {
+                // We fetch if propReadOnly is true OR if isReadOnly is true
+                if (propReadOnly || isReadOnly) {
                     const res = await fetch(`/api/school-location/${schoolId}`);
                     const result = await res.json();
                     if (result.success && result.data) {
@@ -52,7 +59,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
         };
         init();
-    }, [schoolId, propReadOnly]);
+    }, [schoolId, propReadOnly, isReadOnly]);
 
     const handleBack = () => {
         navigate('/modular-dashboard');
@@ -91,17 +98,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     };
 
     const SummaryDashboard = () => {
-        if (!locationData) return (
-            <div className="flex flex-col items-center justify-center p-20 text-slate-400 italic">
-                <FiMapPin className="w-12 h-12 mb-4 opacity-20" />
-                <p className="font-bold">No location record found for this school.</p>
-                {!propReadOnly && (
-                    <button onClick={() => setIsReadOnly(false)} className="mt-4 text-indigo-600 font-black uppercase tracking-widest text-xs border-b-2 border-indigo-600 pb-1">
-                        Start Audit
-                    </button>
-                )}
-            </div>
-        );
+        if (!locationData) return null;
 
         const data = locationData;
         
@@ -142,9 +139,9 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         <span className={`text-[8px] font-black uppercase tracking-widest ${riskColor} opacity-60`}>Risk Index</span>
                     </div>
                     <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
-                        Unit 9 • SHA Assessment
+                        Unit 9 • School Terrain
                     </span>
-                    <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4">Special Hardship Profile</h1>
+                    <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4">School Terrain Profile</h1>
                     <p className="text-slate-500 font-medium mt-2 italic px-8">"Environmental & structural variables for SHA Eligibility"</p>
                 </div>
 
@@ -378,7 +375,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     </button>
                     <div className="flex-1 text-center">
                         <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 9</div>
-                        <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">SHA Hub Assessment</h1>
+                        <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">School Terrain Profile</h1>
                     </div>
                     <div className="w-10" />
                 </div>
@@ -417,26 +414,48 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
             </main>
 
-            {!propReadOnly && (
-                <div className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
+            {isReadOnly && !propReadOnly && (
+                <div className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-[60]">
                     <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
-                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
-                            <FiSave className="w-6 h-6" />
+                        <button
+                            onClick={() => setIsReadOnly(false)}
+                            className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+                        >
+                            <FiUnlock className="w-6 h-6" />
+                            <span>Unlock to Audit</span>
                         </button>
-                        {isReadOnly && (
-                            <button
-                                onClick={() => setIsReadOnly(false)}
-                                className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
-                            >
-                                <FiUnlock className="w-6 h-6" />
-                                <span>Unlock to Audit Location</span>
-                            </button>
-                        )}
                     </div>
                 </div>
             )}
 
-            <BottomNav userRole="School Head" />
+            <AnimatePresence>
+                {showDraftModal && (
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center pointer-events-auto">
+                        <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="bg-white w-full max-w-md rounded-t-[3rem] p-10 pb-12 shadow-2xl relative text-left">
+                            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mb-8" />
+                            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto flex items-center justify-center text-3xl shadow-2xl shadow-blue-200 mb-6 font-bold text-white">
+                                <FiSave />
+                            </div>
+                            <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
+                            <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
+
+                            <div className="grid grid-cols-2 gap-4 mt-10">
+                                <button onClick={() => setShowDraftModal(false)}
+                                    className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
+                                    Continue
+                                </button>
+                                <button onClick={handleSaveDraftAndExit}
+                                    className="py-5 rounded-[2rem] bg-blue-600 text-white font-black text-lg shadow-xl shadow-blue-100 active:scale-95 transition-all outline-none">
+                                    Save & Exit
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {isReadOnly && <BottomNav userRole="School Head" />}
         </motion.div>
     );
 };

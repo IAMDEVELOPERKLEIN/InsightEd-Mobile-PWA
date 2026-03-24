@@ -10560,7 +10560,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     const isUnit8Completed = inventoryCount > 0;
 
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
-    await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2 WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
+    await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP;`);
+    await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
 
     await client.query('COMMIT');
     res.json({ success: true, message: "Facilities and details saved!" });
@@ -14292,6 +14293,16 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8 INTEGER DEFAULT 0`,
       `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9 INTEGER DEFAULT 0`,
       `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10 INTEGER DEFAULT 0`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit1_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit3_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit4_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit5_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit7_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit9_updated_at TIMESTAMP`,
+      `ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_updated_at TIMESTAMP`,
     ];
     for (const sql of ensureCols) {
       await pool.query(sql).catch(() => { }); // silently skip if already exists
@@ -16346,8 +16357,10 @@ app.post('/api/user/progress', async (req, res) => {
     // If schoolId was provided, update the flag directly
     if (schoolId && unitId) {
       const col = `unit${unitId}_completed`;
+      const updateAtCol = `unit${unitId}_updated_at`;
       await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} BOOLEAN DEFAULT FALSE`);
-      await pool.query(`UPDATE ph_schools SET ${col} = TRUE WHERE school_id = $1`, [schoolId]);
+      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${updateAtCol} TIMESTAMP`);
+      await pool.query(`UPDATE ph_schools SET ${col} = TRUE, ${updateAtCol} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, [schoolId]);
 
       // Also update the new integer-based column (unit1-unit8) for the dashboard
       const unitNum = parseInt(unitId);
