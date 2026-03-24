@@ -1,0 +1,29 @@
+﻿[dotenv@17.2.3] injecting env (4) from .env -- tip: ≡ƒöä add secrets lifecycle management: https://dotenvx.com/ops
+≡ƒÜÇ Starting schools_IERN migration and data import...
+Γ£à Schema updated (all types to TEXT).
+Γ£à Table truncated.
+≡ƒôª Parsed 45785 rows. Importing in batches of 50...
+Processed 0 rows...
+Processed 1000 rows...
+Processed 2000 rows...
+Processed 3000 rows...
+Processed 4000 rows...
+node : Γ¥î Error in batch 
+starting at row 4450: 
+Client was closed and is 
+not queryable
+At line:1 char:1
++ node e:\InsightEd-Mobile-
+PWA\tmp_migrate_iern.js > 
+e:\InsightEd-Mobil ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (Γ¥î  
+   Error in ba...s not q   
+ ueryable:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 

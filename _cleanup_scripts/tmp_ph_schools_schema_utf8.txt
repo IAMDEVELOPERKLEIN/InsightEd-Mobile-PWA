@@ -1,0 +1,968 @@
+﻿[dotenv@17.2.3] injecting env (4) from .env -- tip: ΓÜÖ∩╕Å  enable debug logging with { debug: true }
+[
+  {
+    "column_name": "has_electricity",
+    "column_default": "false",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "dropout_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "dropout_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "dropout_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "dropout_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "dropout_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "dropout_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "dropout_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "repeater_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "repeater_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "repeater_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "repeater_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "repeater_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "repeater_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "repeater_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "bmi_severely_wasted",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "bmi_wasted",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "bmi_overweight_obese",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "bmi_normal",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "has_internet",
+    "column_default": "false",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "classrooms_total",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "classrooms_good",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "classrooms_repair",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "classrooms_condemned",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "toilets_male",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "toilets_female",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "toilets_pwd",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "handwashing_stations",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "has_standard_shifting",
+    "column_default": "false",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "adm_mdl",
+    "column_default": "false",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "adm_odl",
+    "column_default": "false",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "adm_tvi",
+    "column_default": "false",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "adm_blended",
+    "column_default": "false",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g7",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g8",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g9",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g10",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g11",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g12",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_kinder",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "enroll_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "total_enrollment",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_learners",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "non_graded_learners",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_math_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_math_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_math_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_math_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_math_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_math_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_read_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_read_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_read_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_read_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_read_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_read_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_sci_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_sci_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_sci_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_sci_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_sci_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "aral_sci_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "male_enrollment",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "female_enrollment",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "verified_as_of",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "updated_at",
+    "column_default": "CURRENT_TIMESTAMP",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "has_multigrade",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "multigrade_details",
+    "column_default": "'[]'::jsonb",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sections_kinder",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_less_kinder",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_within_kinder",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_above_kinder",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sections_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_less_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_within_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_above_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sections_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_less_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_within_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_above_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sections_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_less_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_within_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_above_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sections_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_less_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_within_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_above_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sections_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_less_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_within_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_above_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sections_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_less_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_within_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "size_above_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "selected_learner_groups",
+    "column_default": "'[]'::jsonb",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "als_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "als_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "als_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "als_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "als_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "als_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "als_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "muslim_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "muslim_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "muslim_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "muslim_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "muslim_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "muslim_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "muslim_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "ip_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "ip_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "ip_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "ip_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "ip_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "ip_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "ip_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lwd_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lwd_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lwd_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lwd_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lwd_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lwd_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lwd_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "displaced_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "displaced_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "displaced_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "displaced_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "displaced_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "displaced_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "displaced_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "overage_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "overage_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "overage_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "overage_g3",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "overage_g4",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "overage_g5",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "overage_g6",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_k",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_g1",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sned_g2",
+    "column_default": "0",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "iern",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "school_name",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "region",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "division",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "district",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "curricular_offering",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "school_classification",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "leg_district",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "latitude",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "longitude",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g3",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g3",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g4",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g4",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g5",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g5",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g6",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g6",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g7",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g7",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g8",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "school_id",
+    "column_default": null,
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "mode_g8",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "water_source",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g9",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g9",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g10",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g10",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g11",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g11",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g12",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g12",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "adm_others",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_k",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_k",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g1",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g1",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "shift_g2",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mode_g2",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "province",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "municipality",
+    "column_default": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "barangay",
+    "column_default": null,
+    "is_nullable": "YES"
+  }
+]

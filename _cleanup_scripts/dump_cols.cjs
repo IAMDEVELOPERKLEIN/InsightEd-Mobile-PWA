@@ -1,0 +1,26 @@
+const { Pool } = require('pg');
+
+const dbUrl = 'postgres://Administrator1:pRZTbQ2T1JD7@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd';
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+
+const pool = new Pool({
+  connectionString: dbUrl,
+  ssl: isLocal ? false : { rejectUnauthorized: false }
+});
+
+async function check() {
+  try {
+    const res = await pool.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'esf7_database'
+        ORDER BY ordinal_position
+    `);
+    const cols = res.rows.map(r => r.column_name);
+    console.log(JSON.stringify(cols, null, 2));
+  } catch (err) {
+    console.error('Connection Error:', err.message);
+  } finally {
+    await pool.end();
+  }
+}
+check();

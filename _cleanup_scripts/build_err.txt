@@ -1,0 +1,42 @@
+
+> insighted@0.0.0 build
+> vite build
+
+[36mvite v7.2.7 [32mbuilding client environment for production...[36m[39m
+transforming...
+
+/grid-pattern.png referenced in /grid-pattern.png didn't resolve at build time, it will remain unchanged to be resolved at runtime
+[32m✓[39m 1829 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mmanifest.json                       [39m[1m[2m    0.40 kB[22m[1m[22m[2m │ gzip:     0.24 kB[22m
+[2mdist/[22m[32mindex.html                          [39m[1m[2m    0.75 kB[22m[1m[22m[2m │ gzip:     0.38 kB[22m
+[2mdist/[22m[32massets/InsightEd1-DQGBqvKJ.png      [39m[1m[2m  124.73 kB[22m[1m[22m
+[2mdist/[22m[35massets/index-BQC1-KXf.css           [39m[1m[2m  187.58 kB[22m[1m[22m[2m │ gzip:    31.01 kB[22m
+[2mdist/[22m[36massets/purify.es-Bzr520pe.js        [39m[1m[2m   22.45 kB[22m[1m[22m[2m │ gzip:     8.63 kB[22m
+[2mdist/[22m[36massets/index.es-DkFYDY_Y.js         [39m[1m[2m  158.58 kB[22m[1m[22m[2m │ gzip:    52.93 kB[22m
+[2mdist/[22m[36massets/html2canvas.esm-Ge7aVWlp.js  [39m[1m[2m  201.40 kB[22m[1m[22m[2m │ gzip:    47.48 kB[22m
+[2mdist/[22m[36massets/index-LDuPpjPq.js            [39m[1m[33m3,833.92 kB[39m[22m[2m │ gzip: 1,034.81 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 14.95s[39m
+
+PWA v1.2.0
+Building src/sw.js service worker ("es" format)...
+[36mvite v7.2.7 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 70 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[36msw.mjs  [39m[1m[2m20.32 kB[22m[1m[22m[2m │ gzip: 6.62 kB[22m
+[32m✓ built in 185ms[39m
+
+PWA v1.2.0
+mode      injectManifest
+format:   es
+precache  19 entries (6637.42 KiB)
+files generated
+  dist/sw.js

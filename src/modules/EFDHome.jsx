@@ -82,6 +82,12 @@ const EFDHome = () => {
         if (role === 'deped_engineer' || role === 'DepEd Engineer') return 'Division Engineer';
         return role;
     });
+
+    // Building Standards State
+    const [dataMode, setDataMode] = useState('masterlist');
+    const [drillDownLevel, setDrillDownLevel] = useState('storey'); 
+    const [selectedStorey, setSelectedStorey] = useState(null);
+    const [storeyBreakdown, setStoreyBreakdown] = useState([]);
  
     useEffect(() => {
         const syncUser = () => {
@@ -178,6 +184,51 @@ const EFDHome = () => {
 
         fetchData();
     }, []);
+
+    useEffect(() => {
+        const loadBreakdown = async () => {
+            try {
+                const endpoint = dataMode === 'masterlist' 
+                    ? '/api/masterlist/storey-breakdown' 
+                    : '/api/monitoring/engineer-storey-breakdown';
+                const res = await fetch(endpoint);
+                if (res.ok) {
+                    const data = await res.json();
+                    setStoreyBreakdown(data);
+                }
+            } catch (err) {
+                console.error("Load Breakdown Error:", err);
+            }
+        };
+        loadBreakdown();
+    }, [dataMode]);
+
+    const storeyAggregated = useMemo(() => {
+        const counts = {};
+        storeyBreakdown.forEach(item => {
+            const s = Number(item.storey);
+            counts[s] = (counts[s] || 0) + Number(item.count);
+        });
+        return Object.entries(counts).map(([s, count]) => ({
+            name: `${s}sty`,
+            count,
+            storey: Number(s)
+        })).sort((a, b) => a.storey - b.storey);
+    }, [storeyBreakdown]);
+
+    const prototypeAggregated = useMemo(() => {
+        if (!selectedStorey) return [];
+        return storeyBreakdown
+            .filter(item => Number(item.storey) === selectedStorey)
+            .map(item => ({
+                name: `${item.storey}sty ${item.classrooms}cl`,
+                count: Number(item.count),
+                storey: item.storey,
+                classrooms: item.classrooms
+            })).sort((a, b) => a.classrooms - b.classrooms);
+    }, [storeyBreakdown, selectedStorey]);
+
+    const activeChartData = drillDownLevel === 'storey' ? storeyAggregated : prototypeAggregated;
 
     const normalize = (val) => val?.toString().trim().toUpperCase() || 'UNASSIGNED';
 
@@ -594,7 +645,7 @@ const EFDHome = () => {
                                     <div className="w-full lg:w-96 shrink-0 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 h-[500px] flex flex-col">
                                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
                                             <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
-                                            Global Category Distribution
+                                            National Category Distribution
                                         </h3>
                                         <div className="flex-1 w-full relative">
                                             <ResponsiveContainer width="100%" height={260}>
@@ -658,7 +709,7 @@ const EFDHome = () => {
                                                         {selectedRegions.length === 1 ? `Division Analysis for ${selectedRegions[0]}` : 'Regional Analysis'}
                                                     </h3>
                                                     <p className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase tracking-widest">
-                                                        {selectedRegions.length === 1 ? 'Viewing breakdown per division' : 'Global overview by region'}
+                                                        {selectedRegions.length === 1 ? 'Viewing breakdown per division' : 'National overview by region'}
                                                     </p>
                                                 </div>
                                                 
@@ -786,6 +837,102 @@ const EFDHome = () => {
                                                 </ResponsiveContainer>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Building Standards Chart */}
+                                <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 mt-6">
+                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6 mb-8">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                                                <FiLayers size={24} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                                    Building Standards 
+                                                </h3>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                                                    {drillDownLevel === 'storey' ? 'Select storey level to explore classrooms' : `Classroom prototypes for ${selectedStorey} Storey buildings`}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                                                <button 
+                                                    onClick={() => { setDataMode('masterlist'); setDrillDownLevel('storey'); setSelectedStorey(null); }}
+                                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === 'masterlist' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                >
+                                                    Masterlist
+                                                </button>
+                                                <button 
+                                                    onClick={() => { setDataMode('2026'); setDrillDownLevel('storey'); setSelectedStorey(null); }}
+                                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === '2026' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                >
+                                                    2026
+                                                </button>
+                                            </div>
+
+                                            <select 
+                                                className="bg-white border-2 border-slate-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-400 transition-all cursor-pointer hover:border-indigo-200 shadow-sm"
+                                                value={selectedStorey || ''}
+                                                onChange={(e) => {
+                                                    const val = e.target.value ? Number(e.target.value) : null;
+                                                    setSelectedStorey(val);
+                                                    setDrillDownLevel(val ? 'prototype' : 'storey');
+                                                }}
+                                            >
+                                                <option value="">All Storeys</option>
+                                                {storeyAggregated.map(s => <option key={s.storey} value={s.storey}>{s.storey} Storey</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="h-[400px] w-full mt-4">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart
+                                                layout="vertical"
+                                                data={activeChartData}
+                                                margin={{ top: 5, right: 60, left: 100, bottom: 5 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                                <XAxis type="number" hide />
+                                                <YAxis 
+                                                    dataKey="name" 
+                                                    type="category" 
+                                                    axisLine={false} 
+                                                    tickLine={false} 
+                                                    tick={{ fill: '#475569', fontSize: 10, fontWeight: 900 }} 
+                                                    width={90}
+                                                />
+                                                <Tooltip 
+                                                    cursor={{ fill: '#f8fafc' }}
+                                                    contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                                                    labelStyle={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px' }}
+                                                />
+                                                <Bar 
+                                                    dataKey="count" 
+                                                    radius={[0, 8, 8, 0]} 
+                                                    barSize={32} 
+                                                    className="cursor-pointer"
+                                                    onClick={(payload) => {
+                                                        if (payload && drillDownLevel === 'storey') {
+                                                            setSelectedStorey(payload.storey);
+                                                            setDrillDownLevel('prototype');
+                                                        }
+                                                    }}
+                                                >
+                                                    {activeChartData.map((entry, index) => (
+                                                        <Cell 
+                                                            key={`cell-${index}`} 
+                                                            fill={drillDownLevel === 'storey' ? '#818cf8' : '#c7d2fe'} 
+                                                            className="transition-all duration-300 hover:opacity-80"
+                                                        />
+                                                    ))}
+                                                    <LabelList dataKey="count" position="right" offset={10} style={{ fill: '#6366f1', fontSize: 11, fontWeight: 900 }} />
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </div>
                                 </div>
 

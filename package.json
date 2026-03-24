@@ -40,6 +40,7 @@
     "knex": "^3.1.0",
     "langchain": "^1.2.30",
     "leaflet": "^1.9.4",
+    "multer": "^2.1.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",
     "papaparse": "^5.5.3",

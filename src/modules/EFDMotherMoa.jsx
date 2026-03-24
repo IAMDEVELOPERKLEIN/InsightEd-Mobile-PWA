@@ -90,14 +90,15 @@ const EFDMotherMoa = () => {
     const [province, setProvince] = useState(''); 
     const [municipalityCity, setMunicipalityCity] = useState('');
     
-    const [moaLink, setMoaLink] = useState('');
+    const [moaFile, setMoaFile] = useState(null);
+    const [srFile, setSrFile] = useState(null);
     const [driveLinkValidating, setDriveLinkValidating] = useState(false);
     const [driveLinkError, setDriveLinkError] = useState('');
     
     // Supplemental MOA state
     const [isSupplementalModalOpen, setIsSupplementalModalOpen] = useState(false);
     const [selectedMotherMoa, setSelectedMotherMoa] = useState(null);
-    const [supplementalLink, setSupplementalLink] = useState('');
+    const [supplementalFile, setSupplementalFile] = useState(null);
     const [isUploadingSupplemental, setIsUploadingSupplemental] = useState(false);
     const [supplementals, setSupplementals] = useState([]);
     const [availableProjects, setAvailableProjects] = useState([]);
@@ -123,18 +124,9 @@ const EFDMotherMoa = () => {
         }
     };
 
-    const validateGDriveLink = (link) => {
-        if (!link) return { valid: false, error: "Please provide a Google Drive link." };
-        if (link.includes('/folders/') || link.includes('/drive/u/0/folders/')) {
-            return { valid: false, error: "Please upload the link of the specific file in Google Drive, not the folder link." };
-        }
-        const isGDrive = /drive\.google\.com/.test(link) || /^[a-zA-Z0-9-_]{20,}$/.test(link);
-        if (!isGDrive) return { valid: false, error: "Please provide a valid Google Drive link." };
-        return { valid: true, error: "" };
-    };
-
     const getPreviewUrl = (url) => {
         if (!url) return '';
+        if (url.startsWith('data:application/pdf')) return url; // Support Base64 direct embedding
         if (/^[a-zA-Z0-9-_]{20,}$/.test(url)) return `https://drive.google.com/file/d/${url}/preview`;
         if (url.includes('drive.google.com')) {
             if (url.includes('/file/d/')) {
@@ -191,41 +183,30 @@ const EFDMotherMoa = () => {
     }, [isSupplementalModalOpen, selectedMotherMoa]);
 
     const handleUploadSupplemental = async () => {
-        if (!selectedMotherMoa || !supplementalLink) {
-            alert("Please provide a GDrive link.");
-            return;
-        }
-
-        const validation = validateGDriveLink(supplementalLink);
-        if (!validation.valid) {
-            alert(validation.error);
+        if (!selectedMotherMoa || !supplementalFile) {
+            alert("Please select a PDF file for the Supplemental MOA.");
             return;
         }
 
         setIsUploadingSupplemental(true);
-        const accessCheck = await validateDriveLinkAccess(supplementalLink);
-        if (!accessCheck.valid) {
-            alert("❌ " + accessCheck.error);
-            setIsUploadingSupplemental(false);
-            return;
-        }
         try {
+            const formData = new FormData();
+            formData.append('mother_moa_id', selectedMotherMoa.mother_moa_id);
+            formData.append('moa_pdf', supplementalFile);
+            formData.append('ipc_ids', JSON.stringify(selectedIpcs));
+            formData.append('uid', user.uid);
+
             const res = await fetch('/api/upload-engineer-supplemental-moa', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    mother_moa_id: selectedMotherMoa.mother_moa_id,
-                    moa_pdf: supplementalLink,
-                    ipc_ids: selectedIpcs,
-                    uid: user.uid
-                })
+                body: formData
             });
 
             if (res.ok) {
-                alert("Successfully uploaded Supplemental MOA Link!");
+                alert("Successfully uploaded Supplemental MOA!");
                 setIsSupplementalModalOpen(false);
-                setSupplementalLink('');
+                setSupplementalFile(null);
                 setSelectedMotherMoa(null);
+                // Refresh list if desired
             } else {
                 const err = await res.json();
                 throw new Error(err.error || "Upload failed");
@@ -281,7 +262,7 @@ const EFDMotherMoa = () => {
     
     const provinceOptions = useMemo(() => {
         if (!region) return [];
-        return [...new Set(locations.filter(l => l.region === region).map(l => l.province))].filter(Boolean).sort();
+        return [...new Set(locations.filter(l => l.region?.trim().toUpperCase() === region.trim().toUpperCase()).map(l => l.province))].filter(Boolean).sort();
     }, [region, locations]);
 
     const muniCityOptions = useMemo(() => {
@@ -291,8 +272,8 @@ const EFDMotherMoa = () => {
     }, [province, locations]);
 
     const handleUpload = async () => {
-        if (!lguType || !region || !province || !moaLink) {
-            alert("Please complete the required fields (LGU Type, Region, Province and GDrive Link).");
+        if (!lguType || !region || !province || !moaFile) {
+            alert("Please complete the required fields (LGU Type, Region, Province and Mother MOA PDF file).");
             return;
         }
 
@@ -306,46 +287,40 @@ const EFDMotherMoa = () => {
             return;
         }
 
-        const validation = validateGDriveLink(moaLink);
-        if (!validation.valid) {
-            alert(validation.error);
-            return;
-        }
-
         setIsUploading(true);
-        // Link Access Validation
-        const accessCheck = await validateDriveLinkAccess(moaLink);
-        if (!accessCheck.valid) {
-            alert("❌ " + accessCheck.error);
-            setIsUploading(false);
-            return;
-        }
-
+        
         try {
+            const formData = new FormData();
+            formData.append('region', region);
+            formData.append('province', province);
+            formData.append('municipality_city', municipalityCity);
+            formData.append('lgu_type', lguType);
+            formData.append('lgu_name', lguType === 'PGO' ? province : municipalityCity);
+            formData.append('uid', user.uid);
+            formData.append('moa_pdf', moaFile);
+            
+            if (srFile) {
+                formData.append('sangguniang_resolution', srFile);
+            }
+
             const res = await fetch('/api/upload-engineer-mother-moa', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    region,
-                    province,
-                    municipality_city: municipalityCity,
-                    lgu_type: lguType,
-                    lgu_name: lguType === 'PGO' ? province : municipalityCity, 
-                    moa_pdf: moaLink, // We store link in the same column
-                    uid: user.uid
-                })
+                body: formData
             });
 
             if (res.ok) {
-                alert("Successfully uploaded Mother MOA Link!");
+                alert("Successfully uploaded Mother MOA!");
+                
                 // Refresh list
                 const refreshedRes = await fetch('/api/engineer-mother-moas');
                 if (refreshedRes.ok) {
                     const data = await refreshedRes.json();
                     setMoas(data);
                 }
+                
                 // Reset form
-                setMoaLink('');
+                setMoaFile(null);
+                setSrFile(null);
                 setLguType('');
                 setRegion('');
                 setProvince('');
@@ -482,40 +457,64 @@ const EFDMotherMoa = () => {
                         </div>
 
                         <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                            {/* Google Drive Link Input (REPLACED FILE INPUT) */}
+                            {/* MOA PDF File Input */}
                             <div className="flex-1">
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 ml-1">
-                                    Public Google Drive Link (PDF)
+                                    Mother MOA PDF File
                                 </label>
                                 <div className="relative group">
-                                    <div className={`w-full flex items-center px-4 py-3 bg-slate-50 border-2 rounded-2xl transition-all ${moaLink ? 'border-blue-400 bg-blue-50/30' : 'border-slate-100 focus-within:border-blue-300 focus-within:bg-white'}`}>
-                                        <FiUpload className={`${moaLink ? 'text-blue-500' : 'text-slate-400'} shrink-0`} size={18} />
+                                    <div className={`w-full flex items-center px-4 py-3 bg-slate-50 border-2 rounded-2xl transition-all ${moaFile ? 'border-blue-400 bg-blue-50/30' : 'border-slate-100 focus-within:border-blue-300 focus-within:bg-white'}`}>
+                                        <FiUpload className={`${moaFile ? 'text-blue-500' : 'text-slate-400'} shrink-0`} size={18} />
                                         <input 
-                                            type="text"
-                                            value={moaLink}
-                                            onChange={(e) => setMoaLink(e.target.value)}
-                                            placeholder="Paste shareable GDrive link here..."
-                                            className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-semibold text-slate-700 placeholder:text-slate-300 ml-3"
+                                            type="file"
+                                            accept="application/pdf"
+                                            onChange={(e) => setMoaFile(e.target.files[0])}
+                                            className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-semibold text-slate-700 ml-3 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-[11px] file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                                         />
-                                        {moaLink && (
+                                        {moaFile && (
                                             <button 
-                                                onClick={() => setMoaLink('')}
+                                                onClick={() => setMoaFile(null)}
                                                 className="p-1.5 hover:bg-blue-100 rounded-lg text-blue-600 transition-colors"
                                             >
                                                 <FiX size={14} />
                                             </button>
                                         )}
                                     </div>
-                                    <p className="mt-2 text-[10px] text-slate-400 font-medium ml-1">
-                                        Make sure the link is set to <span className="text-blue-600 font-bold">"Anyone with the link can view"</span>
-                                    </p>
                                 </div>
                             </div>
+                            
+                            {/* Sangguniang Resolution */}
+                            <div className="flex-1">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 ml-1">
+                                    Sangguniang Resolution PDF (Optional)
+                                </label>
+                                <div className="relative group">
+                                    <div className={`w-full flex items-center px-4 py-3 bg-slate-50 border-2 rounded-2xl transition-all ${srFile ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-100 focus-within:border-emerald-300 focus-within:bg-white'}`}>
+                                        <FiUpload className={`${srFile ? 'text-emerald-500' : 'text-slate-400'} shrink-0`} size={18} />
+                                        <input 
+                                            type="file"
+                                            accept="application/pdf"
+                                            onChange={(e) => setSrFile(e.target.files[0])}
+                                            className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-semibold text-slate-700 ml-3 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-[11px] file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                                        />
+                                        {srFile && (
+                                            <button 
+                                                onClick={() => setSrFile(null)}
+                                                className="p-1.5 hover:bg-emerald-100 rounded-lg text-emerald-600 transition-colors"
+                                            >
+                                                <FiX size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
+                        <div className="mt-6 flex justify-end">
                             <button
                                 onClick={handleUpload}
-                                disabled={isUploading || !moaLink || !region || !province || !lguType || isNcrPgoError}
-                                className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-[13px] uppercase tracking-wider shadow-lg transition-all ${isUploading || !moaLink || !region || !province || !lguType || isNcrPgoError ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-[#004A99] text-white hover:bg-blue-700 hover:-translate-y-1 active:scale-95 shadow-blue-900/20'}`}
+                                disabled={isUploading || !moaFile || !region || !province || !lguType || isNcrPgoError}
+                                className={`flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-[13px] uppercase tracking-wider shadow-lg transition-all ${isUploading || !moaFile || !region || !province || !lguType || isNcrPgoError ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-[#004A99] text-white hover:bg-blue-700 hover:-translate-y-1 active:scale-95 shadow-blue-900/20'}`}
                             >
                                 {isUploading ? (
                                     <>
@@ -635,7 +634,22 @@ const EFDMotherMoa = () => {
                                                         <button 
                                                             className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all shadow-sm"
                                                             title="Delete"
-                                                            onClick={() => alert("Delete functionality pending super-admin approval.")}
+                                                            onClick={async () => {
+                                                                if (window.confirm("Are you sure you want to delete this Mother MOA document mapping?")) {
+                                                                    try {
+                                                                        const res = await fetch(`/api/engineer-mother-moas/${moa.mother_moa_id}`, {
+                                                                            method: 'DELETE'
+                                                                        });
+                                                                        if (res.ok) {
+                                                                            setMoas(prev => prev.filter(m => m.mother_moa_id !== moa.mother_moa_id));
+                                                                        } else {
+                                                                            alert("Failed to delete Mother MOA.");
+                                                                        }
+                                                                    } catch (e) {
+                                                                        alert("Error: " + e.message);
+                                                                    }
+                                                                }
+                                                            }}
                                                         >
                                                             <FiTrash2 size={16} />
                                                         </button>
@@ -832,22 +846,17 @@ const EFDMotherMoa = () => {
                                 <div className="space-y-6">
                                     <div>
                                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">
-                                            Supplemental GDrive Link (PDF)
+                                            Supplemental PDF File
                                         </label>
-                                        <div className={`w-full flex items-center px-4 py-3 bg-slate-50 border-2 rounded-2xl transition-all ${supplementalLink ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-100 focus-within:border-emerald-300 focus-within:bg-white'}`}>
-                                            <FiUpload className={`${supplementalLink ? 'text-emerald-500' : 'text-slate-400'} shrink-0`} size={18} />
+                                        <div className={`w-full flex items-center px-4 py-3 bg-slate-50 border-2 rounded-2xl transition-all ${supplementalFile ? 'border-emerald-400 bg-emerald-50/30' : 'border-slate-100 focus-within:border-emerald-300 focus-within:bg-white'}`}>
+                                            <FiUpload className={`${supplementalFile ? 'text-emerald-500' : 'text-slate-400'} shrink-0`} size={18} />
                                             <input 
-                                                type="text"
-                                                value={supplementalLink}
-                                                onChange={(e) => setSupplementalLink(e.target.value)}
-                                                placeholder="Paste shareable GDrive link here..."
-                                                className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-semibold text-slate-700 placeholder:text-slate-300 ml-3"
-                                                autoFocus
+                                                type="file"
+                                                accept="application/pdf"
+                                                onChange={(e) => setSupplementalFile(e.target.files[0])}
+                                                className="w-full bg-transparent border-none focus:ring-0 text-[13px] font-semibold text-slate-700 ml-3 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-[11px] file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
                                             />
                                         </div>
-                                        <p className="mt-2 text-[10px] text-slate-400 font-medium ml-1">
-                                            Must be a <span className="text-emerald-600 font-bold">specific file link</span>, not a folder.
-                                        </p>
                                     </div>
                                     
                                     {/* Project Assignment (IPC) */}
