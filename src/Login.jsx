@@ -60,7 +60,29 @@ const getDashboardPath = (role, accountCategory) => {
     if (userGroup === ROLE_GROUPS.TECHNICAL_FINANCE) {
         return '/project-summary-dashboard';
     }
-    return '/';
+
+    const fallbackRoleMap = {
+        'Local Government Unit': '/project-summary-dashboard',
+        'School Head': '/nodes-dashboard',
+        'Human Resource': '/educational-dashboard',
+        'Regional Office': '/educational-dashboard',
+        'School Division Office': '/educational-dashboard',
+        'Admin': '/educational-dashboard',
+        'Super User': '/educational-dashboard',
+        'Super Admin': '/educational-dashboard',
+        'Central Office': '/educational-dashboard',
+        'Central Office Finance': '/project-summary-dashboard',
+        'Implementing Agency': '/project-summary-dashboard',
+        'EFD': '/project-summary-dashboard',
+        'EFD Engineer': '/project-summary-dashboard',
+        'HRODI': '/project-summary-dashboard',
+        'PGO': '/project-summary-dashboard',
+        'CGO': '/project-summary-dashboard',
+        'MGO': '/project-summary-dashboard',
+        'DPWH': '/project-summary-dashboard',
+        'CSO': '/project-summary-dashboard',
+    };
+    return fallbackRoleMap[role] || '/';
 };
 
 
