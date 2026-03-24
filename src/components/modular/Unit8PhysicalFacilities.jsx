@@ -741,18 +741,20 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         return (
             <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans pb-60">
                 {/* Top Navigation */}
-                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                    <div className="max-w-md mx-auto flex items-center gap-3">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiArrowLeft className="w-6 h-6" />
-                        </button>
-                        <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Unit 8</div>
-                            <h1 className="text-sm font-black text-gray-800">Physical Facilities</h1>
+                {(!isReadOnly && !propReadOnly) && (
+                    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                        <div className="max-w-md mx-auto flex items-center gap-3">
+                            <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                            <div className="flex-1 text-center">
+                                <div className="text-[10px] font-black tracking-widest text-indigo-500 uppercase">Unit 8</div>
+                                <h1 className="text-sm font-black text-gray-800">Physical Facilities</h1>
+                            </div>
+                            <div className="w-10" />
                         </div>
-                        <div className="w-10" />
-                    </div>
-                </header>
+                    </header>
+                )}
 
                 <div className="max-w-md mx-auto mt-4 px-4 space-y-10">
                     {/* Header */}
@@ -1007,29 +1009,31 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 )}
             </AnimatePresence>
             {/* Header / Nav */}
-            <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
-                <div className="max-w-3xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 text-gray-400">
-                            <FiArrowLeft className="w-6 h-6" />
-                        </button>
+            {(!isReadOnly && !propReadOnly) && (
+                <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
+                    <div className="max-w-3xl mx-auto flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 text-gray-400">
+                                <FiArrowLeft className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <h1 className="font-bold text-gray-800 text-xl">Unit 8 Audit</h1>
+                            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Step {currentPage} of 4</span>
+                        </div>
+                        <div className="w-10"></div>
                     </div>
-                    <div className="flex flex-col items-center">
-                        <h1 className="font-bold text-gray-800 text-xl">Unit 8 Audit</h1>
-                        <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Step {currentPage} of 4</span>
+                    {/* Visual Progress Bar */}
+                    <div className="max-w-3xl mx-auto mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden flex gap-1">
+                        {[1, 2, 3, 4].map(step => (
+                            <div
+                                key={step}
+                                className={`flex-1 h-full transition-all duration-500 ${currentPage >= step ? "bg-indigo-500" : "bg-gray-200"}`}
+                            />
+                        ))}
                     </div>
-                    <div className="w-10"></div>
-                </div>
-                {/* Visual Progress Bar */}
-                <div className="max-w-3xl mx-auto mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden flex gap-1">
-                    {[1, 2, 3, 4].map(step => (
-                        <div
-                            key={step}
-                            className={`flex-1 h-full transition-all duration-500 ${currentPage >= step ? "bg-indigo-500" : "bg-gray-200"}`}
-                        />
-                    ))}
-                </div>
-            </header>
+                </header>
+            )}
 
             <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col pt-8">
 
@@ -1721,39 +1725,41 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             </main>
 
             {/* Wizard Navigation Buttons */}
-            <footer className="fixed bottom-[85px] left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
-                <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
-                    <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none shrink-0">
-                        <FiSave className="w-6 h-6" />
-                    </button>
+            {!isReadOnly && (
+                <footer className="fixed bottom-[85px] left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
+                    <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
+                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none shrink-0">
+                            <FiSave className="w-6 h-6" />
+                        </button>
 
-                    {currentPage === 4 ? (
-                        <button onClick={handleMasterSubmit} disabled={loading}
-                            className="flex-1 py-5 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
-                            {loading ? "Processing..." : "Submit Unit Audit"}
-                            <FiArrowRight className="w-6 h-6" />
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => {
-                                // Validation for Phase 2 Step 3: Granular Room Setup
-                                if (currentPage === 3) {
-                                    const missingGradeLevel = roomsData.some(r => !r.grade_level);
-                                    if (missingGradeLevel) {
-                                        alert("Please select a Granular Grade Level for all classrooms before proceeding.");
-                                        return;
+                        {currentPage === 4 ? (
+                            <button onClick={handleMasterSubmit} disabled={loading}
+                                className="flex-1 py-5 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
+                                {loading ? "Processing..." : "Submit Unit Audit"}
+                                <FiArrowRight className="w-6 h-6" />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => {
+                                    // Validation for Phase 2 Step 3: Granular Room Setup
+                                    if (currentPage === 3) {
+                                        const missingGradeLevel = roomsData.some(r => !r.grade_level);
+                                        if (missingGradeLevel) {
+                                            alert("Please select a Granular Grade Level for all classrooms before proceeding.");
+                                            return;
+                                        }
                                     }
-                                }
-                                setCurrentPage(prev => prev + 1);
-                                handlePartialSync();
-                            }}
-                            className="flex-1 py-5 rounded-3xl bg-indigo-500 text-white font-black text-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
-                        >
-                            Next Step <FiArrowRight className="w-6 h-6" />
-                        </button>
-                    )}
-                </div>
-            </footer>
+                                    setCurrentPage(prev => prev + 1);
+                                    handlePartialSync();
+                                }}
+                                className="flex-1 py-5 rounded-3xl bg-indigo-500 text-white font-black text-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
+                            >
+                                Next Step <FiArrowRight className="w-6 h-6" />
+                            </button>
+                        )}
+                    </div>
+                </footer>
+            )}
 
             <SuccessModal
                 isOpen={showSuccess}
@@ -1792,7 +1798,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 )}
             </AnimatePresence>
 
-            <BottomNav userRole="School Head" />
+            {!isReadOnly && <BottomNav userRole="School Head" />}
         </div>
     );
 }

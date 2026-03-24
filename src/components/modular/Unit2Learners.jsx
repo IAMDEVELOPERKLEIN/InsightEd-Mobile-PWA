@@ -44,6 +44,9 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
 
+    // Final read-only determination: prop takes precedence
+    const effectiveReadOnly = propReadOnly || isReadOnly;
+
     // --- Wizard State ---
     const [currentStep, setCurrentStep] = useState(1);
     const [currentGradeIndex, setCurrentGradeIndex] = useState(0); 
@@ -826,27 +829,18 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 </section>
 
                 {/* Unlock Action */}
-                {!propReadOnly && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="mt-12"
-                    >
-                        <button 
-                            onClick={() => setIsReadOnly(false)}
-                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-indigo-100 text-indigo-700 font-black text-lg shadow-xl shadow-indigo-100/50 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-indigo-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <FiUnlock className="w-5 h-5 text-indigo-700" />
-                            </div>
-                            <span>Unlock to Edit Counts</span>
-                        </button>
-                        <p className="text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-4 px-8">
-                            Modifying these totals will trigger a re-validation across all dependent modules.
-                        </p>
-                    </motion.div>
+                {!propReadOnly && isReadOnly && (
+                    <div className="fixed bottom-0 left-0 w-full p-6 pb-20 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-[60]">
+                        <div className="w-full max-w-sm flex gap-3">
+                            <button
+                                onClick={() => setIsReadOnly(false)}
+                                className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+                            >
+                                <FiUnlock className="w-6 h-6" />
+                                <span>Unlock to Audit</span>
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         );
@@ -887,27 +881,29 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     })();
 
     return (
-        <div className={`min-h-screen ${isReadOnly ? 'bg-slate-50' : 'bg-[#fcfdff]'} relative pb-32`}>
+        <div className={`min-h-screen ${effectiveReadOnly ? 'bg-slate-50' : 'bg-[#fcfdff]'} relative pb-32`}>
             
             {/* Header */}
-            <div className="pt-8 pb-4 px-6 sticky top-0 bg-white/80 backdrop-blur-xl z-20 border-b border-gray-100/50">
-                <div className="max-w-xl mx-auto flex items-center justify-between">
-                    <button onClick={handleBack} className="p-3 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all active:scale-95 group">
-                        <FiChevronLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
-                    </button>
-                    <div className="flex flex-col items-center">
-                        <div className="flex gap-1.5 mb-2">
-                            {[1, 2, 3, 4, 5, 6, 7].map(s => (
-                                <div key={s} className={`h-1.5 rounded-full transition-all duration-500 ${currentStep === s ? 'w-8 bg-indigo-600 shadow-sm shadow-indigo-100' : 'w-2 bg-slate-200'}`} />
-                            ))}
+            {!effectiveReadOnly && (
+                <div className="pt-8 pb-4 px-6 sticky top-0 bg-white/80 backdrop-blur-xl z-20 border-b border-gray-100/50">
+                    <div className="max-w-xl mx-auto flex items-center justify-between">
+                        <button onClick={handleBack} className="p-3 bg-gray-50 border-2 border-gray-100 rounded-2xl text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all active:scale-95 group">
+                            <FiChevronLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
+                        </button>
+                        <div className="flex flex-col items-center">
+                            <div className="flex gap-1.5 mb-2">
+                                {[1, 2, 3, 4, 5, 6, 7].map(s => (
+                                    <div key={s} className={`h-1.5 rounded-full transition-all duration-500 ${currentStep === s ? 'w-8 bg-indigo-600 shadow-sm shadow-indigo-100' : 'w-2 bg-slate-200'}`} />
+                                ))}
+                            </div>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Module Status</span>
                         </div>
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Module Status</span>
-                    </div>
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center border-2 border-indigo-100 shadow-inner">
-                        <span className="text-xl font-black text-indigo-600">{currentStep}</span>
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center border-2 border-indigo-100 shadow-inner">
+                            <span className="text-xl font-black text-indigo-600">{currentStep}</span>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {showWelcomeBack && (
                 <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs animate-in slide-in-from-top duration-500">
@@ -922,7 +918,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             )}
 
             <main className="max-w-xl mx-auto px-4">
-                {isReadOnly ? (
+                {effectiveReadOnly ? (
                     <Unit2Summary />
                 ) : (
                     <>
@@ -1511,7 +1507,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
             <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="Smart Enrollment Sync Saved! Your learner counts are locked in." redirectUrl="/modular-dashboard" />
 
-            {!isReadOnly && (
+            {/* Sticky Navigation Footer */}
+            {!effectiveReadOnly && (
                 <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
                     <div className="max-w-md mx-auto flex gap-3">
                         {currentStep === 1 ? (

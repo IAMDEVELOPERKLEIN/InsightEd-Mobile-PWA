@@ -161,6 +161,9 @@ const Register = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const maxSteps = formData.role === 'School Head' ? 5 : (formData.role === 'EFD Engineer' ? 3 : 4);
 
+    // --- AUTH TAB STATE (Internal vs External) ---
+    const [activeTab, setActiveTab] = useState(pathId === 'path_agencies' ? 'external' : 'internal');
+
     // --- REGISTRATION STAGES ---
     const [registrationStage, setRegistrationStage] = useState('form'); // 'form' | 'passcode' | 'confirm'
 
@@ -208,14 +211,19 @@ const Register = () => {
             console.log("[Register] Enforcing path-based restrictions:", pathId);
             if (pathId === 'path_school_head') {
                 setFormData(prev => ({ ...prev, role: 'School Head' }));
+                setActiveTab('internal');
             } else if (pathId === 'path_ro_sd') {
                 setFormData(prev => ({ ...prev, role: 'Regional Office' }));
+                setActiveTab('internal');
             } else if (pathId === 'path_engineers') {
                 setFormData(prev => ({ ...prev, role: 'Division Engineer' }));
+                setActiveTab('internal');
             } else if (pathId === 'path_agencies') {
                 setFormData(prev => ({ ...prev, role: 'Implementing Agency' }));
+                setActiveTab('external');
             } else if (pathId === 'path_efd') {
                 setFormData(prev => ({ ...prev, role: 'EFD Engineer' }));
+                setActiveTab('internal');
             }
         }
 

@@ -489,18 +489,20 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         return (
             <div className="min-h-screen bg-slate-50/50 font-sans">
                 {/* Exit Header */}
-                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
-                    <div className="max-w-md mx-auto flex items-center gap-3">
-                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
-                            <FiX className="w-6 h-6" />
-                        </button>
-                        <div className="flex-1 text-center">
-                            <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 4</div>
-                            <h1 className="text-sm font-black text-gray-800">Learner Profile</h1>
+                {!propReadOnly && (
+                    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm shadow-[0_2px_12px_rgba(0,0,0,0.04)] px-4 py-3">
+                        <div className="max-w-md mx-auto flex items-center gap-3">
+                            <button onClick={() => navigate("/modular-dashboard")} className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+                                <FiX className="w-6 h-6" />
+                            </button>
+                            <div className="flex-1 text-center">
+                                <div className="text-[10px] font-black tracking-widest text-indigo-400 uppercase">Unit 4</div>
+                                <h1 className="text-sm font-black text-gray-800">Learner Profile</h1>
+                            </div>
+                            <div className="w-10" />
                         </div>
-                        <div className="w-10" />
-                    </div>
-                </header>
+                    </header>
+                )}
 
                 <div className="max-w-md mx-auto pb-32 mt-4 px-4 space-y-8">
                     {/* Header */}
@@ -733,13 +735,15 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
             </AnimatePresence>
 
-            <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md shadow-sm px-4 py-4 mb-2">
-                <div className="max-w-xl mx-auto flex items-center justify-start gap-2">
-                    <button onClick={handleBack} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
-                        <FiArrowLeft className="w-5 h-5" />
-                    </button>
-                </div>
-            </header>
+            {!propReadOnly && (
+                <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md shadow-sm px-4 py-4 mb-2">
+                    <div className="max-w-xl mx-auto flex items-center justify-start gap-2">
+                        <button onClick={handleBack} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                            <FiArrowLeft className="w-5 h-5" />
+                        </button>
+                    </div>
+                </header>
+            )}
 
             <main className="flex-1 overflow-y-auto pb-32">
                 <div className="max-w-md w-full mx-auto mt-6 px-4">
@@ -1158,6 +1162,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <span className="font-bold text-slate-700">Learner Movement</span>
                                             </div>
                                         </div>
+```
                                         <span className="font-black text-2xl text-blue-600">{overallDropSum + overallRepSum}</span>
                                     </div>
 
@@ -1194,41 +1199,43 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             </main>
 
             {/* ── Sticky Footer ── */}
-            <div className="fixed bottom-0 left-0 w-full p-6 bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-center z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
-                <div className="w-full max-w-xl flex gap-4">
-                    
-                    {currentChapter === 1 ? (
-                         <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
-                             <FiSave className="w-6 h-6" />
-                         </button>
-                    ) : (
-                        <div className="flex gap-2">
-                            <button onClick={handleBack}
-                                className="w-16 h-16 flex justify-center items-center rounded-3xl bg-slate-100 text-slate-500 border-2 border-slate-200 active:translate-y-[2px] transition-all">
-                                <FiArrowLeft className="w-6 h-6" />
-                            </button>
-                            <button onClick={() => setShowDraftModal(true)}
-                                className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
-                            >
+            {!propReadOnly && (
+                <div className="fixed bottom-0 left-0 w-full p-6 bg-white/90 backdrop-blur-md border-t border-slate-100 flex justify-center z-50 shadow-[0_-8px_30px_rgb(0,0,0,0.04)]">
+                    <div className="w-full max-w-xl flex gap-4">
+                        
+                        {currentChapter === 1 ? (
+                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                                 <FiSave className="w-6 h-6" />
                             </button>
-                        </div>
-                    )}
+                        ) : (
+                            <div className="flex gap-2">
+                                <button onClick={handleBack}
+                                    className="w-16 h-16 flex justify-center items-center rounded-3xl bg-slate-100 text-slate-500 border-2 border-slate-200 active:translate-y-[2px] transition-all">
+                                    <FiArrowLeft className="w-6 h-6" />
+                                </button>
+                                <button onClick={() => setShowDraftModal(true)}
+                                    className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
+                                >
+                                    <FiSave className="w-6 h-6" />
+                                </button>
+                            </div>
+                        )}
 
-                    {currentChapter === TOTAL_CHAPTERS ? (
-                        <button onClick={handleSubmit} disabled={loading || !isVerified}
-                                className="flex-1 h-16 rounded-3xl text-white font-black text-xl bg-emerald-600 border-b-[6px] border-emerald-800 active:border-b-0 active:translate-y-[6px] transition-all duration-100 disabled:opacity-50 shadow-xl shadow-emerald-100 flex justify-center items-center gap-2">
-                                {loading ? "Syncing..." : "Submit Profile"}
-                        </button>
-                    ) : (
-                        <button onClick={handleNext} disabled={!isStepValid}
-                            className="flex-1 h-16 rounded-3xl text-white font-black text-xl bg-indigo-600 border-b-[6px] border-indigo-800 active:border-b-0 active:translate-y-[6px] transition-all duration-100 disabled:opacity-50 shadow-xl shadow-indigo-100 flex justify-center items-center gap-2 uppercase tracking-widest">
-                            {currentChapter === 2 && selectedGroups.length > 1 && catIdx < selectedGroups.length - 1 ? "Next Group" : currentChapter === 1 && selectedGroups.length === 0 ? "Skip Steps" : "Continue"}
-                            <FiChevronRight className="w-6 h-6" />
-                        </button>
-                    )}
+                        {currentChapter === TOTAL_CHAPTERS ? (
+                            <button onClick={handleSubmit} disabled={loading || !isVerified}
+                                    className="flex-1 h-16 rounded-3xl text-white font-black text-xl bg-emerald-600 border-b-[6px] border-emerald-800 active:border-b-0 active:translate-y-[6px] transition-all duration-100 disabled:opacity-50 shadow-xl shadow-emerald-100 flex justify-center items-center gap-2">
+                                    {loading ? "Syncing..." : "Submit Profile"}
+                            </button>
+                        ) : (
+                            <button onClick={handleNext} disabled={!isStepValid}
+                                className="flex-1 h-16 rounded-3xl text-white font-black text-xl bg-indigo-600 border-b-[6px] border-indigo-800 active:border-b-0 active:translate-y-[6px] transition-all duration-100 disabled:opacity-50 shadow-xl shadow-indigo-100 flex justify-center items-center gap-2 uppercase tracking-widest">
+                                {currentChapter === 2 && selectedGroups.length > 1 && catIdx < selectedGroups.length - 1 ? "Next Group" : currentChapter === 1 && selectedGroups.length === 0 ? "Skip Steps" : "Continue"}
+                                <FiChevronRight className="w-6 h-6" />
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             <SuccessModal
                 isOpen={showSuccess}

@@ -617,17 +617,19 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         <div className="min-h-screen bg-white flex flex-col font-sans text-gray-900 overflow-hidden">
             
             {/* Minimal Header */}
-            <header className="px-6 py-5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
-                        <FiArrowLeft className="w-6 h-6" />
-                    </button>
-                </div>
-                <div className="flex-1 max-w-[120px] mx-4 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                    <motion.div className="h-full bg-blue-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.8, ease: "circOut" }} />
-                </div>
-                <span className="text-xs font-black tracking-widest text-gray-300 uppercase">Step {currentStep + 1}/{TOTAL_STEPS}</span>
-            </header>
+            {!isReadOnly && (
+                <header className="px-6 py-5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => navigate("/modular-dashboard")} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 transition-colors">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                    </div>
+                    <div className="flex-1 max-w-[120px] mx-4 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <motion.div className="h-full bg-blue-600 rounded-full" initial={{ width: 0 }} animate={{ width: `${progressPercentage}%` }} transition={{ duration: 0.8, ease: "circOut" }} />
+                    </div>
+                    <span className="text-xs font-black tracking-widest text-gray-300 uppercase">Step {currentStep + 1}/{TOTAL_STEPS}</span>
+                </header>
+            )}
 
             {/* Welcome Back Toast */}
             <AnimatePresence>
@@ -1379,7 +1381,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             </main>
 
             {/* Sticky Navigation Footer */}
-            {!isReviewMode && (
+            {(!isReadOnly && !isReviewMode) && (
                 <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-gray-100 z-50">
                     <div className="max-w-md mx-auto flex gap-3">
                         {currentStep === 0 ? (

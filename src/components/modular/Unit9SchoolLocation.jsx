@@ -368,18 +368,20 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             animate={{ opacity: 1 }} 
             className="min-h-screen bg-slate-50/50 font-sans"
         >
-            <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-4">
-                <div className="max-w-md mx-auto flex items-center justify-between">
-                    <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
-                        <FiArrowLeft className="w-5 h-5" />
-                    </button>
-                    <div className="flex-1 text-center">
-                        <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 9</div>
-                        <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">School Terrain Profile</h1>
+            {!propReadOnly && (
+                <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-4">
+                    <div className="max-w-md mx-auto flex items-center justify-between">
+                        <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                            <FiArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 9</div>
+                            <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">School Terrain Profile</h1>
+                        </div>
+                        <div className="w-10" />
                     </div>
-                    <div className="w-10" />
-                </div>
-            </header>
+                </header>
+            )}
 
             <AnimatePresence>
                 {showWelcomeBack && (
@@ -414,7 +416,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
             </main>
 
-            {isReadOnly && !propReadOnly && (
+            {!propReadOnly && isReadOnly && (
                 <div className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-[60]">
                     <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
                         <button
@@ -455,7 +457,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
             </AnimatePresence>
 
-            {isReadOnly && <BottomNav userRole="School Head" />}
+            {!propReadOnly && isReadOnly && <BottomNav userRole="School Head" />}
         </motion.div>
     );
 };
