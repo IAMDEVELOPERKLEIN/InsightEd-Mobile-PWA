@@ -61,6 +61,8 @@ const AgencyDashboard = () => {
     const userRole = localStorage.getItem('userRole');
     const userAgency = localStorage.getItem('userDivision'); 
     const userRegion = localStorage.getItem('userRegion');
+    const userProvince = localStorage.getItem('userProvince');
+    const userCity = localStorage.getItem('userCity');
     const isAgencyUser = ['Implementing Agency', 'PGO', 'CGO', 'MGO', 'DPWH', 'CSO'].includes(userRole);
 
     // Filters & Search
@@ -127,7 +129,7 @@ const AgencyDashboard = () => {
     useEffect(() => {
         fetchAgencyData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAgency]);
+    }, [selectedAgency, userProvince, userCity]);
 
     const fetchAgencyData = async () => {
         try {
@@ -137,8 +139,10 @@ const AgencyDashboard = () => {
             const params = new URLSearchParams();
             if (isAgencyUser) {
                 params.append('agency', userAgency);
-                if (userRegion) params.append('region', userRegion);
-            } else if (selectedAgency !== 'All') {
+                if (userRegion && userRegion !== 'null') params.append('region', userRegion);
+                if (userProvince && userProvince !== 'null') params.append('province', userProvince);
+                if (userCity && userCity !== 'null') params.append('city', userCity);
+            } else if (selectedAgency !== 'All' && selectedAgency !== 'null') {
                 params.append('agency', selectedAgency);
             }
 
@@ -165,6 +169,68 @@ const AgencyDashboard = () => {
             setLoading(false);
         }
     };
+
+    // MOA Tracking State
+    const [motherMoas, setMotherMoas] = useState([]);
+    const [selectedMotherMoa, setSelectedMotherMoa] = useState(null);
+    const [supplementalMoas, setSupplementalMoas] = useState([]);
+    const [loadingMoa, setLoadingMoa] = useState(false);
+    const [loadingSupp, setLoadingSupp] = useState(false);
+
+    useEffect(() => {
+        const fetchMotherMoas = async () => {
+            try {
+                setLoadingMoa(true);
+                const params = new URLSearchParams();
+                if (isAgencyUser) {
+                    if (userAgency && userAgency !== 'null') params.append('agency', userAgency);
+                    if (userRegion && userRegion !== 'null') params.append('region', userRegion);
+                    if (userProvince && userProvince !== 'null') params.append('province', userProvince);
+                    if (userCity && userCity !== 'null') params.append('city', userCity);
+                } else if (selectedAgency && selectedAgency !== 'All' && selectedAgency !== 'null') {
+                    params.append('agency', selectedAgency);
+                }
+
+                const res = await fetch(`/api/agency-dashboard/mother-moas?${params.toString()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setMotherMoas(data.motherMoas || []);
+                    // Auto-select first if none selected
+                    if (data.motherMoas?.length > 0 && !selectedMotherMoa) {
+                        setSelectedMotherMoa(data.motherMoas[0]);
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching mother MOAs:", err);
+            } finally {
+                setLoadingMoa(false);
+            }
+        };
+        fetchMotherMoas();
+    }, [isAgencyUser, userAgency, userRegion, userProvince, userCity, selectedAgency]);
+
+    useEffect(() => {
+        const fetchSupplementalMoas = async () => {
+            if (!selectedMotherMoa) {
+                setSupplementalMoas([]);
+                return;
+            }
+            try {
+                setLoadingSupp(true);
+                const res = await fetch(`/api/engineer-supplemental-moas/${selectedMotherMoa.moa_id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setSupplementalMoas(data || []);
+                }
+            } catch (err) {
+                console.error("Error fetching supplemental MOAs:", err);
+            } finally {
+                setLoadingSupp(false);
+            }
+        };
+        fetchSupplementalMoas();
+    }, [selectedMotherMoa]);
+
 
     // Derived Data for Filters (Only for non-agency secondary filtering if needed)
     const agenciesList = useMemo(() => {
@@ -246,102 +312,204 @@ const AgencyDashboard = () => {
         <PageTransition>
             <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-900 pb-24 font-sans selection:bg-blue-100">
                 
-                {/* PREMIUM HERO SECTION (Regional Office Style) */}
-                <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-8 pb-24 rounded-b-[3rem] shadow-2xl text-white relative z-[60]">
-
-                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                        <div className="animate-in fade-in slide-in-from-left-4 duration-700">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-white/20 backdrop-blur-md rounded-lg">
-                                    <TbBuilding className="text-white text-2xl" />
-                                </div>
-                                <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tighter drop-shadow-lg flex items-center gap-3">
-                                    <TbBuilding className="text-white/40 text-4xl hidden sm:block" />
-                                    {isAgencyUser ? userAgency : 'Implementing Agency Dashboard'}
-                                </h1>
-                            </div>
-                            <p className="text-blue-100 font-medium text-lg max-w-2xl">
-                                {isAgencyUser 
-                                    ? `Welcome, monitor your agency's project progress and fund utilization.` 
-                                    : 'Centralized monitoring for external partner projects and MOA compliance.'}
+                {/* PREMIUM FIXED STICKY HEADER */}
+                <div className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+                    <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-[#004A99] bg-clip-text text-transparent tracking-tight">
+                                {isAgencyUser ? userAgency : 'Implementing Agency Dashboard'}
+                            </h1>
+                            <p className="text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">
+                                {isAgencyUser ? `Welcome, monitor your agency's projects` : 'Centralized external partner dashboard'}
                             </p>
                         </div>
-
-                        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto animate-in fade-in slide-in-from-right-4 duration-700">
+                        <div className="flex items-center gap-4 w-full md:w-auto">
                             {!isAgencyUser && (
-                                <div className="relative group">
-                                    <FiFilter className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60 group-hover:text-white transition-colors" />
+                                <div className="relative flex-1 md:w-64">
+                                    <FiFilter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <select
-                                        className="pl-12 pr-10 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white font-bold rounded-2xl outline-none appearance-none transition-all cursor-pointer min-w-[200px]"
+                                        className="w-full pl-10 pr-10 py-2.5 bg-slate-100 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-100 transition-all outline-none appearance-none cursor-pointer"
                                         value={selectedAgency}
                                         onChange={(e) => setSelectedAgency(e.target.value)}
                                     >
-                                        <option value="All" className="text-slate-800">All Agencies</option>
+                                        <option value="All">All Agencies</option>
                                         {agenciesList.filter(a => a !== 'All').map(agency => (
-                                            <option key={agency} value={agency} className="text-slate-800">{agency}</option>
+                                            <option key={agency} value={agency}>{agency}</option>
                                         ))}
                                     </select>
-                                    <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-white/60" />
+                                    <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                 </div>
                             )}
 
                             <button 
                                 onClick={fetchAgencyData}
-                                className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-2xl text-white transition-all flex items-center justify-center gap-2"
+                                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 hover:dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-transform active:scale-95"
                                 title="Refresh Data"
                             >
-                                <FiRefreshCw className={loading ? "animate-spin" : ""} />
-                                <span className="sm:hidden font-bold uppercase text-xs tracking-widest">Refresh</span>
+                                <FiRefreshCw className={loading ? "animate-spin" : ""} size={18} />
                             </button>
+                            
+                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-[#004A99] flex items-center justify-center text-white shadow-lg shadow-blue-200/50 hidden sm:flex">
+                                <TbBuilding size={20} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* MAIN DASHBOARD WRAPPER */}
+                <div className="max-w-7xl mx-auto px-6 pt-8 relative z-20">
+                    
+                    {/* DASHBOARD OVERVIEW - FINANCE STYLE */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                        {/* Huge Hero Card */}
+                        <div className="lg:col-span-2 relative overflow-hidden bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] rounded-[2.5rem] p-8 text-white shadow-2xl hover:shadow-indigo-500/20 transition-all duration-500">
+                            <div className="relative z-10 flex flex-col h-full justify-between gap-8">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="text-indigo-100 text-sm font-medium opacity-80 uppercase tracking-widest">Total Financial Value</p>
+                                        <h2 className="text-4xl sm:text-5xl font-black mt-1 tracking-tight">
+                                            {formatCurrency(aggregates.totalTrancheValue)}
+                                        </h2>
+                                    </div>
+                                    <div className="bg-white/20 backdrop-blur-md p-3 rounded-2xl">
+                                        <FiTrendingUp size={24} />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-5 border border-white/10 flex flex-col justify-center transition-all hover:bg-white/20 text-center sm:text-left">
+                                        <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1"><TbClipboardList /> Total Projects</p>
+                                        <p className="text-2xl font-black">{aggregates.totalMoaProjects}</p>
+                                    </div>
+                                    <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-5 border border-white/10 flex flex-col justify-center transition-all hover:bg-white/20 text-center sm:text-left">
+                                        <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1"><TbBuilding /> Active Agencies</p>
+                                        <p className="text-2xl font-black">{aggregates.totalActiveAgencies}</p>
+                                    </div>
+                                    <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-5 border border-white/10 flex flex-col justify-center transition-all hover:bg-white/20 text-center sm:text-left">
+                                        <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest mb-1 flex items-center justify-center sm:justify-start gap-1"><FiClock /> Pending Tasks</p>
+                                        <p className="text-2xl font-black">{aggregates.pendingMoaTasks}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Visual Background Elements */}
+                            <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
+                            <div className="absolute bottom-[-10%] left-[-10%] w-48 h-48 bg-purple-400/20 rounded-full blur-2xl pointer-events-none"></div>
+                        </div>
+
+                        {/* KPI SIDE CARDS */}
+                        <div className="space-y-4 flex flex-col">
+                            <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-6 border border-slate-50 dark:border-slate-700 shadow-xl hover:shadow-2xl transition-all flex-1 flex flex-col justify-center group relative overflow-hidden">
+                                <div className="flex items-center justify-between relative z-10 w-full">
+                                    <div className="flex-1">
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Avg Fund/Project</p>
+                                        <p className="text-2xl font-black text-slate-800 dark:text-white group-hover:text-emerald-500 transition-colors">
+                                            {aggregates.totalMoaProjects > 0 ? formatCurrency(aggregates.totalTrancheValue / aggregates.totalMoaProjects) : '₱0.00'}
+                                        </p>
+                                    </div>
+                                    <div className="w-14 h-14 shrink-0 bg-emerald-50 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 transition-transform group-hover:scale-110">
+                                        <FiDollarSign size={24} />
+                                    </div>
+                                </div>
+                                <div className="absolute -right-4 -bottom-4 opacity-[0.02] text-slate-800 pointer-events-none"><FiDollarSign size={100} /></div>
+                            </div>
+                            
+                            <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-6 border border-slate-50 dark:border-slate-700 shadow-xl hover:shadow-2xl transition-all flex-1 flex flex-col justify-center group relative overflow-hidden">
+                                <div className="flex items-center justify-between relative z-10 w-full">
+                                    <div className="flex-1">
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Completed / Total</p>
+                                        <p className="text-2xl font-black text-slate-800 dark:text-white group-hover:text-blue-500 transition-colors">
+                                            {projects.filter(p => p.status === 'Completed').length} <span className="text-slate-300 dark:text-slate-600 font-medium">/ {projects.length}</span>
+                                        </p>
+                                    </div>
+                                    <div className="w-14 h-14 shrink-0 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400 transition-transform group-hover:scale-110">
+                                        <FiCheckCircle size={24} />
+                                    </div>
+                                </div>
+                                <div className="absolute -right-4 -bottom-4 opacity-[0.02] text-slate-800 pointer-events-none"><FiCheckCircle size={100} /></div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* DECORATIVE BACKGROUND ICON */}
-                    <div className="absolute -bottom-12 -right-12 opacity-[0.03] transform rotate-12 hidden lg:block pointer-events-none">
-                        <TbBuilding size={400} />
-                    </div>
-                </div>
-
-                <div className="px-5 -mt-10 space-y-6 relative z-20">
-                    {/* METRIC CARDS OVERLAP */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <MetricCard
-                            title="Total Projects"
-                            value={aggregates.totalMoaProjects}
-                            icon={<TbClipboardList size={28} />}
-                            color="blue"
-                            delay={0}
-                        />
-                        <MetricCard
-                            title="Active Agencies"
-                            value={aggregates.totalActiveAgencies}
-                            icon={<TbBuilding size={28} />}
-                            color="purple"
-                            delay={0.1}
-                        />
-                        <MetricCard
-                            title="Total Financial Value"
-                            value={formatCurrency(aggregates.totalTrancheValue)}
-                            icon={<FiDollarSign size={28} />}
-                            color="emerald"
-                            isCurrency
-                            delay={0.2}
-                        />
-                        <MetricCard
-                            title="Pending Tasks"
-                            value={aggregates.pendingMoaTasks}
-                            icon={<FiClock size={28} />}
-                            color="amber"
-                            delay={0.3}
-                        />
-                    </div>
-                </div>
-
                 {/* ACTIVE TAB CONTENT */}
                 {activeTab === 'home' && (
-                        <div className="px-5 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         
-                        {/* CHARTS SECTION - Removed in favor of focused list view as specified in plan */}
+                        {/* PREMIUM CHARTS SECTION */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-4">
+                            {/* Project Status Donut Chart */}
+                            <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-8 shadow-2xl border border-slate-50 dark:border-slate-700 hover:shadow-purple-500/10 transition-all duration-500">
+                                <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2 flex items-center gap-2">
+                                    <FiPieChart className="text-purple-500" /> Project Status Distribution
+                                </h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 dark:border-slate-700 pb-4">
+                                    Status Breakdown of {projects.length} Total Projects
+                                </p>
+                                <div className="h-64 w-full">
+                                    {projects.length > 0 ? (
+                                        <ResponsiveContainer>
+                                            <PieChart>
+                                                <Pie
+                                                    data={statusChartData}
+                                                    innerRadius={70}
+                                                    outerRadius={100}
+                                                    paddingAngle={6}
+                                                    dataKey="value"
+                                                    stroke="none"
+                                                >
+                                                    {statusChartData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="hover:opacity-80 transition-opacity cursor-pointer" />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip 
+                                                    contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)', padding: '12px 20px' }}
+                                                    itemStyle={{ color: '#1e293b', fontWeight: '900', fontSize: '14px' }}
+                                                />
+                                                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: '900', color: '#64748B' }} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <div className="h-full w-full flex items-center justify-center text-slate-300 dark:text-slate-600 font-bold uppercase tracking-widest text-xs">
+                                            Not Enough Data
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Financial Utilization Bar Chart */}
+                            <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] p-8 shadow-2xl border border-slate-50 dark:border-slate-700 hover:shadow-emerald-500/10 transition-all duration-500">
+                                <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2 flex items-center gap-2">
+                                    <FiBarChart2 className="text-emerald-500" /> Financial Utilization Top 5
+                                </h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 dark:border-slate-700 pb-4">
+                                    Total Allocated vs. Liquidated Tranches
+                                </p>
+                                <div className="h-64 w-full">
+                                    {trancheChartData.length > 0 ? (
+                                        <ResponsiveContainer>
+                                            <BarChart data={trancheChartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }} barGap={8}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: '900', fill: '#94A3B8' }} tickMargin={12} />
+                                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: '900', fill: '#94A3B8' }} tickFormatter={(value) => `₱${(value / 1000000).toFixed(1)}M`} width={60} />
+                                                <Tooltip 
+                                                    formatter={(value) => [formatCurrency(value), '']}
+                                                    cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
+                                                    contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)', padding: '12px 20px' }}
+                                                    itemStyle={{ color: '#1e293b', fontWeight: '900', fontSize: '12px' }}
+                                                />
+                                                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontWeight: '900', color: '#64748B' }} />
+                                                <Bar dataKey="allocated" name="Allocated" fill="#3B82F6" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                                                <Bar dataKey="liquidated" name="Liquidated" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    ) : (
+                                        <div className="h-full w-full flex items-center justify-center text-slate-300 dark:text-slate-600 font-bold uppercase tracking-widest text-xs">
+                                            Not Enough Data
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                         
                         {/* PROJECT TABLE SECTION - Updated to Modern Progress List */}
                         <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl border border-slate-50 dark:border-slate-700 overflow-hidden">
@@ -476,6 +644,189 @@ const AgencyDashboard = () => {
                                             <p className="text-slate-400 text-sm mt-1">Adjust search or ensure projects have MOA, RTA, and Tranche 1 allocation.</p>
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* MOA TRACKING MASTERLIST SECTION */}
+                        <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl border border-slate-50 dark:border-slate-700 overflow-hidden">
+                            <div className="p-8 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">MOA Tracking Masterlist</h2>
+                                <p className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1 italic">
+                                    Linking Mother Memoranda to Supplemental Project Allocations
+                                </p>
+                            </div>
+
+                            <div className="p-8">
+                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+                                    {/* TABLE 1: MOTHER MOAs (Left 5 Columns) */}
+                                    <div className="lg:col-span-5 space-y-6">
+                                        <div className="flex items-center gap-3 px-2">
+                                            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 shadow-sm">
+                                                <FiFileText size={20} />
+                                            </div>
+                                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">Mother MOA Records</h3>
+                                        </div>
+
+                                        <div className="overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                                            <table className="w-full text-left">
+                                                <thead className="bg-slate-50 dark:bg-slate-800/50">
+                                                    <tr>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Region</th>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Province</th>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Agency</th>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">View</th>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">MOA ID</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                                    {loadingMoa ? (
+                                                        <tr>
+                                                            <td colSpan="3" className="px-5 py-12 text-center">
+                                                                <div className="h-6 w-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                                            </td>
+                                                        </tr>
+                                                    ) : motherMoas.length > 0 ? (
+                                                        motherMoas.map(moa => (
+                                                            <tr 
+                                                                key={moa.moa_id} 
+                                                                onClick={() => setSelectedMotherMoa(moa)}
+                                                                className={`cursor-pointer transition-all ${selectedMotherMoa?.moa_id === moa.moa_id ? 'bg-blue-50 dark:bg-blue-900/40 border-l-4 border-l-blue-600' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                                                            >
+                                                                <td className="px-5 py-5">
+                                                                    <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase">{moa.region}</span>
+                                                                </td>
+                                                                <td className="px-5 py-5">
+                                                                    <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{moa.province}</span>
+                                                                </td>
+                                                                <td className="px-5 py-5">
+                                                                    <span className="text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase leading-tight">{moa.implementing_agency}</span>
+                                                                </td>
+                                                                <td className="px-5 py-5">
+                                                                    <a 
+                                                                        href={moa.moa_link} 
+                                                                        target="_blank" 
+                                                                        rel="noopener noreferrer"
+                                                                        className="p-2 bg-white dark:bg-slate-800 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm border border-slate-100 flex items-center justify-center"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                    >
+                                                                        <FiEye size={14} />
+                                                                    </a>
+                                                                </td>
+                                                                <td className="px-5 py-5">
+                                                                    <span className="text-[10px] font-mono font-bold text-slate-400">#{moa.moa_id}</span>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan="3" className="px-5 py-10 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">No Records Found</td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* TABLE 2: SUPPLEMENTAL MOAs (Right 7 Columns) */}
+                                    <div className="lg:col-span-7 space-y-6">
+                                        <div className="flex items-center justify-between px-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600 shadow-sm">
+                                                    <FiTrendingUp size={20} />
+                                                </div>
+                                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider">Supplemental Details</h3>
+                                            </div>
+                                            {selectedMotherMoa && (
+                                                <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 border border-blue-100 dark:border-blue-800">
+                                                    <FiMapPin size={12} />
+                                                    <span className="text-[10px] font-black uppercase tracking-tight">{selectedMotherMoa.province} Archive</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="overflow-hidden rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm min-h-[400px]">
+                                            <table className="w-full text-left">
+                                                <thead className="bg-slate-50 dark:bg-slate-800/50">
+                                                    <tr>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Mother MOA</th>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Supplemental Link</th>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Supplemental ID</th>
+                                                        <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Associated IPCs</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                                    {loadingSupp ? (
+                                                        <tr>
+                                                            <td colSpan="3" className="px-5 py-12 text-center">
+                                                                <div className="h-6 w-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                                            </td>
+                                                        </tr>
+                                                    ) : supplementalMoas.length > 0 ? (
+                                                        supplementalMoas.map(supp => (
+                                                            <tr key={supp.supplamental_moa_id || 'unassigned'} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                                                                <td className="px-5 py-6">
+                                                                    <span className="text-[10px] font-mono font-bold text-slate-400">#{supp.mother_moa_id}</span>
+                                                                </td>
+                                                                <td className="px-5 py-6">
+                                                                    {supp.moa_pdf ? (
+                                                                        <a 
+                                                                            href={supp.moa_pdf} 
+                                                                            target="_blank" 
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg font-black text-[10px] uppercase tracking-wider hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                                                        >
+                                                                            <FiFileText size={12} /> View
+                                                                        </a>
+                                                                    ) : (
+                                                                        <span className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase italic">Refer to Mother</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-5 py-6">
+                                                                    <span className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase">{supp.supplamental_moa_id ? `SUP-#${supp.supplamental_moa_id}` : 'DIRECT'}</span>
+                                                                </td>
+                                                                <td className="px-5 py-6">
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {supp.ipcs && supp.ipcs.length > 0 ? (
+                                                                            supp.ipcs.map((item, idx) => (
+                                                                                <div key={idx} className="group relative">
+                                                                                    <div className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-[10px] font-black uppercase tracking-tighter border border-blue-100 dark:border-blue-800 shadow-sm cursor-help hover:bg-blue-600 hover:text-white transition-all">
+                                                                                        {item.ipc}
+                                                                                    </div>
+                                                                                    {/* TOOLTIP DICTIONARY */}
+                                                                                    <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-900 text-white text-[10px] p-3 rounded-2xl shadow-2xl whitespace-nowrap z-50 animate-in fade-in zoom-in-95 duration-200 border border-white/10">
+                                                                                        <div className="flex flex-col gap-1">
+                                                                                            <span className="text-blue-300 font-black uppercase tracking-widest text-[8px]">Project Detail</span>
+                                                                                            <span className="font-bold text-[11px]">{item.project_name}</span>
+                                                                                            <span className="text-[9px] text-slate-400">IPC Reference Code</span>
+                                                                                        </div>
+                                                                                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 rotate-45 border-r border-b border-white/10"></div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))
+                                                                        ) : (
+                                                                            <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase italic">No Projects assigned</span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan="3" className="px-5 py-10 text-center">
+                                                                <div className="flex flex-col items-center gap-3">
+                                                                    <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
+                                                                        <FiAlertCircle size={32} />
+                                                                    </div>
+                                                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Select a Mother MOA to view linked allocations</p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -688,6 +1039,8 @@ const AgencyDashboard = () => {
                     document.body
                 )}
 
+                </div> {/* MAIN DASHBOARD WRAPPER */}
+
                 {/* Notification */}
                 {message.text && (
                     <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[3000] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 ${message.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
@@ -700,45 +1053,6 @@ const AgencyDashboard = () => {
                 <BottomNav userRole={userRole} />
             </div>
         </PageTransition>
-    );
-};
-
-const MetricCard = ({ title, value, icon, color, delay }) => {
-    const colorClasses = {
-        blue: 'from-blue-500 to-blue-700 text-blue-600 shadow-blue-200',
-        purple: 'from-purple-500 to-purple-700 text-purple-600 shadow-purple-200',
-        emerald: 'from-emerald-500 to-emerald-700 text-emerald-600 shadow-emerald-200',
-        amber: 'from-amber-500 to-amber-700 text-amber-600 shadow-amber-200'
-    };
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay }}
-            className="group bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] shadow-xl border border-white dark:border-slate-700 hover:shadow-2xl hover:-translate-y-1 transition-all relative overflow-hidden cursor-pointer"
-        >
-            <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${colorClasses[color].split(' ').slice(0, 2).join(' ')} opacity-5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150`}></div>
-            
-            <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                    <div className={`p-4 rounded-2xl bg-gradient-to-br ${colorClasses[color].split(' ').slice(0, 2).join(' ')} text-white shadow-lg ${colorClasses[color].split(' ')[3]}`}>
-                        {icon}
-                    </div>
-                    <div className="text-right">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{title}</h3>
-                        <div className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter">
-                            {value}
-                        </div>
-                    </div>
-                </div>
-                
-                {/* PROGRESS BAR SIMULATION IF APPLICABLE */}
-                <div className="mt-4 w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                    <div className={`h-full bg-gradient-to-r ${colorClasses[color].split(' ').slice(0, 2).join(' ')} w-[70%] rounded-full opacity-80`}></div>
-                </div>
-            </div>
-        </motion.div>
     );
 };
 

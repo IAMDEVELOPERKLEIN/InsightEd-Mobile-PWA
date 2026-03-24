@@ -28,6 +28,8 @@ export const AuthProvider = ({ children }) => {
                         if (userData.role) localStorage.setItem('userRole', userData.role);
                         if (userData.email) localStorage.setItem('userEmail', userData.email);
                         if (userData.account_category) localStorage.setItem('accountCategory', userData.account_category);
+                        if (userData.province) localStorage.setItem('userProvince', userData.province);
+                        if (userData.city) localStorage.setItem('userCity', userData.city);
                         
                         setUser(userData);
                         
@@ -65,6 +67,8 @@ export const AuthProvider = ({ children }) => {
         if (userData.role) localStorage.setItem('userRole', userData.role);
         if (userData.email) localStorage.setItem('userEmail', userData.email);
         if (userData.account_category) localStorage.setItem('accountCategory', userData.account_category);
+        if (userData.province) localStorage.setItem('userProvince', userData.province);
+        if (userData.city) localStorage.setItem('userCity', userData.city);
         
         localStorage.setItem('remembered_user', JSON.stringify(userData));
         

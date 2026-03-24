@@ -49,7 +49,10 @@ import EFDMonitoring from './modules/EFDMonitoring';
 import EFDNewconMonitoring from './modules/EFDNewconMonitoring';
 import EFDMotherMoa from './modules/EFDMotherMoa';
 import BEFFDashboard from './modules/BEFFDashboard';
-import ChatModule from './modules/ChatModule';
+import ChatModule from './modules/ChatModule'; // <--- RESTORED THIS
+import EducationalDashboard from './modules/EducationalDashboard';
+import ProjectSummaryDashboard from './modules/ProjectSummaryDashboard';
+import { ROLE_GROUPS } from './config/roleGroups';
 
 
 
@@ -232,7 +235,8 @@ const AnimatedRoutes = () => {
       <Route path="/school-audit" element={<SchoolAuditView />} />
       <Route path="/esf7-review" element={<Navigate to="/esf7/review" replace />} />
       <Route path="/esf7/review" element={<ProtectedRoute allowedRoles={['Super User', 'School Division Office']}><ESF7Review /></ProtectedRoute>} />
-      <Route path="/dummy-forms" element={<DummyDashboard />} />
+      <Route path="/educational-dashboard" element={<ProtectedRoute allowedGroups={[ROLE_GROUPS.EDUCATIONAL_ADMIN]}><EducationalDashboard /></ProtectedRoute>} />
+      <Route path="/project-summary-dashboard" element={<ProtectedRoute allowedGroups={[ROLE_GROUPS.TECHNICAL_FINANCE]}><ProjectSummaryDashboard /></ProtectedRoute>} />
 
       <Route path="/dummy-forms" element={<DummyDashboard />} />
       <Route path="/psip" element={<PSIP />} />

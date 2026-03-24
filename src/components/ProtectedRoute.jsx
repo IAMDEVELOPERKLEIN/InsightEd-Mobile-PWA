@@ -2,8 +2,9 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoadingScreen from './LoadingScreen';
+import { getRoleGroup } from '../config/roleGroups';
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles, allowedGroups }) => {
     const { user, loading } = useAuth();
 
     if (loading) {
@@ -17,11 +18,21 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         return <Navigate to="/login" replace state={state} />;
     }
 
-    // If role is not allowed, redirect to home
-    // EXCEPT if the user is a Super User in "viewing as" mode
+    // Determine derived role for Super Users (if impersonating)
+    const isSuperUser = user.role === 'Super User';
+    const impersonatedRole = sessionStorage.getItem('impersonatedRole');
+    const effectiveRole = (isSuperUser && impersonatedRole) ? impersonatedRole : user.role;
+    const userGroup = getRoleGroup(effectiveRole);
+
+    // Group-based check
+    if (allowedGroups && !allowedGroups.includes(userGroup)) {
+        return <Navigate to="/" replace />;
+    }
+
+    // Role-based check
     if (allowedRoles && !allowedRoles.includes(user.role)) {
         const isViewingAsSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
-        if (user.role === 'Super User' && isViewingAsSuperUser) {
+        if (isSuperUser && isViewingAsSuperUser) {
             // Allow Super User to access any impersonated dashboard
             return children;
         }

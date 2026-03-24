@@ -9,37 +9,51 @@ import PinLogin from './components/PinLogin';
 import { FiArrowLeft } from 'react-icons/fi';
 
 
+import { getRoleGroup, ROLE_GROUPS } from './config/roleGroups';
+
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role, accountCategory) => {
-    // DepEd/Non-DepEd Engineer redirect
-    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer') {
+    // Determine Group
+    const userGroup = getRoleGroup(role);
+
+    // Super User Special Redirect
+    if (role === 'Super User') return '/super-user-selector';
+
+    // Group-based Redirection (Super User 2.0)
+    if (userGroup === ROLE_GROUPS.EDUCATIONAL_ADMIN) {
+        return '/educational-dashboard';
+    }
+    if (userGroup === ROLE_GROUPS.TECHNICAL_FINANCE) {
+        return '/project-summary-dashboard';
+    }
+
+    // Fallback/Special role overrides
+    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
         return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
             ? '/non-deped-dashboard'
-            : '/engineer-dashboard';
+            : '/project-summary-dashboard';
     }
+
     const roleMap = {
-        'Local Government Unit': '/lgu-dashboard',
+        'Local Government Unit': '/project-summary-dashboard',
         'School Head': '/nodes-dashboard',
-        'Human Resource': '/hr-dashboard',
-        'Regional Office': '/monitoring-dashboard',
-        'School Division Office': '/monitoring-dashboard',
-        'Admin': '/admin-dashboard',
-        'Super Admin': '/super-admin',
-        'Central Office': '/monitoring-dashboard',
-        'Central Office Finance': '/finance-dashboard',
-        'Super User': '/super-user-selector',
-        'Implementing Agency': '/agency-dashboard',
-        'PGO': '/agency-dashboard',
-        'CGO': '/agency-dashboard',
-        'MGO': '/agency-dashboard',
-        'DPWH': '/agency-dashboard',
-        'CSO': '/agency-dashboard',
-        'EFD': '/efd-dashboard',
-        'EFD Engineer': '/efd-dashboard',
-        'HRODI': '/efd-dashboard',
-        'Division Engineer': '/engineer-dashboard',
-        'Non-DepEd Engineer': '/non-deped-dashboard',
-        'Engineer': '/engineer-dashboard',
+        'Human Resource': '/educational-dashboard',
+        'Regional Office': '/educational-dashboard',
+        'School Division Office': '/educational-dashboard',
+        'Admin': '/educational-dashboard',
+        'Super User': '/educational-dashboard',
+        'Super Admin': '/educational-dashboard',
+        'Central Office': '/educational-dashboard',
+        'Central Office Finance': '/project-summary-dashboard',
+        'Implementing Agency': '/project-summary-dashboard',
+        'EFD': '/project-summary-dashboard',
+        'EFD Engineer': '/project-summary-dashboard',
+        'HRODI': '/project-summary-dashboard',
+        'PGO': '/project-summary-dashboard',
+        'CGO': '/project-summary-dashboard',
+        'MGO': '/project-summary-dashboard',
+        'DPWH': '/project-summary-dashboard',
+        'CSO': '/project-summary-dashboard',
     };
     return roleMap[role] || '/';
 };
