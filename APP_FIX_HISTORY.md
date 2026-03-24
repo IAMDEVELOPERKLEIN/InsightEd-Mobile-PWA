@@ -2,6 +2,18 @@
 
 This document tracks technical improvements, bug fixes, and feature implementations made during development.
 
+## 2026-03-24
+### Strict Dynamic Grade Level Filtering
+- **Issue**: Grade level fields in Units 2, 3, 7, and 8 were not strictly restricted based on the Unit 1 school classification (curricular offering), leading to potential data entry for non-applicable grades.
+- **Fix**: Synchronized all modular units (2, 3, 7, and 8) to use a strict mapping rule based on the `curricular_offering` saved in the Azure Postgres database:
+  - **Purely Elementary**: Kinder to Grade 6
+  - **ES and JHS (K-10)**: Kinder to Grade 10
+  - **Junior High and Senior High**: Grade 7 to Grade 12
+  - **All Offering (K to 12)**: Kinder to Grade 12
+  - **Purely Junior High School**: Grade 7 to Grade 10
+  - **Purely Senior High School**: Grade 11 and Grade 12
+- **Benefit**: Ensures data integrity by preventing users from entering data for grade levels not offered by their specific school classification.
+
 ## 2026-03-12
 ### Unit 6 Routing and Backend Alignment
 - **Issue**: Mismatch between frontend unit numbering and backend API routes leading to data saving errors and navigation confusion.

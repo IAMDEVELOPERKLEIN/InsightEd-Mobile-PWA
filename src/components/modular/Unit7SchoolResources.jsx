@@ -142,6 +142,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // Validation Confirmation State
     const [validationConfirm, setValidationConfirm] = useState("");
+    const [gradeValidationConfirm, setGradeValidationConfirm] = useState("");
     useEffect(() => { setValidationConfirm(""); }, [currentPhase]);
 
     // ── Data Fetching ───────────────────────────────────────────────────────────
@@ -187,10 +188,30 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         const expectedGrades = [];
                         
                         const co = (d.curricular_offering || "").toLowerCase();
-                        let hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
-                        let hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                        let hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                        let hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
+                        let hasKinder = false;
+                        let hasElem = false;
+                        let hasJHS = false;
+                        let hasSHS = false;
+
+                        if (co === "purely elementary") {
+                            hasKinder = true; hasElem = true;
+                        } else if (co === "elementary school and junior high school (k-10)") {
+                            hasKinder = true; hasElem = true; hasJHS = true;
+                        } else if (co === "junior high and senior high") {
+                            hasJHS = true; hasSHS = true;
+                        } else if (co === "all offering (k to 12)") {
+                            hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true;
+                        } else if (co === "purely junior high school") {
+                            hasJHS = true;
+                        } else if (co === "purely senior high school") {
+                            hasSHS = true;
+                        } else {
+                            // Fallback for legacy data
+                            hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
+                            hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                            hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                            hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
+                        }
 
                         // Parse Unit 3 to get section counts
                         let parsedSections = [];
@@ -199,21 +220,18 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 parsedSections = typeof d.unit3_simplified_counts === 'string' ? JSON.parse(d.unit3_simplified_counts) : d.unit3_simplified_counts;
                             } catch (e) {}
                         }
+                        const u2Raw = d.unit2_simplified_enrollment || [];
+                        const u2Parsed = Array.isArray(u2Raw) ? u2Raw : (u2Raw.array || []);
+                        
+                        const getEnrollmentForGrade = (gradeId) => {
+                            const found = u2Parsed.find(x => x.grade_level === gradeId);
+                            return found ? parseInt(found.total || 0) : 0;
+                        };
+
                         const getCountForGrade = (gradeId) => {
                             const found = parsedSections.find(sec => sec.grade_level === gradeId);
                             return found ? parseInt(found.total_sections || 0) : 0;
                         };
-
-                        // MASTER SYNC: Parse Unit 2 to define which grades are explicitly active
-                        let u2Raw = [];
-                        if (d.unit2_simplified_enrollment) {
-                            try {
-                                u2Raw = typeof d.unit2_simplified_enrollment === 'string'
-                                    ? JSON.parse(d.unit2_simplified_enrollment)
-                                    : d.unit2_simplified_enrollment;
-                            } catch (e) {}
-                        }
-                        const u2Parsed = Array.isArray(u2Raw) ? u2Raw : (u2Raw.array || []);
                         const isGradeActive = (gradeId) => {
                             if (!u2Parsed.length) return true; // fallback
                             const found = u2Parsed.find(x => x.grade_level === gradeId);
@@ -231,7 +249,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         if (hasKinder && isGradeActive("kinder")) {
                             expectedGrades.push({
                                 id: "kinder", grade_level: "Kinder",
-                                enrolled: parseInt(d.enroll_kinder || 0),
+                                enrolled: getEnrollmentForGrade("kinder") || parseInt(d.enroll_kinder || 0),
                                 sections: getCountForGrade("kinder") || parseInt(d.sections_kinder || 0), isVerified: false,
                             });
                         }
@@ -241,7 +259,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 if (isGradeActive(`g${lvl}`)) {
                                     expectedGrades.push({
                                         id: `g${lvl}`, grade_level: `Grade ${lvl}`,
-                                        enrolled: parseInt(d[`enroll_g${lvl}`] || 0),
+                                        enrolled: getEnrollmentForGrade(`g${lvl}`) || parseInt(d[`enroll_g${lvl}`] || 0),
                                         sections: getCountForGrade(`g${lvl}`) || parseInt(d[`sections_g${lvl}`] || 0), isVerified: false,
                                     });
                                 }
@@ -253,7 +271,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 if (isGradeActive(`g${lvl}`)) {
                                     expectedGrades.push({
                                         id: `g${lvl}`, grade_level: `Grade ${lvl}`,
-                                        enrolled: parseInt(d[`enroll_g${lvl}`] || 0),
+                                        enrolled: getEnrollmentForGrade(`g${lvl}`) || parseInt(d[`enroll_g${lvl}`] || 0),
                                         sections: getCountForGrade(`g${lvl}`) || parseInt(d[`sections_g${lvl}`] || 0), isVerified: false,
                                     });
                                 }
@@ -265,7 +283,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 if (isGradeActive(`g${lvl}`)) {
                                     expectedGrades.push({
                                         id: `g${lvl}`, grade_level: `Grade ${lvl}`,
-                                        enrolled: parseInt(d[`enroll_g${lvl}`] || 0),
+                                        enrolled: getEnrollmentForGrade(`g${lvl}`) || parseInt(d[`enroll_g${lvl}`] || 0),
                                         sections: getCountForGrade(`g${lvl}`) || parseInt(d[`sections_g${lvl}`] || 0), isVerified: false,
                                     });
                                 }
@@ -385,6 +403,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         setShowGradeModal(false);
         setSelectedGradeId(null);
         setCurrentGradeForm(initialGradeForm);
+        setGradeValidationConfirm("");
     };
 
     const openGradeModal = (grade) => {
@@ -397,6 +416,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             desks_func: grade.desks_func || "",
             desks_broken: grade.desks_broken || "",
         });
+        setGradeValidationConfirm("");
         setShowGradeModal(true);
     };
 
@@ -1628,12 +1648,31 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <p className="text-sm font-bold pt-0.5">Shortage of <span className="text-red-600 text-lg font-black">{Math.abs(gradeStats.diff)}</span> seats flagged for this grade level.</p>
                                                 </div>
                                             )}
+
+                                            {gradeStats.diff !== 0 && (
+                                                <div className="mt-4 pt-4 border-t border-black/5">
+                                                    <p className="text-[10px] font-black uppercase tracking-tight mb-2 opacity-70">Please type "confirm" to validate this discrepancy</p>
+                                                    <input 
+                                                        type="text" 
+                                                        value={gradeValidationConfirm} 
+                                                        onChange={(e) => setGradeValidationConfirm(e.target.value)} 
+                                                        placeholder="Type here..."
+                                                        className={`w-full p-3 border-2 rounded-2xl text-center text-sm font-black outline-none transition-all ${gradeStats.isOk ? "bg-white border-emerald-200 text-emerald-700 focus:border-emerald-500" : "bg-white border-red-200 text-red-700 focus:border-red-500"}`}
+                                                    />
+                                                </div>
+                                            )}
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
                             </div>
                             <div className="p-5 border-t border-gray-100 flex gap-3 bg-white rounded-b-3xl">
-                                <button onClick={handleSaveGradeLevel} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all">Save &amp; Verify Grade</button>
+                                <button 
+                                    disabled={gradeStats.diff !== 0 && gradeValidationConfirm.toLowerCase() !== "confirm"}
+                                    onClick={handleSaveGradeLevel} 
+                                    className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50"
+                                >
+                                    Save &amp; Verify Grade
+                                </button>
                             </div>
                         </motion.div>
                     </motion.div>

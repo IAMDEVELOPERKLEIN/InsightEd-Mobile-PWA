@@ -99,6 +99,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         head_hired_month: "",
         head_hired_day: "",
         head_hired_year: "",
+        ownership_doc_id: null,
     });
 
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -228,6 +229,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     head_sex: d.head_sex || merged.head_sex,
                     established_month: d.established_month || merged.established_month,
                     established_year: d.established_year || merged.established_year,
+                    ownership_doc_id: d.ownership_doc_id || merged.ownership_doc_id,
                 };
             }
 
@@ -508,6 +510,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 iern: finalIern || "",
                 school_head: formData.school_head,
                 contact_number: formData.contact_number,
+                ownership: formData.ownership,
                 google_drive_thumbnail_url: formData.google_drive_thumbnail_url,
                 established_month: formData.established_month,
                 established_year: formData.established_year,
@@ -1040,7 +1043,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div className="space-y-2">
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date of Birth</label>
                                                     <div className="grid grid-cols-3 gap-3">
-                                                        <select name="head_dob_month" value={formData.head_dob_month} onChange={handleChange} className={chunkySelect + " !text-sm"}>
+                                                        <select name="head_dob_month" value={formData.head_dob_month} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
                                                             <option value="" disabled hidden>Month</option>
                                                             {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                                                                 <option key={m} value={m}>{m}</option>
@@ -1065,7 +1068,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div className="space-y-2">
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date Assigned</label>
                                                     <div className="grid grid-cols-3 gap-3">
-                                                        <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm"}>
+                                                        <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
                                                             <option value="" disabled hidden>Month</option>
                                                             {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                                                                 <option key={m} value={m}>{m}</option>
@@ -1196,12 +1199,13 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         iern={formData.iern || formData.school_id} 
                                                         docType={formData.ownership_document_type}
                                                         initialFile={formData.local_file_path}
-                                                        onUploadSuccess={(path) => setFormData(prev => ({ ...prev, local_file_path: path }))}
+                                                        initialDocId={formData.ownership_doc_id}
+                                                        onUploadSuccess={(path, id) => setFormData(prev => ({ ...prev, local_file_path: path, ownership_doc_id: id }))}
                                                     />
                                                     
                                                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 mt-4">
                                                         <p className="text-[11px] text-blue-700 font-bold flex-1">
-                                                            💡 Tip: Your PDF will be optimized to 75 DPI in the background once uploaded to ensure fast loading for everyone.
+                                                            💡 Tip: Your PDF will be optimized to 96 DPI in the background once uploaded to ensure fast loading for everyone.
                                                         </p>
                                                     </div>
                                                 </div>

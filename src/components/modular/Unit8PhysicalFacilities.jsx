@@ -454,6 +454,11 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         setRoomsData(prev => prev.filter(r => r.building_local_id !== bId));
     };
 
+    const handleDeleteRoom = (roomId) => {
+        if (!window.confirm("Delete this classroom?")) return;
+        setRoomsData(prev => prev.filter(r => r.id !== roomId));
+    };
+
     const handleToggleRepairItem = (category) => {
         setRepairItemsState(prev => {
             if (prev[category]) {
@@ -1468,9 +1473,14 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                 />
                                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || 'N/A'}</p>
                                             </div>
-                                            <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                {room.condition}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {room.condition}
+                                                </span>
+                                                <button onClick={() => handleDeleteRoom(room.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Room">
+                                                    <FiTrash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1508,8 +1518,53 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
                                                 >
                                                     <option value="">Select Grade Level</option>
-                                                    <option value="Kinder">Kinder</option>
-                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(g => <option key={g} value={`Grade ${g}`}>Grade {g}</option>)}
+                                                    {(() => {
+                                                        const co = (schoolData?.curricular_offering || "").toLowerCase();
+                                                        let hasKinder = false;
+                                                        let hasElem = false;
+                                                        let hasJHS = false;
+                                                        let hasSHS = false;
+
+                                                        if (co === "purely elementary") {
+                                                            hasKinder = true; hasElem = true;
+                                                        } else if (co === "elementary school and junior high school (k-10)") {
+                                                            hasKinder = true; hasElem = true; hasJHS = true;
+                                                        } else if (co === "junior high and senior high") {
+                                                            hasJHS = true; hasSHS = true;
+                                                        } else if (co === "all offering (k to 12)") {
+                                                            hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true;
+                                                        } else if (co === "purely junior high school") {
+                                                            hasJHS = true;
+                                                        } else if (co === "purely senior high school") {
+                                                            hasSHS = true;
+                                                        } else {
+                                                            // Fallback
+                                                            hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
+                                                            hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                                                            hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                                                            hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
+                                                        }
+                                                        
+                                                        const options = [];
+                                                        if (hasKinder) options.push("Kinder");
+                                                        if (hasElem) {
+                                                            [1, 2, 3, 4, 5, 6].forEach(g => options.push(`Grade ${g}`));
+                                                        }
+                                                        if (hasJHS) {
+                                                            [7, 8, 9, 10].forEach(g => options.push(`Grade ${g}`));
+                                                        }
+                                                        if (hasSHS) {
+                                                            [11, 12].forEach(g => options.push(`Grade ${g}`));
+                                                        }
+                                                        
+                                                        // Fallback for empty/unknown offerings
+                                                        if (options.length === 0) {
+                                                            options.push("Kinder");
+                                                            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].forEach(g => options.push(`Grade ${g}`));
+                                                        }
+                                                        
+                                                        return options.map(opt => <option key={opt} value={opt}>{opt}</option>);
+                                                    })()}
                                                     <option value="Non-Instructional">Non-Instructional</option>
                                                 </select>
                                             </div>
@@ -1798,7 +1853,6 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 )}
             </AnimatePresence>
 
-            {!isReadOnly && <BottomNav userRole="School Head" />}
         </div>
     );
 }

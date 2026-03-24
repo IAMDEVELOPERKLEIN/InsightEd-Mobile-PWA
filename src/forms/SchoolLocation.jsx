@@ -179,7 +179,31 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
         { id: 5, title: "Threats", icon: <FaShieldAlt /> }
     ];
 
-    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 5));
+    const nextStep = () => {
+        if (currentStep === 3) {
+            const data = getValues();
+            const refPointsFields = [
+                'emergency_response_mins', 'proximity_hospital_km',
+                'proximity_brgy_hall_mins', 'proximity_brgy_hall_km',
+                'proximity_muni_hall_mins', 'proximity_muni_hall_km',
+                'proximity_sdo_mins', 'proximity_sdo_km',
+                'proximity_clinic_mins', 'proximity_clinic_km',
+                'proximity_terminal_mins', 'proximity_terminal_km',
+                'proximity_highway_mins', 'proximity_highway_km'
+            ];
+            
+            const hasInvalid = refPointsFields.some(field => {
+                const val = data[field];
+                return val === "" || val === null || parseFloat(val) === 0 || isNaN(parseFloat(val));
+            });
+            
+            if (hasInvalid) {
+                alert("Please provide valid (non-zero) values for ALL points of reference before proceeding.");
+                return;
+            }
+        }
+        setCurrentStep(prev => Math.min(prev + 1, 5));
+    };
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
     const sectionStyle = "bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-sm mb-6";

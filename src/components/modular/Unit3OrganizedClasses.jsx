@@ -141,18 +141,33 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         // Determine which single grades are actually active in the school
         let co = (d.curricular_offering || "").toLowerCase();
         let offeringGrades = [];
-        if (co.includes("integrated") || co.includes("k-12") || co.includes("k to 12") || co.includes("k-10") || co.includes("k to 10")) {
-            offeringGrades = singleGradeMappings.map(m => m.id);
+        if (co === "purely elementary") {
+            offeringGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
+        } else if (co === "elementary school and junior high school (k-10)") {
+            offeringGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
+        } else if (co === "junior high and senior high") {
+            offeringGrades = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (co === "all offering (k to 12)") {
+            offeringGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+        } else if (co === "purely junior high school") {
+            offeringGrades = ['g7', 'g8', 'g9', 'g10'];
+        } else if (co === "purely senior high school") {
+            offeringGrades = ['g11', 'g12'];
         } else {
-            if (co.includes("kinder")) offeringGrades.push("kinder");
-            if (co.includes("elementary") || co.includes("primary")) {
-                offeringGrades.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
-            }
-            if (co.includes("junior high") || co.includes("jhs")) {
-                offeringGrades.push("g7", "g8", "g9", "g10");
-            }
-            if (co.includes("senior high") || co.includes("shs")) {
-                offeringGrades.push("g11", "g12");
+            // Fallback for legacy data
+            if (co.includes("integrated") || co.includes("k-12") || co.includes("k to 12") || co.includes("k-10") || co.includes("k to 10")) {
+                offeringGrades = singleGradeMappings.map(m => m.id);
+            } else {
+                if (co.includes("kinder")) offeringGrades.push("kinder");
+                if (co.includes("elementary") || co.includes("primary")) {
+                    offeringGrades.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+                }
+                if (co.includes("junior high") || co.includes("jhs")) {
+                    offeringGrades.push("g7", "g8", "g9", "g10");
+                }
+                if (co.includes("senior high") || co.includes("shs")) {
+                    offeringGrades.push("g11", "g12");
+                }
             }
         }
         offeringGrades = [...new Set(offeringGrades)];
