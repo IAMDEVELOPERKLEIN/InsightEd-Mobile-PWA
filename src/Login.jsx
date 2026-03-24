@@ -61,7 +61,7 @@ const getDashboardPath = (role, accountCategory) => {
         return '/project-summary-dashboard';
     }
 
-    const roleMap = {
+    const fallbackRoleMap = {
         'Local Government Unit': '/project-summary-dashboard',
         'School Head': '/nodes-dashboard',
         'Human Resource': '/educational-dashboard',
@@ -82,7 +82,7 @@ const getDashboardPath = (role, accountCategory) => {
         'DPWH': '/project-summary-dashboard',
         'CSO': '/project-summary-dashboard',
     };
-    return roleMap[role] || '/';
+    return fallbackRoleMap[role] || '/';
 };
 
 
