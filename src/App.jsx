@@ -405,7 +405,7 @@ const AnimatedRoutes = () => {
       <Route path="/project-monitoring" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><ProjectMonitoring /></ProtectedRoute>} />
       <Route path="/site-inspection" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><SiteInspection /></ProtectedRoute>} />
       <Route path="/material-inventory" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><MaterialInventory /></ProtectedRoute>} />
-      <Route path="/new-project" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User']}><NewProjects /></ProtectedRoute>} />
+      <Route path="/new-project" element={<ProtectedRoute allowedRoles={['DepEd Engineer', 'Division Engineer', 'Super User', 'EFD Engineer', 'HRODI Engineer', 'EFD']}><NewProjects /></ProtectedRoute>} />
       <Route path="/project-details/:id" element={<ProtectedRoute><DetailedProjInfo /></ProtectedRoute>} />
       <Route path="/project-gallery" element={<ProtectedRoute><ProjectGallery /></ProtectedRoute>} />
       <Route path="/project-gallery/:projectId" element={<ProtectedRoute><ProjectGallery /></ProtectedRoute>} />

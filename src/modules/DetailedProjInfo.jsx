@@ -1053,8 +1053,7 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Batch of Funds" value={project.batchOfFunds} />
                                 <DetailItem label="Funding Year" value={project.funding_year || project.fundingYear} />
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <DetailItem label="Project Creator" value={project.engineerName ? `Engr. ${project.engineerName}` : 'N/A'} />
+                            <div className="grid grid-cols-1 gap-3">
                                 <DetailItem label="Assigned Engineer" value={project.assigned_engineer_name ? `Engr. ${project.assigned_engineer_name}` : 'Not Assigned'} />
                             </div>
                             <DetailItem label="Remarks" value={project.otherRemarks} />

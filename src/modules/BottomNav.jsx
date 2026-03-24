@@ -28,7 +28,7 @@ const BottomNav = ({ userRole: propRole }) => {
     if (effectiveRole === 'deped_engineer' || effectiveRole === 'DepEd Engineer') effectiveRole = 'Division Engineer';
     if (effectiveRole === 'hrodi_engineer' || effectiveRole === 'HRODI Engineer' || effectiveRole === 'EFD' || effectiveRole === 'HRODI') effectiveRole = 'EFD Engineer';
     if (effectiveRole === 'non_deped_engineer') effectiveRole = 'Non-DepEd Engineer';
-    if (effectiveRole === 'engineer') effectiveRole = 'Engineer';
+    if (effectiveRole === 'engineer' || effectiveRole === 'Engineer') effectiveRole = 'Division Engineer';
     if (effectiveRole === 'school_head') effectiveRole = 'School Head';
     if (effectiveRole === 'lgu') effectiveRole = 'Local Government Unit';
 
@@ -118,7 +118,7 @@ const BottomNav = ({ userRole: propRole }) => {
         ],
 
         'EFD Engineer': [
-            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
+            { label: 'Home', path: '/efd-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/efd-monitoring', icon: TbClipboardList },
             { label: 'Mother MOA', path: '/efd-mother-moa', icon: TbFileCheck },
             // { label: 'Monitoring', path: '/efd-newcon-monitoring', icon: TbChartBar },
