@@ -699,33 +699,32 @@ const NewProjects = () => {
             const newProjectId = projectData.project.project_id;
             console.log("Project Created! ID:", newProjectId);
 
-            // Filter for non-null documents to send in bulk
-            const docsToUpload = {};
-            if (documents.POW) docsToUpload.POW = await convertFullFileToBase64(documents.POW);
-            if (documents.DUPA) docsToUpload.DUPA = await convertFullFileToBase64(documents.DUPA);
-            if (documents.CONTRACT) docsToUpload.CONTRACT = await convertFullFileToBase64(documents.CONTRACT);
+            // Filter for non-null documents to send in bulk via multipart/form-data
+            const formDataDocs = new FormData();
+            formDataDocs.append('projectId', newProjectId);
+            formDataDocs.append('uid', user.uid);
+            
+            let hasDocs = false;
+            if (documents.POW) { formDataDocs.append('POW', documents.POW); hasDocs = true; }
+            if (documents.DUPA) { formDataDocs.append('DUPA', documents.DUPA); hasDocs = true; }
+            if (documents.CONTRACT) { formDataDocs.append('CONTRACT', documents.CONTRACT); hasDocs = true; }
 
             const isEFDOrHRODI = (user?.role === 'EFD' || user?.role === 'HRODI Engineer' || user?.role === 'HRODI' || user?.account_category === 'HRODI Engineer' || user?.account_category === 'EFD');
-            if (documents.RTA && isEFDOrHRODI) docsToUpload.RTA = await convertFullFileToBase64(documents.RTA);
-            if (documents.MOA && isEFDOrHRODI) docsToUpload.MOA = await convertFullFileToBase64(documents.MOA);
+            if (documents.RTA && isEFDOrHRODI) { formDataDocs.append('RTA', documents.RTA); hasDocs = true; }
+            if (documents.MOA && isEFDOrHRODI) { formDataDocs.append('MOA', documents.MOA); hasDocs = true; }
 
-            if (Object.keys(docsToUpload).length > 0) {
-                console.log("Uploading documents in bulk...");
+            if (hasDocs) {
+                console.log("Uploading documents in bulk via Multer...");
                 try {
-                    const bulkEndpoint = (user?.role === 'Local Government Unit') ? '/api/lgu/upload-project-document' : '/api/bulk-upload-project-documents';
+                    const bulkEndpoint = (user?.role === 'Local Government Unit') ? '/api/lgu/bulk-upload-project-documents' : '/api/bulk-upload-project-documents';
                     
                     const bulkRes = await fetch(bulkEndpoint, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            projectId: newProjectId,
-                            documents: docsToUpload,
-                            uid: user.uid
-                        })
+                        body: formDataDocs
                     });
 
-                    if (!bulkRes.ok) throw new Error("Failed to upload documents in bulk");
-                    console.log("Bulk Documentation Uploaded successfully!");
+                    if (!bulkRes.ok) throw new Error("Failed to upload compressed documents in bulk");
+                    console.log("Bulk Documentation Compressed & Uploaded successfully!");
                 } catch (docErr) {
                     console.error("Bulk upload failed:", docErr);
                     alert("⚠️ Project metadata saved, but documents failed to upload. Please try updating them in the Edit modal.");
@@ -762,7 +761,7 @@ const NewProjects = () => {
         <PageTransition>
             <div className="min-h-screen bg-slate-50 font-sans pb-32">
 
-                <div className="bg-[#004A99] pt-8 pb-16 px-6 rounded-b-[2rem] shadow-xl relative">
+                <div className="bg-[#004A99] pt-8 pb-8 px-6 rounded-b-[2rem] shadow-xl relative">
                     <div className="flex items-center justify-between text-white mb-4">
                         <div className="flex items-center gap-3">
                             <button onClick={() => isDummy ? navigate('/dummy-forms', { state: { type: 'engineer' } }) : navigate(-1)} className="p-2">
@@ -797,18 +796,26 @@ const NewProjects = () => {
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="px-6 -mt-10">
+                {isSubmitting && (
+                    <div className="fixed inset-0 z-[999] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                        <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+                        <h2 className="text-2xl font-bold text-white mb-2">Saving Project...</h2>
+                        <p className="text-blue-200 text-sm max-w-[300px]">Securing project details and queueing documents for compression engine. Please don't close this page.</p>
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="px-6 relative z-10 pt-6">
                     {/* --- TAB NAVIGATION --- */}
-                    <div className="flex overflow-x-auto no-scrollbar gap-2 mb-8 pb-2 -mx-2 px-2">
+                    <div className="flex overflow-x-auto no-scrollbar gap-3 mb-8 pb-4 -mx-2 px-2">
                         {TABS.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`flex flex-col items-center justify-center min-w-[80px] sm:min-w-[100px] p-3 sm:p-4 rounded-2xl transition-all duration-300 ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-105' : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
+                                className={`group flex flex-col items-center justify-center min-w-[95px] sm:min-w-[125px] md:flex-1 p-3 sm:p-4 rounded-2xl transition-all duration-300 ${activeTab === tab.id ? 'bg-gradient-to-br from-blue-600 to-[#004A99] text-white shadow-xl shadow-blue-900/40 scale-105 -translate-y-1 border border-blue-400/30' : 'bg-white/95 backdrop-blur-md text-slate-500 hover:bg-white shadow-md shadow-slate-200/50 border border-slate-100 hover:-translate-y-1 hover:text-blue-600'}`}
                             >
-                                <span className="text-lg sm:text-xl mb-1">{tab.icon}</span>
-                                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider">{tab.label}</span>
+                                <span className={`text-xl sm:text-2xl mb-1 transition-transform duration-300 ${activeTab === tab.id ? 'scale-110 drop-shadow-md' : 'opacity-70 group-hover:opacity-100 group-hover:scale-110'}`}>{tab.icon}</span>
+                                <span className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${activeTab === tab.id ? 'font-black' : 'font-bold'}`}>{tab.label}</span>
                             </button>
                         ))}
                     </div>

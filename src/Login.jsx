@@ -13,6 +13,11 @@ import { getRoleGroup, ROLE_GROUPS } from './config/roleGroups';
 
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role, accountCategory) => {
+    // Explicit Overrides (Bypass Groups)
+    if (role === 'EFD' || role === 'EFD Engineer' || role === 'HRODI') return '/efd-dashboard';
+    if (role === 'DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') return '/engineer-dashboard';
+    if (role === 'Non-DepEd Engineer' || accountCategory === 'Non-DepEd Engineer') return '/non-deped-dashboard';
+
     // Determine Group
     const userGroup = getRoleGroup(role);
 
@@ -25,13 +30,6 @@ const getDashboardPath = (role, accountCategory) => {
     }
     if (userGroup === ROLE_GROUPS.TECHNICAL_FINANCE) {
         return '/project-summary-dashboard';
-    }
-
-    // Fallback/Special role overrides
-    if (role === 'DepEd Engineer' || role === 'Non-DepEd Engineer' || role === 'Engineer' || role === 'Division Engineer') {
-        return (accountCategory === 'Non-DepEd Engineer' || role === 'Non-DepEd Engineer')
-            ? '/non-deped-dashboard'
-            : '/project-summary-dashboard';
     }
 
     const roleMap = {

@@ -4510,7 +4510,7 @@ app.post('/api/upload-engineer-supplemental-moa', upload.single('moa_pdf'), asyn
     }
 
     // Check if mother MOA exists
-    const motherRes = await pool.query('SELECT lgu_name, lgu_type FROM engineer_mother_moa WHERE mother_moa_id = $1', [mother_moa_id]);
+    const motherRes = await pool.query('SELECT lgu_name, lgu_type, sangguniang_resolution_id FROM engineer_mother_moa WHERE mother_moa_id = $1', [mother_moa_id]);
     if (motherRes.rows.length === 0) {
       return res.status(404).json({ error: "Mother MOA not found" });
     }
@@ -4539,9 +4539,9 @@ app.post('/api/upload-engineer-supplemental-moa', upload.single('moa_pdf'), asyn
         if (parsedIpcIds && parsedIpcIds.length > 0) {
           await pool.query(`
             UPDATE engineer_form 
-            SET supplamental_moa_id = $1, mother_moa_id = $2 
-            WHERE ipc = ANY($3)
-          `, [sId, mother_moa_id, parsedIpcIds]);
+            SET supplamental_moa_id = $1, mother_moa_id = $2, sangguniang_resolution_id = $3
+            WHERE ipc = ANY($4)
+          `, [sId, mother_moa_id, motherMoa.sangguniang_resolution_id, parsedIpcIds]);
           console.log(`✅ Linked projects ${parsedIpcIds.join(', ')} to Supplemental MOA ${sId}`);
         }
       } catch (bkErr) {
@@ -9443,85 +9443,169 @@ app.post('/api/upload-project-document', async (req, res) => {
 });
 
 // --- NEW BLUK UPLOAD ENDPOINT TO PREVENT DUPLICATES ---
-app.post('/api/bulk-upload-project-documents', async (req, res) => {
-  const { projectId, documents, uid } = req.body; // documents = { POW: base64, DUPA: base64, etc. }
+const bulkUploadFields = upload.fields([
+  { name: 'POW', maxCount: 1 },
+  { name: 'DUPA', maxCount: 1 },
+  { name: 'CONTRACT', maxCount: 1 },
+  { name: 'RTA', maxCount: 1 },
+  { name: 'MOA', maxCount: 1 }
+]);
 
-  console.log(`📂 Incoming Bulk Doc Upload for Project [${projectId}]`);
+app.post('/api/bulk-upload-project-documents', bulkUploadFields, async (req, res) => {
+  const { projectId, uid } = req.body;
 
-  if (!projectId || !documents || Object.keys(documents).length === 0) {
-    return res.status(400).json({ error: "Missing required data" });
+  console.log(`📂 Incoming Bulk Doc Upload (Multer) for Project [${projectId}]`);
+
+  if (!projectId) {
+    return res.status(400).json({ error: "Missing required project ID" });
   }
 
-  let client;
-  try {
-    client = await pool.connect();
+  // 1. Instantly resolve the client request so the UI doesn't hang waiting for DPI compression
+  res.status(200).json({ success: true, projectId: projectId, message: "Documents queued for background DPI compression" });
 
-    // 1. Get Project Metadata (IPC)
-    const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
-    if (projectRes.rows.length === 0) {
-      return res.status(404).json({ error: "Project not found" });
-    }
-    const { ipc } = projectRes.rows[0];
+  // 2. Execute processPdfFile heavily in the background fire-and-forget thread
+  (async () => {
+    try {
+      console.log(`⚙️ Background thread started: PDF Compression for Project [${projectId}]`);
+      const documents = {};
+      if (req.files && req.files['POW'] && req.files['POW'].length > 0) documents.POW = await processPdfFile(req.files['POW'][0]);
+      if (req.files && req.files['DUPA'] && req.files['DUPA'].length > 0) documents.DUPA = await processPdfFile(req.files['DUPA'][0]);
+      if (req.files && req.files['CONTRACT'] && req.files['CONTRACT'].length > 0) documents.CONTRACT = await processPdfFile(req.files['CONTRACT'][0]);
+      if (req.files && req.files['RTA'] && req.files['RTA'].length > 0) documents.RTA = await processPdfFile(req.files['RTA'][0]);
+      if (req.files && req.files['MOA'] && req.files['MOA'].length > 0) documents.MOA = await processPdfFile(req.files['MOA'][0]);
 
-    // 2. Prepare UPSERT Query
-    const docEntries = Object.entries(documents);
-    const updateCols = [];
-    const values = [parseInt(projectId), ipc, uid];
-
-    docEntries.forEach(([type, base64], index) => {
-      let col = '';
-      if (type === 'POW') col = 'pow_pdf';
-      else if (type === 'DUPA') col = 'dupa_pdf';
-      else if (type === 'CONTRACT') col = 'contract_pdf';
-      else if (type === 'RTA') col = 'rta_pdf';
-      else if (type === 'MOA') col = 'moa_pdf';
-
-      if (col) {
-        updateCols.push({ name: col, index: values.length + 1 });
-        values.push(base64);
+      if (Object.keys(documents).length === 0) {
+        console.log(`ℹ️ No valid documents provided or processed for project [${projectId}]. Background task ending.`);
+        return;
       }
-    });
 
-    if (updateCols.length === 0) {
-      return res.status(400).json({ error: "No valid documents provided" });
-    }
-
-    const colList = updateCols.map(c => c.name).join(', ');
-    const placeholderList = updateCols.map(c => `$${c.index}`).join(', ');
-    const updateSet = updateCols.map(c => `${c.name} = EXCLUDED.${c.name}`).join(', ');
-
-    const bulkUpsertQuery = `
-      INSERT INTO engineer_documents (project_id, ipc, uploader_id, ${colList})
-      VALUES ($1, $2, $3, ${placeholderList})
-      ON CONFLICT (project_id) 
-      DO UPDATE SET 
-        ${updateSet},
-        uploader_id = EXCLUDED.uploader_id,
-        created_at = CURRENT_TIMESTAMP
-      RETURNING project_id;
-    `;
-
-    const result = await client.query(bulkUpsertQuery, values);
-
-    console.log(`✅ Bulk updated documents in engineer_documents for project_id ${projectId}`);
-
-    // --- DUAL WRITE ---
-    if (poolNew) {
+      let client;
       try {
-        await poolNew.query(bulkUpsertQuery, values);
-        console.log(`✅ Dual-Write: Bulk Doc UPSERT Synced!`);
-      } catch (dwErr) {
-        console.error("❌ Dual-Write Bulk Doc UPSERT Error:", dwErr.message);
-      }
-    }
+        client = await pool.connect();
 
-    res.json({ success: true, projectId: projectId });
-  } catch (err) {
-    console.error("❌ Bulk Doc Upload Error:", err.message);
-    res.status(500).json({ error: "Failed to save documents" });
-  } finally {
-    if (client) client.release();
-  }
+        const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+        if (projectRes.rows.length === 0) {
+          console.log(`❌ Background Task: Project ${projectId} not found in database.`);
+          return;
+        }
+        const { ipc } = projectRes.rows[0];
+
+        const docEntries = Object.entries(documents);
+        const updateCols = [];
+        const values = [parseInt(projectId), ipc, uid || null];
+
+        docEntries.forEach(([type, base64], index) => {
+          let col = '';
+          if (type === 'POW') col = 'pow_pdf';
+          else if (type === 'DUPA') col = 'dupa_pdf';
+          else if (type === 'CONTRACT') col = 'contract_pdf';
+          else if (type === 'RTA') col = 'rta_pdf';
+          else if (type === 'MOA') col = 'moa_pdf';
+
+          if (col) {
+            updateCols.push({ name: col, index: values.length + 1 });
+            values.push(base64);
+          }
+        });
+
+        if (updateCols.length === 0) return;
+
+        const colList = updateCols.map(c => c.name).join(', ');
+        const placeholderList = updateCols.map(c => `$${c.index}`).join(', ');
+        const updateSet = updateCols.map(c => `${c.name} = EXCLUDED.${c.name}`).join(', ');
+
+        const bulkUpsertQuery = `
+          INSERT INTO engineer_documents (project_id, ipc, uploader_id, ${colList})
+          VALUES ($1, $2, $3, ${placeholderList})
+          ON CONFLICT (project_id) 
+          DO UPDATE SET 
+            ${updateSet},
+            uploader_id = EXCLUDED.uploader_id,
+            created_at = CURRENT_TIMESTAMP
+          RETURNING project_id;
+        `;
+
+        await client.query(bulkUpsertQuery, values);
+        console.log(`✅ Background Task: Bulk updated compressed documents in engineer_documents for project_id ${projectId}`);
+
+        if (poolNew) {
+          try {
+            await poolNew.query(bulkUpsertQuery, values);
+            console.log(`✅ Background Task: Dual-Write UPSERT Synced!`);
+          } catch (dwErr) {
+            console.error("❌ Dual-Write Bulk Doc UPSERT Error:", dwErr.message);
+          }
+        }
+      } finally {
+        if (client) client.release();
+      }
+    } catch (err) {
+      console.error("❌ Background PDF Compression Error:", err.message);
+    }
+  })();
+});
+
+// --- LGU Bulk Document Upload Support ---
+app.post('/api/lgu/bulk-upload-project-documents', bulkUploadFields, async (req, res) => {
+  const { projectId, uid } = req.body;
+
+  if (!projectId) return res.status(400).json({ error: "Missing required project ID" });
+
+  res.status(200).json({ success: true, projectId: projectId, message: "LGU Documents queued for background DPI compression" });
+
+  (async () => {
+    try {
+      console.log(`⚙️ Background thread started: LGU PDF Compression for Project [${projectId}]`);
+      const documents = {};
+      if (req.files && req.files['POW'] && req.files['POW'].length > 0) documents.POW = await processPdfFile(req.files['POW'][0]);
+      if (req.files && req.files['DUPA'] && req.files['DUPA'].length > 0) documents.DUPA = await processPdfFile(req.files['DUPA'][0]);
+      if (req.files && req.files['CONTRACT'] && req.files['CONTRACT'].length > 0) documents.CONTRACT = await processPdfFile(req.files['CONTRACT'][0]);
+      if (req.files && req.files['RTA'] && req.files['RTA'].length > 0) documents.RTA = await processPdfFile(req.files['RTA'][0]);
+      if (req.files && req.files['MOA'] && req.files['MOA'].length > 0) documents.MOA = await processPdfFile(req.files['MOA'][0]);
+
+      if (Object.keys(documents).length === 0) return;
+
+      const docEntries = Object.entries(documents);
+      const updateCols = [];
+      const values = [];
+
+      docEntries.forEach(([type, base64]) => {
+        let col = '';
+        if (type === 'POW') col = 'pow_pdf';
+        else if (type === 'DUPA') col = 'dupa_pdf';
+        else if (type === 'CONTRACT') col = 'contract_pdf';
+        else if (type === 'RTA') col = 'rta_pdf';
+        else if (type === 'MOA') col = 'moa_pdf';
+
+        if (col) {
+          values.push(base64);
+          updateCols.push(`${col} = $${values.length}`);
+        }
+      });
+
+      if (updateCols.length > 0) {
+        values.push(parseInt(projectId));
+        const query = `UPDATE lgu_forms SET ${updateCols.join(', ')} WHERE project_id = $${values.length}`;
+        await pool.query(query, values);
+        
+        if (poolNew) {
+          try {
+            const ipcRes = await pool.query('SELECT ipc FROM lgu_forms WHERE project_id = $1', [parseInt(projectId)]);
+            if (ipcRes.rows.length > 0) {
+              const ipc = ipcRes.rows[0].ipc;
+              values[values.length - 1] = ipc;
+              await poolNew.query(`UPDATE lgu_forms SET ${updateCols.join(', ')} WHERE ipc = $${values.length}`, values);
+              console.log("✅ Background Task: Dual-Write LGU Bulk Upload Synced via IPC!");
+            }
+          } catch (dwErr) {
+            console.error("❌ Dual-Write LGU Bulk Upload Error:", dwErr.message);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("❌ LGU Background PDF Compression Error:", err.message);
+    }
+  })();
 });
 
 
