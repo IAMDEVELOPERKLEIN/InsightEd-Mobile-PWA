@@ -95,8 +95,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     const [buildingFormData, setBuildingFormData] = useState({
         building_name: "",
         category: "Academic Building",
-        storey: 1,
-        classroom: 1,
+        storey: "",
+        classroom: "",
         year_completed: currentYear,
         remarks: "",
         status: "Good Condition",
@@ -126,7 +126,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
 
     // Integrated Rooms State
-    const [roomsData, setRoomsData] = useState([]); 
+    const [roomsData, setRoomsData] = useState([]);
     const [roomsPage, setRoomsPage] = useState(1);
     const roomsPerPage = 10;
 
@@ -199,7 +199,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     id: r.id, building_local_id: b.id, room_name: r.room_name,
                                     grade_level: r.grade_level, advisory_teacher: r.advisory_teacher,
                                     room_length: r.room_length, room_width: r.room_width,
-                                    dimension: r.dimension || '', condition: r.condition || 'Good Condition'
+                                    dimension: r.dimension || '', condition: r.condition || 'Good Condition',
+                                    seats: r.seats || ''
                                 });
                             });
                         }
@@ -323,7 +324,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             const stored = localStorage.getItem('quest_progress');
             let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
             if (!progress.completedUnits.includes(8)) {
-                progress.completedUnits.push(8); 
+                progress.completedUnits.push(8);
                 // The dashboard mapped Unit 10 ID to locked array of 9. Let's just update as needed.
                 if (!progress.completedUnits.includes(10)) progress.completedUnits.push(10);
                 progress.xp += 300;
@@ -379,26 +380,30 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             id: bId
         };
 
+        const numStoreys = parseInt(buildingFormData.storey) || 1;
+        const numClassrooms = parseInt(buildingFormData.classroom) || 1;
+
         // Automatic Room Generation
         const generatedRooms = [];
-        const roomsPerFloor = Math.ceil(buildingFormData.classroom / buildingFormData.storey);
+        const roomsPerFloor = Math.ceil(numClassrooms / numStoreys);
         let roomCount = 0;
 
-        for (let floor = 1; floor <= buildingFormData.storey; floor++) {
-            for (let r = 0; r < roomsPerFloor && roomCount < buildingFormData.classroom; r++) {
+        for (let floor = 1; floor <= numStoreys; floor++) {
+            for (let r = 0; r < roomsPerFloor && roomCount < numClassrooms; r++) {
                 roomCount++;
                 const roomLetter = String.fromCharCode(65 + r); // A, B, C...
                 const roomName = `${buildingFormData.building_name} ${floor}-${roomLetter}`;
-                
+
                 generatedRooms.push({
                     id: `${bId}-room-${roomCount}`,
                     building_local_id: bId,
                     building_name: buildingFormData.building_name,
                     room_name: roomName,
-                    dimensions: "7x9", 
+                    dimensions: "7x9",
                     grade_level: "",
                     teacher_id: "",
-                    condition: "Good Condition", 
+                    condition: "Good Condition",
+                    seats: "",
                 });
             }
         }
@@ -418,7 +423,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         setShowBuildingModal(false);
         setEditingBuildingId(null);
         setBuildingFormData({
-            building_name: "", category: "Academic Building", storey: 1, classroom: 1,
+            building_name: "", category: "Academic Building", storey: "", classroom: "",
             year_completed: currentYear, remarks: "", status: "Good Condition",
             condemn_age: false, condemn_hazard: false, condemn_calamity: false, condemn_upgrade: false
         });
@@ -694,7 +699,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     })
                 }).catch(err => console.error("Failed to sync progress to backend", err));
             }
-            
+
             setShowSuccess(true);
             await clearUnitDraft(8, schoolId);
             // Redirection happens via SuccessModal onClose or we can delay it
@@ -752,9 +757,9 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 <div className="max-w-md mx-auto mt-4 px-4 space-y-10">
                     {/* Header */}
                     <div className="text-center mb-10">
-                        <motion.div 
-                            initial={{ scale: 0 }} 
-                            animate={{ scale: 1 }} 
+                        <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
                             className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-[2.5rem] mx-auto mb-6 flex items-center justify-center shadow-xl shadow-indigo-100"
                         >
                             <span className="text-4xl text-white">🏢</span>
@@ -769,20 +774,20 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     {/* High Level Metrics */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden group">
-                             <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">🏗️</div>
-                             <p className="text-indigo-300 text-[8px] font-black uppercase tracking-widest mb-1">Structures</p>
-                             <div className="flex items-baseline gap-1">
-                                 <span className="text-3xl font-black">{buildings.length}</span>
-                                 <span className="text-[10px] font-bold text-indigo-400">BLDGS</span>
-                             </div>
+                            <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">🏗️</div>
+                            <p className="text-indigo-300 text-[8px] font-black uppercase tracking-widest mb-1">Structures</p>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-3xl font-black">{buildings.length}</span>
+                                <span className="text-[10px] font-bold text-indigo-400">BLDGS</span>
+                            </div>
                         </div>
                         <div className="bg-indigo-600 rounded-[2.5rem] p-6 text-white shadow-xl relative overflow-hidden group">
-                             <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">🏫</div>
-                             <p className="text-indigo-100 text-[8px] font-black uppercase tracking-widest mb-1">Total Rooms</p>
-                             <div className="flex items-baseline gap-1">
-                                 <span className="text-3xl font-black">{totalClassrooms}</span>
-                                 <span className="text-[10px] font-bold text-indigo-200">UNITS</span>
-                             </div>
+                            <div className="absolute -right-4 -bottom-4 text-6xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">🏫</div>
+                            <p className="text-indigo-100 text-[8px] font-black uppercase tracking-widest mb-1">Total Rooms</p>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-3xl font-black">{totalClassrooms}</span>
+                                <span className="text-[10px] font-bold text-indigo-200">UNITS</span>
+                            </div>
                         </div>
                     </div>
 
@@ -793,7 +798,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Buildable Footprint</h3>
                         </div>
                         <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden p-2">
-                             <div className="h-[220px] rounded-[2rem] overflow-hidden bg-slate-50 relative">
+                            <div className="h-[220px] rounded-[2rem] overflow-hidden bg-slate-50 relative">
                                 {centerMap ? (
                                     <MapContainer center={centerMap} zoom={18} scrollWheelZoom={false} dragging={false} doubleClickZoom={false} zoomControl={false} className="h-full w-full">
                                         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -808,8 +813,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold italic">Map Preview Unavailable</div>
                                 )}
-                             </div>
-                             <div className="p-4 space-y-3">
+                            </div>
+                            <div className="p-4 space-y-3">
                                 {spaces.map(s => (
                                     <div key={s.id} className="flex items-center justify-between px-2">
                                         <div>
@@ -822,7 +827,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     </div>
                                 ))}
                                 {spaces.length === 0 && <p className="text-center text-slate-400 text-[10px] font-bold italic py-2">No spaces recorded.</p>}
-                             </div>
+                            </div>
                         </div>
                     </section>
 
@@ -840,11 +845,10 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             <h4 className="font-black text-slate-800 text-lg tracking-tight uppercase">{b.building_name}</h4>
                                             <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.15em]">{b.category}</p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                            b.status === 'Newly Built' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
-                                            b.status === 'Good Condition' ? 'bg-blue-50 border-blue-100 text-blue-600' : 
-                                            'bg-rose-50 border-rose-100 text-rose-600'
-                                        }`}>
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${b.status === 'Newly Built' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
+                                            b.status === 'Good Condition' ? 'bg-blue-50 border-blue-100 text-blue-600' :
+                                                'bg-rose-50 border-rose-100 text-rose-600'
+                                            }`}>
                                             {b.status}
                                         </span>
                                     </div>
@@ -899,9 +903,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                     <span className="font-bold text-slate-600 text-[11px] whitespace-nowrap">{room.grade_level || '--'}</span>
                                                 </td>
                                                 <td className="px-4 py-4 text-center">
-                                                    <div className={`inline-flex items-center justify-center w-6 h-6 rounded-lg ${
-                                                        room.condition === 'Good Condition' || room.condition === 'Newly Built' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                                                    }`}>
+                                                    <div className={`inline-flex items-center justify-center w-6 h-6 rounded-lg ${room.condition === 'Good Condition' || room.condition === 'Newly Built' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                                                        }`}>
                                                         {room.condition === 'Good Condition' || room.condition === 'Newly Built' ? <FiCheck className="w-3.5 h-3.5" /> : <FiAlertTriangle className="w-3.5 h-3.5" />}
                                                     </div>
                                                 </td>
@@ -911,7 +914,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 </table>
                             </div>
                             {roomsData.length > 10 && (
-                                <button 
+                                <button
                                     onClick={() => setShowAllRooms(!showAllRooms)}
                                     className="w-full p-4 text-[10px] font-black text-indigo-500 hover:text-indigo-700 bg-slate-50/30 border-t border-slate-50 transition-colors uppercase tracking-widest"
                                 >
@@ -930,29 +933,29 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         <div className="space-y-4">
                             {groupedRepairsArray.map(r => (
                                 <div key={r.roomId} className="bg-white rounded-[2rem] p-6 border border-rose-100 shadow-sm relative overflow-hidden group">
-                                     <div className="absolute top-0 right-0 p-4 text-4xl opacity-5 group-hover:scale-110 transition-transform">🛠️</div>
-                                     <div className="mb-4">
-                                         <h4 className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{r.room_name}</h4>
-                                         <p className="text-[9px] font-black text-rose-500 uppercase tracking-[0.15em]">{r.building_name} · DIM: {r.room_length}x{r.room_width}</p>
-                                     </div>
-                                     <div className="space-y-3">
-                                         {r.items.map((itm, iidx) => (
-                                             <div key={iidx} className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center group/item hover:bg-slate-100 transition-colors">
-                                                 <div className="flex-1">
-                                                     <div className="flex justify-between items-center mb-1">
+                                    <div className="absolute top-0 right-0 p-4 text-4xl opacity-5 group-hover:scale-110 transition-transform">🛠️</div>
+                                    <div className="mb-4">
+                                        <h4 className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{r.room_name}</h4>
+                                        <p className="text-[9px] font-black text-rose-500 uppercase tracking-[0.15em]">{r.building_name} · DIM: {r.room_length}x{r.room_width}</p>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {r.items.map((itm, iidx) => (
+                                            <div key={iidx} className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center group/item hover:bg-slate-100 transition-colors">
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between items-center mb-1">
                                                         <span className="text-[10px] font-black text-slate-700 uppercase">{itm.item}</span>
                                                         <span className="text-[10px] font-black text-rose-600">{itm.damage_ratio}% SCALE</span>
-                                                     </div>
-                                                     <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
+                                                    </div>
+                                                    <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden">
                                                         <div className="h-full bg-rose-500 transition-all duration-1000" style={{ width: `${itm.damage_ratio}%` }} />
-                                                     </div>
-                                                     <p className="text-[9px] font-medium text-slate-400 mt-2 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
+                                                    </div>
+                                                    <p className="text-[9px] font-medium text-slate-400 mt-2 uppercase tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
                                                         {itm.recommend_action} · {itm.oms || 'Standard Material'}
-                                                     </p>
-                                                 </div>
-                                             </div>
-                                         ))}
-                                     </div>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             ))}
                             {groupedRepairsArray.length === 0 && (
@@ -1064,22 +1067,22 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             );
                                         })}
 
-                                         {/* Render new drawing space */}
-                                         {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
-                                             const b = calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0);
-                                             if (!b) return null;
-                                             return (
-                                                 <>
-                                                     <Rectangle 
-                                                         bounds={b} 
-                                                         pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }} 
-                                                     />
-                                                     <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
-                                                         <Popup>Target Location</Popup>
-                                                     </Marker>
-                                                 </>
-                                             );
-                                         })()}
+                                        {/* Render new drawing space */}
+                                        {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
+                                            const b = calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0);
+                                            if (!b) return null;
+                                            return (
+                                                <>
+                                                    <Rectangle
+                                                        bounds={b}
+                                                        pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }}
+                                                    />
+                                                    <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
+                                                        <Popup>Target Location</Popup>
+                                                    </Marker>
+                                                </>
+                                            );
+                                        })()}
                                     </MapContainer>
                                 )}
                             </div>
@@ -1238,12 +1241,12 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     <div className="space-y-5">
                                         <div>
                                             <label className="text-sm font-bold text-gray-500 ml-2">Building Name</label>
-                                            <input 
-                                                type="text" 
-                                                value={buildingFormData.building_name} 
+                                            <input
+                                                type="text"
+                                                value={buildingFormData.building_name}
                                                 onChange={(e) => setBuildingFormData({ ...buildingFormData, building_name: e.target.value })}
-                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all placeholder-gray-300" 
-                                                placeholder="e.g. Marcos Type Bldg" 
+                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all placeholder-gray-300"
+                                                placeholder="e.g. Marcos Type Bldg"
                                             />
                                         </div>
 
@@ -1322,36 +1325,38 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         <div className="flex gap-4">
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Storeys</label>
-                                                <input 
-                                                    type="text" 
+                                                <input
+                                                    type="text"
                                                     inputMode="numeric"
-                                                    value={buildingFormData.storey} 
+                                                    value={buildingFormData.storey}
+                                                    placeholder="1"
                                                     onChange={(e) => {
-                                                        const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
-                                                        setBuildingFormData({ ...buildingFormData, storey: (val === '' || val === '0') ? 1 : parseInt(val) });
+                                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                                        setBuildingFormData({ ...buildingFormData, storey: val });
                                                     }}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" 
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
                                                 />
                                             </div>
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2">Classrooms</label>
-                                                <input 
-                                                    type="text" 
+                                                <input
+                                                    type="text"
                                                     inputMode="numeric"
-                                                    value={buildingFormData.classroom} 
+                                                    value={buildingFormData.classroom}
+                                                    placeholder="1"
                                                     onChange={(e) => {
-                                                        const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '');
-                                                        setBuildingFormData({ ...buildingFormData, classroom: (val === '' || val === '0') ? 1 : parseInt(val) });
+                                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                                        setBuildingFormData({ ...buildingFormData, classroom: val });
                                                     }}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center" 
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all text-center"
                                                 />
                                             </div>
                                         </div>
 
                                         <div>
                                             <label className="text-sm font-bold text-gray-500 ml-2">Year Completed</label>
-                                            <select 
-                                                value={buildingFormData.year_completed} 
+                                            <select
+                                                value={buildingFormData.year_completed}
                                                 onChange={(e) => setBuildingFormData({ ...buildingFormData, year_completed: parseInt(e.target.value) })}
                                                 className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all appearance-none cursor-pointer"
                                             >
@@ -1362,8 +1367,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         <div className="flex gap-4">
                                             <div className="flex-1">
                                                 <label className="text-sm font-bold text-gray-500 ml-2 mb-1 block">Building Status</label>
-                                                <select 
-                                                    value={buildingFormData.status} 
+                                                <select
+                                                    value={buildingFormData.status}
                                                     onChange={(e) => setBuildingFormData({ ...buildingFormData, status: e.target.value })}
                                                     className="w-full bg-gray-50 border-2 border-gray-200 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all cursor-pointer"
                                                 >
@@ -1406,15 +1411,15 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                         <div>
                                             <label className="text-sm font-bold text-gray-500 ml-2">Remarks</label>
-                                            <textarea 
-                                                value={buildingFormData.remarks} 
+                                            <textarea
+                                                value={buildingFormData.remarks}
                                                 onChange={(e) => setBuildingFormData({ ...buildingFormData, remarks: e.target.value })}
-                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]" 
+                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all min-h-[100px]"
                                                 placeholder="Optional notes..."
                                             ></textarea>
                                         </div>
 
-                                        <button 
+                                        <button
                                             onClick={handleSaveBuilding}
                                             className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50"
                                         >
@@ -1451,9 +1456,9 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
                                         <div className="flex justify-between items-start mb-4">
                                             <div className="flex-1 mr-4">
-                                                <input 
-                                                    type="text" 
-                                                    value={room.room_name} 
+                                                <input
+                                                    type="text"
+                                                    value={room.room_name}
                                                     onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
                                                     className="font-black text-xl text-gray-800 bg-transparent border-b-2 border-dashed border-gray-200 focus:border-indigo-500 outline-none w-full"
                                                 />
@@ -1467,8 +1472,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Dimensions</label>
-                                                <select 
-                                                    value={room.dimensions} 
+                                                <select
+                                                    value={room.dimensions}
                                                     onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, dimensions: e.target.value } : r))}
                                                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
                                                 >
@@ -1480,8 +1485,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                             <div>
                                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
-                                                <select 
-                                                    value={room.condition} 
+                                                <select
+                                                    value={room.condition}
                                                     onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
                                                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
                                                 >
@@ -1493,26 +1498,41 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                             <div>
                                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level</label>
-                                                <select 
-                                                    value={room.grade_level} 
+                                                <select
+                                                    value={room.grade_level}
                                                     onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: e.target.value } : r))}
                                                     className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
                                                 >
                                                     <option value="">Select Grade Level</option>
                                                     <option value="Kinder">Kinder</option>
-                                                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(g => <option key={g} value={`Grade ${g}`}>Grade {g}</option>)}
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(g => <option key={g} value={`Grade ${g}`}>Grade {g}</option>)}
                                                     <option value="Non-Instructional">Non-Instructional</option>
                                                 </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats</label>
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    value={room.seats || ""}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats: val } : r));
+                                                    }}
+                                                    placeholder="0"
+                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                />
                                             </div>
                                         </div>
                                     </div>
                                 );
                             })}
-                            
+
                             {/* Pagination Controls */}
                             {roomsData.length > roomsPerPage && (
                                 <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
-                                    <button 
+                                    <button
                                         onClick={() => setRoomsPage(prev => Math.max(prev - 1, 1))}
                                         disabled={roomsPage === 1}
                                         className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-600 disabled:opacity-50"
@@ -1522,7 +1542,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     <span className="font-black text-gray-400 uppercase text-xs tracking-widest">
                                         Page {roomsPage} of {Math.ceil(roomsData.length / roomsPerPage)}
                                     </span>
-                                    <button 
+                                    <button
                                         onClick={() => setRoomsPage(prev => Math.min(prev + 1, Math.ceil(roomsData.length / roomsPerPage)))}
                                         disabled={roomsPage === Math.ceil(roomsData.length / roomsPerPage)}
                                         className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-indigo-600 disabled:opacity-50"
@@ -1556,7 +1576,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     {roomsData.filter(r => r.condition === 'Repair').map(room => {
                                         const building = allBuildings.find(b => b.id === room.building_local_id);
                                         const isAssessed = repairAssessments.some(a => a.building_name === building?.building_name && a.room_name === room.room_name);
-                                        
+
                                         return (
                                             <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
                                                 <div className="flex justify-between items-center">
@@ -1565,7 +1585,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{building?.building_name || 'N/A'}</p>
                                                         {isAssessed && <p className="text-xs font-black text-emerald-500 mt-2 uppercase flex items-center gap-1"><FiCheckCircle /> Assessment Recorded</p>}
                                                     </div>
-                                                    <button 
+                                                    <button
                                                         onClick={() => {
                                                             setRepairRoomFormData({
                                                                 building_name: building?.building_name || "",
@@ -1575,11 +1595,11 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                             });
 
                                                             // Populate previous assessments
-                                                            const existingItems = repairAssessments.filter(a => 
-                                                                a.building_name === building?.building_name && 
+                                                            const existingItems = repairAssessments.filter(a =>
+                                                                a.building_name === building?.building_name &&
                                                                 a.room_name === room.room_name
                                                             );
-                                                            
+
                                                             const initialState = {};
                                                             existingItems.forEach(item => {
                                                                 initialState[item.item] = {
@@ -1680,73 +1700,60 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                                     className="w-full bg-white border-2 border-gray-100 mt-0.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 outline-none focus:border-amber-400" placeholder="Additional notes..." />
                                                             </div>
                                                         </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
 
-                                        <button onClick={handleSaveRepairRoom}
-                                            className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-amber-500 border-b-[6px] border-amber-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-amber-200/50">
-                                            Save Room Assessment ✓
+                                    <button onClick={handleSaveRepairRoom}
+                                        className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-amber-500 border-b-[6px] border-amber-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-amber-200/50">
+                                        Save Room Assessment ✓
                                     </button>
                                 </motion.div>
                             )}
-                            </div>
-
-                        {/* FINAL SUBMIT BUTTON on Page 4 */}
-                        <div className="mt-12 p-8 bg-indigo-600 rounded-[2.5rem] shadow-2xl shadow-indigo-200 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-6 opacity-10">
-                                <FiCheckCircle className="w-32 h-32 text-white" />
-                            </div>
-                            <h3 className="text-white font-black text-3xl mb-2 relative z-10">Finalize Audit ✨</h3>
-                            <p className="text-indigo-100 font-medium mb-8 relative z-10">Ready to save all your Physical Facilities data for this school?</p>
-
-                            <button onClick={handleMasterSubmit} disabled={loading}
-                                className="w-full py-5 rounded-2xl bg-white text-indigo-600 font-black text-2xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
-                                {loading ? "Processing..." : "Submit Unit Audit"}
-                                <FiArrowRight className="w-6 h-6" />
-                            </button>
                         </div>
+
+
                     </motion.div>
                 )}
 
-                </main>
+            </main>
 
-                {/* Wizard Navigation Buttons */}
-                <footer className="fixed bottom-[85px] left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
-                    <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
-                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none shrink-0">
-                             <FiSave className="w-6 h-6" />
+            {/* Wizard Navigation Buttons */}
+            <footer className="fixed bottom-[85px] left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-30 pointer-events-none">
+                <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
+                    <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none shrink-0">
+                        <FiSave className="w-6 h-6" />
+                    </button>
+
+                    {currentPage === 4 ? (
+                        <button onClick={handleMasterSubmit} disabled={loading}
+                            className="flex-1 py-5 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
+                            {loading ? "Processing..." : "Submit Unit Audit"}
+                            <FiArrowRight className="w-6 h-6" />
                         </button>
-                        
-                        {currentPage === 4 ? (
-                            <button onClick={handleMasterSubmit} disabled={loading}
-                                className="flex-1 py-5 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
-                                {loading ? "Processing..." : "Submit Unit Audit"}
-                                <FiArrowRight className="w-6 h-6" />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => {
-                                    // Validation for Phase 2 Step 3: Granular Room Setup
-                                    if (currentPage === 3) {
-                                        const missingGradeLevel = roomsData.some(r => !r.grade_level);
-                                        if (missingGradeLevel) {
-                                            alert("Please select a Granular Grade Level for all classrooms before proceeding.");
-                                            return;
-                                        }
+                    ) : (
+                        <button
+                            onClick={() => {
+                                // Validation for Phase 2 Step 3: Granular Room Setup
+                                if (currentPage === 3) {
+                                    const missingGradeLevel = roomsData.some(r => !r.grade_level);
+                                    if (missingGradeLevel) {
+                                        alert("Please select a Granular Grade Level for all classrooms before proceeding.");
+                                        return;
                                     }
-                                    setCurrentPage(prev => prev + 1);
-                                    handlePartialSync();
-                                }}
-                                className="flex-1 py-5 rounded-3xl bg-indigo-500 text-white font-black text-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
-                            >
-                                Next Step <FiArrowRight className="w-6 h-6" />
-                            </button>
-                        )}
-                    </div>
-                </footer>
+                                }
+                                setCurrentPage(prev => prev + 1);
+                                handlePartialSync();
+                            }}
+                            className="flex-1 py-5 rounded-3xl bg-indigo-500 text-white font-black text-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 hover:bg-indigo-600 transition-all border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px]"
+                        >
+                            Next Step <FiArrowRight className="w-6 h-6" />
+                        </button>
+                    )}
+                </div>
+            </footer>
 
             <SuccessModal
                 isOpen={showSuccess}
@@ -1769,7 +1776,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             </div>
                             <h2 className="text-2xl font-black text-gray-900 text-center leading-tight">Save Progress?</h2>
                             <p className="text-gray-500 text-center font-medium mt-3 px-4">Would you like to save your progress and go back to the modules overview?</p>
-                            
+
                             <div className="grid grid-cols-2 gap-4 mt-10">
                                 <button onClick={() => setShowDraftModal(false)}
                                     className="py-5 rounded-[2rem] bg-gray-100 text-gray-900 font-black text-lg active:scale-95 transition-all outline-none">
