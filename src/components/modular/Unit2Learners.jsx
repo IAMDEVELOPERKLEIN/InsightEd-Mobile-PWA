@@ -360,7 +360,11 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         // Step 1: Kindergarten
         if (currentStep === 1) {
             if (hasElementary) {
-                setCurrentStep(2);
+                if (orgType === 'pure_mg' || orgType === 'mixed') {
+                    setCurrentStep(3); // Jump straight to multigrade editor if already choosing it
+                } else {
+                    setCurrentStep(2);
+                }
             } else {
                 setOrgType('nano');
                 setCurrentStep(4);
@@ -839,7 +843,12 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     <div className="fixed bottom-0 left-0 w-full p-6 pb-20 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-[60]">
                         <div className="w-full max-w-sm flex gap-3">
                             <button
-                                onClick={() => setIsReadOnly(false)}
+                                onClick={() => {
+                                    setIsReadOnly(false);
+                                    if (orgType === 'pure_mg' || orgType === 'mixed') {
+                                        setCurrentStep(3);
+                                    }
+                                }}
                                 className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
                             >
                                 <FiUnlock className="w-6 h-6" />
@@ -870,10 +879,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             if (!hasValidCombos) return false;
 
             if (orgType === 'pure_mg') {
-                // Ensure all offered elementary grades are included in some combination
+                // Ensure all offered elementary grades that are NOT disabled are included in some combination
                 const assignedGrades = new Set(mgCombinations.flatMap(c => c.grades));
                 const offeredElemGrades = availableGrades
-                    .filter(g => g.type === 'elem' && g.id !== 'kinder')
+                    .filter(g => g.type === 'elem' && g.id !== 'kinder' && gradeAvailability[g.id] !== false)
                     .map(g => g.id);
                 return offeredElemGrades.every(g => assignedGrades.has(g));
             }
@@ -1157,7 +1166,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-xl">📋</div>
                                             <div>
                                                 <h4 className="text-sm font-black text-slate-700 leading-none">Grade Assignment Tracker</h4>
-                                                <p className="text-[10px] font-medium text-slate-500 mt-1 uppercase tracking-widest italic">Ensure all offered elementary grades are combined</p>
+                                                <p className="text-[10px] font-medium text-slate-500 mt-1 uppercase tracking-widest italic">
+                                                    Ensure all offered elementary grades are combined.
+                                                    <span className="text-rose-600 block sm:inline sm:ml-2 font-black NOT-italic underline decoration-rose-200 decoration-4">Click DISABLE if a grade level is not offered.</span>
+                                                </p>
                                             </div>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
@@ -1165,23 +1177,50 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 .filter(g => g.type === 'elem' && g.id !== 'kinder')
                                                 .map(g => {
                                                     const isAssigned = mgCombinations.some(c => c.grades.includes(g.id));
+                                                    const isAvailable = gradeAvailability[g.id] !== false;
+                                                    
                                                     return (
                                                         <div 
                                                             key={`tracker-${g.id}`} 
-                                                            className={`px-4 py-2 rounded-xl text-[11px] font-black border-2 transition-all flex items-center gap-2 ${isAssigned ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-white border-rose-100 text-rose-400'}`}
+                                                            className={`px-4 py-2 rounded-xl text-[11px] font-black border-2 transition-all flex items-center gap-2 
+                                                                ${isAssigned ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
+                                                                  !isAvailable ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 font-medium' : 
+                                                                  'bg-white border-rose-100 text-rose-400'}
+                                                            `}
                                                         >
-                                                            {isAssigned ? '✅' : '⏳'} {g.label}
-                                                            {!isAssigned && <span className="ml-1 px-2 py-0.5 bg-rose-50 text-[9px] rounded-lg">Required</span>}
+                                                            <div className="flex items-center gap-2">
+                                                                <span>{isAssigned ? '✅' : !isAvailable ? '🚫' : '⏳'}</span>
+                                                                <span>{g.label}</span>
+                                                                
+                                                                {!isAssigned && (
+                                                                    <button 
+                                                                        onClick={() => toggleAvailability(g.id)}
+                                                                        className={`ml-1 px-2 py-1 rounded-lg transition-all flex items-center justify-center text-[8px] font-black
+                                                                            ${isAvailable ? 'bg-rose-50 text-rose-400 hover:bg-rose-500 hover:text-white' : 'bg-indigo-50 text-indigo-500 hover:bg-indigo-500 hover:text-white'}
+                                                                        `}
+                                                                        title={isAvailable ? "Mark as Not Offered" : "Mark as Offered"}
+                                                                    >
+                                                                        {isAvailable ? "DISABLE" : "RESTORE"}
+                                                                    </button>
+                                                                )}
+                                                                
+                                                                {!isAssigned && isAvailable && (
+                                                                    <span className="ml-1 px-2 py-0.5 bg-rose-50 text-[9px] rounded-lg border border-rose-100 animate-pulse">Required</span>
+                                                                )}
+                                                                {!isAssigned && !isAvailable && (
+                                                                    <span className="ml-1 px-2 py-0.5 bg-slate-200 text-[9px] rounded-lg text-slate-500 italic">Excluded</span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     )
                                                 })
                                             }
                                         </div>
-                                        {availableGrades.filter(g => g.type === 'elem' && g.id !== 'kinder').some(g => !mgCombinations.some(c => c.grades.includes(g.id))) && (
+                                        {availableGrades.filter(g => g.type === 'elem' && g.id !== 'kinder' && gradeAvailability[g.id] !== false).some(g => !mgCombinations.some(c => c.grades.includes(g.id))) && (
                                             <div className="mt-6 p-4 bg-amber-50 rounded-2xl border-2 border-amber-100 flex items-start gap-3">
                                                 <FiAlertTriangle className="text-amber-500 w-5 h-5 mt-0.5 shrink-0" />
                                                 <p className="text-xs font-bold text-amber-800 leading-relaxed">
-                                                    Because you selected <span className="underline decoration-2 text-amber-900">Purely Multi-Grade</span>, you must assign all offered elementary grades to a combination before you can continue.
+                                                    Because you selected <span className="underline decoration-2 text-amber-900">Purely Multi-Grade</span>, you must assign all offered elementary grades to a combination (or mark them as not offered) before you can continue.
                                                 </p>
                                             </div>
                                         )}

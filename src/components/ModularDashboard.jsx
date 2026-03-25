@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnitDraft } from "../db";
-import BarongMascot from "./BarongMascot";
+
 import BottomNav from "../modules/BottomNav";
 import { DASHBOARD_METADATA } from "../config/dashboardMetadata";
 import { useAuth } from "../context/AuthContext";
@@ -211,23 +211,7 @@ const ModularDashboard = () => {
         navigate(targetPath);
     };
 
-    const getMascotMessage = () => {
-        const completed = questProgress.completedUnits.length;
-        const total = modules.length;
-        const isHighSchool = (curricularOffering || "").toLowerCase().includes('high');
 
-        if (completed === 0) return "Start with your School Profile! 🏢";
-        if (completed === 1) return `Great job! Let's map out ${isHighSchool ? 'High School ' : ''}Enrollment next!`;
-        if (completed === 2) return "Excellent progress! Log your organized classes! 📈";
-        if (completed === 3) return "Halfway there! Complete the learner profile. 📚";
-        if (completed === 4) return "Almost done! Let's configure shifting modalities! ⏱️";
-        if (completed === 5) return "Keep it going! Update your Teaching Personnel. 👨‍🏫";
-        if (completed === 6) return "Great! Tell us about teacher specializations. 🎓";
-        if (completed === 7) return "You're doing amazing! Check your School Resources. 📦";
-        if (completed === 8) return "Phenomenal! You've conquered all core modules! 🏆";
-        if (completed === total) return "Phenomenal! You've conquered all modules! 🏆";
-        return "Keep up the great work! ✨";
-    };
 
     const userRank = getRank(questProgress.xp);
 
@@ -349,34 +333,7 @@ const ModularDashboard = () => {
                 </div>
             </div>
 
-            <motion.div
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, type: "spring", bounce: 0.4 }}
-                className="fixed bottom-6 left-6 flex items-end drop-shadow-xl z-50 pointer-events-none"
-            >
-                <AnimatePresence>
-                    {!isLoading && (
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.8, x: -20 }}
-                            animate={{ opacity: 1, scale: 1, x: 0 }}
-                            className="relative bg-white rounded-3xl rounded-bl-xl border-2 border-slate-100 px-5 py-4 shadow-2xl max-w-[220px] mr-4 z-10 pointer-events-auto"
-                        >
-                            <p className="text-xs text-slate-700 leading-relaxed font-bold">
-                                {getMascotMessage()}
-                            </p>
-                            <div className="absolute -bottom-2 left-6 w-4 h-4 bg-white border-b-2 border-l-2 border-slate-100 -rotate-45" />
-                        </motion.div>
-                    )}
-                </AnimatePresence>
 
-                <motion.div 
-                    whileHover={{ scale: 1.05, rotate: [-2, 2, 0] }}
-                    className="text-6xl drop-shadow-md cursor-pointer select-none"
-                >
-                    🦁
-                </motion.div>
-            </motion.div>
 
             <BottomNav userRole="School Head" />
         </motion.div>
