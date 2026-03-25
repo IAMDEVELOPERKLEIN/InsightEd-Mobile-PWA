@@ -126,6 +126,7 @@ const EFDMotherMoa = () => {
 
     const getPreviewUrl = (url) => {
         if (!url) return '';
+        if (url.startsWith('JVBER')) return `data:application/pdf;base64,${url}`; // Support raw Base64 PDF strings
         if (url.startsWith('data:application/pdf')) return url; // Support Base64 direct embedding
         if (/^[a-zA-Z0-9-_]{20,}$/.test(url)) return `https://drive.google.com/file/d/${url}/preview`;
         if (url.includes('drive.google.com')) {
@@ -361,7 +362,7 @@ const EFDMotherMoa = () => {
                             <div>
                                 <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight flex items-center gap-3">
                                     <TbFileCheck size={32} className="text-blue-200" />
-                                    Engineer Mother MOA
+                                    Mother MOA
                                 </h1>
                                 <p className="text-blue-100/80 text-sm font-medium mt-1">
                                     Archive Central Memorandums per Province/City (Source: Engineer Forms)
@@ -524,7 +525,7 @@ const EFDMotherMoa = () => {
                                 ) : (
                                     <>
                                         <FiUpload size={16} />
-                                        Submit Archive Link
+                                        Submit Supplemental
                                     </>
                                 )}
                             </button>

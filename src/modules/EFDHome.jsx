@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevronRight, FiAlertCircle, FiChevronDown, FiCheckSquare } from 'react-icons/fi';
+import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevronRight, FiAlertCircle, FiChevronDown, FiCheckSquare, FiTrash2 } from 'react-icons/fi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LabelList, Legend } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
@@ -56,13 +56,32 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, icon: Icon })
     );
 };
 
+const formatLargeCurrency = (value) => {
+    if (value >= 1e12) return `₱${(value / 1e12).toFixed(2)}T`;
+    if (value >= 1e9) return `₱${(value / 1e9).toFixed(2)}B`;
+    if (value >= 1e6) return `₱${(value / 1e6).toFixed(2)}M`;
+    return `₱${value.toLocaleString()}`;
+};
+
+const formatLargeNumber = (value) => {
+    if (value >= 1e12) return `${(value / 1e12).toFixed(1)}T`;
+    if (value >= 1e9) return `${(value / 1e9).toFixed(1)}B`;
+    if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+    return value.toLocaleString();
+};
+
 const EFDHome = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
-    const [activeTab, setActiveTab] = useState('granular'); // 'granular' or 'list'
+    const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('efdHomeTab') || 'granular');
+    
+    useEffect(() => {
+        sessionStorage.setItem('efdHomeTab', activeTab);
+    }, [activeTab]);
+
     const [selectedRegions, setSelectedRegions] = useState([]);
     const [selectedDivision, setSelectedDivision] = useState('');
     const [selectedCategories, setSelectedCategories] = useState([]);
@@ -459,6 +478,25 @@ const EFDHome = () => {
         return filteredProjects.reduce((sum, p) => sum + (parseFloat(p.projectAllocation) || 0), 0);
     }, [filteredProjects]);
 
+    const handleDeleteProject = async (e, id) => {
+        e.stopPropagation();
+        if (window.confirm("Are you sure you want to delete this project and all its history? This action cannot be undone.")) {
+            try {
+                const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    setProjects(prev => prev.filter(p => p.id !== id));
+                    alert("Project deleted successfully.");
+                } else {
+                    const data = await res.json();
+                    alert(data.message || "Failed to delete project.");
+                }
+            } catch (err) {
+                console.error("Delete error:", err);
+                alert("An error occurred while deleting.");
+            }
+        }
+    };
+
     const renderCustomizedLabel = useCallback(({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name, value }) => {
         const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
         const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
@@ -473,7 +511,7 @@ const EFDHome = () => {
                 fill="white" 
                 textAnchor="middle" 
                 dominantBaseline="central" 
-                className="text-[12px] font-black drop-shadow-md"
+                className="text-[9px] font-black drop-shadow-md"
             >
                 {value}
             </text>
@@ -501,7 +539,7 @@ const EFDHome = () => {
                                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                                     Infrastructure Management
                                 </p>
-                                <h1 className="text-2xl font-black tracking-tight leading-none">HRODI Engineer Dashboard</h1>
+                                <h1 className="text-2xl font-black tracking-tight leading-none">HRODI Dashboard</h1>
                                 <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">
                                     {userData?.region || 'Central Office'} • Infrastructure Monitoring
                                 </p>
@@ -512,17 +550,17 @@ const EFDHome = () => {
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1">
-                                <p className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-1.5 opacity-80">Total Projects</p>
-                                <h2 className="text-2xl lg:text-3xl font-black">{projects.length.toLocaleString()}</h2>
+                            <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0">
+                                <p className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-1.5 opacity-80 truncate">Total Projects</p>
+                                <h2 className="text-2xl lg:text-3xl font-black truncate">{projects.length.toLocaleString()}</h2>
                             </div>
-                            <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1">
-                                <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80">Filtered Results</p>
-                                <h2 className="text-2xl lg:text-3xl font-black">{filteredProjects.length.toLocaleString()}</h2>
+                            <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0">
+                                <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80 truncate">Filtered Results</p>
+                                <h2 className="text-2xl lg:text-3xl font-black truncate">{filteredProjects.length.toLocaleString()}</h2>
                             </div>
-                            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-2">
-                                <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80">Total ABC Allocation</p>
-                                <h2 className="text-2xl lg:text-3xl font-black">₱{(totalABC / 1000000).toFixed(2)}M</h2>
+                            <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-2 min-w-0">
+                                <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80 truncate">Total ABC Allocation</p>
+                                <h2 className="text-2xl lg:text-3xl font-black truncate">{formatLargeCurrency(totalABC)}</h2>
                             </div>
                         </div>
                     </div>
@@ -559,7 +597,7 @@ const EFDHome = () => {
                         </div>
 
                         {/* Multi-Select Group */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-w-0">
                             <MultiSelectDropdown 
                                 label="Regions" 
                                 options={allRegions} 
@@ -645,8 +683,10 @@ const EFDHome = () => {
                             {/* Analytics Drilldown Layout */}
                             <div className="max-w-7xl mx-auto w-full px-0 space-y-6">
                                 <div className="flex flex-col lg:flex-row gap-6">
-                                    {/* Pie Chart */}
-                                    <div className="w-full lg:w-96 shrink-0 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 h-[500px] flex flex-col">
+                                    {/* Left Column Container */}
+                                    <div className="w-full lg:w-96 shrink-0 flex flex-col gap-6">
+                                        {/* Pie Chart */}
+                                        <div className="bg-white px-5 py-8 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-[500px] flex flex-col">
                                         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
                                             <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
                                             National Category Distribution
@@ -658,8 +698,8 @@ const EFDHome = () => {
                                                         data={pieChartData}
                                                         cx="50%"
                                                         cy="50%"
-                                                        innerRadius={65}
-                                                        outerRadius={95}
+                                                        innerRadius={40}
+                                                        outerRadius={120}
                                                         paddingAngle={5}
                                                         dataKey="value"
                                                         labelLine={false}
@@ -688,12 +728,12 @@ const EFDHome = () => {
                                             
                                             <div className="mt-6 space-y-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar border-t border-slate-50 pt-4 px-1">
                                                 {pieChartData.filter(e => e.value > 0).map((entry) => (
-                                                    <div key={entry.name} className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 p-1.5 rounded-lg transition-colors">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: categoryColors[entry.name] || '#94a3b8' }}></div>
-                                                            <span className="truncate max-w-[180px]">{entry.name}</span>
+                                                    <div key={entry.name} className="flex items-start justify-between text-[9px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 p-1.5 rounded-lg transition-colors gap-2">
+                                                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                                                            <div className="w-2 h-2 rounded-full shadow-sm shrink-0 mt-1" style={{ backgroundColor: categoryColors[entry.name] || '#94a3b8' }}></div>
+                                                            <span className="break-words leading-tight whitespace-normal">{entry.name}</span>
                                                         </div>
-                                                        <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md font-black min-w-[30px] text-center">{entry.value}</span>
+                                                        <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md font-black min-w-[30px] text-center shrink-0">{entry.value}</span>
                                                     </div>
                                                 ))}
                                                 {pieChartData.every(e => e.value === 0) && (
@@ -701,10 +741,43 @@ const EFDHome = () => {
                                                 )}
                                             </div>
                                         </div>
+                                        </div>
+                                        
+                                        {/* Funding Year Histogram */}
+                                        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col">
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                                <span className="w-2 h-2 bg-blue-600 rounded-full shadow-[0_0_8px_rgba(37,99,235,0.4)]"></span>
+                                                Funding Year Distribution
+                                            </h3>
+                                            <div className="h-[200px] w-full">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart 
+                                                        data={yearData}
+                                                        margin={{ top: 30, right: 30, left: 20, bottom: 5 }}
+                                                    >
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                        <XAxis 
+                                                            dataKey="name" 
+                                                            tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
+                                                            axisLine={false}
+                                                            tickLine={false}
+                                                        />
+                                                        <YAxis hide domain={[0, 'auto']} />
+                                                        <Tooltip 
+                                                            cursor={{ fill: '#f8fafc' }}
+                                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                        />
+                                                        <Bar dataKey="value" fill="#004A99" radius={[6, 6, 0, 0]} barSize={40}>
+                                                            <LabelList dataKey="value" position="top" style={{ fontSize: '10px', fontWeight: 'black', fill: '#004A99' }} />
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    {/* Main Area: Consolidated Drilldown Chart */}
-                                    <div className="flex-1 space-y-6">
+                                    {/* Main Area: Consolidated Drilldown Chart & Building Standards */}
+                                    <div className="flex-1 space-y-6 flex flex-col">
                                         <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col">
                                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                                                 <div>
@@ -774,7 +847,7 @@ const EFDHome = () => {
                                                         <Tooltip
                                                             cursor={{ fill: '#f8fafc' }}
                                                             formatter={(val, name) => {
-                                                                const formattedVal = chartMetric === 'abc' ? `₱${(val / 1000000).toFixed(2)}M` : `${val} Projects`;
+                                                                const formattedVal = chartMetric === 'abc' ? formatLargeCurrency(val) : `${val} Projects`;
                                                                 return [formattedVal, name];
                                                             }}
                                                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '11px', fontWeight: 'bold' }}
@@ -790,8 +863,7 @@ const EFDHome = () => {
                                                             >
                                                                 <LabelList 
                                                                     dataKey={cat} 
-                                                                    position="inside" 
-                                                                    formatter={(val) => val > 0 ? (chartMetric === 'abc' ? `${(val / 1000000).toFixed(1)}M` : val) : ''}
+                                                                    formatter={(val) => val > 0 ? (chartMetric === 'abc' ? formatLargeNumber(val) : val) : ''}
                                                                     style={{ fontSize: '8px', fontWeight: 'black', fill: '#fff', pointerEvents: 'none' }} 
                                                                 />
                                                             </Bar>
@@ -799,9 +871,8 @@ const EFDHome = () => {
                                                         <Bar dataKey="totalValue" stackId="a" hide>
                                                             <LabelList 
                                                                 dataKey="totalValue" 
-                                                                position="right" 
                                                                 offset={10}
-                                                                formatter={(val) => chartMetric === 'abc' ? `₱${(val / 1000000).toFixed(1)}M` : val}
+                                                                formatter={(val) => chartMetric === 'abc' ? formatLargeCurrency(val) : val}
                                                                 style={{ fontSize: '10px', fontWeight: 'black', fill: '#475569' }} 
                                                             />
                                                         </Bar>
@@ -809,33 +880,97 @@ const EFDHome = () => {
                                                 </ResponsiveContainer>
                                             </div>
                                         </div>
+                                        
+                                        {/* Building Standards Chart (Moved) */}
+                                        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 min-w-0 overflow-hidden">
+                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-8 w-full">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+                                                        <FiLayers size={24} />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                                            Building Standards 
+                                                        </h3>
+                                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                                                            {drillDownLevel === 'storey' ? 'Select storey level to explore classrooms' : `Classroom prototypes for ${selectedStorey} Storey buildings`}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                                                        <button 
+                                                            onClick={() => { setDataMode('masterlist'); setDrillDownLevel('storey'); setSelectedStorey(null); }}
+                                                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === 'masterlist' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            Masterlist
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { setDataMode('2026'); setDrillDownLevel('storey'); setSelectedStorey(null); }}
+                                                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === '2026' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                                        >
+                                                            2026
+                                                        </button>
+                                                    </div>
 
-                                        {/* Funding Year Histogram */}
-                                        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col">
-                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                                                <span className="w-2 h-2 bg-blue-600 rounded-full shadow-[0_0_8px_rgba(37,99,235,0.4)]"></span>
-                                                Funding Year Distribution
-                                            </h3>
-                                            <div className="h-[200px] w-full">
-                                                <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart 
-                                                        data={yearData}
-                                                        margin={{ top: 30, right: 30, left: 20, bottom: 5 }}
+                                                    <select 
+                                                        className="bg-white border-2 border-slate-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-400 transition-all cursor-pointer hover:border-indigo-200 shadow-sm"
+                                                        value={selectedStorey || ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value ? Number(e.target.value) : null;
+                                                            setSelectedStorey(val);
+                                                            setDrillDownLevel(val ? 'prototype' : 'storey');
+                                                        }}
                                                     >
-                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                        <XAxis 
+                                                        <option value="">All Storeys</option>
+                                                        {storeyAggregated.map(s => <option key={s.storey} value={s.storey}>{s.storey} Storey</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="h-[370px] w-full mt-4">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart
+                                                        layout="vertical"
+                                                        data={activeChartData}
+                                                        margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
+                                                    >
+                                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                                        <XAxis type="number" hide />
+                                                        <YAxis 
                                                             dataKey="name" 
-                                                            tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
-                                                            axisLine={false}
-                                                            tickLine={false}
+                                                            type="category" 
+                                                            axisLine={false} 
+                                                            tickLine={false} 
+                                                            tick={{ fill: '#475569', fontSize: 9, fontWeight: 900 }} 
+                                                            width={65}
                                                         />
-                                                        <YAxis hide domain={[0, 'auto']} />
                                                         <Tooltip 
                                                             cursor={{ fill: '#f8fafc' }}
-                                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                                            contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }}
+                                                            labelStyle={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px' }}
                                                         />
-                                                        <Bar dataKey="value" fill="#004A99" radius={[6, 6, 0, 0]} barSize={40}>
-                                                            <LabelList dataKey="value" position="top" style={{ fontSize: '10px', fontWeight: 'black', fill: '#004A99' }} />
+                                                        <Bar 
+                                                            dataKey="count" 
+                                                            radius={[0, 8, 8, 0]} 
+                                                            barSize={32} 
+                                                            className="cursor-pointer"
+                                                            onClick={(payload) => {
+                                                                if (payload && drillDownLevel === 'storey') {
+                                                                    setSelectedStorey(payload.storey);
+                                                                    setDrillDownLevel('prototype');
+                                                                }
+                                                            }}
+                                                        >
+                                                            {activeChartData.map((entry, index) => (
+                                                                <Cell 
+                                                                    key={`cell-${index}`} 
+                                                                    fill={drillDownLevel === 'storey' ? '#818cf8' : '#c7d2fe'} 
+                                                                    className="transition-all duration-300 hover:opacity-80"
+                                                                />
+                                                            ))}
+                                                            <LabelList dataKey="count" position="right" offset={10} style={{ fill: '#6366f1', fontSize: 11, fontWeight: 900 }} />
                                                         </Bar>
                                                     </BarChart>
                                                 </ResponsiveContainer>
@@ -844,101 +979,7 @@ const EFDHome = () => {
                                     </div>
                                 </div>
 
-                                {/* Building Standards Chart */}
-                                <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 mt-6">
-                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6 mb-8">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                                                <FiLayers size={24} />
-                                            </div>
-                                            <div>
-                                                <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                                                    Building Standards 
-                                                </h3>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                                                    {drillDownLevel === 'storey' ? 'Select storey level to explore classrooms' : `Classroom prototypes for ${selectedStorey} Storey buildings`}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
-                                                <button 
-                                                    onClick={() => { setDataMode('masterlist'); setDrillDownLevel('storey'); setSelectedStorey(null); }}
-                                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === 'masterlist' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                                >
-                                                    Masterlist
-                                                </button>
-                                                <button 
-                                                    onClick={() => { setDataMode('2026'); setDrillDownLevel('storey'); setSelectedStorey(null); }}
-                                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dataMode === '2026' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                                >
-                                                    2026
-                                                </button>
-                                            </div>
 
-                                            <select 
-                                                className="bg-white border-2 border-slate-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-indigo-400 transition-all cursor-pointer hover:border-indigo-200 shadow-sm"
-                                                value={selectedStorey || ''}
-                                                onChange={(e) => {
-                                                    const val = e.target.value ? Number(e.target.value) : null;
-                                                    setSelectedStorey(val);
-                                                    setDrillDownLevel(val ? 'prototype' : 'storey');
-                                                }}
-                                            >
-                                                <option value="">All Storeys</option>
-                                                {storeyAggregated.map(s => <option key={s.storey} value={s.storey}>{s.storey} Storey</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="h-[400px] w-full mt-4">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart
-                                                layout="vertical"
-                                                data={activeChartData}
-                                                margin={{ top: 5, right: 60, left: 100, bottom: 5 }}
-                                            >
-                                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                                                <XAxis type="number" hide />
-                                                <YAxis 
-                                                    dataKey="name" 
-                                                    type="category" 
-                                                    axisLine={false} 
-                                                    tickLine={false} 
-                                                    tick={{ fill: '#475569', fontSize: 10, fontWeight: 900 }} 
-                                                    width={90}
-                                                />
-                                                <Tooltip 
-                                                    cursor={{ fill: '#f8fafc' }}
-                                                    contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '12px' }}
-                                                    labelStyle={{ fontWeight: 900, color: '#1e293b', marginBottom: '4px' }}
-                                                />
-                                                <Bar 
-                                                    dataKey="count" 
-                                                    radius={[0, 8, 8, 0]} 
-                                                    barSize={32} 
-                                                    className="cursor-pointer"
-                                                    onClick={(payload) => {
-                                                        if (payload && drillDownLevel === 'storey') {
-                                                            setSelectedStorey(payload.storey);
-                                                            setDrillDownLevel('prototype');
-                                                        }
-                                                    }}
-                                                >
-                                                    {activeChartData.map((entry, index) => (
-                                                        <Cell 
-                                                            key={`cell-${index}`} 
-                                                            fill={drillDownLevel === 'storey' ? '#818cf8' : '#c7d2fe'} 
-                                                            className="transition-all duration-300 hover:opacity-80"
-                                                        />
-                                                    ))}
-                                                    <LabelList dataKey="count" position="right" offset={10} style={{ fill: '#6366f1', fontSize: 11, fontWeight: 900 }} />
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
 
                                 {/* Browse Detailed Button */}
                                 <div className="mt-6">
@@ -969,7 +1010,7 @@ const EFDHome = () => {
                                                     <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Division</th>
                                                     <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                                                     <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Progress</th>
-                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Documents</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Docs & Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
@@ -1011,15 +1052,26 @@ const EFDHome = () => {
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
-                                                            <div className="flex justify-end gap-1">
-                                                                {!p.hasMoa && !p.hasRta ? (
-                                                                    <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-red-50 text-red-500 border border-red-100">None</span>
-                                                                ) : p.hasMoa && p.hasRta ? (
-                                                                    <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-100">Full</span>
-                                                                ) : !p.hasMoa ? (
-                                                                    <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-100">RTA Only</span>
-                                                                ) : (
-                                                                    <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-100">MOA Only</span>
+                                                            <div className="flex justify-end items-center gap-3">
+                                                                <div className="flex justify-end gap-1">
+                                                                    {!p.hasMoa && !p.hasRta ? (
+                                                                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-red-50 text-red-500 border border-red-100">None</span>
+                                                                    ) : p.hasMoa && p.hasRta ? (
+                                                                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-100">Full</span>
+                                                                    ) : !p.hasMoa ? (
+                                                                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-100">RTA Only</span>
+                                                                    ) : (
+                                                                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-100">MOA Only</span>
+                                                                    )}
+                                                                </div>
+                                                                {userRole === 'EFD Engineer' && (
+                                                                    <button 
+                                                                        onClick={(e) => handleDeleteProject(e, p.id)}
+                                                                        className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                                                        title="Delete Project"
+                                                                    >
+                                                                        <FiTrash2 size={16} />
+                                                                    </button>
                                                                 )}
                                                             </div>
                                                         </td>
