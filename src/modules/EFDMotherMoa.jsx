@@ -107,8 +107,66 @@ const EFDMotherMoa = () => {
     
     // Preview state
     const [previewMoa, setPreviewMoa] = useState(null);
+    const [previewBlobUrl, setPreviewBlobUrl] = useState(null);
 
-    // Utilities
+    // --- PDF Preview Utilities ---
+
+    /**
+     * Converts a raw base64 or full data-URI string to a Blob URL.
+     * Works for opening in new tab AND embedding in iframes.
+     * Falls back to a Google Drive /preview URL for Drive links.
+     */
+    const resolvePreviewUrl = (raw) => {
+        if (!raw) return null;
+
+        // If it's already a data URI, we should still try to convert it to a Blob URL
+        // because window.open() has severe character limits for data URIs in many browsers.
+        let base64Data = null;
+        if (raw.startsWith('data:application/pdf;base64,')) {
+            base64Data = raw.split(',')[1];
+        } else if (raw.startsWith('JVBER') || raw.startsWith('JVBERi')) {
+            base64Data = raw;
+        }
+
+        if (base64Data) {
+            try {
+                const binaryStr = atob(base64Data);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) {
+                    bytes[i] = binaryStr.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: 'application/pdf' });
+                return URL.createObjectURL(blob);
+            } catch (err) {
+                console.error("Blob conversion failed:", err);
+                return raw.startsWith('data:') ? raw : `data:application/pdf;base64,${raw}`;
+            }
+        }
+
+        // Google Drive file ID only (20+ alphanum chars)
+        if (/^[a-zA-Z0-9-_]{20,}$/.test(raw))
+            return `https://drive.google.com/file/d/${raw}/preview`;
+
+        // Full Google Drive URL
+        if (raw.includes('drive.google.com')) {
+            if (raw.includes('/file/d/')) {
+                const fileId = raw.split('/file/d/')[1]?.split('/')[0];
+                return `https://drive.google.com/file/d/${fileId}/preview`;
+            }
+            return raw.replace(/\/view(\?.*)?$/, '/preview');
+        }
+
+        return raw;
+    };
+
+    /** Opens PDF in a new tab robustly (handles Blob URL, data URI, Drive URL) */
+    const openPdfInTab = (raw) => {
+        const url = resolvePreviewUrl(raw);
+        if (!url) return;
+        window.open(url, '_blank');
+    };
+
+
     const validateDriveLinkAccess = async (url) => {
         try {
             const res = await fetch('/api/validate-drive-link', {
@@ -124,20 +182,6 @@ const EFDMotherMoa = () => {
         }
     };
 
-    const getPreviewUrl = (url) => {
-        if (!url) return '';
-        if (url.startsWith('JVBER')) return `data:application/pdf;base64,${url}`; // Support raw Base64 PDF strings
-        if (url.startsWith('data:application/pdf')) return url; // Support Base64 direct embedding
-        if (/^[a-zA-Z0-9-_]{20,}$/.test(url)) return `https://drive.google.com/file/d/${url}/preview`;
-        if (url.includes('drive.google.com')) {
-            if (url.includes('/file/d/')) {
-                const fileId = url.split('/file/d/')[1]?.split('/')[0];
-                return `https://drive.google.com/file/d/${fileId}/preview`;
-            }
-            return url.replace(/\/view(\?.*)?$/, '/preview');
-        }
-        return url;
-    };
 
     const fetchSupplementals = async (motherMoaId) => {
         try {
@@ -163,12 +207,20 @@ const EFDMotherMoa = () => {
         }
     };
 
-    // Fetch supplementals when previewing
+    // Fetch supplementals when previewing + build Blob URL for iframe
     useEffect(() => {
         if (previewMoa) {
             fetchSupplementals(previewMoa.mother_moa_id);
+            // Build a Blob URL so the iframe can load base64 PDFs
+            const url = resolvePreviewUrl(previewMoa.moa_pdf);
+            setPreviewBlobUrl(url);
         } else {
             setSupplementals([]);
+            // Revoke any previous Blob URL to free memory
+            setPreviewBlobUrl(prev => {
+                if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+                return null;
+            });
         }
     }, [previewMoa]);
 
@@ -705,15 +757,13 @@ const EFDMotherMoa = () => {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <a 
-                                        href={previewMoa.moa_pdf}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                    <button 
+                                        onClick={() => openPdfInTab(previewMoa.moa_pdf)}
                                         className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all border border-transparent hover:border-blue-100"
-                                        title="Open in Google Drive"
+                                        title="Open PDF in New Tab"
                                     >
                                         <FiUpload size={20} className="rotate-45" /> 
-                                    </a>
+                                    </button>
                                     <button 
                                         onClick={() => setPreviewMoa(null)}
                                         className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100"
@@ -728,10 +778,10 @@ const EFDMotherMoa = () => {
                                 {/* Iframe Preview */}
                                 <div className="flex-1 h-full">
                                     <iframe 
-                                        src={getPreviewUrl(previewMoa.moa_pdf)}
+                                        src={previewBlobUrl || ''}
                                         className="w-full h-full border-0"
                                         allow="autoplay"
-                                        title="GDrive Preview"
+                                        title="MOA Preview"
                                     />
                                 </div>
 
@@ -762,15 +812,13 @@ const EFDMotherMoa = () => {
                                                             ))}
                                                         </div>
                                                     )}
-                                                    <a 
-                                                        href={sup.moa_pdf}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
+                                                    <button 
+                                                        onClick={() => openPdfInTab(sup.moa_pdf)}
                                                         className="w-full flex items-center justify-center gap-2 py-2 bg-white text-emerald-600 border border-emerald-100 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
                                                     >
                                                         <FiEye size={12} />
                                                         View File
-                                                    </a>
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -784,12 +832,10 @@ const EFDMotherMoa = () => {
                                     <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Supplemental Documents Available ({supplementals.length})</h4>
                                     <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                                         {supplementals.map((sup, idx) => (
-                                            <a 
+                                            <button 
                                                 key={idx}
-                                                href={sup.moa_pdf}
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="shrink-0 flex items-center gap-2 px-3 py-2 bg-white border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 whitespace-nowrap"
+                                                onClick={() => openPdfInTab(sup.moa_pdf)}
+                                                className="shrink-0 flex items-center gap-2 px-3 py-2 bg-white border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 whitespace-nowrap hover:border-emerald-300 transition-all"
                                             >
                                                 <FiFileText size={12} className="text-emerald-500" />
                                                 <div className="flex flex-col items-start leading-none">
@@ -798,7 +844,7 @@ const EFDMotherMoa = () => {
                                                         <span className="text-[7px] text-blue-500 font-black uppercase mt-0.5">{sup.ipc_ids.length} IPCs</span>
                                                     )}
                                                 </div>
-                                            </a>
+                                            </button>
                                         ))}
                                     </div>
                                 </div>

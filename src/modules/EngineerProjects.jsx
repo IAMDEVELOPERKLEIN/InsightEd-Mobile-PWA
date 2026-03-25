@@ -223,6 +223,7 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
 
 
 import EditProjectModal from "../components/EditProjectModal";
+import UpdateProjectWizard from "../components/UpdateProjectWizard";
 
 
 // --- MAIN PROJECT LIST COMPONENT ---
@@ -722,25 +723,21 @@ const EngineerProjects = () => {
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
         <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
 
-        <EditProjectModal
+        <UpdateProjectWizard
           project={selectedProject}
           isOpen={editModalOpen}
-          mode={modalMode}
-          readOnly={userRole === 'Super User'}
           onClose={() => setEditModalOpen(false)}
-          onSave={handleSaveProject}
-          onCameraClick={(category) => {
-            setActiveCategory(category);
-            cameraInputRef.current?.click();
-          }}
-          onGalleryClick={(category) => {
-            setActiveCategory(category);
-            fileInputRef.current?.click();
-          }}
-          internalPreviews={internalPreviews}
-          externalPreviews={externalPreviews}
-          onRemoveFile={removeFile}
           isUploading={isUploading}
+          onSave={async (updatedProject, wizardInternalFiles, wizardExternalFiles) => {
+            // Use files provided by the wizard instead of the parent state
+            const prevInternal = internalFiles;
+            const prevExternal = externalFiles;
+            setInternalFiles(wizardInternalFiles || []);
+            setExternalFiles(wizardExternalFiles || []);
+            await handleSaveProject(updatedProject);
+            setInternalFiles(prevInternal);
+            setExternalFiles(prevExternal);
+          }}
         />
 
         <BottomNav userRole={userRole} />

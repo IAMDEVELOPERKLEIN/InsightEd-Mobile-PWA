@@ -8234,29 +8234,32 @@ app.post('/api/save-project', async (req, res) => {
 });
 // --- 9. PUT: Update Project ---
 // --- 9. PUT: Update Project (With History Logging) ---
-app.put('/api/update-project/:id', async (req, res) => {
+app.put('/api/update-project/:id', upload.fields([
+  { name: 'pow_pdf', maxCount: 1 },
+  { name: 'dupa_pdf', maxCount: 1 },
+  { name: 'contract_pdf', maxCount: 1 }
+]), async (req, res) => {
   const { id } = req.params;
   const data = req.body;
 
   let client;
-  let clientNew = null; // Fix: Define clientNew
+  let clientNew = null;
   try {
     client = await pool.connect();
 
-    // Attempt secondary connection safely
     if (poolNew) {
       try {
         clientNew = await poolNew.connect();
         await clientNew.query('BEGIN');
       } catch (connErr) {
         console.error("⚠️ Dual-Write Conn Error (Update Project):", connErr.message);
-        clientNew = null; // Continue with primary only
+        clientNew = null;
       }
     }
 
     await client.query('BEGIN');
 
-    // 1. Fetch Existing Data for Comparison
+    // 1. Fetch Existing Data for Comparison & Document Carry-over
     const oldRes = await client.query('SELECT * FROM "engineer_form" WHERE project_id = $1', [id]);
     if (oldRes.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -8265,12 +8268,31 @@ app.put('/api/update-project/:id', async (req, res) => {
     }
     const oldData = oldRes.rows[0];
 
-    // 2. Prepare Data for New Row (Append History)
-    // Fetch user name to ensure it's up-to-date
+    // Fetch existing documents for carry-over
+    const oldDocsRes = await client.query('SELECT * FROM engineer_documents WHERE project_id = $1', [id]);
+    const d = oldDocsRes.rows[0];
+
+    // 2. Handle File Uploads
+    let pow_pdf_base64 = data.pow_pdf || (d ? d.pow_pdf : null);
+    let dupa_pdf_base64 = data.dupa_pdf || (d ? d.dupa_pdf : null);
+    let contract_pdf_base64 = data.contract_pdf || (d ? d.contract_pdf : null);
+
+    if (req.files) {
+        if (req.files['pow_pdf']) {
+            pow_pdf_base64 = fs.readFileSync(req.files['pow_pdf'][0].path, { encoding: 'base64' });
+        }
+        if (req.files['dupa_pdf']) {
+            dupa_pdf_base64 = fs.readFileSync(req.files['dupa_pdf'][0].path, { encoding: 'base64' });
+        }
+        if (req.files['contract_pdf']) {
+            contract_pdf_base64 = fs.readFileSync(req.files['contract_pdf'][0].path, { encoding: 'base64' });
+        }
+    }
+
+    // 3. Prepare Data for New Row (Append History)
     let finalUserName = await getUserFullName(data.uid);
     if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
 
-    // Merge new data with old data (Snapshot concept)
     const newStatus = data.statusOfConstructionPhase || data.status || oldData.status_of_construction_phase;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
@@ -8278,8 +8300,6 @@ app.put('/api/update-project/:id', async (req, res) => {
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
     const newLat = valueOrNull(data.latitude) || oldData.latitude;
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
-
-
 
     const insertValues = [
       oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
@@ -8334,7 +8354,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       data.program_type || (data.isDonated === true || data.is_donated === true ? 'Donated' : (data.isDonated === false || data.is_donated === false ? 'BEFF' : oldData.program_type || 'BEFF')),
       valueOrNull(data.province) || oldData.province,
       valueOrNull(data.city) || oldData.city,
-      valueOrNull(data.municipality) || oldData.municipality
+      valueOrNull(data.municipality) || oldData.municipality,
+      pow_pdf_base64, dupa_pdf_base64, contract_pdf_base64
     ];
 
     const insertQuery = `
@@ -8354,8 +8375,9 @@ app.put('/api/update-project/:id', async (req, res) => {
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
         mode_of_project, assigned_engineer_id, assigned_engineer_name,
         implementing_agency, implementing_agency_specific, uploader_id_moa_rta, no_of_units, program_type,
-        province, city, municipality
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59)
+        province, city, municipality,
+        pow_pdf, dupa_pdf, contract_pdf
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62)
       RETURNING *;
     `;
 
@@ -8363,20 +8385,42 @@ app.put('/api/update-project/:id', async (req, res) => {
     const newData = result.rows[0];
 
     // --- 2.2a Handle Documents Update (engineer_documents) ---
-    const oldDocs = await client.query('SELECT * FROM engineer_documents WHERE project_id = $1', [id]);
-    const d = oldDocs.rows[0];
     await client.query(`
       INSERT INTO engineer_documents (project_id, ipc, pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf, uploader_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (project_id) DO UPDATE SET
+        pow_pdf = EXCLUDED.pow_pdf,
+        dupa_pdf = EXCLUDED.dupa_pdf,
+        contract_pdf = EXCLUDED.contract_pdf,
+        rta_pdf = EXCLUDED.rta_pdf,
+        moa_pdf = EXCLUDED.moa_pdf,
+        uploader_id = EXCLUDED.uploader_id
     `, [
       newData.project_id, newData.ipc,
-      data.pow_pdf || (d ? d.pow_pdf : null),
-      data.dupa_pdf || (d ? d.dupa_pdf : null),
-      data.contract_pdf || (d ? d.contract_pdf : null),
+      pow_pdf_base64,
+      dupa_pdf_base64,
+      contract_pdf_base64,
       data.rta_pdf || (d ? d.rta_pdf : null),
       data.moa_pdf || (d ? d.moa_pdf : null),
-      (data.pow_pdf || data.dupa_pdf || data.contract_pdf || data.rta_pdf || data.moa_pdf) ? data.uid : (d ? d.uploader_id : null)
+      (data.pow_pdf || data.dupa_pdf || data.contract_pdf || (req.files && Object.keys(req.files).length > 0)) ? data.uid : (d ? d.uploader_id : null)
     ]);
+
+    // Handle background compression if new files were uploaded
+    if (req.files) {
+        ['pow_pdf', 'dupa_pdf', 'contract_pdf'].forEach(field => {
+            if (req.files[field] && req.files[field][0]) {
+                processPdfFile(req.files[field][0]).then(async compressedBase64 => {
+                    try {
+                        await pool.query(`UPDATE engineer_documents SET ${field} = $1 WHERE project_id = $2`, [compressedBase64, newData.project_id]);
+                        await pool.query(`UPDATE engineer_form SET ${field} = $1 WHERE project_id = $2`, [compressedBase64, newData.project_id]);
+                        console.log(`✅ Background ${field} Compression Success for project ${newData.project_id}`);
+                    } catch (e) {
+                        console.error(`❌ Background ${field} Update Failed`, e);
+                    }
+                }).catch(err => console.error(`${field} bg compress err`, err));
+            }
+        });
+    }
 
     // --- 2.3 Handle Extension Tables Update (Conditional Carry Over + Changes) ---
     // HRODI Extension - Merged into engineer_form directly above
