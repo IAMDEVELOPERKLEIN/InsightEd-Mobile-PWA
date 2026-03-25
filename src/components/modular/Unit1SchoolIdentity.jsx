@@ -725,7 +725,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Geographical Registry</h3>
                                 </div>
                                 <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 gap-4">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Region</span>
                                             <p className="font-bold text-slate-700">{formData.region || "—"}</p>
@@ -735,7 +735,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <p className="font-bold text-slate-700">{formData.province || "—"}</p>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 gap-4">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Municipality</span>
                                             <p className="font-bold text-slate-700">{formData.municipality || "—"}</p>
@@ -745,7 +745,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <p className="font-bold text-slate-700">{formData.barangay || "—"}</p>
                                         </div>
                                     </div>
-                                    <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-4">
+                                    <div className="pt-4 border-t border-slate-50 grid grid-cols-1 gap-4">
                                         <div>
                                             <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Division</span>
                                             <p className="font-bold text-slate-700">{formData.division || "—"}</p>
@@ -939,7 +939,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 gap-4">
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Province</label>
                                                     <select name="province" value={formData.province} onChange={handleProvinceChange} className={chunkySelect} disabled={!formData.region}>
@@ -962,7 +962,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     {divisionOptions.map(d => <option key={d}>{d}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 gap-4">
                                                 <div>
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">District</label>
                                                     <select name="district" value={formData.district} onChange={handleChange} className={chunkySelect} disabled={!formData.division}>
@@ -1089,19 +1089,19 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <div className="space-y-2">
                                                     <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date of Birth</label>
                                                     <div className="grid grid-cols-3 gap-3">
-                                                        <select name="head_dob_month" value={formData.head_dob_month} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                        <select name="head_dob_month" value={formData.head_dob_month} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Month</option>
                                                             {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                                                                 <option key={m} value={m}>{m}</option>
                                                             ))}
                                                         </select>
-                                                        <select name="head_dob_day" value={formData.head_dob_day} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                        <select name="head_dob_day" value={formData.head_dob_day} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Day</option>
                                                             {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(d => (
                                                                 <option key={d} value={d}>{d}</option>
                                                             ))}
                                                         </select>
-                                                        <select name="head_dob_year" value={formData.head_dob_year} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                        <select name="head_dob_year" value={formData.head_dob_year} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Year</option>
                                                             {Array.from({ length: 120 }, (_, i) => (new Date().getFullYear() - i).toString()).map(y => (
                                                                 <option key={y} value={y}>{y}</option>
@@ -1112,21 +1112,21 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
                                                 {/* Date Assigned Selection */}
                                                 <div className="space-y-2">
-                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date Assigned</label>
+                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date of Assignment</label>
                                                     <div className="grid grid-cols-3 gap-3">
-                                                        <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                        <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Month</option>
                                                             {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
                                                                 <option key={m} value={m}>{m}</option>
                                                             ))}
                                                         </select>
-                                                        <select name="head_hired_day" value={formData.head_hired_day} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                        <select name="head_hired_day" value={formData.head_hired_day} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Day</option>
                                                             {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(d => (
                                                                 <option key={d} value={d}>{d}</option>
                                                             ))}
                                                         </select>
-                                                        <select name="head_hired_year" value={formData.head_hired_year} onChange={handleChange} className={chunkySelect + " !text-sm text-center"}>
+                                                        <select name="head_hired_year" value={formData.head_hired_year} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Year</option>
                                                             {Array.from({ length: 70 }, (_, i) => (new Date().getFullYear() - i).toString()).map(y => (
                                                                 <option key={y} value={y}>{y}</option>
