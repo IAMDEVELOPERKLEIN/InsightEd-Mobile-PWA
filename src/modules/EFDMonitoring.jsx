@@ -9,6 +9,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { uploadFileInChunks } from '../utils/chunkedUploader';
 import EditProjectModal from '../components/EditProjectModal';
+import UpdateProjectWizard from '../components/UpdateProjectWizard';
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 
 
@@ -905,23 +906,21 @@ const EFDMonitoring = () => {
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
                 <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
 
-                {editModalOpen && createPortal(
-                    <EditProjectModal 
-                        isOpen={editModalOpen}
-                        onClose={() => setEditModalOpen(false)}
-                        project={selectedProjectForEdit}
-                        onSave={handleSaveProject}
-                        userRole={userRole}
-                        mode="full"
-                        onCameraClick={handleCameraClick}
-                        onGalleryClick={handleGalleryClick}
-                        internalPreviews={internalPreviews}
-                        externalPreviews={externalPreviews}
-                        onRemoveFile={removeFile}
-                        isUploading={isUploading}
-                    />,
-                    document.body
-                )}
+                <UpdateProjectWizard
+                    project={selectedProjectForEdit}
+                    isOpen={editModalOpen}
+                    onClose={() => setEditModalOpen(false)}
+                    isUploading={isUploading}
+                    onSave={async (updatedProject, wizardInternalFiles, wizardExternalFiles) => {
+                        const prevInternal = internalFiles;
+                        const prevExternal = externalFiles;
+                        setInternalFiles(wizardInternalFiles || []);
+                        setExternalFiles(wizardExternalFiles || []);
+                        await handleSaveProject(updatedProject);
+                        setInternalFiles(prevInternal);
+                        setExternalFiles(prevExternal);
+                    }}
+                />
                 {message.text && (
                     <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[3000] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 ${message.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
                         {message.type === 'success' ? <FiCheck size={20} /> : <FiAlertCircle size={20} />}
