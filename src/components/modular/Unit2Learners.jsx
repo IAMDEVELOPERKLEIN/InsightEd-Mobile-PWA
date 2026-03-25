@@ -862,10 +862,23 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         }
         if (currentStep === 2) return !!orgType;
         if (currentStep === 3) {
-            return mgCombinations.length > 0 && mgCombinations.every(c => 
+            const hasValidCombos = mgCombinations.length > 0 && mgCombinations.every(c => 
                 c.grades.length > 0 && 
                 c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) > 0
             );
+
+            if (!hasValidCombos) return false;
+
+            if (orgType === 'pure_mg') {
+                // Ensure all offered elementary grades are included in some combination
+                const assignedGrades = new Set(mgCombinations.flatMap(c => c.grades));
+                const offeredElemGrades = availableGrades
+                    .filter(g => g.type === 'elem' && g.id !== 'kinder')
+                    .map(g => g.id);
+                return offeredElemGrades.every(g => assignedGrades.has(g));
+            }
+
+            return true;
         }
         if (currentStep === 4) {
             const g = activeMonogrades[currentGradeIndex];
@@ -1136,7 +1149,44 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             </div>
                                         </div>
                                     ))}
-                                </div>
+                                 </div>
+
+                                {orgType === 'pure_mg' && (
+                                    <div className="mt-8 p-6 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-xl">📋</div>
+                                            <div>
+                                                <h4 className="text-sm font-black text-slate-700 leading-none">Grade Assignment Tracker</h4>
+                                                <p className="text-[10px] font-medium text-slate-500 mt-1 uppercase tracking-widest italic">Ensure all offered elementary grades are combined</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {availableGrades
+                                                .filter(g => g.type === 'elem' && g.id !== 'kinder')
+                                                .map(g => {
+                                                    const isAssigned = mgCombinations.some(c => c.grades.includes(g.id));
+                                                    return (
+                                                        <div 
+                                                            key={`tracker-${g.id}`} 
+                                                            className={`px-4 py-2 rounded-xl text-[11px] font-black border-2 transition-all flex items-center gap-2 ${isAssigned ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-white border-rose-100 text-rose-400'}`}
+                                                        >
+                                                            {isAssigned ? '✅' : '⏳'} {g.label}
+                                                            {!isAssigned && <span className="ml-1 px-2 py-0.5 bg-rose-50 text-[9px] rounded-lg">Required</span>}
+                                                        </div>
+                                                    )
+                                                })
+                                            }
+                                        </div>
+                                        {availableGrades.filter(g => g.type === 'elem' && g.id !== 'kinder').some(g => !mgCombinations.some(c => c.grades.includes(g.id))) && (
+                                            <div className="mt-6 p-4 bg-amber-50 rounded-2xl border-2 border-amber-100 flex items-start gap-3">
+                                                <FiAlertTriangle className="text-amber-500 w-5 h-5 mt-0.5 shrink-0" />
+                                                <p className="text-xs font-bold text-amber-800 leading-relaxed">
+                                                    Because you selected <span className="underline decoration-2 text-amber-900">Purely Multi-Grade</span>, you must assign all offered elementary grades to a combination before you can continue.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </motion.div>
                     )}
