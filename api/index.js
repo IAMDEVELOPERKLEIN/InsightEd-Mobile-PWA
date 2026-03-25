@@ -4447,13 +4447,13 @@ app.post('/api/upload-engineer-mother-moa', upload.fields([{ name: 'moa_pdf', ma
     let sr_base64 = null;
 
     if (req.files && req.files['moa_pdf'] && req.files['moa_pdf'].length > 0) {
-        moa_pdf_base64 = await processPdfFile(req.files['moa_pdf'][0]);
+        moa_pdf_base64 = fs.readFileSync(req.files['moa_pdf'][0].path, { encoding: 'base64' });
     } else {
         return res.status(400).json({ error: "Mother MOA PDF file is required." });
     }
 
     if (req.files && req.files['sangguniang_resolution'] && req.files['sangguniang_resolution'].length > 0) {
-        sr_base64 = await processPdfFile(req.files['sangguniang_resolution'][0]);
+        sr_base64 = fs.readFileSync(req.files['sangguniang_resolution'][0].path, { encoding: 'base64' });
     }
 
     // Generate unique Sangguniang Resolution ID like INF-SRID-YYYY-XXXX
@@ -4474,6 +4474,28 @@ app.post('/api/upload-engineer-mother-moa', upload.fields([{ name: 'moa_pdf', ma
     `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Mother MOA for ${lgu_name} (${lgu_type})`, 'Mother MOA']);
 
     res.json({ success: true });
+
+    // --- Background Compression Tasks ---
+    if (req.files['moa_pdf'] && req.files['moa_pdf'].length > 0) {
+        processPdfFile(req.files['moa_pdf'][0]).then(async compressedBase64 => {
+            try {
+                await pool.query('UPDATE engineer_mother_moa SET moa_pdf = $1 WHERE mother_moa_id = $2', [compressedBase64, mId]);
+                console.log(`✅ Background MOA Compression Success for ${mId}`);
+            } catch (e) {
+                console.error(`❌ Background MOA Update Failed for ${mId}`, e);
+            }
+        }).catch(err => console.error("MOA bg compress err", err));
+    }
+    if (req.files['sangguniang_resolution'] && req.files['sangguniang_resolution'].length > 0) {
+        processPdfFile(req.files['sangguniang_resolution'][0]).then(async compressedBase64 => {
+            try {
+                await pool.query('UPDATE engineer_mother_moa SET sangguniang_resolution = $1 WHERE mother_moa_id = $2', [compressedBase64, mId]);
+                console.log(`✅ Background SR Compression Success for ${mId}`);
+            } catch (e) {
+                console.error(`❌ Background SR Update Failed for ${mId}`, e);
+            }
+        }).catch(err => console.error("SR bg compress err", err));
+    }
   } catch (err) {
     console.error("Mother MOA Upload Error:", err);
     res.status(500).json({ error: "Internal Server Error: " + err.message });
@@ -4637,7 +4659,7 @@ app.post('/api/upload-engineer-supplemental-moa', upload.single('moa_pdf'), asyn
   try {
     let moa_pdf_base64 = null;
     if (req.file) {
-        moa_pdf_base64 = await processPdfFile(req.file);
+        moa_pdf_base64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
     } else {
         return res.status(400).json({ error: "Supplemental MOA PDF file is required." });
     }
@@ -4665,6 +4687,18 @@ app.post('/api/upload-engineer-supplemental-moa', upload.single('moa_pdf'), asyn
     `, [uid, uName || 'Engineer', 'UPLOAD', `Uploaded Supplemental MOA for Mother MOA ${mother_moa_id} (${motherMoa.lgu_name} - ${motherMoa.lgu_type})`, 'Supplemental MOA']);
 
     res.json({ success: true });
+
+    // --- Background Compression Task ---
+    if (req.file) {
+        processPdfFile(req.file).then(async compressedBase64 => {
+            try {
+                await pool.query('UPDATE engineer_supplamental_moa SET moa_pdf = $1 WHERE supplamental_moa_id = $2', [compressedBase64, sId]);
+                console.log(`✅ Background Supplemental MOA Compression Success for ${sId}`);
+            } catch (e) {
+                console.error(`❌ Background Supplemental Update Failed for ${sId}`, e);
+            }
+        }).catch(err => console.error("Supplemental bg compress err", err));
+    }
 
     // Update engineer_form for assigned IPCs
     (async () => {
@@ -8896,6 +8930,7 @@ app.get('/api/projects', async (req, res) => {
             e.construction_start_date, e.project_category, e.scope_of_work,
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
             e.is_donated, e.program_type, e.status_design_phase, e.actions, e.savings, e.funding_year, e.funding_year_justification,
+            e.sangguniang_resolution_id, e.mother_moa_id, e.supplamental_moa_id,
             (NULLIF(d.moa_pdf, '') IS NOT NULL) AS has_moa,
             (NULLIF(d.rta_pdf, '') IS NOT NULL) AS has_rta,
             (NULLIF(d.pow_pdf, '') IS NOT NULL) AS has_pow,
@@ -8940,6 +8975,9 @@ app.get('/api/projects', async (req, res) => {
         p.is_donated AS "is_donated",
         p.program_type AS "programType",
         p.program_type AS "program_type",
+        p.sangguniang_resolution_id AS "sangguniang_resolution_id",
+        p.mother_moa_id AS "mother_moa_id",
+        p.supplamental_moa_id AS "supplamental_moa_id",
         p.has_moa AS "hasMoa",
         p.has_rta AS "hasRta",
         p.has_pow AS "hasPow",
@@ -9150,7 +9188,7 @@ app.get('/api/engineers', async (req, res) => {
 
     if (role) {
       query = `
-        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
+        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position, region, role 
         FROM users 
         WHERE role = $1
         ORDER BY first_name ASC;
@@ -9158,7 +9196,7 @@ app.get('/api/engineers', async (req, res) => {
       values = [role];
     } else {
       query = `
-        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position 
+        SELECT uid, first_name AS "firstName", last_name AS "lastName", division, position, region, role 
         FROM users 
         WHERE role = 'DepEd Engineer' OR role = 'Division Engineer' OR role = 'Non-DepEd Engineer'
         ORDER BY first_name ASC;
@@ -9572,6 +9610,41 @@ app.post('/api/upload-project-document', async (req, res) => {
     res.status(500).json({ error: "Failed to save document" });
   } finally {
     if (client) client.release();
+  }
+});
+
+// --- UNIT 1: Nexus Ownership Document Upload ---
+app.post('/api/schools/:iern/ownership-docs', upload.single('file'), async (req, res) => {
+  try {
+    const { iern } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const filePath = `/uploads/${req.file.filename}`;
+    const docId = `doc_${Date.now()}_${iern}`;
+    
+    res.json({
+      success: true,
+      data: {
+        id: docId,
+        filePath: filePath
+      }
+    });
+  } catch (error) {
+    console.error("Ownership Doc Upload Error:", error);
+    res.status(500).json({ error: "Failed to upload document" });
+  }
+});
+
+app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
+  try {
+    // Return success to allow frontend to remove the reference in its state.
+    res.json({ success: true, message: "Document mapping removed" });
+  } catch (error) {
+    console.error("Ownership Doc Delete Error:", error);
+    res.status(500).json({ error: "Failed to delete document" });
   }
 });
 

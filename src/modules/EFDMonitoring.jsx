@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2, FiImage, FiLayers, FiList, FiCheckSquare, FiActivity, FiTarget } from 'react-icons/fi';
+import { FiSearch, FiUserPlus, FiCheck, FiX, FiAlertCircle, FiInfo, FiMapPin, FiFilter, FiChevronDown, FiFileText, FiPlus, FiChevronRight, FiEdit2, FiImage, FiLayers, FiList, FiCheckSquare, FiActivity, FiTarget, FiTrash2 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAuth } from '../context/AuthContext';
@@ -90,7 +90,7 @@ const EFDMonitoring = () => {
 
     const normalize = (val) => val?.toString().trim().toUpperCase() || 'UNASSIGNED';
     const [selectedProject, setSelectedProject] = useState(null);
-    const [selectedEngineer, setSelectedEngineer] = useState('');
+    const [selectedEngineers, setSelectedEngineers] = useState([]);
     const [isAssigning, setIsAssigning] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
     const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
@@ -229,14 +229,34 @@ const EFDMonitoring = () => {
         setCurrentPage(1);
     }, [searchTerm, selectedRegions, selectedDivision, selectedCategories, selectedFundingYears, selectedDonated, selectedDocStatus, showUnassignedOnly]);
 
+    const handleDeleteProject = async (e, id) => {
+        e.stopPropagation();
+        if (window.confirm("Are you sure you want to delete this project and all its history? This action cannot be undone.")) {
+            try {
+                const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    setProjects(prev => prev.filter(p => p.id !== id));
+                    alert("Project deleted successfully.");
+                } else {
+                    const data = await res.json();
+                    alert(data.message || "Failed to delete project.");
+                }
+            } catch (err) {
+                console.error("Delete error:", err);
+                alert("An error occurred while deleting.");
+            }
+        }
+    };
+
     const handleAssign = async () => {
-        if (!selectedProject || !selectedEngineer) return;
+        if (!selectedProject || selectedEngineers.length === 0) return;
 
         setIsAssigning(true);
         setMessage({ text: '', type: '' });
 
-        const engineer = engineers.find(e => e.uid === selectedEngineer);
-        const engineerName = `${engineer?.firstName || ''} ${engineer?.lastName || ''}`;
+        const selectedEngs = engineers.filter(e => selectedEngineers.includes(e.uid));
+        const engineerIds = selectedEngs.map(e => e.uid).join(', ');
+        const engineerNames = selectedEngs.map(e => `${e.firstName || ''} ${e.lastName || ''}`.trim()).join(', ');
 
         try {
             const response = await fetch('/api/assign-project', {
@@ -244,19 +264,19 @@ const EFDMonitoring = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     projectId: selectedProject.id,
-                    engineerId: selectedEngineer,
-                    engineerName: engineerName
+                    engineerId: engineerIds,
+                    engineerName: engineerNames
                 })
             });
 
             if (response.ok) {
-                setMessage({ text: `Project assigned to ${engineerName} successfully!`, type: 'success' });
+                setMessage({ text: `Project assigned successfully!`, type: 'success' });
                 // Update local state
                 setProjects(prev => prev.map(p => 
-                    p.id === selectedProject.id ? { ...p, engineerName: engineerName } : p
+                    p.id === selectedProject.id ? { ...p, engineerName: engineerNames, engineerId: engineerIds } : p
                 ));
                 setSelectedProject(null);
-                setSelectedEngineer('');
+                setSelectedEngineers([]);
                 setEngineerSearchTerm('');
             } else {
                 const err = await response.json();
@@ -607,6 +627,11 @@ const EFDMonitoring = () => {
                                                                         {p.projectCategory}
                                                                     </span>
                                                                 )}
+                                                                {p.sangguniang_resolution_id && (
+                                                                    <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200" title="Sangguniang Resolution ID attached via MOA">
+                                                                        SR ID: {p.sangguniang_resolution_id}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </td>
@@ -681,12 +706,25 @@ const EFDMonitoring = () => {
                                                                 <FiEdit2 size={18} />
                                                             </button>
                                                             <button 
-                                                                onClick={(e) => { e.stopPropagation(); setSelectedProject(p); }}
+                                                                onClick={(e) => { 
+                                                                    e.stopPropagation(); 
+                                                                    setSelectedProject(p);
+                                                                    setSelectedEngineers(p.engineerId ? p.engineerId.split(',').map(s=>s.trim()) : []);
+                                                                }}
                                                                 className="p-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white hover:shadow-lg transition-all"
                                                                 title="Assign Engineer"
                                                             >
                                                                 <FiUserPlus size={18} />
                                                             </button>
+                                                            {(user?.role === 'efd engineer' || user?.role === 'EFD Engineer' || user?.role === 'hrodi_engineer') && (
+                                                                <button 
+                                                                    onClick={(e) => handleDeleteProject(e, p.id)}
+                                                                    className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-600 hover:text-white hover:shadow-lg transition-all"
+                                                                    title="Delete Project"
+                                                                >
+                                                                    <FiTrash2 size={18} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -764,6 +802,7 @@ const EFDMonitoring = () => {
                                 onClick={() => {
                                     setSelectedProject(null);
                                     setEngineerSearchTerm('');
+                                    setSelectedEngineers([]);
                                 }}
                                 className="absolute top-6 right-6 p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
                             >
@@ -793,29 +832,47 @@ const EFDMonitoring = () => {
                                 <div className="grid grid-cols-1 gap-2 overflow-y-auto pr-2 custom-scrollbar flex-1 min-h-0">
                                     {engineers.filter(eng => {
                                         const search = engineerSearchTerm.toLowerCase();
-                                        return eng.firstName?.toLowerCase().includes(search) || 
+                                        const matchesSearch = eng.firstName?.toLowerCase().includes(search) || 
                                                eng.lastName?.toLowerCase().includes(search) || 
                                                eng.division?.toLowerCase().includes(search);
-                                    }).map((eng) => (
+                                        
+                                        const isDivEng = eng.role === 'Division Engineer' || eng.role === 'deped_engineer' || eng.account_category === 'Division Engineer' || eng.account_category === 'deped_engineer';
+                                        
+                                        const projReg = selectedProject?.region?.trim().toLowerCase() || '';
+                                        const engReg = eng.region?.trim().toLowerCase() || '';
+                                        const matchesReg = !projReg || !engReg || projReg === engReg;
+
+                                        const projDiv = selectedProject?.division?.trim().toLowerCase() || '';
+                                        const engDiv = eng.division?.trim().toLowerCase() || '';
+                                        const matchesDiv = !projDiv || !engDiv || engDiv === projDiv;
+                                        
+                                        return isDivEng && matchesReg && matchesDiv && matchesSearch;
+                                    }).map((eng) => {
+                                        const isSelected = selectedEngineers.includes(eng.uid);
+                                        return (
                                         <button
                                             key={eng.uid}
-                                            onClick={() => setSelectedEngineer(eng.uid)}
-                                            className={`flex items-center justify-between p-4 rounded-2xl transition-all border-2 ${selectedEngineer === eng.uid ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 border-transparent text-slate-700 hover:bg-slate-100'}`}
+                                            onClick={() => {
+                                                setSelectedEngineers(prev => 
+                                                    prev.includes(eng.uid) ? prev.filter(id => id !== eng.uid) : [...prev, eng.uid]
+                                                );
+                                            }}
+                                            className={`flex items-center justify-between p-4 rounded-2xl transition-all border-2 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 border-transparent text-slate-700 hover:bg-slate-100'}`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${selectedEngineer === eng.uid ? 'bg-white/20' : 'bg-white'}`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${isSelected ? 'bg-white/20' : 'bg-white'}`}>
                                                     {eng.firstName[0]}
                                                 </div>
                                                 <div className="text-left">
                                                     <p className="text-sm font-bold">{eng.firstName} {eng.lastName}</p>
-                                                    <p className={`text-[10px] ${selectedEngineer === eng.uid ? 'text-blue-100' : 'text-slate-400'}`}>
+                                                    <p className={`text-[10px] ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
                                                         {eng.division} • {eng.position || 'Engineer'}
                                                     </p>
                                                 </div>
                                             </div>
-                                            {selectedEngineer === eng.uid && <FiCheck size={20} />}
+                                            {isSelected && <FiCheck size={20} />}
                                         </button>
-                                    ))}
+                                    )})}
                                 </div>
                             </div>
 
@@ -824,6 +881,7 @@ const EFDMonitoring = () => {
                                     onClick={() => {
                                         setSelectedProject(null);
                                         setEngineerSearchTerm('');
+                                        setSelectedEngineers([]);
                                     }}
                                     className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors"
                                 >
@@ -831,7 +889,7 @@ const EFDMonitoring = () => {
                                 </button>
                                 <button 
                                     onClick={handleAssign}
-                                    disabled={!selectedEngineer || isAssigning}
+                                    disabled={selectedEngineers.length === 0 || isAssigning}
                                     className="w-full py-4 rounded-2xl bg-blue-600 text-white font-bold text-sm shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all disabled:opacity-50"
                                 >
                                     {isAssigning ? 'Updating...' : 'Confirm Assignment'}

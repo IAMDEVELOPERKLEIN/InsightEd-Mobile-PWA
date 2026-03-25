@@ -28,7 +28,7 @@ const getDashboardPath = (role, accountCategory) => {
         'Finance': '/finance-dashboard',
         'Implementing Agency': '/agency-dashboard',
         'EFD': '/efd-dashboard',
-        'EFD Engineer': '/engineer-dashboard',
+        'EFD Engineer': '/efd-dashboard',
         'HRODI': '/efd-dashboard',
         'PGO': '/agency-dashboard',
         'CGO': '/agency-dashboard',
