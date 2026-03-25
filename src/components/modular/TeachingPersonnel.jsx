@@ -170,8 +170,9 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [activeTeacher, setActiveTeacher] = useState(null);
 
     const handleFinalize = async () => {
-        // Detection: Check if any teacher has zero teaching load
-        const teachersWithZeroLoad = teachers.filter(t => {
+        // Detection: Check if any visible teacher has zero teaching load
+        // STRICT: Only look at the filtered 'actualTeachers' roster
+        const teachersWithZeroLoad = actualTeachers.filter(t => {
             const totalLoad = (t.monday_mins || 0) + (t.tuesday_mins || 0) + 
                               (t.wednesday_mins || 0) + (t.thursday_mins || 0) + 
                               (t.friday_mins || 0);
@@ -194,7 +195,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                 partial: !isFullyComplete,
-                total_teachers_registered: teachers.length
+                total_teachers_registered: actualTeachers.length
             })
             });
             const json = await res.json();
@@ -616,7 +617,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
     // ── Summary Component ──────────────────────────────────────────────────
     const Unit6Summary = () => {
-        const totalStaff = teachers.length;
+        const totalStaff = actualTeachers.length;
         const totalMins = teachers.reduce((sum, t) => {
             return sum + (t.monday_mins || 0) + (t.tuesday_mins || 0) + 
                    (t.wednesday_mins || 0) + (t.thursday_mins || 0) + 
@@ -628,14 +629,14 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
         // Position breakdown
         const positions = {};
-        teachers.forEach(t => {
+        actualTeachers.forEach(t => {
             const p = t.position || "Teacher I";
             positions[p] = (positions[p] || 0) + 1;
         });
 
         // Funding breakdown
         const funding = {};
-        teachers.forEach(t => {
+        actualTeachers.forEach(t => {
             const f = t.funding_source || "DepEd National";
             funding[f] = (funding[f] || 0) + 1;
         });
@@ -750,7 +751,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Detailed Roster</h3>
                         </div>
                         <div className="space-y-3">
-                            {teachers.slice(0, 5).map(t => {
+                            {actualTeachers.slice(0, 5).map(t => {
                                 const mins = (t.monday_mins||0) + (t.tuesday_mins||0) + (t.wednesday_mins||0) + (t.thursday_mins||0) + (t.friday_mins||0);
                                 return (
                                     <div key={t.id} className="bg-white rounded-2xl p-4 border border-slate-50 shadow-sm flex items-center justify-between">
@@ -772,7 +773,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                             })}
                             {teachers.length > 5 && (
                                 <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest pt-2">
-                                    + {teachers.length - 5} more personnel in database
+                                    + {actualTeachers.length - 5} more personnel in database
                                 </p>
                             )}
                         </div>

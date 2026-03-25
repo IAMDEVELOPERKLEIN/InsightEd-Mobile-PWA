@@ -1136,6 +1136,17 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             </div>
                                         </div>
                                     ))}
+                                    {mgCombinations.length > 0 && (
+                                        <div className="flex justify-center mt-6">
+                                            <button 
+                                                onClick={() => setMgCombinations(prev => [...prev, { id: Date.now(), grades: [], enrollment: 0 }])}
+                                                className="px-8 py-4 bg-white border-4 border-indigo-100 text-indigo-600 rounded-[2rem] font-black text-sm shadow-xl hover:bg-indigo-50 transition-all flex items-center gap-2 group active:scale-95"
+                                            >
+                                                <span className="text-xl group-hover:rotate-90 transition-transform">➕</span>
+                                                Add Another Combination
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </motion.div>

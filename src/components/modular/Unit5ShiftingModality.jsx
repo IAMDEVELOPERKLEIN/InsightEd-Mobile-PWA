@@ -66,26 +66,6 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [showDraftModal, setShowDraftModal] = useState(false);
 
     // ── Dynamic grades based on curricular offering ──────────────────────
-    const activeGrades = useMemo(() => {
-        let coLower = (curricularOffering || "").toLowerCase();
-        let keys = [];
-        if (coLower.includes("kinder")) keys.push("kinder");
-        if (coLower.includes("elementary") || coLower.includes("primary")) {
-            keys.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
-        }
-        if (coLower.includes("junior high") || coLower.includes("jhs")) {
-            keys.push("g7", "g8", "g9", "g10");
-        }
-        if (coLower.includes("senior high") || coLower.includes("shs")) {
-            keys.push("g11", "g12");
-        }
-        // Safety
-        if (keys.length === 0) keys = Object.keys(GRADE_LABEL_MAP);
-        
-        // Ensure unique keys (in case of overlap like elementary + jhs)
-        const uniqueKeys = Array.from(new Set(keys));
-        return uniqueKeys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
-    }, [curricularOffering]);
 
     // ── Chapter 1: Standard Setup ───────────────────────────────────────────
     const [hasStandardShifting, setHasStandardShifting] = useState(null);
@@ -134,47 +114,116 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
                     setCurricularOffering(d.curricular_offering || "");
                     
-                    let offeringKeys = [];
-                    let coLower = (d.curricular_offering || "").toLowerCase();
-                    if (coLower.includes("kinder")) offeringKeys.push("kinder");
-                    if (coLower.includes("elementary") || coLower.includes("primary")) {
-                        offeringKeys.push("kinder", "g1", "g2", "g3", "g4", "g5", "g6");
+                    const expectedGrades = [];
+                    const co = (d.curricular_offering || "").toLowerCase();
+                    let hasKinder = false; let hasElem = false; let hasJHS = false; let hasSHS = false;
+                    if (co === "purely elementary") { hasKinder = true; hasElem = true; }
+                    else if (co === "elementary school and junior high school (k-10)") { hasKinder = true; hasElem = true; hasJHS = true; }
+                    else if (co === "junior high and senior high") { hasJHS = true; hasSHS = true; }
+                    else if (co === "all offering (k to 12)") { hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true; }
+                    else if (co === "purely junior high school") { hasJHS = true; }
+                    else if (co === "purely senior high school") { hasSHS = true; }
+                    else {
+                        hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
+                        hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                        hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
+                        hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
                     }
-                    if (coLower.includes("junior high") || coLower.includes("jhs")) {
-                        offeringKeys.push("g7", "g8", "g9", "g10");
+                    let parsedSections = [];
+                    if (d.unit3_simplified_counts) {
+                        try { parsedSections = typeof d.unit3_simplified_counts === 'string' ? JSON.parse(d.unit3_simplified_counts) : d.unit3_simplified_counts; } catch (e) {}
                     }
-                    if (coLower.includes("senior high") || coLower.includes("shs")) {
-                        offeringKeys.push("g11", "g12");
-                    }
-                    if (offeringKeys.length === 0) offeringKeys = Object.keys(GRADE_LABEL_MAP);
-
-                    let baseGrades = offeringKeys.map(k => ({ key: k, label: GRADE_LABEL_MAP[k] }));
-                    let finalGrades = baseGrades;
-
+                    let u2Parsed = [];
                     if (d.unit2_simplified_enrollment) {
                         try {
-                            const u2 = typeof d.unit2_simplified_enrollment === 'string' 
-                                ? JSON.parse(d.unit2_simplified_enrollment) 
-                                : d.unit2_simplified_enrollment;
-                            const q = u2.questionnaire || {};
-                            let processedActiveIds = new Set();
-                            baseGrades.forEach(g => {
-                                const isAvail = q.gradeAvailability?.[g.key] !== false;
-                                const hasData = q.gradeTotals?.[g.key] !== undefined || (g.key === 'kinder' && q.kinderEnrollment !== undefined);
-                                if (isAvail && hasData) processedActiveIds.add(g.key);
-                            });
-                            (q.mgCombinations || []).forEach(combo => { (combo.grades || []).forEach(gid => processedActiveIds.add(gid)); });
-                            let u2Array = Array.isArray(u2) ? u2 : (u2.array || []);
-                            u2Array.forEach(item => {
-                                if (item.grade_level) {
-                                    if (q.gradeAvailability?.[item.grade_level] === false || item.is_active === false) processedActiveIds.delete(item.grade_level);
-                                    else processedActiveIds.add(item.grade_level);
-                                }
-                            });
-                            if (processedActiveIds.size > 0) finalGrades = baseGrades.filter(g => processedActiveIds.has(g.key));
-                        } catch (e) { console.warn("Unit 2 Parse error in Unit 5", e); }
+                            const raw = typeof d.unit2_simplified_enrollment === 'string' ? JSON.parse(d.unit2_simplified_enrollment) : d.unit2_simplified_enrollment;
+                            u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
+                        } catch (e) { console.warn("U2 Parse Error", e); }
                     }
-
+                    const getEnrollmentForGrade = (gradeId) => {
+                        const found = u2Parsed.find(x => x.grade_level === gradeId);
+                        if (found) return parseInt(found.total || 0);
+                        const colKey = `enroll_${gradeId}`;
+                        if (d[colKey] !== undefined) return parseInt(d[colKey] || 0);
+                        return 0;
+                    };
+                    const getCountForGrade = (gradeId) => {
+                        const found = parsedSections.find(sec => sec.grade_level === gradeId);
+                        if (found) return parseInt(found.total_sections || 0);
+                        if (gradeId.startsWith('mg_')) {
+                            const idx = gradeId.replace('mg_', '');
+                            return parseInt(d[`multigrade_sections_${idx}`] || 0);
+                        }
+                        const sectKey = `sections_${gradeId}`;
+                        if (d[sectKey] !== undefined) return parseInt(d[sectKey] || 0);
+                        return 0;
+                    };
+                    const isGradeActive = (gradeId) => {
+                        if (!u2Parsed.length) return true;
+                        const found = u2Parsed.find(x => x.grade_level === gradeId);
+                        return found ? found.is_active !== false : true;
+                    };
+                    const ALL_POSSIBLE_GRADES = [
+                        { id: "kinder", label: "Kinder" },
+                        ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
+                    ];
+                    ALL_POSSIBLE_GRADES.forEach(pg => {
+                        let isOffered = false;
+                        const nid = pg.id.replace('g', '');
+                        if (pg.id === 'kinder') isOffered = hasKinder;
+                        else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
+                        else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
+                        else if (['11','12'].includes(nid)) isOffered = hasSHS;
+                        const enrollment = getEnrollmentForGrade(pg.id) || parseInt(d[`enroll_${pg.id}`] || 0);
+                        const sections = getCountForGrade(pg.id) || parseInt(d[`sections_${pg.id}`] || 0);
+                        const isActive = isGradeActive(pg.id);
+                        if (enrollment > 0 || sections > 0 || (isOffered && isActive)) {
+                            expectedGrades.push({ id: pg.id, label: pg.label });
+                        }
+                    });
+                    const multigradeGrades = [];
+                    for (let nIdx = 1; nIdx <= 3; nIdx++) {
+                        const groupName = d[`multigrade_groupings_${nIdx}`];
+                        const groupSections = getCountForGrade(`mg_${nIdx}`) || parseInt(d[`multigrade_sections_${nIdx}`] || 0);
+                        if (groupName && groupSections > 0) {
+                            const labelStr = groupName.toLowerCase();
+                            let gradeNums = [];
+                            if (labelStr.includes("-") || labelStr.includes(" to ")) {
+                                const numbers = labelStr.match(/\d+/g);
+                                if (numbers && numbers.length >= 2) {
+                                    const start = parseInt(numbers[0]);
+                                    const end = parseInt(numbers[1]);
+                                    for (let n = start; n <= end; n++) gradeNums.push(`${n}`);
+                                }
+                            } else {
+                                gradeNums = labelStr.replace(/\D/g, " ").trim().split(/\s+/).filter(x => x);
+                            }
+                            const gradeIds = gradeNums.map(n => `g${n}`);
+                            if (labelStr.includes("kinder") || labelStr.includes(" k ")) gradeIds.push("kinder");
+                            multigradeGrades.push({ id: `mg_${nIdx}`, label: groupName, pairs: gradeIds });
+                        }
+                    }
+                    const finalExpectedGrades = expectedGrades.filter(eg => {
+                        const isPaired = multigradeGrades.some(mg => mg.pairs.includes(eg.id));
+                        return !isPaired;
+                    });
+                    finalExpectedGrades.push(...multigradeGrades);
+                    const getSortOrder = (id) => {
+                        if (id === "kinder") return 0;
+                        if (id.startsWith("g")) return parseInt(id.replace("g", ""));
+                        if (id.startsWith("mg_")) {
+                            const mg = multigradeGrades.find(x => x.id === id);
+                            if (mg && mg.pairs.length > 0) {
+                                const first = mg.pairs[0];
+                                if (first === "kinder") return 0.5;
+                                return parseInt(first.replace("g", "")) + 0.1;
+                            }
+                            return 99;
+                        }
+                        return 200;
+                    };
+                    finalExpectedGrades.sort((a,b) => getSortOrder(a.id) - getSortOrder(b.id));
+                    const finalGrades = finalExpectedGrades.map(g => ({ key: g.id, label: g.label }));
                     setFilteredGrades(finalGrades);
 
                     // MASTER PRECEDENCE: Draft > Database
@@ -271,7 +320,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 setCurrentChapter(1);
             } else {
                 setCurrentChapter(2);
-                setGradeIdx(activeGrades.length - 1);
+                setGradeIdx(filteredGrades.length - 1);
             }
         } else if (currentChapter === 4) {
             setCurrentChapter(3);

@@ -15772,12 +15772,20 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
       'it_laptop_total', 'it_tablet_total', 'it_pc_total', 'it_printer_total', 'it_ecart_total'
     ];
     const insightsAlter = insightsCols.map(c => `ADD COLUMN IF NOT EXISTS ${c} INTEGER DEFAULT 0`);
-    await pool.query(`ALTER TABLE ph_schools ${insightsAlter.join(', ')}`);
+    
+    // Auto-migrate multigrade shift/mode columns
+    const mgCols = [];
+    for (let i = 1; i <= 3; i++) {
+      mgCols.push(`ADD COLUMN IF NOT EXISTS shift_mg_${i} TEXT`);
+      mgCols.push(`ADD COLUMN IF NOT EXISTS mode_mg_${i} TEXT`);
+    }
+    
+    await pool.query(`ALTER TABLE ph_schools ${[...insightsAlter, ...mgCols].join(', ')}`);
   } catch (e) { }
 
   try {
     // Base dynamic fields for K-12
-    const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+    const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12", "mg_1", "mg_2", "mg_3"];
     const dynamicFields = [];
     const values = [];
     let paramIdx = 1;

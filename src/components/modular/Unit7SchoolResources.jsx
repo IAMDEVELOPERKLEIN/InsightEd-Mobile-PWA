@@ -613,6 +613,10 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         setEcartForm(initialEcartForm);
     };
 
+    const deleteEcart = (id) => {
+        setECarts(prev => prev.filter(cart => cart.id !== id));
+    };
+
     const isPhase3Valid = useMemo(() => (hasEcart === false) || (hasEcart === true && eCarts.length > 0), [hasEcart, eCarts]);
     const handlePhase3Proceed = () => { setCurrentPhase(4); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
