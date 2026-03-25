@@ -667,7 +667,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                                 <div className="relative group">
                                                     <div className="flex items-center gap-1.5 mb-2">
                                                         <FiClock className="text-amber-500 text-[10px]" />
-                                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Time (mins)</p>
+                                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Time</p>
                                                     </div>
                                                     <input 
                                                         type="number" 
@@ -684,7 +684,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                                 <div className="relative group">
                                                     <div className="flex items-center gap-1.5 mb-2">
                                                         <FiMapPin className="text-indigo-500 text-[10px]" />
-                                                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Distance (km)</p>
+                                                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Distance</p>
                                                     </div>
                                                     <input 
                                                         type="number" 

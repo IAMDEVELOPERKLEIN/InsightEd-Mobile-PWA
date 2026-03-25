@@ -45,6 +45,14 @@ const SkeletonWizard = () => (
 
 // ── Main Component ───────────────────────────────────────────────────────────
 const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
+    const formatDateAbbr = (dateStr) => {
+        if (!dateStr) return "—";
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    };
+
     const navigate = useNavigate();
     const { user, loading: authLoading } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
@@ -217,10 +225,10 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             head_date_of_birth: dobVal,
                             head_date_hired: hiredVal,
                             head_dob_year: dobParts[0] || "",
-                            head_dob_month: dobParts[1] ? new Date(dobVal).toLocaleString('default', { month: 'long' }) : "",
+                            head_dob_month: dobParts[1] ? new Date(dobVal).toLocaleString('default', { month: 'short' }).replace('.', '') : "",
                             head_dob_day: dobParts[2] ? parseInt(dobParts[2]).toString() : "",
                             head_hired_year: hiredParts[0] || "",
-                            head_hired_month: hiredParts[1] ? new Date(hiredVal).toLocaleString('default', { month: 'long' }) : "",
+                            head_hired_month: hiredParts[1] ? new Date(hiredVal).toLocaleString('default', { month: 'short' }).replace('.', '') : "",
                             head_hired_day: hiredParts[2] ? parseInt(hiredParts[2]).toString() : "",
                         };
                     })(),
@@ -338,7 +346,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     // ── Date Sync Logic ──────────────────────────────────────────────────────
     useEffect(() => {
         if (formData.head_dob_month && formData.head_dob_day && formData.head_dob_year) {
-            const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
             const m = (months.indexOf(formData.head_dob_month) + 1).toString().padStart(2, '0');
             const d = formData.head_dob_day.padStart(2, '0');
             const y = formData.head_dob_year;
@@ -349,7 +357,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     useEffect(() => {
         if (formData.head_hired_month && formData.head_hired_day && formData.head_hired_year) {
-            const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
             const m = (months.indexOf(formData.head_hired_month) + 1).toString().padStart(2, '0');
             const d = formData.head_hired_day.padStart(2, '0');
             const y = formData.head_hired_year;
@@ -625,7 +633,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     ];
 
     const isStep0Valid = formData.school_id.length === 6 && /^\d+$/.test(formData.school_id);
-    const isStep1Valid = formData.school_name.trim().length > 3;
+    const isStep1Valid = formData.school_name.trim().length > 3 && !schoolNameWarning;
     const isStep2Valid = formData.region && formData.province && formData.municipality && formData.barangay && formData.division && formData.district && formData.leg_district;
     const isStep3Valid = formData.curricular_offering !== "";
     const isStep4Valid = formData.head_first_name !== "" && formData.head_last_name !== "" && formData.head_position_title !== "" && formData.head_date_hired !== "";
@@ -798,8 +806,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         <p className="font-black text-sm">{formData.head_sex || "—"}</p>
                                     </div>
                                     <div>
-                                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest block mb-2">Assigned</span>
-                                        <p className="font-black text-sm">{formData.head_date_hired ? new Date(formData.head_date_hired).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : "—"}</p>
+                                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest block mb-2">Date of Assignment</span>
+                                        <p className="font-black text-sm">{formatDateAbbr(formData.head_date_hired)}</p>
                                     </div>
                                 </div>
                             </section>
@@ -1091,7 +1099,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <div className="grid grid-cols-3 gap-3">
                                                         <select name="head_dob_month" value={formData.head_dob_month} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Month</option>
-                                                            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                                            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(m => (
                                                                 <option key={m} value={m}>{m}</option>
                                                             ))}
                                                         </select>
@@ -1116,7 +1124,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <div className="grid grid-cols-3 gap-3">
                                                         <select name="head_hired_month" value={formData.head_hired_month} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
                                                             <option value="" disabled hidden>Month</option>
-                                                            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                                                            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(m => (
                                                                 <option key={m} value={m}>{m}</option>
                                                             ))}
                                                         </select>

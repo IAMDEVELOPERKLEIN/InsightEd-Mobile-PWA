@@ -25,6 +25,8 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         }
     }, [propReadOnly]);
 
+    const hasCheckedCompletion = React.useRef(false);
+
     useEffect(() => {
         const init = async () => {
             if (!schoolId) {
@@ -33,9 +35,22 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
 
             try {
+                // Initial completion check - only run once on mount
+                let isUnitCompleted = false;
+                if (!hasCheckedCompletion.current) {
+                    const storedProgress = localStorage.getItem('quest_progress');
+                    const progress = storedProgress ? JSON.parse(storedProgress) : null;
+                    isUnitCompleted = progress?.completedUnits?.includes(9);
+
+                    if (isUnitCompleted && !propReadOnly && !isReadOnly) {
+                        setIsReadOnly(true);
+                    }
+                    hasCheckedCompletion.current = true;
+                }
+
                 // If read-only, fetch the actual data for the dashboard
-                // We fetch if propReadOnly is true OR if isReadOnly is true
-                if (propReadOnly || isReadOnly) {
+                const effectiveReadOnly = propReadOnly || isReadOnly || isUnitCompleted;
+                if (effectiveReadOnly) {
                     const res = await fetch(`/api/school-location/${schoolId}`);
                     const result = await res.json();
                     if (result.success && result.data) {
@@ -43,11 +58,11 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     }
                 }
 
-                // Check for Draft
-                const draft = await getUnitDraft(9, schoolId);
-                if (draft) {
-                    setInitialDraft(draft);
-                    if (!propReadOnly) {
+                // Check for Draft (only if not viewing a completed unit)
+                if (!effectiveReadOnly) {
+                    const draft = await getUnitDraft(9, schoolId);
+                    if (draft) {
+                        setInitialDraft(draft);
                         setShowWelcomeBack(true);
                         setTimeout(() => setShowWelcomeBack(false), 3000);
                     }
@@ -457,7 +472,6 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 )}
             </AnimatePresence>
 
-            {!propReadOnly && isReadOnly && <BottomNav userRole="School Head" />}
         </motion.div>
     );
 };
