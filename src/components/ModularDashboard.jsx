@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { FiHome, FiUsers, FiGrid, FiBookOpen, FiArrowLeft, FiClock, FiShield, FiStar, FiAward, FiCheck, FiMapPin } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { getUnitDraft } from "../db";
+
 import BottomNav from "../modules/BottomNav";
 import { DASHBOARD_METADATA } from "../config/dashboardMetadata";
 import { useAuth } from "../context/AuthContext";
@@ -207,6 +208,7 @@ const ModularDashboard = () => {
     };
 
 
+
     const userRank = getRank(questProgress.xp);
 
     return (
@@ -326,6 +328,7 @@ const ModularDashboard = () => {
                     })}
                 </div>
             </div>
+
 
 
             <BottomNav userRole="School Head" />
