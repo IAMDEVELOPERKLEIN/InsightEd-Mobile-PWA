@@ -2,6 +2,25 @@
 
 This document tracks technical improvements, bug fixes, and feature implementations made during development.
 
+## 2026-03-25
+### Unit 7 Resource Audit Refinements
+- **UI Taxonomy Update**: Removed "Discrepancy Detected" terminology from Unit 7 (School Resources) to reduce user anxiety. Relabeled confirmation prompts to "Status Confirmation" and "Resource Validation" while preserving the functional shortage/excess verification logic.
+- **Robust Source-of-Truth Recovery**: Implemented a multi-layered data recovery strategy that cross-references JSON arrays with flat database columns (`enroll_g1`) and parses section counts from text descriptions (`grade_X_size`). This ensures Unit 7 reference data is always accurate even if some data sources are missing or inconsistent.
+- **Aggressive Grade Detection**: Replaced strict curricular offering filters with a **Data-First** detection logic. Unit 7 now automatically identifies and includes any grade level that has recorded enrollment in Unit 2 or sections in Unit 3, regardless of the school's primary classification.
+- **Multigrade Data Harvesting**: Robustly integrated the `has_multigrade` flag and implemented advanced **Multigrade Range Parsing**. Unit 7 now recognizes labels like "Grade 1-3" or "Kinder & Grade 1", correctly mapping all involved grade levels and summing their enrollment.
+- **Draft Reconciliation**: Updated the `init` function to reconcile saved Unit 7 drafts with the latest school structure from Unit 3. This ensures that new multigrade groupings are reflected even if a previous draft existed, while preserving already verified furniture data.
+- **Logical Row Sorting**: Implemented a custom sorting algorithm to ensure grade levels and multigrade groups appear in a natural academic order (Kinder → G1 → Multigrades → G12 → SPED/ALS).
+- **Loading Hang Resolution**: Fixed a race condition/logic error in the `init` function that caused Unit 7 to hang on "Loading classrooms..." for new schools or schools with missing Unit 2 data.
+- **Data Normalization**: Implemented strict JSON parsing for `unit2_simplified_enrollment` to ensure enrollment baselines are always accurate regardless of database storage format.
+- **UI Cleanup (Confirmation Logic)**: Removed the school-wide "Status Confirmation" box and its associated requirement to type "confirm" at the bottom of the page. This streamlines the user experience by eliminating redundant global validations while preserving mandatory per-grade level validations within the audit modals.
+- **Utility Status Confirmations**: Added dynamic, red-alert confirmation checkboxes for schools reporting a lack of grid electricity, piped water, or wired internet in Unit 7. These mandatory acknowledgments ensure data accuracy for critical infrastructure gaps.
+- **Internet Type Granularity**: Introduced a new "Internet Connection Type" field (Wired, Wireless, Satellite) to Unit 7 Phase 5, providing better technical insights into school connectivity beyond simple Yes/No status.
+- **SHA Classification Removal**: Removed the "School Classification (SHA)" question from Unit 7 Phase 5. This streamlines the data collection process by eliminating a redundant administrative field.
+- **Unit 7 Navigation Correction**: Fixed a bug where completing Unit 7 would immediately redirect users to Unit 8. The application now correctly redirects to the **Modular Dashboard** (Units Overview).
+- **Quantitative Asset Condition UI**: Standardized "Operational Condition" for all ICT and WASH assets (Smart TVs, Faucets, etc.) to use a "Working/Not Working" breakdown with auto-computation, matching the advanced desktop/laptop logic.
+- **'Type Confirm' Validation**: Implemented mandatory "type confirm" text fields for critical utility status warnings (No Grid Power, No Piped Water, No Wired Internet). Users must now type the literal word "confirm" to validate these infrastructure gaps.
+- **Infrastructure Schema Extensions**: Expanded the `ph_schools` table with 4 new columns (`u7_confirm_no_grid`, `u7_confirm_no_wired`, etc.) to permanently track these critical infrastructure confirmations and connection types for administrative reporting.
+
 ## 2026-03-24
 ### Strict Dynamic Grade Level Filtering
 - **Issue**: Grade level fields in Units 2, 3, 7, and 8 were not strictly restricted based on the Unit 1 school classification (curricular offering), leading to potential data entry for non-applicable grades.

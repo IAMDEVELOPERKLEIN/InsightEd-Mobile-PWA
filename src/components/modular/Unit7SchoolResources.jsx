@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave, FiAlertTriangle } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave, FiAlertTriangle, FiAlertCircle } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
@@ -30,7 +30,7 @@ const GRADE_LOOP = [
     { label: "Grade 3", key: "g3", emoji: "3️⃣" },
     { label: "Grade 4", key: "g4", emoji: "4️⃣" },
     { label: "Grade 5", key: "g5", emoji: "5️⃣" },
-    { label: "Grade 6", key: "g6", emoji: "6️⃣" },
+    { label: "Grade 6", key: "g6", emoji: "🖨️" }, // Use printer icon for g6 as a placeholder for school-res
 ];
 
 const ICT_CATEGORIES = [
@@ -99,9 +99,9 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         laptops_total: "", laptops_func: "", laptops_teaching: "", laptops_working: "",
         tablets_total: "", tablets_func: "", tablets_teaching: "", tablets_working: "",
         desktops_total: "", desktops_func: "", desktops_teaching: "", desktops_working: "",
-        smart_tvs_total: "", smart_tvs_func: "",
-        projectors_total: "", projectors_func: "",
-        printers_total: "", printers_func: "",
+        smart_tvs_total: "", smart_tvs_func: "", smart_tvs_cond: "",
+        projectors_total: "", projectors_func: "", projectors_cond: "",
+        printers_total: "", printers_func: "", printers_cond: "",
     });
 
     // PHASE 3 State (eCart)
@@ -118,32 +118,36 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // PHASE 4 State (WASH)
     const [washData, setWashData] = useState({
-        male_seats_total: "", male_seats_func: "",
+        male_seats_total: "", male_seats_func: "", male_seats_cond: "",
         male_urinals_total: "", male_urinals_func: "",
-        female_seats_total: "", female_seats_func: "",
-        common_seats_total: "", common_seats_func: "",
-        pwd_seats_total: "", pwd_seats_func: "",
-        faucets_total: "", faucets_func: "",
+        female_seats_total: "", female_seats_func: "", female_seats_cond: "",
+        common_seats_total: "", common_seats_func: "", common_seats_cond: "",
+        pwd_seats_total: "", pwd_seats_func: "", pwd_seats_cond: "",
+        faucets_total: "", faucets_func: "", faucets_cond: "",
         water_source: "",
+        confirm_no_piped: false,
         attached_cr_classrooms: "",
         attached_cr_seats: "",
         attached_cr_included_in_main: false,
+        confirm_no_piped_text: "",
     });
 
     // PHASE 5 State (Utilities & Hardship)
     const [utilitiesData, setUtilitiesData] = useState({
         utility_electricity: "",
+        confirm_no_grid: false,
+        confirm_no_grid_text: "",
         has_solar_or_gen: false,
         utility_internet_yesno: null,
+        utility_internet_type: "",
+        confirm_no_wired: false,
+        confirm_no_wired_text: "",
         utility_internet_funder: "",
-        sha_category: "",
     });
     const [hasMultigradeContext, setHasMultigradeContext] = useState(false);
 
     // Validation Confirmation State
-    const [validationConfirm, setValidationConfirm] = useState("");
     const [gradeValidationConfirm, setGradeValidationConfirm] = useState("");
-    useEffect(() => { setValidationConfirm(""); }, [currentPhase]);
 
     // ── Data Fetching ───────────────────────────────────────────────────────────
     useEffect(() => {
@@ -165,7 +169,6 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     // MASTER PRECEDENCE: Draft > Database
                     if (draft) {
                         setCurrentPhase(draft.currentPhase || 1);
-                        setGradesData(draft.gradesData || []);
                         setGeneralRoomsData(draft.generalRoomsData || {});
                         setIctData(draft.ictData || {});
                         setHasEcart(draft.hasEcart);
@@ -175,8 +178,9 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         setIsReviewMode(false); // Force edit mode for drafts
                         setShowWelcomeBack(true);
                         setTimeout(() => setShowWelcomeBack(false), 3000);
-                    } else if (saved.exists && saved.data) {
-                        const d = saved.data;
+                        // We continue into the database fetching logic to reconcile the draft with current Unit 3 structure
+                    }
+                    if (saved.exists && saved.data) {
                         
                         // Check SPED/ALS
                         let speedAlsCountTotal = 0;
@@ -220,81 +224,184 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 parsedSections = typeof d.unit3_simplified_counts === 'string' ? JSON.parse(d.unit3_simplified_counts) : d.unit3_simplified_counts;
                             } catch (e) {}
                         }
-                        const u2Raw = d.unit2_simplified_enrollment || [];
-                        const u2Parsed = Array.isArray(u2Raw) ? u2Raw : (u2Raw.array || []);
+
+                        // Parse Unit 2 Enrollment (STRICT FIX: Must parse string if present)
+                        let u2Parsed = [];
+                        if (d.unit2_simplified_enrollment) {
+                            try {
+                                const raw = typeof d.unit2_simplified_enrollment === 'string' ? JSON.parse(d.unit2_simplified_enrollment) : d.unit2_simplified_enrollment;
+                                u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
+                            } catch (e) { console.warn("U2 Parse Error", e); }
+                        }
                         
                         const getEnrollmentForGrade = (gradeId) => {
+                            // Layer 1: Simplified JSON Array (Modern)
                             const found = u2Parsed.find(x => x.grade_level === gradeId);
-                            return found ? parseInt(found.total || 0) : 0;
+                            if (found) return parseInt(found.total || 0);
+                            
+                            // Layer 2: Flat Columns (Legacy/Guaranteed Integer)
+                            // Note: gradeId is 'kinder', 'g1', 'g2', etc.
+                            const colKey = `enroll_${gradeId}`;
+                            if (d[colKey] !== undefined) return parseInt(d[colKey] || 0);
+                            
+                            return 0;
                         };
 
                         const getCountForGrade = (gradeId) => {
+                            // Layer 1: Simplified JSON Array (Modern)
                             const found = parsedSections.find(sec => sec.grade_level === gradeId);
-                            return found ? parseInt(found.total_sections || 0) : 0;
+                            if (found) return parseInt(found.total_sections || 0);
+                            
+                            // Layer 2: Multigrade Flat Columns
+                            if (gradeId.startsWith('mg_')) {
+                                const idx = gradeId.replace('mg_', '');
+                                return parseInt(d[`multigrade_sections_${idx}`] || 0);
+                            }
+
+                            // Layer 3: Monograde Flat Sections (if they exist in some schemas)
+                            const sectKey = `sections_${gradeId}`;
+                            if (d[sectKey] !== undefined) return parseInt(d[sectKey] || 0);
+
+                            // Layer 4: Parse grade_X_size text from Unit 3 (e.g. "3 (30-35 learners)")
+                            const nid = gradeId.replace('g', '');
+                            const sizeKey = gradeId === 'kinder' ? 'grade_kinder_size' : `grade_${nid}_size`;
+                            const sizeVal = d[sizeKey] || "";
+                            if (sizeVal && typeof sizeVal === 'string') {
+                                const match = sizeVal.match(/^(\d+)/); // Extracts leading number
+                                if (match) return parseInt(match[1]);
+                            }
+                            
+                            return 0;
                         };
+
                         const isGradeActive = (gradeId) => {
-                            if (!u2Parsed.length) return true; // fallback
+                            if (!u2Parsed.length) return true; // Permissive fallback
                             const found = u2Parsed.find(x => x.grade_level === gradeId);
                             return found ? found.is_active !== false : true;
                         };
+                        // --- AGGRESSIVE GRADE DETECTION (Data-First) ---
+                        const ALL_POSSIBLE_GRADES = [
+                            { id: "kinder", label: "Kinder" },
+                            ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
+                        ];
 
-                        // Fallback: If curricular offering is empty (e.g. legacy test data), infer from actual enrollment data
-                        if (!co) {
-                            if (getCountForGrade("kinder") > 0 || parseInt(d.kinder_sections || 0) > 0) hasKinder = true;
-                            if (['1','2','3','4','5','6'].some(lvl => getCountForGrade(`g${lvl}`) > 0 || parseInt(d[`sections_g${lvl}`] || 0) > 0)) hasElem = true;
-                            if (['7','8','9','10'].some(lvl => getCountForGrade(`g${lvl}`) > 0 || parseInt(d[`sections_g${lvl}`] || 0) > 0)) hasJHS = true;
-                            if (['11','12'].some(lvl => getCountForGrade(`g${lvl}`) > 0 || parseInt(d[`sections_g${lvl}`] || 0) > 0)) hasSHS = true;
-                        }
+                        ALL_POSSIBLE_GRADES.forEach(pg => {
+                            // Check if grade is in standard curricular offering
+                            let isOffered = false;
+                            const nid = pg.id.replace('g', '');
+                            if (pg.id === 'kinder') isOffered = hasKinder;
+                            else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
+                            else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
+                            else if (['11','12'].includes(nid)) isOffered = hasSHS;
 
-                        if (hasKinder && isGradeActive("kinder")) {
-                            expectedGrades.push({
-                                id: "kinder", grade_level: "Kinder",
-                                enrolled: getEnrollmentForGrade("kinder") || parseInt(d.enroll_kinder || 0),
-                                sections: getCountForGrade("kinder") || parseInt(d.sections_kinder || 0), isVerified: false,
-                            });
-                        }
+                            const enrollment = getEnrollmentForGrade(pg.id) || parseInt(d[`enroll_${pg.id}`] || 0);
+                            const sections = getCountForGrade(pg.id) || parseInt(d[`sections_${pg.id}`] || 0);
+                            const isActive = isGradeActive(pg.id);
+                            
+                            // Include if it has DATA (even if outside offering) OR if it is OFFERED and ACTIVE
+                            if (enrollment > 0 || sections > 0 || (isOffered && isActive)) {
+                                expectedGrades.push({
+                                    id: pg.id, grade_level: pg.label,
+                                    enrolled: enrollment,
+                                    sections: sections, 
+                                    isVerified: false,
+                                });
+                            }
+                        });
 
-                        if (hasElem) {
-                            ['1','2','3','4','5','6'].forEach(lvl => {
-                                if (isGradeActive(`g${lvl}`)) {
-                                    expectedGrades.push({
-                                        id: `g${lvl}`, grade_level: `Grade ${lvl}`,
-                                        enrolled: getEnrollmentForGrade(`g${lvl}`) || parseInt(d[`enroll_g${lvl}`] || 0),
-                                        sections: getCountForGrade(`g${lvl}`) || parseInt(d[`sections_g${lvl}`] || 0), isVerified: false,
-                                    });
+                        // --- MULTIGRADE PAIRING SUPPORT ---
+                        // 1. Identify multigrade groups from Unit 3
+                        const multigradeGrades = [];
+                        for (let i = 1; i <= 3; i++) {
+                            const groupName = d[`multigrade_groupings_${i}`];
+                            const groupSections = getCountForGrade(`mg_${i}`) || parseInt(d[`multigrade_sections_${i}`] || 0);
+
+                            if (groupName && groupSections > 0) {
+                                // Extract grade numbers from label (e.g. "Grade 1 & 2", "Grade 1-3", "Kinder & Grade 1")
+                                const label = groupName.toLowerCase();
+                                let gradeNums = [];
+                                
+                                if (label.includes("-") || label.includes(" to ")) {
+                                    // Handle ranges like "4-6" or "1 to 3"
+                                    const numbers = label.match(/\d+/g);
+                                    if (numbers && numbers.length >= 2) {
+                                        const start = parseInt(numbers[0]);
+                                        const end = parseInt(numbers[1]);
+                                        for (let n = start; n <= end; n++) gradeNums.push(`${n}`);
+                                    }
+                                } else {
+                                    // Handle discrete lists "1, 2 & 3"
+                                    gradeNums = label.replace(/\D/g, " ").trim().split(/\s+/).filter(x => x);
                                 }
-                            });
+
+                                const gradeIds = gradeNums.map(n => `g${n}`);
+                                if (label.includes("kinder") || label.includes(" k ")) gradeIds.push("kinder");
+
+                                let totalMgEnrollment = 0;
+                                gradeIds.forEach(gid => {
+                                    totalMgEnrollment += getEnrollmentForGrade(gid);
+                                });
+
+                                multigradeGrades.push({
+                                    id: `mg_${i}`, 
+                                    grade_level: groupName,
+                                    enrolled: totalMgEnrollment,
+                                    sections: groupSections,
+                                    isVerified: false,
+                                    isMultigrade: true,
+                                    pairs: gradeIds
+                                });
+                            }
                         }
 
-                        if (hasJHS) {
-                            ['7','8','9','10'].forEach(lvl => {
-                                if (isGradeActive(`g${lvl}`)) {
-                                    expectedGrades.push({
-                                        id: `g${lvl}`, grade_level: `Grade ${lvl}`,
-                                        enrolled: getEnrollmentForGrade(`g${lvl}`) || parseInt(d[`enroll_g${lvl}`] || 0),
-                                        sections: getCountForGrade(`g${lvl}`) || parseInt(d[`sections_g${lvl}`] || 0), isVerified: false,
-                                    });
-                                }
-                            });
-                        }
+                        // 2. Filter out single grades that are part of a multigrade pairing
+                        const finalExpectedGrades = expectedGrades.filter(eg => {
+                            // Don't remove Kinder or SPED/ALS from base list unless specifically paired (rare)
+                            if (eg.id === "kinder" || eg.id === "sped_als") return true;
+                            
+                            // Check if this grade ID is in any multigrade pair
+                            const isPaired = multigradeGrades.some(mg => mg.pairs.includes(eg.id));
+                            return !isPaired;
+                        });
 
-                        if (hasSHS) {
-                            ['11','12'].forEach(lvl => {
-                                if (isGradeActive(`g${lvl}`)) {
-                                    expectedGrades.push({
-                                        id: `g${lvl}`, grade_level: `Grade ${lvl}`,
-                                        enrolled: getEnrollmentForGrade(`g${lvl}`) || parseInt(d[`enroll_g${lvl}`] || 0),
-                                        sections: getCountForGrade(`g${lvl}`) || parseInt(d[`sections_g${lvl}`] || 0), isVerified: false,
-                                    });
-                                }
-                            });
-                        }
+                        // 3. Add multigrade groups to the final list
+                        finalExpectedGrades.push(...multigradeGrades);
 
                         if (speedAlsCountTotal > 0 || d.als_community_centers_count > 0) {
-                            expectedGrades.push({
+                            finalExpectedGrades.push({
                                 id: "sped_als", grade_level: "SPED/ALS",
                                 enrolled: speedAlsCountTotal,
                                 sections: Math.max(1, parseInt(d.als_community_centers_count || 0)), isVerified: false,
+                            });
+                        }
+
+                        // Replace base expectedGrades with the multigrade-aware list
+                        let mergedExpectedGrades = finalExpectedGrades;
+
+                        // --- SORTING LOGIC ---
+                        const getSortOrder = (id) => {
+                            if (id === "kinder") return 0;
+                            if (id.startsWith("g")) return parseInt(id.replace("g", ""));
+                            if (id.startsWith("mg_")) {
+                                // Sort multigrade by its first grade member
+                                const mg = multigradeGrades.find(x => x.id === id);
+                                if (mg && mg.pairs.length > 0) {
+                                    const first = mg.pairs[0];
+                                    if (first === "kinder") return 0.5;
+                                    return parseInt(first.replace("g", "")) + 0.1;
+                                }
+                                return 99;
+                            }
+                            if (id === "sped_als") return 100;
+                            return 200;
+                        };
+                        mergedExpectedGrades.sort((a,b) => getSortOrder(a.id) - getSortOrder(b.id));
+
+                        // Reconcile with DRAFT if present
+                        if (draft && draft.gradesData) {
+                            mergedExpectedGrades = mergedExpectedGrades.map(eg => {
+                                const draftMatch = draft.gradesData.find(dg => dg.id === eg.id);
+                                return draftMatch ? { ...eg, ...draftMatch } : eg;
                             });
                         }
 
@@ -306,23 +413,27 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 // Merge saved furniture data into expected grades
                                 if (parsed.grades) {
                                     parsed.grades.forEach(savedGrade => {
-                                        const expectedIdx = expectedGrades.findIndex(eg => eg.id === savedGrade.id);
+                                        const expectedIdx = mergedExpectedGrades.findIndex(eg => eg.id === savedGrade.id);
                                         if (expectedIdx >= 0) {
-                                            expectedGrades[expectedIdx] = { ...expectedGrades[expectedIdx], ...savedGrade, isVerified: true };
+                                            mergedExpectedGrades[expectedIdx] = { ...mergedExpectedGrades[expectedIdx], ...savedGrade, isVerified: true };
                                         } else {
-                                            // Handle edge case where section existed before but was removed
-                                            expectedGrades.push({ ...savedGrade, isVerified: true });
+                                            // Handle edge case where section existed before but was removed or was filtered out
+                                            // STRICT FIX: If this saved grade is now part of a multigrade pair, do NOT resurrect it as an individual grade
+                                            const isPairedNow = multigradeGrades.some(mg => mg.pairs.includes(savedGrade.id));
+                                            if (!isPairedNow) {
+                                                mergedExpectedGrades.push({ ...savedGrade, isVerified: true });
+                                            }
                                         }
                                     });
                                 }
-                                setGradesData(expectedGrades);
+                                setGradesData(mergedExpectedGrades);
                                 if (parsed.general) setGeneralRoomsData(parsed.general);
                             } catch (e) {
                                 console.warn(e);
-                                setGradesData(expectedGrades);
+                                setGradesData(mergedExpectedGrades);
                             }
                         } else {
-                            setGradesData(expectedGrades);
+                            setGradesData(mergedExpectedGrades);
                         }
 
                         // Load Phase 2
@@ -346,7 +457,11 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         if (d.unit7_wash) {
                             try {
                                 const parsed = typeof d.unit7_wash === 'string' ? JSON.parse(d.unit7_wash) : d.unit7_wash;
-                                setWashData(prev => ({ ...prev, ...parsed }));
+                                setWashData(prev => ({ 
+                                    ...prev, 
+                                    ...parsed,
+                                    confirm_no_piped: d.u7_confirm_no_piped !== undefined ? d.u7_confirm_no_piped : (parsed.confirm_no_piped || false)
+                                }));
                             } catch (e) { console.warn(e); }
                         }
 
@@ -354,7 +469,13 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         if (d.unit7_utilities) {
                             try {
                                 const parsed = typeof d.unit7_utilities === 'string' ? JSON.parse(d.unit7_utilities) : d.unit7_utilities;
-                                setUtilitiesData(prev => ({ ...prev, ...parsed }));
+                                setUtilitiesData(prev => ({ 
+                                    ...prev, 
+                                    ...parsed,
+                                    confirm_no_grid: d.u7_confirm_no_grid !== undefined ? d.u7_confirm_no_grid : (parsed.confirm_no_grid || false),
+                                    confirm_no_wired: d.u7_confirm_no_wired !== undefined ? d.u7_confirm_no_wired : (parsed.confirm_no_wired || false),
+                                    utility_internet_type: d.u7_utility_internet_type || parsed.utility_internet_type || ""
+                                }));
                             } catch (e) { console.warn(e); }
                         }
 
@@ -365,12 +486,11 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         if (d.unit7_completed || propReadOnly) {
                             setIsReviewMode(true);
                         }
-
-                        setLoading(false);
                     }
                 }
             } catch (e) {
-                console.warn("Could not fetch data for Unit 9", e);
+                console.warn("Could not fetch data for Unit 7", e);
+            } finally {
                 setLoading(false);
             }
         };
@@ -467,7 +587,10 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             else { errors[cat.key] = false; }
             
             broken[cat.key] = total - func;
-            if ((tStr !== "" && fStr === "") || (tStr === "" && fStr !== "")) isValid = false;
+            
+            // Validation: Only require working count if we have more than 0 total items.
+            if (total > 0 && fStr === "") isValid = false;
+            if (tStr === "" && fStr !== "") isValid = false;
         });
         return { isValid, errors, broken };
     }, [ictData]);
@@ -511,72 +634,19 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const fStr = washData[`${cat.key}_func`];
             if (fStr !== "" && func > total) { isValid = false; errors[cat.key] = true; } 
             else { errors[cat.key] = false; }
-            if ((tStr !== "" && fStr === "") || (tStr === "" && fStr !== "")) isValid = false;
+            const needsBreakdown = ["male_seats", "female_seats", "common_seats", "pwd_seats", "faucets", "male_urinals"].includes(cat.key);
+            if (needsBreakdown && total > 0 && fStr === "") isValid = false;
+            if (tStr === "" && fStr !== "") isValid = false;
         });
         if (!washData.water_source) isValid = false;
+        
+        // Critical Status Validation for Water
+        if (washData.water_source === "Natural resources (Deep well, Spring, Rainwater)" || washData.water_source === "No water source") {
+            if ((washData.confirm_no_piped_text || "").toLowerCase() !== "confirm") isValid = false;
+        }
+        
         return { isValid, errors };
     }, [washData]);
-
-    const hasShortageOrExcess = useMemo(() => {
-        if (currentPhase === 1) {
-            return gradesData.some(g => {
-                const total = (parseInt(g.armchairs_func)||0) + ((parseInt(g.tables_func)||0)*2) + ((parseInt(g.desks_func)||0)*2);
-                return total !== (parseInt(g.enrolled)||0);
-            });
-        }
-        if (currentPhase === 2) {
-            return ICT_CATEGORIES.some(cat => {
-                const total = parseInt(ictData[`${cat.key}_total`]) || 0;
-                const func = parseInt(ictData[`${cat.key}_func`]) || 0;
-                return total !== func && (ictData[`${cat.key}_total`] !== "" || ictData[`${cat.key}_func`] !== "");
-            });
-        }
-        if (currentPhase === 4) {
-            const noPiped = washData.water_source === "Natural resources (Deep well, Spring, Rainwater)" || washData.water_source === "No water source";
-            if (noPiped) return true;
-            return WASH_CATEGORIES.some(cat => {
-                const total = parseInt(washData[`${cat.key}_total`]) || 0;
-                const func = parseInt(washData[`${cat.key}_func`]) || 0;
-                return total !== func && (washData[`${cat.key}_total`] !== "" || washData[`${cat.key}_func`] !== "");
-            });
-        }
-        if (currentPhase === 5) {
-            const noNet = utilitiesData.utility_internet_yesno === false;
-            const noGrid = utilitiesData.utility_electricity === "Off-grid supply" || utilitiesData.utility_electricity === "No electricity";
-            return noNet || noGrid;
-        }
-        return false;
-    }, [currentPhase, gradesData, ictData, washData, utilitiesData]);
-
-    const isValidationRequired = hasShortageOrExcess && (currentPhase === 1 || currentPhase === 2 || currentPhase === 4 || currentPhase === 5);
-    const isValidationConfirmed = !isValidationRequired || validationConfirm.toLowerCase() === "confirm";
-
-    const ConfirmationBox = () => (
-        <AnimatePresence>
-            {isValidationRequired && !isValidationConfirmed && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="mb-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-3xl shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center text-lg">⚠️</div>
-                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest leading-tight">
-                            {currentPhase >= 4 ? "Critical Status Confirmation" : "Discrepancy Detected"}
-                        </p>
-                    </div>
-                    <p className="text-[10px] font-bold text-amber-600 mb-3 px-1 leading-relaxed">
-                        {currentPhase >= 4 
-                            ? "You have indicated a lack of basic utilities (Power, Water, or Internet). Please type \"confirm\" to verify." 
-                            : "Inventory count doesn't match baseline. Type \"confirm\" to validate your computation."}
-                    </p>
-                    <input 
-                        type="text" 
-                        value={validationConfirm} 
-                        onChange={(e) => setValidationConfirm(e.target.value)} 
-                        placeholder="Type 'confirm' here..."
-                        className="w-full p-3 bg-white border-2 border-amber-300 rounded-2xl text-center text-sm font-black text-amber-700 placeholder:text-amber-200 focus:outline-none focus:border-amber-500 transition-colors"
-                    />
-                </motion.div>
-            )}
-        </AnimatePresence>
-    );
 
     const handlePhase4Proceed = () => { setCurrentPhase(5); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
@@ -590,7 +660,17 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (!utilitiesData.utility_electricity) return false;
         if (utilitiesData.utility_internet_yesno === null) return false;
         if (utilitiesData.utility_internet_yesno === true && !utilitiesData.utility_internet_funder) return false;
-        if (!utilitiesData.sha_category) return false;
+        
+        // Critical Status Validation for Electricity
+        if (utilitiesData.utility_electricity === "No electricity" || utilitiesData.utility_electricity === "Off-grid supply") {
+            if ((utilitiesData.confirm_no_grid_text || "").toLowerCase() !== "confirm") return false;
+        }
+
+        // Critical Status Validation for Internet
+        if (utilitiesData.utility_internet_yesno === false || (utilitiesData.utility_internet_yesno === true && utilitiesData.utility_internet_type && utilitiesData.utility_internet_type !== "Wired (Fiber/DSL/Cable)")) {
+            if ((utilitiesData.confirm_no_wired_text || "").toLowerCase() !== "confirm") return false;
+        }
+
         return true;
     }, [utilitiesData]);
 
@@ -633,7 +713,21 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 unit7_ecarts: JSON.stringify(eCarts), // kept for backwards compatibility
                 unit7_wash: JSON.stringify(washData),
                 unit7_utilities: JSON.stringify(utilitiesData),
-                unit7_completed: true
+                unit7_completed: true,
+                // SYNC CORE COLUMNS
+                u7_ict_smart_tv_cond: ictData.smart_tvs_cond,
+                u7_ict_projector_cond: ictData.projectors_cond,
+                u7_ict_printer_cond: ictData.printers_cond,
+                u7_wash_male_seats_cond: washData.male_seats_cond,
+                u7_wash_female_seats_cond: washData.female_seats_cond,
+                u7_wash_common_seats_cond: washData.common_seats_cond,
+                u7_wash_pwd_seats_cond: washData.pwd_seats_cond,
+                u7_wash_faucets_cond: washData.faucets_cond,
+                // STATUS CONFIRMATIONS (Derived from text input)
+                u7_confirm_no_grid: (utilitiesData.confirm_no_grid_text || "").toLowerCase() === "confirm",
+                u7_confirm_no_piped: (washData.confirm_no_piped_text || "").toLowerCase() === "confirm",
+                u7_confirm_no_wired: (utilitiesData.confirm_no_wired_text || "").toLowerCase() === "confirm",
+                u7_utility_internet_type: utilitiesData.utility_internet_type
             };
 
             const res = await fetch(`/api/ph_schools/${storedId}`, {
@@ -673,7 +767,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 } catch (e) { console.warn("Progress sync failed", e); }
 
                 alert("School Resources module completed and saved successfully!");
-                navigate("/modular/unit-8");
+                navigate("/modular-dashboard");
             } else {
                 alert("Failed to save. Please check your connection.");
                 setLoading(false);
@@ -1109,6 +1203,9 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div>
                                         <p className="text-xs font-bold uppercase tracking-widest text-indigo-400">Phase 2</p>
                                         <h2 className="text-2xl font-black text-gray-800 leading-tight">School-Wide ICT</h2>
+                                                <p className="text-[11px] font-medium text-indigo-700 leading-relaxed">
+                                                    <b>Note:</b> This school was previously identified as having <b>Multigrade Classes</b>. This may affect SHA eligibility.
+                                                </p>
                                     </div>
                                 </div>
                                 <p className="text-sm text-gray-400 mb-8">Count your campus-wide technology assets. Include all devices, regardless of location.</p>
@@ -1126,18 +1223,42 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <span className="text-2xl">{cat.emoji}</span>
                                                     <h3 className="text-lg font-black text-gray-800">{cat.label}</h3>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div className="grid grid-cols-1 gap-3 mb-4">
                                                     <div>
                                                         <p className="text-[10px] font-black text-gray-400 uppercase text-center mb-1">Total Units</p>
                                                         <input type="number" name={`${cat.key}_total`} value={ictData[`${cat.key}_total`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 !bg-gray-50 text-gray-800 focus:!border-gray-400 focus:!bg-white`} />
                                                     </div>
-                                                    {!isAdvanced && (
-                                                        <div>
-                                                            <p className={`text-[10px] font-black uppercase text-center mb-1 ${hasError ? "text-red-500" : "text-emerald-500"}`}>Functional</p>
-                                                            <input type="number" name={`${cat.key}_func`} value={ictData[`${cat.key}_func`]} onChange={handleIctChange} min="0" placeholder="0" className={`${chunkyInput} !mt-0 ${hasError ? "!bg-red-50 !border-red-400 text-red-700" : "!bg-emerald-50 text-emerald-700 focus:!border-emerald-400"}`} />
-                                                        </div>
-                                                    )}
                                                 </div>
+
+                                                <AnimatePresence>
+                                                    {!isAdvanced && total > 0 && (
+                                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mb-4">
+                                                            <div className="bg-emerald-50/50 rounded-2xl p-4 border border-emerald-100">
+                                                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-3">Operational Condition</p>
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div>
+                                                                        <p className="text-[9px] font-bold text-emerald-700 mb-1 ml-1">Working</p>
+                                                                        <input 
+                                                                            type="number" 
+                                                                            name={`${cat.key}_func`} 
+                                                                            value={ictData[`${cat.key}_func`]} 
+                                                                            onChange={handleIctChange} 
+                                                                            min="0" 
+                                                                            placeholder="0" 
+                                                                            className={`${chunkyInput} !mt-0 !bg-white focus:!border-emerald-400`} 
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[9px] font-bold text-red-400 mb-1 ml-1">Not Working</p>
+                                                                        <div className={`${chunkyInput} !mt-0 !bg-red-50 text-red-400 border-dashed flex items-center justify-center`}>
+                                                                            {Math.max(0, total - (parseInt(ictData[`${cat.key}_func`]) || 0))}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
 
                                                 <AnimatePresence>
                                                     {isAdvanced && total > 0 && (
@@ -1276,69 +1397,122 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 <p className="text-sm text-gray-400 mb-8">Count all school water and sanitation facilities. We will isolate classroom-attached CRs below.</p>
 
                                 {/* Water Source Gatekeeper */}
-                                <div className="bg-white border-2 border-gray-100 rounded-3xl p-5 shadow-sm mb-6">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="text-2xl">🚰</span>
-                                        <h3 className="text-lg font-black text-gray-800">Primary Water Source</h3>
+                                    <div className="bg-white border-2 border-gray-100 rounded-3xl p-5 shadow-sm mb-6">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="text-2xl">🚰</span>
+                                            <h3 className="text-lg font-black text-gray-800">Primary Water Source</h3>
+                                        </div>
+                                        <select name="water_source" value={washData.water_source} onChange={handleWashChange} className={`${chunkySelect} w-full`}>
+                                            <option value="" disabled>Tap to select...</option>
+                                            {WATER_SOURCES.map(src => <option key={src} value={src}>{src}</option>)}
+                                        </select>
                                     </div>
-                                    <select name="water_source" value={washData.water_source} onChange={handleWashChange} className={`${chunkySelect} w-full`}>
-                                        <option value="" disabled>Tap to select...</option>
-                                        {WATER_SOURCES.map(src => <option key={src} value={src}>{src}</option>)}
-                                    </select>
-                                </div>
+    
+                                    <AnimatePresence>
+                                        {(washData.water_source === "Natural resources (Deep well, Spring, Rainwater)" || washData.water_source === "No water source") && (
+                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mb-6">
+                                                <div className="rounded-3xl p-6 border-2 bg-white border-red-100 shadow-md">
+                                                    <div className="flex items-start gap-4 mb-4">
+                                                        <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0 mt-1 shadow-sm">
+                                                            <FiAlertCircle className="text-red-600 w-6 h-6" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-red-900 font-black text-lg leading-tight mb-1">Infrastructure Warning</h4>
+                                                            <p className="text-sm font-bold text-red-700 opacity-80">Non-Piped Connection Reported</p>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="bg-red-50/50 rounded-2xl p-4 border border-red-100">
+                                                        <p className="text-xs font-bold text-red-800 mb-3 leading-relaxed">
+                                                            I confirm that this school does not have a piped water connection from a local provider. 
+                                                            To proceed, please type <span className="font-black underline italic">confirm</span> below:
+                                                        </p>
+                                                        <input 
+                                                            type="text"
+                                                            name="confirm_no_piped_text"
+                                                            value={washData.confirm_no_piped_text || ""}
+                                                            onChange={handleWashChange}
+                                                            placeholder="Type 'confirm' here..."
+                                                            className={`${chunkyInput} !mt-0 !bg-white !text-red-900 !border-red-200 placeholder:text-red-200 focus:!border-red-400`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
 
                                 {/* Main Sanitation Audit List */}
                                 <div className="space-y-4 mb-6">
-                                    {WASH_CATEGORIES.map(cat => {
-                                        const hasError = washStats.errors[cat.key];
-                                        return (
-                                            <div key={cat.key} className={`bg-white border-2 rounded-3xl p-5 transition-all shadow-sm ${hasError ? "border-red-300" : "border-gray-100"}`}>
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <span className="text-2xl">{cat.emoji}</span>
-                                                    <h3 className="text-lg font-black text-gray-800">{cat.label}</h3>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-gray-400 uppercase text-center mb-1">Total Count</p>
-                                                        <input 
-                                                            type="number" 
-                                                            name={`${cat.key}_total`} 
-                                                            value={washData[`${cat.key}_total`]} 
-                                                            onChange={handleWashChange} 
-                                                            min="0" 
-                                                            placeholder="0" 
-                                                            className={`${chunkyInput} !mt-0 !bg-gray-50 text-gray-800 focus:!border-gray-400 focus:!bg-white`} 
-                                                        />
+                                        {WASH_CATEGORIES.map(cat => {
+                                            const hasError = washStats.errors[cat.key];
+                                            return (
+                                                <div key={cat.key} className={`bg-white border-2 rounded-3xl p-5 transition-all shadow-sm ${hasError ? "border-red-300" : "border-gray-100"}`}>
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <span className="text-2xl">{cat.emoji}</span>
+                                                        <h3 className="text-lg font-black text-gray-800">{cat.label}</h3>
                                                     </div>
-                                                    <div>
-                                                        <p className={`text-[10px] font-black uppercase text-center mb-1 ${hasError ? "text-red-500" : "text-emerald-500"}`}>Functional</p>
-                                                        <input 
-                                                            type="number" 
-                                                            name={`${cat.key}_func`} 
-                                                            value={washData[`${cat.key}_func`]} 
-                                                            onChange={handleWashChange} 
-                                                            min="0" 
-                                                            placeholder="0" 
-                                                            className={`${chunkyInput} !mt-0 ${hasError ? "!bg-red-50 !border-red-400 text-red-700" : "!bg-emerald-50 text-emerald-700 focus:!border-emerald-400"}`} 
-                                                        />
-                                                    </div>
-                                                </div>
 
-                                                <AnimatePresence>
-                                                    {hasError && (
-                                                        <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
-                                                            <div className="bg-red-50 text-red-600 text-xs font-bold p-3 rounded-xl border border-red-100 flex items-center gap-2">
-                                                                <FiX className="w-4 h-4 flex-shrink-0" />
-                                                                Functional cannot exceed Total items!
-                                                            </div>
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                                    <div className="grid grid-cols-1 gap-3 mb-4">
+                                                        <div>
+                                                            <p className="text-[10px] font-black text-gray-400 uppercase text-center mb-1">Total Count</p>
+                                                            <input 
+                                                                type="number" 
+                                                                name={`${cat.key}_total`} 
+                                                                value={washData[`${cat.key}_total`]} 
+                                                                onChange={handleWashChange} 
+                                                                min="0" 
+                                                                placeholder="0" 
+                                                                className={`${chunkyInput} !mt-0 !bg-gray-50 text-gray-800 focus:!border-gray-400 focus:!bg-white`} 
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <AnimatePresence>
+                                                        {["male_seats", "female_seats", "common_seats", "pwd_seats", "faucets", "male_urinals"].includes(cat.key) && (parseInt(washData[`${cat.key}_total`]) || 0) > 0 && (
+                                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mb-4">
+                                                                <div className="bg-emerald-50/50 rounded-2xl p-4 border border-emerald-100">
+                                                                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-3">Operational Condition</p>
+                                                                    <div className="grid grid-cols-2 gap-3">
+                                                                        <div>
+                                                                            <p className="text-[9px] font-bold text-emerald-700 mb-1 ml-1">Working</p>
+                                                                            <input 
+                                                                                type="number" 
+                                                                                name={`${cat.key}_func`} 
+                                                                                value={washData[`${cat.key}_func`]} 
+                                                                                onChange={handleWashChange} 
+                                                                                min="0" 
+                                                                                placeholder="0" 
+                                                                                className={`${chunkyInput} !mt-0 !bg-white focus:!border-emerald-400`} 
+                                                                            />
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[9px] font-bold text-red-400 mb-1 ml-1">Not Working</p>
+                                                                            <div className={`${chunkyInput} !mt-0 !bg-red-50 text-red-400 border-dashed flex items-center justify-center`}>
+                                                                                {Math.max(0, (parseInt(washData[`${cat.key}_total`]) || 0) - (parseInt(washData[`${cat.key}_func`]) || 0))}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+
+                                                    <AnimatePresence>
+                                                        {hasError && (
+                                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden">
+                                                                <div className="bg-red-50 text-red-600 text-xs font-bold p-3 rounded-xl border border-red-100 flex items-center gap-2">
+                                                                    <FiX className="w-4 h-4 flex-shrink-0" />
+                                                                    Functional cannot exceed Total items!
+                                                                </div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+
 
                                 {/* Attached CR Breakdown */}
                                 <div className="bg-indigo-50 border-2 border-indigo-100 rounded-3xl p-5 shadow-sm">
@@ -1419,6 +1593,36 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 </div>
                                             </motion.div>
                                         )}
+                                        {(utilitiesData.utility_electricity === "No electricity" || utilitiesData.utility_electricity === "Off-grid supply") && (
+                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mt-4">
+                                                <div className="rounded-3xl p-6 border-2 bg-white border-red-100 shadow-md">
+                                                    <div className="flex items-start gap-4 mb-4">
+                                                        <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0 mt-1 shadow-sm">
+                                                            <FiAlertCircle className="text-red-600 w-6 h-6" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-red-900 font-black text-lg leading-tight mb-1">Grid Connectivity Notice</h4>
+                                                            <p className="text-sm font-bold text-red-700 opacity-80">No active Grid connection reported</p>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="bg-red-50/50 rounded-2xl p-4 border border-red-100">
+                                                        <p className="text-xs font-bold text-red-800 mb-3 leading-relaxed">
+                                                            I confirm that this school does not have a functional grid connection. 
+                                                            To proceed, please type <span className="font-black underline italic">confirm</span> below:
+                                                        </p>
+                                                        <input 
+                                                            type="text"
+                                                            name="confirm_no_grid_text"
+                                                            value={utilitiesData.confirm_no_grid_text || ""}
+                                                            onChange={handleUtilitiesChange}
+                                                            placeholder="Type 'confirm' here..."
+                                                            className={`${chunkyInput} !mt-0 !bg-white !text-red-900 !border-red-200 placeholder:text-red-200 focus:!border-red-400`}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
                                     </AnimatePresence>
                                 </div>
 
@@ -1433,15 +1637,59 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     
                                     <AnimatePresence>
                                         {utilitiesData.utility_internet_yesno === true && (
-                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden pt-4 border-t border-gray-100 mt-4">
-                                                <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Primary Funding Source for Internet</p>
-                                                <select name="utility_internet_funder" value={utilitiesData.utility_internet_funder} onChange={handleUtilitiesChange} className={`${chunkySelect} w-full`}>
-                                                    <option value="" disabled>Select funder...</option>
-                                                    <option value="DepEd Funded (DCP)">DepEd Funded (DCP)</option>
-                                                    <option value="School MOOE">School MOOE</option>
-                                                    <option value="LGU/Barangay Funded">LGU/Barangay Funded</option>
-                                                    <option value="Teachers' Personal Expense">Teachers' Personal Expense</option>
-                                                </select>
+                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden pt-4 border-t border-gray-100 mt-4 space-y-4">
+                                                <div>
+                                                    <p className="text-xs font-bold text-gray-500 mb-2 ml-1">Internet Connection Type</p>
+                                                    <select name="utility_internet_type" value={utilitiesData.utility_internet_type} onChange={handleUtilitiesChange} className={`${chunkySelect} w-full !mt-0`}>
+                                                        <option value="" disabled>Tap to select...</option>
+                                                        <option value="Wired (Fiber/DSL/Cable)">Wired (Fiber/DSL/Cable)</option>
+                                                        <option value="Wireless (4G/5G/Radio)">Wireless (4G/5G/Radio)</option>
+                                                        <option value="Satellite">Satellite (Starlink/VSAT)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-bold text-gray-500 mb-2 ml-1">Primary Funding Source</p>
+                                                    <select name="utility_internet_funder" value={utilitiesData.utility_internet_funder} onChange={handleUtilitiesChange} className={`${chunkySelect} w-full !mt-0`}>
+                                                        <option value="" disabled>Select funder...</option>
+                                                        <option value="DepEd Funded (DCP)">DepEd Funded (DCP)</option>
+                                                        <option value="School MOOE">School MOOE</option>
+                                                        <option value="LGU/Barangay Funded">LGU/Barangay Funded</option>
+                                                        <option value="Teachers' Personal Expense">Teachers' Personal Expense</option>
+                                                    </select>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    <AnimatePresence>
+                                        {(utilitiesData.utility_internet_yesno === false || (utilitiesData.utility_internet_yesno === true && utilitiesData.utility_internet_type && utilitiesData.utility_internet_type !== "Wired (Fiber/DSL/Cable)")) && (
+                                            <motion.div variants={expandVariants} initial="hidden" animate="visible" exit="hidden" className="overflow-hidden mt-4">
+                                                <div className="rounded-3xl p-6 border-2 bg-white border-red-100 shadow-md">
+                                                    <div className="flex items-start gap-4 mb-4">
+                                                        <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0 mt-1 shadow-sm">
+                                                            <FiAlertCircle className="text-red-600 w-6 h-6" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-red-900 font-black text-lg leading-tight mb-1">Connectivity Status</h4>
+                                                            <p className="text-sm font-bold text-red-700 opacity-80">Non-Wired Connection Detected</p>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="bg-red-50/50 rounded-2xl p-4 border border-red-100">
+                                                        <p className="text-xs font-bold text-red-800 mb-3 leading-relaxed">
+                                                            I confirm that this school does not have a dedicated wired internet connection. 
+                                                            To proceed, please type <span className="font-black underline italic">confirm</span> below:
+                                                        </p>
+                                                        <input 
+                                                            type="text"
+                                                            name="confirm_no_wired_text"
+                                                            value={utilitiesData.confirm_no_wired_text || ""}
+                                                            onChange={handleUtilitiesChange}
+                                                            placeholder="Type 'confirm' here..."
+                                                            className={`${chunkyInput} !mt-0 !bg-white !text-red-900 !border-red-200 placeholder:text-red-200 focus:!border-red-400`}
+                                                        />
+                                                    </div>
+                                                </div>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
@@ -1458,26 +1706,6 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     </div>
                                     <FiCheckCircle className="w-6 h-6 text-emerald-400" />
                                 </div>
-
-                                {/* SHA Classification */}
-                                <div className="bg-indigo-50 border-2 border-indigo-100 rounded-3xl p-5 shadow-sm mb-6 relative overflow-hidden">
-                                    <h3 className="text-sm font-bold text-indigo-400 uppercase tracking-widest mb-3">School Classification (SHA)</h3>
-                                    <select name="sha_category" value={utilitiesData.sha_category} onChange={handleUtilitiesChange} className={`${chunkySelect} w-full !bg-white focus:!border-indigo-400`}>
-                                        <option value="" disabled>Select category...</option>
-                                        <option value="Not included">Not included</option>
-                                        <option value="Hardship post">Hardship post</option>
-                                        <option value="Pure multigrade">Pure multigrade</option>
-                                        <option value="Hardship post & pure multigrade">Hardship post &amp; pure multigrade</option>
-                                    </select>
-
-                                    {hasMultigradeContext && (
-                                        <div className="mt-4 bg-white/60 p-3 rounded-xl border border-indigo-100 flex items-start gap-2">
-                                            <span className="text-indigo-500">💡</span>
-                                            <p className="text-xs font-bold text-indigo-700 mt-0.5">Note: You reported having multi-grade classes in Unit 6.</p>
-                                        </div>
-                                    )}
-                                </div>
-
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -1487,18 +1715,18 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             {!propReadOnly && (
                 <div className="fixed bottom-0 left-0 w-full p-5 bg-white border-t border-gray-100 flex flex-col items-center z-40 shadow-[0_-2px_12px_rgba(0,0,0,0.02)]">
                     <div className="w-full max-w-md">
-                        <ConfirmationBox />
+                        {/* School-wide Status Confirmation removed as requested */}
                     </div>
                     <div className="w-full max-w-md flex items-center gap-3">
                         <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                             <FiSave className="w-6 h-6" />
                         </button>
                         {currentPhase === 1 ? (
-                            <button disabled={!isPhase1Valid || !isValidationConfirmed} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                            <button disabled={!isPhase1Valid} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                                 Continue to Phase 2 <FiChevronRight className="w-5 h-5" />
                             </button>
                         ) : currentPhase === 2 ? (
-                            <button disabled={!ictStats.isValid || !isValidationConfirmed} onClick={handlePhase2Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                            <button disabled={!ictStats.isValid} onClick={handlePhase2Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-blue-500 border-b-[5px] border-blue-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                                 Continue to Mobile Labs (eCart) <FiChevronRight className="w-5 h-5" />
                             </button>
                         ) : currentPhase === 3 ? (
@@ -1506,7 +1734,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 Continue to Phase 4 (WASH) <FiChevronRight className="w-5 h-5" />
                             </button>
                         ) : currentPhase === 4 ? (
-                            <button disabled={!washStats.isValid || !isValidationConfirmed} onClick={handlePhase4Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                            <button disabled={!washStats.isValid} onClick={handlePhase4Proceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-indigo-500 border-b-[5px] border-indigo-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                                 Continue to Phase 5 (Utilities) <FiChevronRight className="w-5 h-5" />
                             </button>
                         ) : (
@@ -1645,13 +1873,13 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             ) : (
                                                 <div className="flex items-start gap-2 text-red-700">
                                                     <span className="text-lg">⚠️</span>
-                                                    <p className="text-sm font-bold pt-0.5">Shortage of <span className="text-red-600 text-lg font-black">{Math.abs(gradeStats.diff)}</span> seats flagged for this grade level.</p>
+                                                    <p className="text-sm font-bold pt-0.5">Note: <span className="text-red-600 text-lg font-black">{Math.abs(gradeStats.diff)}</span> shortage/excess seats identified for this grade level.</p>
                                                 </div>
                                             )}
 
                                             {gradeStats.diff !== 0 && (
                                                 <div className="mt-4 pt-4 border-t border-black/5">
-                                                    <p className="text-[10px] font-black uppercase tracking-tight mb-2 opacity-70">Please type "confirm" to validate this discrepancy</p>
+                                                    <p className="text-[10px] font-black uppercase tracking-tight mb-2 opacity-70">Please type "confirm" to acknowledge this status</p>
                                                     <input 
                                                         type="text" 
                                                         value={gradeValidationConfirm} 

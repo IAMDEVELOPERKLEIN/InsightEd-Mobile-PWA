@@ -801,6 +801,39 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init school_ownership_docs table:`, migErr.message);
     }
+
+    // --- 22. UNIT 7 DYNAMIC CONDITION FIELDS ---
+    try {
+        await client.query(`
+            ALTER TABLE ph_schools 
+            ADD COLUMN IF NOT EXISTS u7_ict_smart_tv_cond TEXT,
+            ADD COLUMN IF NOT EXISTS u7_ict_projector_cond TEXT,
+            ADD COLUMN IF NOT EXISTS u7_ict_printer_cond TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_male_seats_cond TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_female_seats_cond TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_common_seats_cond TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_pwd_seats_cond TEXT,
+            ADD COLUMN IF NOT EXISTS u7_wash_faucets_cond TEXT;
+        `);
+        console.log(`✅ [${dbLabel}] Unit 7 Condition Columns Added to ph_schools`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to migrate Unit 7 condition columns:`, migErr.message);
+    }
+
+    // --- 23. UNIT 7 UTILITY STATUS CONFIRMATIONS ---
+    try {
+        await client.query(`
+            ALTER TABLE ph_schools 
+            ADD COLUMN IF NOT EXISTS u7_confirm_no_grid BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS u7_confirm_no_piped BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS u7_confirm_no_wired BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS u7_utility_internet_type TEXT;
+        `);
+        console.log(`✅ [${dbLabel}] Unit 7 Utility Confirmation Columns Added to ph_schools`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to migrate Unit 7 utility confirmation columns:`, migErr.message);
+    }
+    
 };
 
 export { initOtpTable, runMigrations };

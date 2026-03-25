@@ -16203,18 +16203,18 @@ app.get('/api/schools/:schoolId/workload-summary', async (req, res) => {
 });
 
 
-// --- POST: Finalize Unit 7 (Teacher Roster & Workloads) ---
+// --- POST: Finalize Unit 7 (School Resources) ---
 app.post('/api/ph_schools/unit7/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // STRICT VALIDATION: Check if there's at least one workload mapped
-    const workloadRes = await pool.query('SELECT COUNT(*) FROM ph_teachers_workload WHERE school_id = $1', [schoolId]);
-    const workloadCount = parseInt(workloadRes.rows[0].count) || 0;
+    // Check if Unit 7 furniture data exists
+    const schoolRes = await pool.query('SELECT unit7_furniture FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const furnitureData = schoolRes.rows[0]?.unit7_furniture;
 
-    if (workloadCount === 0) {
+    if (!furnitureData) {
       return res.json({
         success: false,
-        message: "Cannot finalize Unit 7: No teacher workloads have been mapped yet. Please add workloads in the Teacher Roster first."
+        message: "Cannot finalize Unit 7: No school resource data has been saved yet."
       });
     }
 

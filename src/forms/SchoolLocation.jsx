@@ -6,7 +6,7 @@ import {
     FaShieldAlt, FaMapMarkerAlt, FaClinicMedical, FaSignal, FaCloudRain,
     FaHorse, FaBicycle, FaMotorcycle
 } from 'react-icons/fa';
-import { FiSave } from 'react-icons/fi';
+import { FiSave, FiClock, FiMapPin } from 'react-icons/fi';
 import PageTransition from '../components/PageTransition';
 
 const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft, isReadOnly = false, initialValues = null }, ref) => {
@@ -69,6 +69,17 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
     const watchPassability = watch('road_passable_public_transpo_pct');
     const watchRiverFoot = watch('river_crossing_on_foot');
     const watchThreats = watch('anthropogenic_threats') || [];
+    
+    // Watch all 14 reference point fields for reactive validation
+    const watchedRefPoints = watch([
+        'emergency_response_mins', 'proximity_hospital_km',
+        'proximity_brgy_hall_mins', 'proximity_brgy_hall_km',
+        'proximity_muni_hall_mins', 'proximity_muni_hall_km',
+        'proximity_sdo_mins', 'proximity_sdo_km',
+        'proximity_clinic_mins', 'proximity_clinic_km',
+        'proximity_terminal_mins', 'proximity_terminal_km',
+        'proximity_highway_mins', 'proximity_highway_km'
+    ]);
 
     useEffect(() => {
         setValue('road_unpaved_pct', 100 - watchPaved);
@@ -210,6 +221,44 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
     const labelStyle = "block text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3";
     const inputStyle = "w-full bg-slate-50 dark:bg-slate-900 border-0 rounded-2xl p-4 text-sm font-bold text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 transition-all";
 
+    const getTerrainAssessment = (paved) => {
+        if (paved >= 90) return { text: "Excellent: Fully Paved/Urban Access", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" };
+        if (paved >= 70) return { text: "Good: Mostly Paved/Accessible", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" };
+        if (paved >= 40) return { text: "Fair: Partial Unpaved/Mixed Terrain", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" };
+        if (paved >= 10) return { text: "Poor: Significant Unpaved/Remote", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" };
+        return { text: "Critical: Fully Unpaved/Isolated", color: "text-red-600", bg: "bg-red-50", border: "border-red-100" };
+    };
+
+    const getTranspoAssessment = (level) => {
+        if (level >= 5) return { text: "Excellent: Available Anytime", color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" };
+        if (level >= 4) return { text: "Good: Frequent Trips", color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" };
+        if (level >= 3) return { text: "Fair: Regular Schedule", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" };
+        if (level >= 2) return { text: "Poor: Limited Trips", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" };
+        return { text: "Critical: Once/Twice a Day", color: "text-red-600", bg: "bg-red-50", border: "border-red-100" };
+    };
+
+    const getLightingAssessment = (pct) => {
+        if (pct >= 90) return { text: "Ideal: Fully Illuminated", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" };
+        if (pct >= 70) return { text: "Good: Mostly Lit", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" };
+        if (pct >= 40) return { text: "Fair: Partially Lit", color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" };
+        if (pct >= 10) return { text: "Poor: Dim/Inadequate", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" };
+        return { text: "Critical: No Lighting", color: "text-red-600", bg: "bg-red-50", border: "border-red-100" };
+    };
+
+    const getPassabilityAssessment = (pct) => {
+        if (pct >= 90) return { text: "Ideal: 4-Wheel Accessible", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" };
+        if (pct >= 70) return { text: "Good: Mostly Accessible", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" };
+        if (pct >= 40) return { text: "Fair: Difficult Access", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" };
+        if (pct >= 10) return { text: "Poor: Highly Restricted", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-100" };
+        return { text: "Critical: Completely Impassable", color: "text-red-600", bg: "bg-red-50", border: "border-red-100" };
+    };
+
+    const isStep3Valid = () => {
+        return !watchedRefPoints.some(val => {
+            return val === "" || val === null || parseFloat(val) === 0 || isNaN(parseFloat(val));
+        });
+    };
+
     const renderStepContent = () => {
         switch (currentStep) {
             case 1:
@@ -246,60 +295,139 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                         </div>
 
                         <div className="space-y-6">
-                            <div>
+                            <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-sm">
                                 <label className={labelStyle}>Public Transpo Availability (1-5)</label>
-                                <div className="flex justify-between gap-2 mb-2">
+                                <div className="flex justify-between gap-2 mb-6">
                                     {[1, 2, 3, 4, 5].map(v => (
                                         <button 
                                             key={v}
                                             type="button"
                                             onClick={() => setValue('public_transpo_availability', v)}
-                                            className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${watch('public_transpo_availability') == v ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-400'}`}
+                                            className={`flex-1 py-4 rounded-2xl font-black text-lg transition-all ${watch('public_transpo_availability') == v ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-60'}`}
                                             disabled={isReadOnly}
                                         >
                                             {v}
                                         </button>
                                     ))}
                                 </div>
-                                <div className="flex justify-between px-1">
+                                <div className="flex justify-between px-1 mb-6 opacity-60">
                                     <span className="text-[10px] font-bold text-slate-400">1: Once/Twice a day</span>
                                     <span className="text-[10px] font-bold text-slate-400">5: Available anytime</span>
                                 </div>
+
+                                {(() => {
+                                    const val = watch('public_transpo_availability');
+                                    const assessment = getTranspoAssessment(val);
+                                    return (
+                                        <motion.div 
+                                            key={assessment.text}
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className={`p-4 rounded-2xl border ${assessment.bg} ${assessment.border} flex items-center justify-center gap-3`}
+                                        >
+                                            <div className={`w-2 h-2 rounded-full ${assessment.color.replace('text-', 'bg-')} animate-pulse`} />
+                                            <p className={`text-sm font-black ${assessment.color} uppercase tracking-tight`}>
+                                                {assessment.text}
+                                            </p>
+                                        </motion.div>
+                                    );
+                                })()}
                             </div>
 
-                            <div>
-                                <div className="flex justify-between mb-2">
-                                    <label className={labelStyle}>Road Paved: {watchPaved}%</label>
-                                    <span className="text-xs font-bold text-slate-400">Unpaved: {100 - watchPaved}%</span>
+                            <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2.5rem] p-8 mt-4 shadow-sm">
+                                <div className="flex justify-between items-end mb-6">
+                                    <div className="flex flex-col">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Road Paved</p>
+                                        <span className="text-6xl font-black text-indigo-600 tracking-tighter">{watchPaved}%</span>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Road Unpaved</p>
+                                        <span className="text-5xl font-black text-slate-400 dark:text-slate-500 tracking-tighter">{100 - watchPaved}%</span>
+                                    </div>
                                 </div>
+                                
                                 <input 
                                     type="range" 
                                     {...register('road_paved_pct', { valueAsNumber: true })} 
-                                    className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                    className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-indigo-600 mb-6"
                                     disabled={isReadOnly}
                                 />
+
+                                {(() => {
+                                    const assessment = getTerrainAssessment(watchPaved);
+                                    return (
+                                        <motion.div 
+                                            key={assessment.text}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className={`p-4 rounded-2xl border ${assessment.bg} ${assessment.border} flex items-center gap-3`}
+                                        >
+                                            <div className={`w-2 h-2 rounded-full ${assessment.color.replace('text-', 'bg-')} animate-pulse`} />
+                                            <p className={`text-sm font-black ${assessment.color} uppercase tracking-tight`}>
+                                                {assessment.text}
+                                            </p>
+                                        </motion.div>
+                                    );
+                                })()}
                             </div>
 
-                            <div>
-                                <label className={labelStyle}>Road Lighting Coverage: {watch('road_lighting_pct')}%</label>
+                            <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-sm">
+                                <div className="flex justify-between items-baseline mb-6">
+                                    <label className={labelStyle}>Road Lighting Coverage</label>
+                                    <span className="text-5xl font-black text-amber-500 tracking-tighter">{watch('road_lighting_pct')}%</span>
+                                </div>
                                 <input 
                                     type="range" 
                                     {...register('road_lighting_pct', { valueAsNumber: true })} 
-                                    className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                    className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-amber-500 mb-6"
                                     disabled={isReadOnly}
                                 />
+                                {(() => {
+                                    const val = watch('road_lighting_pct');
+                                    const assessment = getLightingAssessment(val);
+                                    return (
+                                        <motion.div 
+                                            key={assessment.text}
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className={`p-4 rounded-2xl border ${assessment.bg} ${assessment.border} flex items-center justify-center gap-3`}
+                                        >
+                                            <div className={`w-2 h-2 rounded-full ${assessment.color.replace('text-', 'bg-')} animate-pulse`} />
+                                            <p className={`text-sm font-black ${assessment.color} uppercase tracking-tight`}>
+                                                {assessment.text}
+                                            </p>
+                                        </motion.div>
+                                    );
+                                })()}
                             </div>
 
-                            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-                                <div className="flex justify-between mb-2">
-                                    <label className={labelStyle}>Road Passable by Public Transpo: {watchPassability}%</label>
+                            <div className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-sm">
+                                <div className="flex justify-between items-baseline mb-6">
+                                    <label className={labelStyle}>Road Passable by Public Transpo</label>
+                                    <span className="text-5xl font-black text-emerald-600 tracking-tighter">{watchPassability}%</span>
                                 </div>
                                 <input 
                                     type="range" 
                                     {...register('road_passable_public_transpo_pct', { valueAsNumber: true })} 
-                                    className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-emerald-500 mb-6"
                                     disabled={isReadOnly}
                                 />
+                                {(() => {
+                                    const assessment = getPassabilityAssessment(watchPassability);
+                                    return (
+                                        <motion.div 
+                                            key={assessment.text}
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className={`p-4 rounded-2xl border ${assessment.bg} ${assessment.border} flex items-center justify-center gap-3`}
+                                        >
+                                            <div className={`w-2 h-2 rounded-full ${assessment.color.replace('text-', 'bg-')} animate-pulse`} />
+                                            <p className={`text-sm font-black ${assessment.color} uppercase tracking-tight`}>
+                                                {assessment.text}
+                                            </p>
+                                        </motion.div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </motion.div>
@@ -536,22 +664,28 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                                 <span className="text-sm font-black text-slate-700 dark:text-slate-200">{point.label}</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div className="relative">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Time</p>
+                                                <div className="relative group">
+                                                    <div className="flex items-center gap-1.5 mb-2">
+                                                        <FiClock className="text-amber-500 text-[10px]" />
+                                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Time (mins)</p>
+                                                    </div>
                                                     <input 
                                                         type="number" 
                                                         {...register(point.mins, { 
                                                             onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
                                                             valueAsNumber: true 
                                                         })} 
-                                                        className="w-full bg-white dark:bg-slate-800 border-0 rounded-xl p-3 text-sm font-bold shadow-sm pr-12"
+                                                        className="w-full bg-amber-50/50 dark:bg-amber-900/10 border-2 border-amber-100 dark:border-amber-900/30 rounded-xl p-3 text-sm font-bold text-amber-900 dark:text-amber-200 focus:ring-2 focus:ring-amber-500 transition-all pr-12"
                                                         placeholder="0"
                                                         disabled={isReadOnly} 
                                                     />
-                                                    <span className="absolute right-3 bottom-3 text-[10px] font-black text-slate-400">MINS</span>
+                                                    <span className="absolute right-3 bottom-3 text-[10px] font-black text-amber-300">MINS</span>
                                                 </div>
-                                                <div className="relative">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Distance</p>
+                                                <div className="relative group">
+                                                    <div className="flex items-center gap-1.5 mb-2">
+                                                        <FiMapPin className="text-indigo-500 text-[10px]" />
+                                                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Distance (km)</p>
+                                                    </div>
                                                     <input 
                                                         type="number" 
                                                         step="0.1"
@@ -559,11 +693,11 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                                             onChange: (e) => { e.target.value = e.target.value.replace(/^0+(?=\d)/, ''); },
                                                             valueAsNumber: true 
                                                         })} 
-                                                        className="w-full bg-white dark:bg-slate-800 border-0 rounded-xl p-3 text-sm font-bold shadow-sm pr-10"
+                                                        className="w-full bg-indigo-50/50 dark:bg-indigo-900/10 border-2 border-indigo-100 dark:border-indigo-900/30 rounded-xl p-3 text-sm font-bold text-indigo-900 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500 transition-all pr-10"
                                                         placeholder="0.0"
                                                         disabled={isReadOnly} 
                                                     />
-                                                    <span className="absolute right-3 bottom-3 text-[10px] font-black text-slate-400">KM</span>
+                                                    <span className="absolute right-3 bottom-3 text-[10px] font-black text-indigo-300">KM</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -818,7 +952,8 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                         key="btn-next"
                                         type="button" 
                                         onClick={nextStep}
-                                        className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all text-sm uppercase tracking-widest"
+                                        disabled={currentStep === 3 && !isStep3Valid()}
+                                        className={`flex-[2] font-black py-4 rounded-2xl shadow-lg transition-all text-sm uppercase tracking-widest active:scale-95 ${currentStep === 3 && !isStep3Valid() ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-blue-600 text-white shadow-blue-500/30'}`}
                                     >
                                         Next
                                     </button>
@@ -826,8 +961,8 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                     <button 
                                         key="btn-save"
                                         type="submit" 
-                                        disabled={loading}
-                                        className="flex-[2] bg-emerald-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-emerald-500/30 active:scale-95 transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3"
+                                        disabled={loading || !isStep3Valid()}
+                                        className={`flex-[2] font-black py-4 rounded-2xl shadow-lg transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 ${!isStep3Valid() ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white shadow-emerald-500/30'}`}
                                     >
                                         {loading ? (
                                             <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
