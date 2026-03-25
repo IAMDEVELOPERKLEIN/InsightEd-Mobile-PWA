@@ -518,15 +518,22 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     };
 
     // ── Pagination & Filter Logic ────────────────────────────────────────────
+    const actualTeachers = useMemo(() => {
+        return teachers.filter(t => {
+            const pos = (t.position || "").toLowerCase();
+            return !pos.includes("principal") && !pos.includes("head teacher");
+        });
+    }, [teachers]);
+
     const filteredTeachers = useMemo(() => {
-        if (!rosterSearch) return teachers;
+        if (!rosterSearch) return actualTeachers;
         const low = rosterSearch.toLowerCase();
-        return teachers.filter(t => 
+        return actualTeachers.filter(t => 
             (t.first_name || "").toLowerCase().includes(low) || 
             (t.last_name || "").toLowerCase().includes(low) ||
             (t.position || "").toLowerCase().includes(low)
         );
-    }, [teachers, rosterSearch]);
+    }, [actualTeachers, rosterSearch]);
 
     const totalPages = Math.ceil(filteredTeachers.length / ITEMS_PER_PAGE);
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -861,7 +868,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                             <p className="text-xs font-bold text-slate-600 italic">Total Registered Teachers</p>
                         </div>
                     </div>
-                    <div className="text-2xl font-black text-indigo-600">{teachers.length}</div>
+                    <div className="text-2xl font-black text-indigo-600">{actualTeachers.length}</div>
                 </div>
 
                 {loading ? (
@@ -869,7 +876,7 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
                         <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Loading Roster...</p>
                     </div>
-                ) : teachers.length === 0 ? (
+                ) : actualTeachers.length === 0 ? (
                     <div className="text-center py-20 px-8">
                         <div className="w-20 h-20 bg-slate-100 rounded-[2.5rem] mx-auto mb-6 flex items-center justify-center text-slate-300">
                             <FiUsers size={40} />
@@ -1401,13 +1408,13 @@ const TeachingPersonnelUnit = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                         </button>
                         <button 
                             onClick={handleFinalize}
-                            disabled={teachers.length === 0 || isFinalizing}
+                            disabled={actualTeachers.length === 0 || isFinalizing}
                             className="flex-1 py-5 bg-slate-900 text-white font-black rounded-3xl shadow-2xl flex items-center justify-center gap-3 transition-all hover:bg-black active:scale-95 disabled:opacity-50 disabled:grayscale"
                         >
                             {isFinalizing ? (
                                 <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
                             ) : (
-                                <>Finalize & Submit Unit 6 {teachers.length > 0 && `(${teachers.length})`} <FiChevronRight size={20} /></>
+                                <>Finalize & Submit Unit 6 {actualTeachers.length > 0 && `(${actualTeachers.length})`} <FiChevronRight size={20} /></>
                             )}
                         </button>
                     </div>

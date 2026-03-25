@@ -132,6 +132,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
     const [editingBuildingId, setEditingBuildingId] = useState(null);
     const [editingRepairRoomId, setEditingRepairRoomId] = useState(null);
+    const [activeUnit7Grades, setActiveUnit7Grades] = useState([]);
 
     const years = Array.from({ length: currentYear - 1950 + 1 }, (_, i) => currentYear - i);
 
@@ -154,6 +155,21 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         setSchoolData(profile.data);
                         if (profile.data.latitude && profile.data.longitude) {
                             setCenterMap([parseFloat(profile.data.latitude), parseFloat(profile.data.longitude)]);
+                        }
+
+                        // Parse Unit 7 audited grades
+                        if (profile.data.unit7_furniture) {
+                            try {
+                                const unit7 = typeof profile.data.unit7_furniture === 'string' 
+                                    ? JSON.parse(profile.data.unit7_furniture) 
+                                    : profile.data.unit7_furniture;
+                                
+                                if (unit7.gradesData) {
+                                    setActiveUnit7Grades(unit7.gradesData);
+                                }
+                            } catch (e) {
+                                console.error("Error parsing Unit 7 data:", e);
+                            }
                         }
                     }
                 }
@@ -613,9 +629,20 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     };
 
     const handleMasterSubmit = async () => {
-        // STRICT VALIDATION: Do not mark Unit 8 as accomplished when there are no buildings registered
-        if (!buildings || buildings.length === 0) {
-            alert("Error: You must register at least one building before marking Unit 8 as accomplished.");
+        // Phase 2 Step 3 & 4 Validation: Ensure "Repair" rooms have assessments
+        const repairRooms = roomsData.filter(r => r.condition === 'Repair');
+        const unassessedRooms = repairRooms.filter(room => {
+            const building = buildings.find(b => b.id === room.building_local_id);
+            const bName = building ? (building.building_name || building.building_no) : "";
+            return !repairAssessments.some(a => 
+                (a.building_name === bName || a.building_no === bName) && 
+                (a.room_name === room.room_name || a.room_no === room.room_name)
+            );
+        });
+
+        if (unassessedRooms.length > 0) {
+            alert(`Validation Error: Please provide repair details for "${unassessedRooms[0].room_name}" in Step 4 before finalizing.`);
+            setCurrentPage(4); // Take them to Step 4
             return;
         }
 
@@ -977,7 +1004,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 </div>
 
                 {!propReadOnly && (
-                    <div className="fixed bottom-[85px] left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
+                    <div className="fixed bottom-0 left-0 w-full p-6 pb-10 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
                         <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
                             <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                                 <FiSave className="w-6 h-6" />
@@ -996,13 +1023,42 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         );
     };
 
-    // ── Render Wizard ─────────────────────────────────────────────────────
-    if (isReadOnly) {
-        return <SummaryDashboard />;
-    }
-
+    // ── Render Header & Main Content ──────────────────────────────────────
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans overflow-x-hidden pb-52">
+            {/* Header / Nav */}
+            {!propReadOnly && (
+                <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-4">
+                    <div className="max-w-md mx-auto flex items-center justify-between">
+                        <button onClick={handleBack} className="p-2 -ml-2 rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                            <FiArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-black tracking-widest text-[#004A99] uppercase">Unit 8</div>
+                            <h1 className="text-sm font-black text-gray-800 uppercase tracking-tight">Physical Facilities</h1>
+                        </div>
+                        {(!isReadOnly) ? (
+                            <div className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md uppercase tracking-widest">
+                                Step {currentPage}/4
+                            </div>
+                        ) : (
+                            <div className="w-10"></div>
+                        )}
+                    </div>
+                    {/* Visual Progress Bar (Only in Wizard) */}
+                    {!isReadOnly && (
+                        <div className="max-w-md mx-auto mt-3 h-1 bg-gray-100 rounded-full overflow-hidden flex gap-1">
+                            {[1, 2, 3, 4].map(step => (
+                                <div
+                                    key={step}
+                                    className={`flex-1 h-full transition-all duration-500 ${currentPage >= step ? "bg-indigo-500" : "bg-gray-200"}`}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </header>
+            )}
+
             {/* Welcome Back Toast */}
             <AnimatePresence>
                 {showWelcomeBack && (
@@ -1013,34 +1069,11 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     </motion.div>
                 )}
             </AnimatePresence>
-            {/* Header / Nav */}
-            {(!isReadOnly && !propReadOnly) && (
-                <header className="sticky top-0 z-50 bg-white shadow-sm px-4 py-3">
-                    <div className="max-w-3xl mx-auto flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <button onClick={handleBack} className="p-2 rounded-full hover:bg-gray-100 text-gray-400">
-                                <FiArrowLeft className="w-6 h-6" />
-                            </button>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <h1 className="font-bold text-gray-800 text-xl">Unit 8 Audit</h1>
-                            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Step {currentPage} of 4</span>
-                        </div>
-                        <div className="w-10"></div>
-                    </div>
-                    {/* Visual Progress Bar */}
-                    <div className="max-w-3xl mx-auto mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden flex gap-1">
-                        {[1, 2, 3, 4].map(step => (
-                            <div
-                                key={step}
-                                className={`flex-1 h-full transition-all duration-500 ${currentPage >= step ? "bg-indigo-500" : "bg-gray-200"}`}
-                            />
-                        ))}
-                    </div>
-                </header>
-            )}
 
-            <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col pt-8">
+            {isReadOnly ? (
+                <SummaryDashboard />
+            ) : (
+                <main className="flex-1 w-full max-w-3xl mx-auto p-4 lg:p-6 flex flex-col pt-8">
 
                 {currentPage === 1 && (
                     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
@@ -1108,7 +1141,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                     onClick={() => setIsFormVisible(true)}
                                     className="bg-emerald-500 w-full py-4 rounded-2xl text-white font-black text-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-[6px] shadow-lg flex justify-center items-center gap-2 mb-8 transition-all hover:bg-emerald-400"
                                 >
-                                    <FiPlus className="w-6 h-6" /> Add New Space
+                                    <FiPlus className="w-6 h-6" /> Add Buildable Space
                                 </motion.button>
                             ) : (
                                 <motion.div
@@ -1510,63 +1543,83 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                 </select>
                                             </div>
 
-                                            <div>
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level</label>
-                                                <select
-                                                    value={room.grade_level}
-                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: e.target.value } : r))}
-                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                >
-                                                    <option value="">Select Grade Level</option>
-                                                    {(() => {
-                                                        const co = (schoolData?.curricular_offering || "").toLowerCase();
-                                                        let hasKinder = false;
-                                                        let hasElem = false;
-                                                        let hasJHS = false;
-                                                        let hasSHS = false;
-
-                                                        if (co === "purely elementary") {
-                                                            hasKinder = true; hasElem = true;
-                                                        } else if (co === "elementary school and junior high school (k-10)") {
-                                                            hasKinder = true; hasElem = true; hasJHS = true;
-                                                        } else if (co === "junior high and senior high") {
-                                                            hasJHS = true; hasSHS = true;
-                                                        } else if (co === "all offering (k to 12)") {
-                                                            hasKinder = true; hasElem = true; hasJHS = true; hasSHS = true;
-                                                        } else if (co === "purely junior high school") {
-                                                            hasJHS = true;
-                                                        } else if (co === "purely senior high school") {
-                                                            hasSHS = true;
-                                                        } else {
-                                                            // Fallback
-                                                            hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
-                                                            hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                                                            hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12") || co.includes("k-10") || co.includes("k-12");
-                                                            hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12") || co.includes("k-12");
-                                                        }
-                                                        
-                                                        const options = [];
-                                                        if (hasKinder) options.push("Kinder");
-                                                        if (hasElem) {
-                                                            [1, 2, 3, 4, 5, 6].forEach(g => options.push(`Grade ${g}`));
-                                                        }
-                                                        if (hasJHS) {
-                                                            [7, 8, 9, 10].forEach(g => options.push(`Grade ${g}`));
-                                                        }
-                                                        if (hasSHS) {
-                                                            [11, 12].forEach(g => options.push(`Grade ${g}`));
-                                                        }
-                                                        
-                                                        // Fallback for empty/unknown offerings
-                                                        if (options.length === 0) {
-                                                            options.push("Kinder");
-                                                            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].forEach(g => options.push(`Grade ${g}`));
-                                                        }
-                                                        
-                                                        return options.map(opt => <option key={opt} value={opt}>{opt}</option>);
-                                                    })()}
-                                                    <option value="Non-Instructional">Non-Instructional</option>
-                                                </select>
+                                            <div className="md:col-span-2">
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
+                                                <div className="space-y-3">
+                                                    <div className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-3 py-2 min-h-[44px] flex flex-wrap gap-1.5 focus-within:border-indigo-500 transition-all cursor-pointer">
+                                                        {(room.grade_level || "").split(',').filter(Boolean).map(g => (
+                                                            <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
+                                                                {g}
+                                                                <FiX 
+                                                                    className="cursor-pointer hover:text-rose-300" 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                        const newGrades = currentGrades.filter(x => x !== g);
+                                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                    }}
+                                                                />
+                                                            </span>
+                                                        ))}
+                                                        {!(room.grade_level || "") && <span className="text-gray-400 text-sm font-medium py-0.5">Select Grade Levels</span>}
+                                                    </div>
+                                                    
+                                                    <div className="mt-2 flex flex-wrap gap-2">
+                                                        {activeUnit7Grades.length > 0 ? (
+                                                            activeUnit7Grades.map(g => {
+                                                                const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes(g.label);
+                                                                return (
+                                                                    <button
+                                                                        key={g.id}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                            let newGrades;
+                                                                            if (isSelected) {
+                                                                                newGrades = currentGrades.filter(x => x !== g.label);
+                                                                            } else {
+                                                                                newGrades = [...currentGrades, g.label];
+                                                                            }
+                                                                            setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                                        }}
+                                                                        className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${
+                                                                            isSelected 
+                                                                                ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm" 
+                                                                                : "bg-white border-gray-100 text-gray-500 hover:border-indigo-200"
+                                                                        }`}
+                                                                    >
+                                                                        {g.label}
+                                                                    </button>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <p className="text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 italic">
+                                                                ⚠️ No audited grades found in Unit 7
+                                                            </p>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional");
+                                                                const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
+                                                                let newGrades;
+                                                                if (isSelected) {
+                                                                    newGrades = currentGrades.filter(x => x !== "Non-Instructional");
+                                                                } else {
+                                                                    newGrades = [...currentGrades, "Non-Instructional"];
+                                                                }
+                                                                setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, grade_level: newGrades.join(',') } : r));
+                                                            }}
+                                                            className={`text-[10px] font-black px-3 py-1.5 rounded-lg border-2 transition-all ${
+                                                                (room.grade_level || "").split(',').filter(Boolean).includes("Non-Instructional")
+                                                                    ? "bg-slate-100 border-slate-500 text-slate-700 shadow-sm" 
+                                                                    : "bg-white border-gray-100 text-gray-400 hover:border-slate-200"
+                                                            }`}
+                                                        >
+                                                            Non-Instructional
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <div>
@@ -1778,6 +1831,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 )}
 
             </main>
+            )}
 
             {/* Wizard Navigation Buttons */}
             {!isReadOnly && (

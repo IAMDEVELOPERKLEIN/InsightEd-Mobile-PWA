@@ -7,6 +7,7 @@ import LocationPickerMap from '../components/LocationPickerMap';
 import { TbPhoto } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
 import EditProjectModal from '../components/EditProjectModal';
+import ProjectEditModal from '../components/ProjectEditModal';
 import { compressImage } from '../utils/imageCompression';
 import { LuHistory, LuUser, LuCalendar, LuX } from "react-icons/lu";
 import { FiSettings } from 'react-icons/fi';
@@ -439,12 +440,18 @@ const DetailedProjInfo = () => {
     const [userRole, setUserRole] = useState(null);
     const [accountCategory, setAccountCategory] = useState(null);
     
+    // Edit Modal State (single modal with 3 tabs)
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+    const [voModalOpen, setVoModalOpen] = useState(false);
+    const [realignModalOpen, setRealignModalOpen] = useState(false);
+
     const TABS = [
         { id: 0, label: 'Overview' },
         { id: 1, label: 'Location' },
         { id: 2, label: 'Procurement' },
         { id: 3, label: 'Finance' },
-        { id: 4, label: 'Media' }
+        { id: 4, label: 'Documents' }
     ];
 
 
@@ -925,7 +932,15 @@ const DetailedProjInfo = () => {
 
     const renderOverview = () => (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <SectionHeader title="Construction Status" />
+            <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-1 mt-2">
+                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0">Construction Status</h2>
+                <button 
+                  onClick={() => setEditModalOpen(true)}
+                  className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-blue-100 active:scale-95 transition-all"
+                >
+                  Update Status
+                </button>
+            </div>
             <div className="bg-[#004A99] p-6 rounded-3xl shadow-xl mb-6 text-white overflow-hidden relative">
                 <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-1">Overall Accomplishment</p>
@@ -1091,6 +1106,7 @@ const DetailedProjInfo = () => {
     );
 
     return (
+        <>
         <PageTransition>
             <div className="min-h-screen bg-slate-50 pb-24">
                 {/* --- PREMIUM HEADER --- */}
@@ -1103,22 +1119,19 @@ const DetailedProjInfo = () => {
                         </button>
                         
                         <div className="flex gap-2">
-                             {!isEditMode ? (
-                                <button 
-                                    onClick={() => {
-                                        setFormData(project);
-                                        setIsEditMode(true);
-                                    }}
-                                    className="px-4 py-2 bg-white text-[#004A99] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 active:scale-95 transition-all"
-                                >
-                                    Edit Details
-                                </button>
-                             ) : (
+                             {isEditMode ? (
                                 <button 
                                     onClick={() => setIsEditMode(false)}
                                     className="px-4 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-red-900/40 active:scale-95 transition-all"
                                 >
                                     Cancel
+                                </button>
+                             ) : (
+                                <button
+                                    onClick={() => setEditModalOpen(true)}
+                                    className="px-4 py-2 bg-white text-[#004A99] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5"
+                                >
+                                    ✏️ Edit
                                 </button>
                              )}
                         </div>
@@ -1158,14 +1171,6 @@ const DetailedProjInfo = () => {
                         {activeTab === 2 && renderProcurement()}
                         {activeTab === 3 && renderFinance()}
                         {activeTab === 4 && renderMedia()}
-
-                        {/* Audit Trail Context */}
-                        {!isEditMode && (
-                            <div className="mt-8 pt-8 border-t border-slate-50">
-                                <VOHistoryList voHistory={voHistory} loading={voHistoryLoading} />
-                                <RemarksHistory history={history} loading={historyLoading} currentRemarks={project.otherRemarks} />
-                            </div>
-                        )}
                     </div>
                 </div>
 
@@ -1277,6 +1282,58 @@ const DetailedProjInfo = () => {
                 )}
             </div>
         </PageTransition>
+
+        <ProjectEditModal
+            project={project}
+            isOpen={editModalOpen}
+            onClose={() => setEditModalOpen(false)}
+            onSaveDetails={async (payload) => {
+                try {
+                    const isFormData = payload instanceof FormData;
+                    const projectId = isFormData ? payload.get('id') : payload.id;
+                    const res = await fetch(`/api/update-project/${projectId}`, {
+                        method: 'PUT',
+                        headers: isFormData ? {} : { 'Content-Type': 'application/json' },
+                        body: isFormData ? payload : JSON.stringify(payload),
+                    });
+                    if (!res.ok) throw new Error('Update failed');
+                    alert('✅ Details updated successfully!');
+                    setEditModalOpen(false);
+                    window.location.reload();
+                } catch (err) { alert('Error: ' + err.message); }
+            }}
+            onSaveVO={async (payload) => {
+                try {
+                    const isFormData = payload instanceof FormData;
+                    const projectId = isFormData ? payload.get('id') : payload.id;
+                    const res = await fetch(`/api/update-project/${projectId}`, {
+                        method: 'PUT',
+                        headers: isFormData ? {} : { 'Content-Type': 'application/json' },
+                        body: isFormData ? payload : JSON.stringify(payload),
+                    });
+                    if (!res.ok) throw new Error('Update failed');
+                    alert('✅ Variation Order recorded!');
+                    setEditModalOpen(false);
+                    window.location.reload();
+                } catch (err) { alert('Error: ' + err.message); }
+            }}
+            onSaveRealign={async (payload) => {
+                try {
+                    const isFormData = payload instanceof FormData;
+                    const projectId = isFormData ? payload.get('id') : payload.id;
+                    const res = await fetch(`/api/update-project/${projectId}`, {
+                        method: 'PUT',
+                        headers: isFormData ? {} : { 'Content-Type': 'application/json' },
+                        body: isFormData ? payload : JSON.stringify(payload),
+                    });
+                    if (!res.ok) throw new Error('Update failed');
+                    alert('✅ Realignment submitted!');
+                    setEditModalOpen(false);
+                    window.location.reload();
+                } catch (err) { alert('Error: ' + err.message); }
+            }}
+        />
+        </>
     );
 };
 
