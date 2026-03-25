@@ -106,19 +106,10 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-100 dark:border-slate-700">
             <tr>
-              <th className="sticky left-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 min-w-[150px]">
+              <th className="sticky left-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 w-full">
                 Project Info
               </th>
-              <th className="p-4 min-w-[120px]">
-                Status & Progress
-              </th>
-              <th className="p-4 min-w-[200px]">
-                Remarks
-              </th>
-              <th className="p-4 min-w-[100px]">
-                Details
-              </th>
-              <th className="sticky right-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 min-w-[100px] text-center">
+              <th className="sticky right-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 min-w-[80px] text-center">
                 Action
               </th>
             </tr>
@@ -137,123 +128,37 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
                   className="hover:bg-blue-50/30 dark:hover:bg-blue-900/20 transition-all duration-200 group animate-in fade-in slide-in-from-bottom-2"
                   style={{ animationDelay: `${idx * 50}ms` }}
                 >
-                  <td className="sticky left-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-r border-slate-50 dark:border-slate-700">
-                    <div className="font-bold text-slate-800 dark:text-slate-100 mb-1 line-clamp-2 leading-tight group-hover:text-[#004A99] dark:group-hover:text-blue-400 transition-colors">
-                      {p.schoolName}
-                    </div>
-                    {/* ID Badges Row */}
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {/* IPC Badge */}
-                      {p.ipc && (
-                        <div className="group/ipc flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-800 transition-colors cursor-help" title="InsightEd Project Code">
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#004A99] dark:bg-blue-400 group-hover/ipc:animate-pulse"></div>
-                          <span className="text-[8px] font-black uppercase tracking-wider text-[#004A99]/70 dark:text-blue-300/70">IPC</span>
-                          <span className="text-[9px] font-bold font-mono text-[#004A99] dark:text-blue-300">{p.ipc}</span>
-                        </div>
-                      )}
-
-                      {/* School ID Badge */}
-                      <div className="flex items-center gap-1.5 bg-slate-100/80 dark:bg-slate-700/50 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600">
-                        <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">ID</span>
-                        <span className="text-[9px] font-bold font-mono text-slate-600 dark:text-slate-300">{p.schoolId}</span>
+                  <td className="sticky left-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4">
+                    <div className="flex flex-col gap-1">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-[#004A99] dark:text-blue-400 opacity-70">
+                        {p.schoolName}
                       </div>
-
-                      {/* Variation Order Badge */}
-                      {p.hasVariationOrder && (
-                        <div className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/40 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800 transition-colors shadow-sm" title="Variation Order Active">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
-                          <span className="text-[8px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">VO</span>
+                      <div className="font-bold text-slate-800 dark:text-slate-100 text-[13px] leading-snug group-hover:text-[#004A99] transition-colors">
+                        {p.projectName}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+                          <LuCalendar size={10} className="text-slate-300" />
+                          Latest Update: {formatDateShort(p.statusAsOfDate)}
                         </div>
-                      )}
-
-                      {/* Realignment Badge */}
-                      {p.isRealigned && (
-                        <div className="flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-800 transition-colors shadow-sm" title={p.updateType}>
-                          <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
-                          <span className="text-[8px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">RE</span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="p-4">
-                    <div className="mb-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold border ${getStatusColor(
-                          p.status
-                        )}`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-pulse"></span>
-                        {p.status}
-                      </span>
-                    </div>
-
-                    {(p.status === ProjectStatus.Ongoing || p.status === ProjectStatus.Completed || progress > 0) ? (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-[9px] font-bold text-slate-400">
-                          <div className="flex items-center gap-1">
-                            <span>PROGRESS</span>
-                            {/* LATE BADGE */}
-                            {p.status === ProjectStatus.Completed && p.actualCompletionDate && p.targetCompletionDate && new Date(p.actualCompletionDate) > new Date(p.targetCompletionDate) && (
-                              <span className="text-[7px] bg-red-100 text-red-600 px-1 py-0.5 rounded border border-red-200">LATE</span>
-                            )}
+                        {p.accomplishmentPercentage > 0 && (
+                          <div className={`text-[9px] font-black px-1.5 py-0.5 rounded ${p.accomplishmentPercentage === 100 ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
+                            {p.accomplishmentPercentage}%
                           </div>
-                          <span className={progress === 100 ? "text-emerald-500 dark:text-emerald-400" : "text-[#004A99] dark:text-blue-400"}>
-                            {progress}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden border border-slate-50 dark:border-slate-600">
-                          <div
-                            className={`h-full rounded-full transition-all duration-1000 ease-out ${progress === 100 ? "bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" : "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-[0_0_8px_rgba(59,130,246,0.3)]"
-                              }`}
-                            style={{ width: `${progress}%` }}
-                          ></div>
-                        </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-[9px] text-slate-300 dark:text-slate-500 italic flex items-center gap-1">
-                        <LuActivity size={10} /> Pending Start
-                      </div>
-                    )}
-                  </td>
 
-                  <td className="p-4 min-w-[200px]">
-                    {p.otherRemarks ? (
-                      <div className="bg-amber-50/50 dark:bg-amber-900/20 p-2 rounded-lg border border-amber-100/50 dark:border-amber-800/50">
-                        <p className="text-[10px] italic text-slate-600 dark:text-slate-400 line-clamp-3">
-                          "{p.otherRemarks}"
-                        </p>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">No remarks</span>
-                    )}
-                  </td>
-
-                  <td className="p-4 text-[10px]">
-                    <div className="space-y-3">
-                      <div className="flex flex-col">
-                        <span className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                          <LuCalendar size={10} /> Target
-                        </span>
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">
-                          {formatDateShort(p.targetCompletionDate)}
-                        </span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                          <LuDollarSign size={10} /> Approved Budget (ABC)
-                        </span>
-                        <span className="font-mono font-bold text-[#004A99] dark:text-blue-400">
-                          {formatAllocation(p.projectAllocation)}
-                        </span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                          <LuDollarSign size={10} /> Contract Amount
-                        </span>
-                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                          {formatAllocation(p.contractAmount)}
-                        </span>
+                      {/* ID Badges (Smaller) */}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {p.ipc && (
+                          <div className="px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100 text-[8px] font-black text-slate-400">
+                            IPC {p.ipc}
+                          </div>
+                        )}
+                        <div className="px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100 text-[8px] font-black text-slate-400 uppercase">
+                          ID {p.schoolId}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -748,11 +653,11 @@ const EngineerProjects = () => {
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
                   <p className="text-white/60 text-[10px] font-black uppercase tracking-[0.2em] leading-none">
-                    Infrastructure Live
+                     Infrastructure
                   </p>
                 </div>
-                <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-2">
-                  Projects <span className="text-blue-400/60 font-medium">/</span> {projects.length}
+                <h1 className="text-3xl font-black text-white tracking-tight">
+                  Project Monitoring
                 </h1>
               </div>
               {userRole !== 'Super User' && (

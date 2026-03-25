@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse';
+import EXIF from 'exif-js';
 // Removed Firebase imports - using PostgreSQL + LocalStorage
 import { useAuth } from '../context/AuthContext';
 // --- IMPORT NEW DB LOGIC ---
@@ -28,9 +29,8 @@ import { compressImage } from '../utils/imageCompression';
 import LocationPickerMap from '../components/LocationPickerMap'; // Import Map Component
 
 // Helper component for Section Headers
-const SectionHeader = ({ title, icon }) => (
-    <div className="flex items-center gap-3 text-slate-700 font-bold text-sm uppercase mt-6 mb-3">
-        <span className="text-xl">{icon}</span>
+const SectionHeader = ({ title }) => (
+    <div className="text-slate-700 font-black text-[10px] uppercase tracking-widest mt-8 mb-4 ml-1">
         <h2>{title}</h2>
     </div>
 );
@@ -45,11 +45,11 @@ const NewProjects = () => {
     const [activeTab, setActiveTab] = useState(0);
 
     const TABS = [
-        { id: 0, label: 'Overview', icon: '🏢' },
-        { id: 1, label: 'Location', icon: '📍' },
-        { id: 2, label: 'Status', icon: '📈' },
-        { id: 3, label: 'Finance', icon: '💰' },
-        { id: 4, label: 'Media', icon: '📸' }
+        { id: 0, label: 'Overview' },
+        { id: 1, label: 'Location' },
+        { id: 2, label: 'Status' },
+        { id: 3, label: 'Finance' },
+        { id: 4, label: 'Media' }
     ];
 
     // --- FETCH ROLE ---
@@ -314,6 +314,48 @@ const NewProjects = () => {
                 setExternalFiles(prev => [...prev, ...newFiles]);
                 setExternalPreviews(prev => [...prev, ...newPreviews]);
             }
+
+            // --- NEW: METADATA EXTRACTION ---
+            newFiles.forEach(file => {
+                EXIF.getData(file, function() {
+                    const lat = EXIF.getTag(this, "GPSLatitude");
+                    const lon = EXIF.getTag(this, "GPSLongitude");
+                    const dateTaken = EXIF.getTag(this, "DateTimeOriginal") || EXIF.getTag(this, "DateTime");
+
+                    if (lat && lon) {
+                        const latRef = EXIF.getTag(this, "GPSLatitudeRef") || "N";
+                        const lonRef = EXIF.getTag(this, "GPSLongitudeRef") || "E";
+
+                        // Helper for rational numbers used in EXIF
+                        const toDecimal = (gpsData, ref) => {
+                            const d = gpsData[0].numerator ? gpsData[0].numerator / gpsData[0].denominator : gpsData[0];
+                            const m = gpsData[1].numerator ? gpsData[1].numerator / gpsData[1].denominator : gpsData[1];
+                            const s = gpsData[2].numerator ? gpsData[2].numerator / gpsData[2].denominator : gpsData[2];
+                            let coordinate = d + (m / 60) + (s / 3600);
+                            if (ref === "S" || ref === "W") coordinate *= -1;
+                            return coordinate;
+                        };
+
+                        const decimalLat = toDecimal(lat, latRef);
+                        const decimalLon = toDecimal(lon, lonRef);
+
+                        setFormData(prev => {
+                            // Only auto-fill if currently empty or zero
+                            const isExistingCoord = prev.latitude && Number(prev.latitude) !== 0;
+                            
+                            return {
+                                ...prev,
+                                latitude: isExistingCoord ? prev.latitude : decimalLat.toFixed(6),
+                                longitude: isExistingCoord ? prev.longitude : decimalLon.toFixed(6),
+                                // Set Survey Date if empty
+                                statusAsOfDate: !prev.statusAsOfDate && dateTaken ? dateTaken.split(' ')[0].replace(/:/g, '-') : prev.statusAsOfDate
+                            };
+                        });
+                        
+                        alert(`📍 PHOTO METADATA DETECTED\n\nCoordinates: ${decimalLat.toFixed(6)}, ${decimalLon.toFixed(6)}\nDate Captured: ${dateTaken || "N/A"}\n\nThis data has been added to your form.`);
+                    }
+                });
+            });
         }
         // Reset input
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -805,27 +847,47 @@ const NewProjects = () => {
                 )}
 
                 <form onSubmit={handleSubmit} className="px-6 relative z-10 pt-6">
-                    {/* --- TAB NAVIGATION --- */}
-                    <div className="flex overflow-x-auto no-scrollbar gap-3 mb-8 pb-4 -mx-2 px-2">
-                        {TABS.map((tab) => (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`group flex flex-col items-center justify-center min-w-[95px] sm:min-w-[125px] md:flex-1 p-3 sm:p-4 rounded-2xl transition-all duration-300 ${activeTab === tab.id ? 'bg-gradient-to-br from-blue-600 to-[#004A99] text-white shadow-xl shadow-blue-900/40 scale-105 -translate-y-1 border border-blue-400/30' : 'bg-white/95 backdrop-blur-md text-slate-500 hover:bg-white shadow-md shadow-slate-200/50 border border-slate-100 hover:-translate-y-1 hover:text-blue-600'}`}
-                            >
-                                <span className={`text-xl sm:text-2xl mb-1 transition-transform duration-300 ${activeTab === tab.id ? 'scale-110 drop-shadow-md' : 'opacity-70 group-hover:opacity-100 group-hover:scale-110'}`}>{tab.icon}</span>
-                                <span className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${activeTab === tab.id ? 'font-black' : 'font-bold'}`}>{tab.label}</span>
-                            </button>
-                        ))}
+                    {/* --- PROGRESS LINE --- */}
+                    <div className="bg-white/95 backdrop-blur-md p-4 rounded-3xl shadow-lg border border-slate-100 mb-8 overflow-hidden relative group transition-all duration-300 hover:shadow-xl">
+                        <div className="flex justify-between items-center mb-4 px-2 relative z-10">
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 font-sans">Form Stepper</h3>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Progress:</span>
+                                <span className="text-xl font-black text-[#004A99] font-mono">{Math.round((activeTab / (TABS.length - 1)) * 100)}%</span>
+                            </div>
+                        </div>
+                        <div className="relative h-1.5 bg-slate-100 rounded-full mb-6 mx-2">
+                            <div 
+                                className="absolute h-full bg-gradient-to-r from-blue-400 to-[#004A99] transition-all duration-700 ease-out shadow-[0_0_8px_rgba(0,74,153,0.3)] rounded-full"
+                                style={{ width: `${(activeTab / (TABS.length - 1)) * 100}%` }}
+                            ></div>
+                        </div>
+                        <div className="flex justify-between items-center gap-1 px-1">
+                            {TABS.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`relative z-10 transition-all duration-500 flex flex-col items-center gap-2 ${activeTab === tab.id ? 'scale-110' : 'opacity-40 hover:opacity-100 grayscale hover:grayscale-0'}`}
+                                >
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shadow-sm transition-all duration-500 border ${activeTab === tab.id ? 'bg-[#004A99] text-white border-blue-400/30' : 'bg-white text-slate-400 border-slate-100'}`}>
+                                        {tab.id + 1}
+                                    </div>
+                                    <span className={`text-[8px] font-black uppercase tracking-tighter transition-colors ${activeTab === tab.id ? 'text-[#004A99]' : 'text-slate-400'}`}>{tab.label}</span>
+                                    {activeTab === tab.id && (
+                                        <div className="absolute -bottom-1 w-1 h-1 bg-blue-600 rounded-full animate-pulse"></div>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 min-h-[400px]">
+                    <div className="space-y-6 min-h-[400px]">
 
                         {/* --- TAB 0: OVERVIEW --- */}
                         {activeTab === 0 && (
                             <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
-                                <SectionHeader title="Project Identification" icon="🏢" />
+                                <SectionHeader title="Project Identification" />
                         <div className="space-y-4">
                             {/* 0. PROJECT CATEGORY (New - Dropdown) */}
                             <div>
@@ -845,8 +907,11 @@ const NewProjects = () => {
 
                             {/* 1. PROJECT NAME */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
-                                <input name="projectName" value={formData.projectName} onChange={handleChange} required readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase">Project Name <span className="text-red-500">*</span></label>
+                                    <span className="text-[10px] text-slate-400 font-bold">{formData.projectName?.length || 0}/150</span>
+                                </div>
+                                <input name="projectName" value={formData.projectName} onChange={handleChange} required readOnly={isDummy} maxLength="150" placeholder="e.g. 2 Storey 4 Classroom - School Name" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
 
                              {/* Program Type Selection */}
@@ -870,14 +935,41 @@ const NewProjects = () => {
                                          <span className="text-[10px] font-black uppercase tracking-widest">Donated</span>
                                      </button>
                                  </div>
+
+                                 {/* Donated Agency Selection */}
+                                 {formData.program_type === 'Donated' && (
+                                     <div className="mt-3 space-y-3">
+                                         <label className="block text-[10px] font-bold text-blue-600 uppercase tracking-widest ml-1">Donor Agency Type</label>
+                                         <select 
+                                             name="donorType" 
+                                             value={formData.donorType || ''} 
+                                             onChange={handleChange}
+                                             className="w-full p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm focus:outline-none focus:border-blue-500"
+                                         >
+                                             <option value="">Select Donor Type...</option>
+                                             <option value="LGU">Local Government Unit (LGU)</option>
+                                             <option value="NGO">Non-Governmental Organization (NGO)</option>
+                                             <option value="Private Donor">Private Donor / Individual</option>
+                                             <option value="Corporate Foundation">Corporate Foundation</option>
+                                             <option value="Other">Other</option>
+                                         </select>
+                                         <input 
+                                             name="donorName" 
+                                             placeholder="Full Name of Donor/Agency"
+                                             value={formData.donorName || ''} 
+                                             onChange={handleChange}
+                                             className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 shadow-sm"
+                                         />
+                                     </div>
+                                 )}
                              </div>
 
                             {/* 1.5 SCOPE OF WORK */}
                             <div>
                                 <div className="flex justify-between items-center mb-1">
                                     <label className="block text-xs font-bold text-slate-500 uppercase">Scope of Work</label>
-                                    <span className={`text-[10px] font-bold ${formData.scopeOfWork?.length >= 200 ? 'text-red-500' : 'text-slate-400'}`}>
-                                        {formData.scopeOfWork?.length || 0}/200
+                                    <span className={`text-[10px] font-bold ${formData.scopeOfWork?.length >= 100 ? 'text-red-500' : 'text-slate-400'}`}>
+                                        {formData.scopeOfWork?.length || 0}/100
                                     </span>
                                 </div>
                                 <textarea 
@@ -885,7 +977,7 @@ const NewProjects = () => {
                                     rows="2" 
                                     value={formData.scopeOfWork || ''} 
                                     onChange={handleChange} 
-                                    maxLength="200"
+                                    maxLength="100"
                                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" 
                                     placeholder="Brief description of the project scope..."
                                 />
@@ -970,7 +1062,7 @@ const NewProjects = () => {
                             </div>
                         </div>
 
-                        <SectionHeader title="School Information" icon="🏫" />
+                        <SectionHeader title="School Information" />
                         <div className="space-y-4">
                             {/* 2. SCHOOL ID + VALIDATE BUTTON */}
                             <div>
@@ -1034,7 +1126,7 @@ const NewProjects = () => {
                         {/* --- IMPLEMENTING AGENCY SECTION (EFD / HRODI Engineer) --- */}
                         {(userRole === 'HRODI Engineer' || userRole === 'HRODI' || userRole === 'EFD' || userRole === 'EFD Engineer' || accountCategory === 'HRODI Engineer' || accountCategory === 'EFD' || accountCategory === 'EFD Engineer') && (
                             <>
-                                <SectionHeader title="Implementing Agency" icon="🏛️" />
+                                <SectionHeader title="Implementing Agency" />
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
@@ -1067,7 +1159,7 @@ const NewProjects = () => {
 
                                     {/* Sub-question: shown only for mgo, pgo, cgo, cso */}
                                     {['mgo', 'pgo', 'cgo', 'cso'].includes(formData.implementingAgency) && (
-                                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                        <div className="space-y-4 py-4">
                                             <label className="block text-xs font-bold text-blue-700 uppercase mb-1">
                                                 Which {formData.implementingAgency?.toUpperCase()}? <span className="text-red-500">*</span>
                                             </label>
@@ -1084,13 +1176,9 @@ const NewProjects = () => {
                                             </p>
                                         </div>
                                     )}
-                                </div>
-                            </>
-                        )}
-
-                        <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
-                            <button type="button" onClick={() => setActiveTab(1)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
-                        </div>
+                                 </div>
+                             </>
+                         )}
                     </div>
                 )}
 
@@ -1099,9 +1187,9 @@ const NewProjects = () => {
                         {/* --- TAB 1: LOCATION --- */}
                         {activeTab === 1 && (
                             <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
-                                <SectionHeader title="Project Location" icon="📍" />
+                                <SectionHeader title="Project Location" />
                                 <div className="space-y-4">
-                                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                    <div className="space-y-4">
                                         <div className="flex items-start gap-3 mb-4">
                                             <div className="text-blue-600 text-xl">ℹ️</div>
                                             <p className="text-xs text-blue-800 leading-relaxed">
@@ -1149,11 +1237,6 @@ const NewProjects = () => {
                                             <span>📍</span> Get Current Location
                                         </button>
                                     </div>
-
-                                    <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
-                                        <button type="button" onClick={() => setActiveTab(0)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
-                                        <button type="button" onClick={() => setActiveTab(2)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
-                                    </div>
                                 </div>
                             </div>
                         )}
@@ -1161,16 +1244,16 @@ const NewProjects = () => {
                         {/* --- TAB 2: STATUS & TIMELINES --- */}
                         {activeTab === 2 && (
                             <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
-                                <SectionHeader title="Status and Progress" icon="📊" />
+                                <SectionHeader title="Status and Progress" />
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status Design Phase</label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Planning and Design Status</label>
                                         <select name="statusDesignPhase" value={formData.statusDesignPhase || ''} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
-                                            <option value="">Select Design Phase Status...</option>
+                                            <option value="">Select Phase Status...</option>
                                             <option value="Not Yet Started">Not Yet Started</option>
-                                            <option value="Under Procurement">Under Procurement</option>
-                                            <option value="Ongoing">Ongoing</option>
-                                            <option value="For Final Inspection">For Final Inspection</option>
+                                            <option value="Survey / Assessment">Survey / Assessment</option>
+                                            <option value="In-Design / Preparation">In-Design / Preparation</option>
+                                            <option value="For Approval">For Approval</option>
                                             <option value="Completed">Completed</option>
                                         </select>
                                     </div>
@@ -1206,8 +1289,8 @@ const NewProjects = () => {
                                     )}
                                 </div>
 
-                                <SectionHeader title="Procurement Milestones" icon="⚖️" />
-                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
+                                <SectionHeader title="Procurement Milestones" />
+                                <div className="space-y-6 mb-6">
                                     <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Procurement Dates</h4>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
@@ -1247,7 +1330,7 @@ const NewProjects = () => {
 
                                 {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
                                     <>
-                                        <SectionHeader title="Timelines" icon="📅" />
+                                        <SectionHeader title="Timelines" />
                                         <div className="space-y-4">
                                             <div>
                                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed Date</label>
@@ -1270,11 +1353,6 @@ const NewProjects = () => {
                                         </div>
                                     </>
                                 )}
-
-                                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
-                                    <button type="button" onClick={() => setActiveTab(1)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
-                                    <button type="button" onClick={() => setActiveTab(3)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
-                                </div>
                             </div>
                         )}
 
@@ -1315,7 +1393,7 @@ const NewProjects = () => {
                                             </div>
 
                                             {/* Tranches */}
-                                            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                            <div className="space-y-4">
                                                 <h4 className="font-bold text-blue-800 text-xs uppercase mb-3">Fund Tranches</h4>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     <div>
@@ -1378,7 +1456,7 @@ const NewProjects = () => {
                                     </div>
                                 )}
 
-                                <SectionHeader title="Funds and Contractor" icon="💰" />
+                                <SectionHeader title="Funds and Contractor" />
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
@@ -1403,11 +1481,23 @@ const NewProjects = () => {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Funding Year</label>
-                                            <input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 2024" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            <select 
+                                                name="fundingYear" 
+                                                value={formData.fundingYear || ''} 
+                                                onChange={handleChange} 
+                                                className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}
+                                            >
+                                                <option value="">Select Year</option>
+                                                {Array.from({ length: 26 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                                                    <option key={year} value={year}>{year}</option>
+                                                ))}
+                                                <option value="Before 2000">Before 2000</option>
+                                            </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract ID</label>
-                                            <input name="contractId" value={formData.contractId || ''} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 23B0001" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract ID / Reference No.</label>
+                                            <input name="contractId" value={formData.contractId || ''} onChange={handleChange} readOnly={isDummy} placeholder="Unique numeric or alphanumeric ID" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                            <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-tighter">Enter the project record ID or official Contract number</p>
                                         </div>
                                     </div>
                                     <div>
@@ -1416,20 +1506,14 @@ const NewProjects = () => {
                                     </div>
                                 </div>
 
-                                <SectionHeader title="Other Remarks" icon="📝" />
+                                <SectionHeader title="Other Remarks" />
                                 <textarea name="otherRemarks" rows="3" value={formData.otherRemarks} onChange={handleChange} readOnly={isDummy} placeholder="Any specific issues or notes..." className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-
-                                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
-                                    <button type="button" onClick={() => setActiveTab(2)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
-                                    <button type="button" onClick={() => setActiveTab(4)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Next →</button>
-                                </div>
                             </div>
                         )}
-
                         {/* --- TAB 4: MEDIA & DOCUMENTS --- */}
                         {activeTab === 4 && (
                             <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-8">
-                                <SectionHeader title="Site Photos" icon="📸" />
+                                <SectionHeader title="Site Photos" />
                                 <div className="space-y-6">
                                     <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-3 mb-2">
                                         <div className="text-amber-500 text-lg">⚠️</div>
@@ -1440,7 +1524,7 @@ const NewProjects = () => {
 
                                     {/* Photos content moved from Tab 2 */}
                                     {/* EXTERNAL PHOTOS */}
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <div className="space-y-4">
                                         <div className="flex justify-between items-center mb-1">
                                             <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
                                             <span className="text-[10px] font-bold text-blue-500">{externalFiles.length} Added</span>
@@ -1473,7 +1557,7 @@ const NewProjects = () => {
                                     </div>
 
                                     {/* INTERNAL PHOTOS */}
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <div className="space-y-4">
                                         <div className="flex justify-between items-center mb-1">
                                             <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
                                             <span className="text-[10px] font-bold text-blue-500">{internalFiles.length} Added</span>
@@ -1506,7 +1590,7 @@ const NewProjects = () => {
                                     </div>
                                 </div>
 
-                                <SectionHeader title="Project Documents" icon="📄" />
+                                <SectionHeader title="Project Documents" />
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {Object.entries(DOC_TYPES)
                                         .filter(([key]) => {
@@ -1516,7 +1600,7 @@ const NewProjects = () => {
                                             return true;
                                         })
                                         .map(([key, label]) => (
-                                            <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                                            <div key={key} className={`py-4 border-b border-slate-100 transition-all`}>
                                             <div className="flex justify-between items-center">
                                                 <div>
                                                     <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
@@ -1556,10 +1640,6 @@ const NewProjects = () => {
                                         </div>
                                     ))}
                                 </div>
-
-                                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between gap-4">
-                                    <button type="button" onClick={() => setActiveTab(3)} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all">← Previous</button>
-                                </div>
                             </div>
                         )}
 
@@ -1574,13 +1654,23 @@ const NewProjects = () => {
                             {isDummy ? 'Back' : 'Cancel'}
                         </button>
                         {!isDummy && (
-                            <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="flex-1 py-3 text-white font-bold text-sm bg-[#004A99] rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition disabled:opacity-50"
-                            >
-                                {isSubmitting ? 'Saving...' : 'Create Project'}
-                            </button>
+                                activeTab < 4 ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab(prev => Math.min(prev + 1, 4))}
+                                        className="flex-1 py-3 text-white font-bold text-sm bg-blue-600 rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition"
+                                    >
+                                        NEXT
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 py-3 text-white font-bold text-sm bg-[#004A99] rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition disabled:opacity-50"
+                                    >
+                                        {isSubmitting ? 'Saving...' : 'CREATE PROJECT'}
+                                    </button>
+                                )
                         )}
                     </div>
                 </form>

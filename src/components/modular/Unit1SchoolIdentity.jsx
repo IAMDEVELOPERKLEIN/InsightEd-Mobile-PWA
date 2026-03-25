@@ -115,6 +115,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showGDriveGuide, setShowGDriveGuide] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [showFullscreenPdf, setShowFullscreenPdf] = useState(false);
+    const [schoolNameWarning, setSchoolNameWarning] = useState("");
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
     useEffect(() => {
@@ -243,6 +244,20 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 merged = { ...merged, ...draft.formData };
             }
 
+            // ── Auto-Fill Logic for School Head ──────────────────────────────────
+            // Populate from user session if fields are currently empty
+            const sessionFirstName = user?.first_name || user?.firstName;
+            const sessionLastName = user?.last_name || user?.lastName;
+
+            if (!merged.head_first_name && sessionFirstName) {
+                console.log("Auto-filling School Head First Name:", sessionFirstName);
+                merged.head_first_name = sessionFirstName;
+            }
+            if (!merged.head_last_name && sessionLastName) {
+                console.log("Auto-filling School Head Last Name:", sessionLastName);
+                merged.head_last_name = sessionLastName;
+            }
+
             setFormData(merged);
 
             // Pre-populate location dropdowns based on merged state
@@ -342,6 +357,24 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             if (res !== formData.head_date_hired) setFormData(prev => ({ ...prev, head_date_hired: res }));
         }
     }, [formData.head_hired_month, formData.head_hired_day, formData.head_hired_year]);
+
+    useEffect(() => {
+        if (!formData.school_name) {
+            setSchoolNameWarning("");
+            return;
+        }
+        
+        const abbrList = ["ES", "NHS", "PS", "CS", "CES", "HS", "IS", "SHS", "ELEM", "MNHS"];
+        const regex = new RegExp(`\\b(${abbrList.join('|')})\\b`, 'i');
+        const match = formData.school_name.match(regex);
+        
+        if (match) {
+            const detected = match[1].toUpperCase();
+            setSchoolNameWarning(`It looks like you are using an abbreviation (e.g., ${detected}). Please spell out the full name (e.g., National High School) for official record accuracy.`);
+        } else {
+            setSchoolNameWarning("");
+        }
+    }, [formData.school_name]);
 
     useEffect(() => {
         if (!isModeLoading) {
@@ -880,6 +913,19 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <div>
                                         <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">Full School Name</label>
                                         <input type="text" name="school_name" value={formData.school_name} onChange={handleChange} placeholder="Official Name" className={chunkyInput} autoFocus />
+                                        <AnimatePresence>
+                                            {schoolNameWarning && (
+                                                <motion.div 
+                                                    initial={{ opacity: 0, scale: 0.95 }} 
+                                                    animate={{ opacity: 1, scale: 1 }} 
+                                                    exit={{ opacity: 0, scale: 0.95 }} 
+                                                    className="mt-4 p-4 bg-amber-50 border-2 border-amber-100 rounded-3xl flex gap-3 items-center"
+                                                >
+                                                    <FiInfo className="w-6 h-6 text-amber-500 flex-shrink-0" />
+                                                    <p className="text-[13px] font-bold text-amber-800 leading-relaxed">{schoolNameWarning}</p>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
                                 )}
 
