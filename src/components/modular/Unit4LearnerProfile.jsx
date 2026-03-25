@@ -448,6 +448,8 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const currentMove = MOVEMENT_TYPES[movementIdx].id;
             return dynamicGrades.every(g => {
                 const val = parseInt(movementData[`${currentMove}_${g.id}`]) || 0;
+                // [FIX] Do not put a max on dropout for previous SY
+                if (currentMove === 'dropout') return true;
                 return val <= (gradeTotalsMap[g.id] || 0);
             });
         }
@@ -983,7 +985,8 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     const fieldKey = `${currentMovement.id}_${g.id}`;
                                                     const maxVal = gradeTotalsMap[g.id] || 0;
                                                     const currentVal = parseInt(movementData[fieldKey]) || 0;
-                                                    const isExceeded = currentVal > maxVal;
+                                                    // [FIX] Do not put a max on dropout for previous SY
+                                                    const isExceeded = currentMovement.id !== 'dropout' && currentVal > maxVal;
 
                                                     return (
                                                         <div key={g.id} className="space-y-2">
@@ -991,12 +994,14 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                 <label className={`text-xs font-black uppercase tracking-widest ${isExceeded ? 'text-rose-500' : 'text-slate-400'}`}>
                                                                     {g.label} Total
                                                                 </label>
-                                                                <span className="text-[10px] font-bold text-slate-400">MAX: {maxVal}</span>
+                                                                {currentMovement.id !== 'dropout' && (
+                                                                    <span className="text-[10px] font-bold text-slate-400">MAX: {maxVal}</span>
+                                                                )}
                                                             </div>
                                                             <div className="relative group">
                                                                 <input 
                                                                     type="number" min="0" placeholder="0"
-                                                                    max={maxVal}
+                                                                    max={currentMovement.id === 'dropout' ? undefined : maxVal}
                                                                     value={movementData[fieldKey] !== undefined ? movementData[fieldKey] : ""}
                                                                     onFocus={e => { if (e.target.value === '0') setMovementData(prev => ({ ...prev, [fieldKey]: "" })) }}
                                                                     onChange={e => {

@@ -186,10 +186,6 @@ const ModularDashboard = () => {
 
         return units.map(u => {
             let title = u.title;
-            if (u.dynamicTitle) {
-                if (u.id === 2) title = hasHighSchool ? "JHS/SHS Enrollment" : "Enrollment";
-                if (u.id === 4) title = hasHighSchool ? "JHS/SHS Profile" : "Learner Profile";
-            }
 
             const Icon = u.icon;
 

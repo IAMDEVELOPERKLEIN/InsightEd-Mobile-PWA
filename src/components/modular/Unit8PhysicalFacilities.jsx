@@ -132,7 +132,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
     const [editingBuildingId, setEditingBuildingId] = useState(null);
     const [editingRepairRoomId, setEditingRepairRoomId] = useState(null);
-    const [activeUnit7Grades, setActiveUnit7Grades] = useState([]);
+    const [availableGrades, setAvailableGrades] = useState([]);
 
     const years = Array.from({ length: currentYear - 1950 + 1 }, (_, i) => currentYear - i);
 
@@ -157,20 +157,63 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                             setCenterMap([parseFloat(profile.data.latitude), parseFloat(profile.data.longitude)]);
                         }
 
-                        // Parse Unit 7 audited grades
-                        if (profile.data.unit7_furniture) {
+                        // --- Unit 2 Grade & Grouping Detection (Replacing Unit 7) ---
+                        const co = (profile.data.curricular_offering || "").toLowerCase();
+                        const hasKinder = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12") || co.includes("kinder");
+                        const hasElem = co.includes("elementary") || co.includes("k to 10") || co.includes("k to 12");
+                        const hasJHS = co.includes("junior high") || co.includes("jhs") || co.includes("k to 10") || co.includes("k to 12");
+                        const hasSHS = co.includes("senior high") || co.includes("shs") || co.includes("k to 12");
+
+                        let u2Parsed = [];
+                        if (profile.data.unit2_simplified_enrollment) {
                             try {
-                                const unit7 = typeof profile.data.unit7_furniture === 'string' 
-                                    ? JSON.parse(profile.data.unit7_furniture) 
-                                    : profile.data.unit7_furniture;
-                                
-                                if (unit7.gradesData) {
-                                    setActiveUnit7Grades(unit7.gradesData);
-                                }
-                            } catch (e) {
-                                console.error("Error parsing Unit 7 data:", e);
+                                const raw = typeof profile.data.unit2_simplified_enrollment === 'string' 
+                                    ? JSON.parse(profile.data.unit2_simplified_enrollment) 
+                                    : profile.data.unit2_simplified_enrollment;
+                                u2Parsed = Array.isArray(raw) ? raw : (raw.array || []);
+                            } catch (e) { console.warn("U2 Parse Error", e); }
+                        }
+
+                        const detectedGrades = [];
+                        const ALL_POSSIBLE = [
+                            { id: "kinder", label: "Kinder" },
+                            ...['1','2','3','4','5','6','7','8','9','10','11','12'].map(lvl => ({ id: `g${lvl}`, label: `Grade ${lvl}` }))
+                        ];
+
+                        // 1. Identify Monogrades from Unit 2
+                        ALL_POSSIBLE.forEach(pg => {
+                            let isOffered = false;
+                            const nid = pg.id.replace('g', '');
+                            if (pg.id === 'kinder') isOffered = hasKinder;
+                            else if (['1','2','3','4','5','6'].includes(nid)) isOffered = hasElem;
+                            else if (['7','8','9','10'].includes(nid)) isOffered = hasJHS;
+                            else if (['11','12'].includes(nid)) isOffered = hasSHS;
+
+                            const u2Entry = u2Parsed.find(x => x.grade_level === pg.id);
+                            const isActive = u2Entry ? u2Entry.is_active !== false : isOffered;
+                            const hasEnrollment = u2Entry ? (parseInt(u2Entry.total) > 0) : false;
+
+                            if (hasEnrollment || (isOffered && isActive)) {
+                                detectedGrades.push({ id: pg.id, label: pg.label, isMultigrade: false });
+                            }
+                        });
+
+                        // 2. Identify Multigrade Groups from Unit 2/Profile
+                        const mgGroups = [];
+                        for (let i = 1; i <= 3; i++) {
+                            const groupName = profile.data[`multigrade_groupings_${i}`];
+                            const groupEnrollment = parseInt(profile.data[`multigrade_enrollment_${i}`] || 0);
+                            if (groupName && groupEnrollment > 0) {
+                                mgGroups.push({ id: `mg_${i}`, label: groupName, isMultigrade: true });
                             }
                         }
+
+                        // 3. Filter out monogrades that are part of a MG group (optional but cleaner)
+                        // For Unit 8, it might be better to show both if the user wants to assign a room to a specific grade within a group,
+                        // but usually multigrade rooms are assigned to the group.
+                        // Let's stick to showing what Unit 2 defines as active.
+                        
+                        setAvailableGrades([...detectedGrades, ...mgGroups]);
                     }
                 }
 
@@ -1082,6 +1125,75 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         </h2>
                         <p className="text-gray-500 mb-6 font-medium">Draw and record buildable spaces for the school campus footprint.</p>
 
+                        {/* Form or Add Button */}
+                        <AnimatePresence mode="wait">
+                            {!isFormVisible ? (
+                                <motion.button
+                                    key="addbtn"
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.9 }}
+                                    onClick={() => {
+                                        setIsFormVisible(true);
+                                        // Scroll to top when opening form so user sees it
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="bg-emerald-500 w-full py-4 rounded-2xl text-white font-black text-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-[6px] shadow-lg flex justify-center items-center gap-2 mb-8 transition-all hover:bg-emerald-400"
+                                >
+                                    <FiPlus className="w-6 h-6" /> Add Buildable Space
+                                </motion.button>
+                            ) : (
+                                <motion.div
+                                    key="form"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -20 }}
+                                    className="bg-white p-5 rounded-3xl shadow-lg border border-gray-100 mb-8"
+                                >
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="font-black text-xl text-gray-800">New Space Details</h3>
+                                        <button onClick={() => setIsFormVisible(false)} className="text-gray-400 hover:text-gray-700"><FiX className="w-6 h-6" /></button>
+                                    </div>
+
+                                    <p className="text-sm font-bold text-amber-600 mb-4 bg-amber-50 p-3 rounded-lg flex items-center gap-2">
+                                        <FiMapPin className="shrink-0" />
+                                        {newSpace.center_lat ? "Pin placed! Adjust size." : "Tap on the map below to select the center location!"}
+                                    </p>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-sm font-bold text-gray-500 ml-2">Space Name / ID</label>
+                                            <input type="text" value={newSpace.space_name} onChange={(e) => setNewSpace({ ...newSpace, space_name: e.target.value })}
+                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all" />
+                                        </div>
+
+                                        <div className="flex gap-4">
+                                            <div className="flex-1">
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Length (meters)</label>
+                                                <input type="number" value={newSpace.length_m} onChange={(e) => setNewSpace({ ...newSpace, length_m: parseFloat(e.target.value) || 0 })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-sm font-bold text-gray-500 ml-2">Width (meters)</label>
+                                                <input type="number" value={newSpace.width_m} onChange={(e) => setNewSpace({ ...newSpace, width_m: parseFloat(e.target.value) || 0 })}
+                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-emerald-50 p-4 rounded-2xl border-2 border-emerald-100 flex justify-between items-center mt-4">
+                                            <span className="font-bold text-emerald-800">Computed Area:</span>
+                                            <span className="text-3xl font-black text-emerald-600">{totalAreaSqm.toFixed(2)} m&sup2;</span>
+                                        </div>
+                                    </div>
+
+                                    <button onClick={handleSaveSpace} disabled={loading || !newSpace.center_lat}
+                                        className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400 shadow-xl shadow-indigo-200/50">
+                                        {loading ? "Saving..." : "Save space configuration ✓"}
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
                         {/* Map Display area */}
                         <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-200 mb-6 relative overflow-hidden z-0">
                             <div className="h-[400px] rounded-xl overflow-hidden shadow-inner">
@@ -1129,71 +1241,6 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 )}
                             </div>
                         </div>
-
-                        {/* Form or Add Button */}
-                        <AnimatePresence mode="wait">
-                            {!isFormVisible ? (
-                                <motion.button
-                                    key="addbtn"
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    onClick={() => setIsFormVisible(true)}
-                                    className="bg-emerald-500 w-full py-4 rounded-2xl text-white font-black text-lg border-b-[6px] border-emerald-700 active:border-b-0 active:translate-y-[6px] shadow-lg flex justify-center items-center gap-2 mb-8 transition-all hover:bg-emerald-400"
-                                >
-                                    <FiPlus className="w-6 h-6" /> Add Buildable Space
-                                </motion.button>
-                            ) : (
-                                <motion.div
-                                    key="form"
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -20 }}
-                                    className="bg-white p-5 rounded-3xl shadow-lg border border-gray-100 mb-8"
-                                >
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-black text-xl text-gray-800">New Space Details</h3>
-                                        <button onClick={() => setIsFormVisible(false)} className="text-gray-400 hover:text-gray-700"><FiX className="w-6 h-6" /></button>
-                                    </div>
-
-                                    <p className="text-sm font-bold text-amber-600 mb-4 bg-amber-50 p-3 rounded-lg flex items-center gap-2">
-                                        <FiMapPin className="shrink-0" />
-                                        {newSpace.center_lat ? "Pin placed! Adjust size." : "Tap on the map above to select the center location!"}
-                                    </p>
-
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="text-sm font-bold text-gray-500 ml-2">Space Name / ID</label>
-                                            <input type="text" value={newSpace.space_name} onChange={(e) => setNewSpace({ ...newSpace, space_name: e.target.value })}
-                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all" />
-                                        </div>
-
-                                        <div className="flex gap-4">
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Length (meters)</label>
-                                                <input type="number" value={newSpace.length_m} onChange={(e) => setNewSpace({ ...newSpace, length_m: parseFloat(e.target.value) || 0 })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="text-sm font-bold text-gray-500 ml-2">Width (meters)</label>
-                                                <input type="number" value={newSpace.width_m} onChange={(e) => setNewSpace({ ...newSpace, width_m: parseFloat(e.target.value) || 0 })}
-                                                    className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all text-center" />
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-emerald-50 p-4 rounded-2xl border-2 border-emerald-100 flex justify-between items-center mt-4">
-                                            <span className="font-bold text-emerald-800">Computed Area:</span>
-                                            <span className="text-3xl font-black text-emerald-600">{totalAreaSqm.toFixed(2)} m&sup2;</span>
-                                        </div>
-                                    </div>
-
-                                    <button onClick={handleSaveSpace} disabled={loading || !newSpace.center_lat}
-                                        className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400 shadow-xl shadow-indigo-200/50">
-                                        {loading ? "Saving..." : "Save space configuration ✓"}
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
 
                         {/* List of Saved spaces */}
                         {spaces.length > 0 && (
@@ -1550,8 +1597,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         {(room.grade_level || "").split(',').filter(Boolean).map(g => (
                                                             <span key={g} className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 group-hover:bg-indigo-700 transition-colors">
                                                                 {g}
-                                                                <FiX 
-                                                                    className="cursor-pointer hover:text-rose-300" 
+                                                                <FiX
+                                                                    className="cursor-pointer hover:text-rose-300"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         const currentGrades = (room.grade_level || "").split(',').filter(Boolean);
@@ -1563,10 +1610,10 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         ))}
                                                         {!(room.grade_level || "") && <span className="text-gray-400 text-sm font-medium py-0.5">Select Grade Levels</span>}
                                                     </div>
-                                                    
+
                                                     <div className="mt-2 flex flex-wrap gap-2">
-                                                        {activeUnit7Grades.length > 0 ? (
-                                                            activeUnit7Grades.map(g => {
+                                                        {availableGrades.length > 0 ? (
+                                                            availableGrades.map(g => {
                                                                 const isSelected = (room.grade_level || "").split(',').filter(Boolean).includes(g.label);
                                                                 return (
                                                                     <button
@@ -1842,8 +1889,18 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                         </button>
 
                         {currentPage === 4 ? (
-                            <button onClick={handleMasterSubmit} disabled={loading}
-                                className="flex-1 py-5 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]">
+                            <button 
+                                onClick={handleMasterSubmit} 
+                                disabled={loading || roomsData.filter(r => r.condition === 'Repair').some(room => {
+                                    const building = buildings.find(b => b.id === room.building_local_id);
+                                    const bName = building ? (building.building_name || building.building_no) : "";
+                                    return !repairAssessments.some(a => 
+                                        (a.building_name === bName || a.building_no === bName) && 
+                                        (a.room_name === room.room_name || a.room_no === room.room_name)
+                                    );
+                                })}
+                                className="flex-1 py-5 rounded-3xl bg-indigo-600 text-white font-black text-xl shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-[6px] border-indigo-200 active:border-b-0 active:translate-y-[6px]"
+                            >
                                 {loading ? "Processing..." : "Submit Unit Audit"}
                                 <FiArrowRight className="w-6 h-6" />
                             </button>

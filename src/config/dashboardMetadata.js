@@ -4,9 +4,9 @@ import { TbSchool, TbUsers, TbActivity, TbReportAnalytics } from "react-icons/tb
 export const DASHBOARD_METADATA = {
     units: [
         { id: 1, title: "School Profile", icon: FiHome, emoji: '🏫', path: "/modular/unit-1", xp: 150 },
-        { id: 2, title: "Enrollment", icon: FiUsers, emoji: '👨‍🎓', path: "/modular/unit-2", xp: 200, dynamicTitle: true },
+        { id: 2, title: "Enrollment", icon: FiUsers, emoji: '👨‍🎓', path: "/modular/unit-2", xp: 200 },
         { id: 3, title: "Organized Classes", icon: FiGrid, emoji: '📚', path: "/modular/unit-3", xp: 250 },
-        { id: 4, title: "Learner Profile", icon: FiBookOpen, emoji: '📋', path: "/modular/unit-4", xp: 300, dynamicTitle: true },
+        { id: 4, title: "Learner Profile", icon: FiBookOpen, emoji: '📋', path: "/modular/unit-4", xp: 300 },
         { id: 5, title: "Shifting & Modality", icon: FiClock, emoji: '🔄', path: "/modular/unit-5", xp: 350 },
         { id: 6, title: "Teaching Personnel", icon: FiUsers, emoji: '👩‍🏫', path: "/modular/unit-6", xp: 400 },
         { id: 7, title: "School Resources", icon: FiBookOpen, emoji: '🧰', path: "/modular/unit-7", xp: 450 },
