@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevronRight, FiAlertCircle, FiChevronDown, FiCheckSquare, FiTrash2 } from 'react-icons/fi';
+import { FiFilter, FiSearch, FiLayers, FiList, FiTrendingUp, FiMapPin, FiChevronRight, FiAlertCircle, FiChevronDown, FiCheckSquare, FiTrash2, FiGrid, FiEdit2, FiUserPlus, FiImage, FiPlus, FiX } from 'react-icons/fi';
+import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LabelList, Legend } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
+import EditProjectModal from '../components/EditProjectModal';
+import { createPortal } from 'react-dom';
 
 const MultiSelectDropdown = ({ label, options, selected, onChange, icon: Icon }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -76,7 +79,24 @@ const EFDHome = () => {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
-    const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem('efdHomeTab') || 'granular');
+    const [activeTab, setActiveTab] = useState('summary'); // 'summary' or 'granular' (Details)
+    const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
+    const [engineers, setEngineers] = useState([]);
+    const [selectedProjectForAssignment, setSelectedProjectForAssignment] = useState(null);
+    const [selectedEngineers, setSelectedEngineers] = useState([]);
+    const [isAssigning, setIsAssigning] = useState(false);
+    const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
+    const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [selectedProjectForEdit, setSelectedProjectForEdit] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [internalFiles, setInternalFiles] = useState([]);
+    const [internalPreviews, setInternalPreviews] = useState([]);
+    const [externalFiles, setExternalFiles] = useState([]);
+    const [externalPreviews, setExternalPreviews] = useState([]);
+    const [activeCategory, setActiveCategory] = useState(null);
+    const fileInputRef = useRef(null);
+    const cameraInputRef = useRef(null);
     
     useEffect(() => {
         sessionStorage.setItem('efdHomeTab', activeTab);
@@ -178,21 +198,24 @@ const EFDHome = () => {
                 if (user.division) setSelectedDivision(user.division);
 
                 // Concurrent fetch for project and reference data
-                const [pRes, fyRes, locRes] = await Promise.all([
+                const [pRes, fyRes, locRes, engRes] = await Promise.all([
                     fetch('/api/projects'),
                     fetch('/api/reference/funding-years'),
-                    fetch('/api/reference/efd-locations')
+                    fetch('/api/reference/efd-locations'),
+                    fetch('/api/engineers')
                 ]);
 
-                const [pData, fyData, locData] = await Promise.all([
+                const [pData, fyData, locData, engData] = await Promise.all([
                     pRes.ok ? pRes.json() : [],
                     fyRes.ok ? fyRes.json() : [],
-                    locRes.ok ? locRes.json() : []
+                    locRes.ok ? locRes.json() : [],
+                    engRes.ok ? engRes.json() : []
                 ]);
 
                 setProjects(pData);
                 setFundingYears(fyData);
                 setEfdLocations(locData);
+                setEngineers(engData);
 
             } catch (error) {
                 console.error("Error fetching EFD data:", error);
@@ -480,11 +503,11 @@ const EFDHome = () => {
 
     const handleDeleteProject = async (e, id) => {
         e.stopPropagation();
-        if (window.confirm("Are you sure you want to delete this project and all its history? This action cannot be undone.")) {
+        if (window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
             try {
                 const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
                 if (res.ok) {
-                    setProjects(prev => prev.filter(p => p.id !== id));
+                    setProjects(prev => prev.filter(p => !p.id.toString().includes(id.toString())));
                     alert("Project deleted successfully.");
                 } else {
                     const data = await res.json();
@@ -494,6 +517,142 @@ const EFDHome = () => {
                 console.error("Delete error:", err);
                 alert("An error occurred while deleting.");
             }
+        }
+    };
+
+    const handleAssign = async () => {
+        if (!selectedProjectForAssignment || selectedEngineers.length === 0) return;
+
+        setIsAssigning(true);
+        const selectedEngs = engineers.filter(e => selectedEngineers.includes(e.uid));
+        const engineerIds = selectedEngs.map(e => e.uid).join(', ');
+        const engineerNames = selectedEngs.map(e => `${e.firstName || ''} ${e.lastName || ''}`.trim()).join(', ');
+
+        try {
+            const response = await fetch('/api/assign-project', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectId: selectedProjectForAssignment.id,
+                    engineerId: engineerIds,
+                    engineerName: engineerNames
+                })
+            });
+
+            if (response.ok) {
+                alert(`Project assigned successfully!`);
+                setProjects(prev => prev.map(p => 
+                    p.id === selectedProjectForAssignment.id ? { ...p, engineerName: engineerNames, engineerId: engineerIds } : p
+                ));
+                setIsAssignmentModalOpen(false);
+                setSelectedProjectForAssignment(null);
+                setSelectedEngineers([]);
+                setEngineerSearchTerm('');
+            } else {
+                const err = await response.json();
+                alert(err.message || "Failed to assign project");
+            }
+        } catch (error) {
+            alert("Network error");
+        } finally {
+            setIsAssigning(false);
+        }
+    };
+
+    const handleCameraClick = (category) => {
+        setActiveCategory(category);
+        cameraInputRef.current?.click();
+    };
+
+    const handleGalleryClick = (category) => {
+        setActiveCategory(category);
+        fileInputRef.current?.click();
+    };
+
+    const handleFileUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        const validFiles = files.filter(file => file.size <= 100 * 1024 * 1024);
+        const newPreviews = validFiles.map(file => URL.createObjectURL(file));
+
+        if (activeCategory === 'Internal') {
+            setInternalFiles(prev => [...prev, ...validFiles]);
+            setInternalPreviews(prev => [...prev, ...newPreviews]);
+        } else {
+            setExternalFiles(prev => [...prev, ...validFiles]);
+            setExternalPreviews(prev => [...prev, ...newPreviews]);
+        }
+
+        e.target.value = null;
+    };
+
+    const handleEditProject = (project) => {
+        setSelectedProjectForEdit(project);
+        setEditModalOpen(true);
+    };
+
+    const handleSaveProject = async (updatedProject) => {
+        const uid = localStorage.getItem('uid');
+        if (!uid) return;
+
+        setIsUploading(true);
+        try {
+            const response = await fetch(`/api/update-project/${updatedProject.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...updatedProject,
+                    uid: uid,
+                    modifiedBy: 'EFD Engineer'
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to update project');
+
+            setEditModalOpen(false);
+            
+            // Upload Images if any
+            const { compressImage } = await import('../utils/imageCompression');
+            const allFiles = [
+                ...internalFiles.map(f => ({ file: f, category: 'Internal' })),
+                ...externalFiles.map(f => ({ file: f, category: 'External' }))
+            ];
+
+            if (allFiles.length > 0) {
+                for (const item of allFiles) {
+                    try {
+                        const base64Image = await compressImage(item.file);
+                        await fetch('/api/upload-image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                projectId: updatedProject.id,
+                                imageData: base64Image,
+                                uploadedBy: uid,
+                                category: item.category
+                            }),
+                        });
+                    } catch (err) {
+                        console.error("Compression/Upload failed for file:", item.file.name, err);
+                    }
+                }
+            }
+
+            setInternalFiles([]);
+            setInternalPreviews([]);
+            setExternalFiles([]);
+            setExternalPreviews([]);
+
+            const projRes = await fetch('/api/projects');
+            if (projRes.ok) setProjects(await projRes.json());
+            alert('Project updated successfully!');
+
+        } catch (error) {
+            console.error('Save Error:', error);
+            alert(error.message || 'Failed to update project');
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -569,8 +728,8 @@ const EFDHome = () => {
                 <div className="px-5 mb-8 space-y-4">
                     <div className="bg-slate-200/50 p-1.5 rounded-2xl flex border border-slate-200 gap-1.5">
                         <button
-                            onClick={() => setActiveTab('granular')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === 'granular' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            onClick={() => setActiveTab('summary')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === 'summary' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             <FiLayers size={14} /> Analytics
                         </button>
@@ -678,7 +837,7 @@ const EFDHome = () => {
                 </div>
 
                 <div className="px-5">
-                    {activeTab === 'granular' ? (
+                    {activeTab === 'summary' ? (
                         <div className="space-y-6 animate-in fade-in duration-700 pb-10">
                             {/* Analytics Drilldown Layout */}
                             <div className="max-w-7xl mx-auto w-full px-0 space-y-6">
@@ -1001,14 +1160,44 @@ const EFDHome = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden max-w-7xl mx-auto w-full">
+                        <div className="animate-in fade-in duration-700">
+                            <div className="flex items-center justify-between gap-4 mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-[#004A99] text-white rounded-2xl shadow-lg">
+                                        <LuClipboardList size={22} />
+                                    </div>
+                                    <div className="hidden sm:block">
+                                        <h2 className="text-xl font-black text-slate-800 tracking-tight leading-none mb-1">Project Inventory</h2>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Granular project details</p>
+                                    </div>
+                                </div>
+
+                                {/* View Toggle */}
+                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm">
+                                    <button
+                                        onClick={() => setViewMode('table')}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <FiList size={14} />
+                                        <span className="hidden xs:inline">Table</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('card')}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${viewMode === 'card' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <FiGrid size={13} />
+                                        <span className="hidden xs:inline">Cards</span>
+                                    </button>
+                                </div>
+                            </div>
+
                             {filteredProjects.length === 0 ? (
                                 <div className="text-center py-20">
                                     <FiAlertCircle size={48} className="mx-auto text-slate-200 mb-4" />
                                     <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No projects found</p>
                                 </div>
-                            ) : (
-                                <>
+                            ) : viewMode === 'table' ? (
+                                <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden max-w-7xl mx-auto w-full">
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
@@ -1130,7 +1319,161 @@ const EFDHome = () => {
                                             </button>
                                         </div>
                                     </div>
-                                </>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {paginatedProjects.map((p) => {
+                                        const isUnassigned = !p.engineerName && !p.assigned_engineer_name;
+                                        const engrName = p.assigned_engineer_name || p.engineerName;
+                                        
+                                        return (
+                                            <div key={p.id} className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-500 relative flex flex-col">
+                                                {/* Action Buttons Overlay (Top Right) */}
+                                                <div className="absolute top-4 right-4 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
+                                                        className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-sm text-blue-600 rounded-xl shadow-lg hover:bg-blue-600 hover:text-white transition-all border border-blue-50"
+                                                        title="Edit Details"
+                                                    >
+                                                        <FiEdit2 size={15} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => handleDeleteProject(e, p.id)}
+                                                        className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-sm text-red-500 rounded-xl shadow-lg hover:bg-red-600 hover:text-white transition-all border border-red-50"
+                                                        title="Delete Project"
+                                                    >
+                                                        <FiTrash2 size={15} />
+                                                    </button>
+                                                </div>
+
+                                                {/* Card Header (Category & Status) */}
+                                                <div className="p-6 pb-0">
+                                                    <div className="flex items-center justify-between gap-4 mb-3">
+                                                        <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 tracking-widest whitespace-nowrap">
+                                                            {p.projectCategory || 'General'}
+                                                        </span>
+                                                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter truncate">
+                                                            IPC: {p.ipc || 'TBD'}
+                                                        </span>
+                                                    </div>
+                                                    <h3 className="text-sm font-black text-slate-800 leading-tight group-hover:text-blue-600 transition-colors line-clamp-2 uppercase">
+                                                        {p.projectName}
+                                                    </h3>
+                                                </div>
+
+                                                {/* Card Body */}
+                                                <div className="p-6 pt-4 flex-1 space-y-5">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center border border-slate-100">
+                                                            <FiMapPin size={14} />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-0.5">School Location</span>
+                                                            <span className="text-[11px] font-black text-slate-700 leading-tight uppercase">{p.schoolName}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-6 pl-1">
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Project Status</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={`w-1.5 h-1.5 rounded-full ${p.status?.toLowerCase().includes('ongoing') ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                                                                <span className="text-[10px] font-black text-slate-700 uppercase whitespace-nowrap">{p.status || 'Not Yet Started'}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col gap-1.5 text-right md:text-left">
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Engineer</span>
+                                                            <div className="flex items-center justify-end md:justify-start gap-1.5">
+                                                                {isUnassigned ? (
+                                                                    <span className="text-[10px] font-black text-orange-500 italic uppercase">No Assignee</span>
+                                                                ) : (
+                                                                    <span className="text-[10px] font-black text-slate-700 truncate uppercase">Engr. {engrName}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Card Footer (Assignment Action) */}
+                                                <div className="p-4 px-6 bg-slate-50/30 border-t border-slate-50 flex items-center justify-between mt-auto">
+                                                    {isUnassigned ? (
+                                                        <button 
+                                                            onClick={(e) => { 
+                                                                e.stopPropagation(); 
+                                                                setSelectedProjectForAssignment(p);
+                                                                setSelectedEngineers(p.assigned_engineer_id ? p.assigned_engineer_id.split(',').map(s=>s.trim()) : []);
+                                                                setIsAssignmentModalOpen(true);
+                                                            }}
+                                                            className="w-full flex items-center justify-center gap-2 py-3 bg-[#FFF8F1] text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-orange-600 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-orange-100/50"
+                                                        >
+                                                            <FiUserPlus size={14} />
+                                                            Assign Engineer
+                                                        </button>
+                                                    ) : (
+                                                        <div className="flex items-center justify-between w-full">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-blue-200">
+                                                                    {engrName?.[0] || 'E'}
+                                                                </div>
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active Engineer</span>
+                                                            </div>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); navigate(`/project-details/${p.id}`); }}
+                                                                className="w-8 h-8 flex items-center justify-center bg-white text-blue-600 rounded-xl border border-slate-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                                                title="See Insights"
+                                                            >
+                                                                <FiChevronRight size={14} />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {/* Pagination Controls for Card View */}
+                            {filteredProjects.length > 0 && (
+                                <div className="bg-slate-50/50 px-6 py-4 flex items-center justify-between border-t border-slate-100 mt-6 rounded-[2.5rem]">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                        Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredProjects.length)} of {filteredProjects.length} Records
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <button 
+                                            onClick={() => setCurrentPage(1)}
+                                            disabled={currentPage === 1}
+                                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white transition-all shadow-sm active:scale-95"
+                                        >
+                                            First
+                                        </button>
+                                        <button 
+                                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                            disabled={currentPage === 1}
+                                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white transition-all shadow-sm active:scale-90"
+                                        >
+                                            <FiChevronRight className="rotate-180" size={12} />
+                                        </button>
+                                        
+                                        <div className="px-4 text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] bg-blue-50 py-1.5 rounded-lg border border-blue-100">
+                                            Page {currentPage} of {totalPages || 1}
+                                        </div>
+
+                                        <button 
+                                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                            disabled={currentPage === totalPages || totalPages === 0}
+                                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white transition-all shadow-sm active:scale-90"
+                                        >
+                                            <FiChevronRight size={12} />
+                                        </button>
+                                        <button 
+                                            onClick={() => setCurrentPage(totalPages)}
+                                            disabled={currentPage === totalPages || totalPages === 0}
+                                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white transition-all shadow-sm active:scale-95"
+                                        >
+                                            Last
+                                        </button>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}
@@ -1138,6 +1481,117 @@ const EFDHome = () => {
 
                 <BottomNav userRole={userRole} />
             </div>
+
+            {/* Assignment Modal */}
+            {isAssignmentModalOpen && createPortal(
+                <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 px-4">
+                    <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+                        <div className="bg-[#004A99] p-8 text-white relative">
+                            <div className="flex justify-between items-center mb-1">
+                                <h3 className="text-xl font-black tracking-tight">Assign Engineer</h3>
+                                <button onClick={() => setIsAssignmentModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                                    <FiX size={20} />
+                                </button>
+                            </div>
+                            <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em]">{selectedProjectForAssignment?.projectName}</p>
+                        </div>
+                        
+                        <div className="p-8 space-y-6 overflow-y-auto no-scrollbar">
+                            <div className="relative">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search engineer by name..."
+                                    value={engineerSearchTerm}
+                                    onChange={(e) => setEngineerSearchTerm(e.target.value)}
+                                    className="w-full bg-slate-50 border-none rounded-2xl pl-12 pr-4 py-4 text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5 transition-all"
+                                />
+                                <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            </div>
+
+                            <div className="space-y-2">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Available Resource Pool</span>
+                                <div className="max-h-[300px] overflow-y-auto pr-2 space-y-2 no-scrollbar">
+                                    {(engineers || []).filter(e => 
+                                        `${e.firstName} ${e.lastName}`.toLowerCase().includes(engineerSearchTerm.toLowerCase()) ||
+                                        e.uid?.toLowerCase().includes(engineerSearchTerm.toLowerCase())
+                                    ).map(eng => {
+                                        const isSelected = selectedEngineers.includes(eng.uid);
+                                        return (
+                                            <div 
+                                                key={eng.uid}
+                                                onClick={() => {
+                                                    const next = isSelected ? selectedEngineers.filter(id => id !== eng.uid) : [...selectedEngineers, eng.uid];
+                                                    setSelectedEngineers(next);
+                                                }}
+                                                className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between group ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black transition-colors ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'}`}>
+                                                        {eng.firstName?.[0]}{eng.lastName?.[0]}
+                                                    </div>
+                                                    <div>
+                                                        <p className={`text-xs font-black uppercase ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{eng.firstName} {eng.lastName}</p>
+                                                        <p className="text-[9px] font-bold text-slate-400 italic">{eng.role || 'Regional Engineer'}</p>
+                                                    </div>
+                                                </div>
+                                                {isSelected && <FiCheckSquare className="text-blue-600" size={18} />}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
+                            <button 
+                                onClick={() => setIsAssignmentModalOpen(false)}
+                                className="flex-1 py-4 text-slate-500 text-[11px] font-black uppercase tracking-widest hover:text-slate-700 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                disabled={selectedEngineers.length === 0 || isAssigning}
+                                onClick={handleAssign}
+                                className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-200 hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-2"
+                            >
+                                {isAssigning ? 'Processing...' : 'Modify Assignment'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Edit Project Modal */}
+            {selectedProjectForEdit && (
+                <EditProjectModal
+                    isOpen={editModalOpen}
+                    onClose={() => setEditModalOpen(false)}
+                    project={selectedProjectForEdit}
+                    onSave={handleSaveProject}
+                    isUploading={isUploading}
+                    userRole="EFD Engineer"
+                    internalFiles={internalFiles}
+                    externalFiles={externalFiles}
+                    internalPreviews={internalPreviews}
+                    externalPreviews={externalPreviews}
+                    onCameraClick={handleCameraClick}
+                    onGalleryClick={handleGalleryClick}
+                    onRemoveFile={(idx, cat) => {
+                        if (cat === 'Internal') {
+                            setInternalFiles(prev => prev.filter((_, i) => i !== idx));
+                            setInternalPreviews(prev => prev.filter((_, i) => i !== idx));
+                        } else {
+                            setExternalFiles(prev => prev.filter((_, i) => i !== idx));
+                            setExternalPreviews(prev => prev.filter((_, i) => i !== idx));
+                        }
+                    }}
+                />
+            )}
+
+            {/* Hidden Inputs for Photos */}
+            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
+            <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
         </PageTransition>
     );
 };
