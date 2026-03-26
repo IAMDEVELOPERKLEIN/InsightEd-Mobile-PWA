@@ -9,8 +9,8 @@ import { useAuth } from '../context/AuthContext';
 import EditProjectModal from '../components/EditProjectModal';
 import ProjectEditModal from '../components/ProjectEditModal';
 import { compressImage } from '../utils/imageCompression';
-import { LuHistory, LuUser, LuCalendar, LuX } from "react-icons/lu";
-import { FiSettings } from 'react-icons/fi';
+import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages } from "react-icons/lu";
+import { FiSettings, FiImage, FiFileText } from 'react-icons/fi';
 
 // --- SUB-COMPONENT: REMARKS HISTORY ---
 const RemarksHistory = ({ history, loading, currentRemarks }) => {
@@ -447,11 +447,12 @@ const DetailedProjInfo = () => {
     const [realignModalOpen, setRealignModalOpen] = useState(false);
 
     const TABS = [
-        { id: 0, label: 'Overview' },
-        { id: 1, label: 'Location' },
-        { id: 2, label: 'Procurement' },
-        { id: 3, label: 'Finance' },
-        { id: 4, label: 'Documents' }
+        { id: 0, label: 'Overview', icon: <LuInfo size={16} /> },
+        { id: 1, label: 'Location', icon: <LuMapPin size={16} /> },
+        { id: 2, label: 'Procurement', icon: <LuShoppingBag size={16} /> },
+        { id: 3, label: 'Finance', icon: <LuDollarSign size={16} /> },
+        { id: 4, label: 'Progress', icon: <LuImages size={16} /> },
+        { id: 5, label: 'Documents', icon: <LuFileText size={16} /> }
     ];
 
 
@@ -1045,59 +1046,109 @@ const DetailedProjInfo = () => {
         </div>
     );
 
-    const renderMedia = () => (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-            <SectionHeader title="Site Documentation" />
-            
-            <div className="flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-4 -mx-2 px-2">
-                {projectImages.map((img, idx) => (
-                    <div 
-                        key={idx}
-                        onClick={() => setSelectedZoomImage({ ...img, src: getImageSrc(img) })}
-                        className="flex-none w-[85%] snap-center relative aspect-video rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white group cursor-pointer active:scale-95 transition-all"
-                    >
-                        <img 
-                            src={getImageSrc(img)} 
-                            alt={`Update ${idx + 1}`} 
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                        />
-                        <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/20">
-                             <p className="text-[8px] font-black text-white uppercase tracking-widest">{img.date_captured ? new Date(img.date_captured).toLocaleDateString() : 'Recent'}</p>
-                        </div>
-                    </div>
-                ))}
+    const renderMedia = () => {
+        const sortedImages = [...projectImages].sort((a, b) => new Date(b.uploaded_at || b.created_at || 0) - new Date(a.uploaded_at || a.created_at || 0));
+        const featured = sortedImages[0];
+        const others = sortedImages.slice(1);
+
+        return (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
+                <SectionHeader title="Progress Documentation" />
                 
-                {/* Final Slide: View Gallery */}
-                <div 
-                    onClick={() => navigate(`/project-gallery/${id}`)}
-                    className="flex-none w-[85%] snap-center aspect-video bg-[#004A99] rounded-[2.5rem] flex flex-col items-center justify-center border-4 border-white shadow-2xl active:scale-95 transition-all cursor-pointer group overflow-hidden relative"
-                >
-                    <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <TbPhoto size={48} className="text-white mb-3 group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-black text-white uppercase tracking-widest">View Full Gallery</span>
-                    <p className="text-[9px] text-white/50 mt-1 uppercase font-bold">Total {projectImages.length} Photos</p>
-                </div>
+                {sortedImages.length === 0 ? (
+                    <div className="bg-slate-50 rounded-3xl p-12 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-200">
+                        <LuImages size={48} className="text-slate-300 mb-4" />
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No documentation photos yet</p>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {/* Featured Recent Photo */}
+                        {featured && (
+                            <div 
+                                onClick={() => setSelectedZoomImage({ ...featured, src: getImageSrc(featured) })}
+                                className="relative aspect-[16/10] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white group cursor-pointer active:scale-[0.98] transition-all"
+                            >
+                                <img 
+                                    src={getImageSrc(featured)} 
+                                    alt="Most Recent Update" 
+                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                />
+                                <div className="absolute top-6 right-6 bg-emerald-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                                    Most Recent Update
+                                </div>
+                                <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
+                                    <p className="text-[10px] font-black text-white/70 uppercase tracking-[0.2em] mb-1">Captured Date</p>
+                                    <p className="text-lg font-bold text-white">
+                                        {new Date(featured.uploaded_at || featured.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Previous Photos Grid */}
+                        {others.length > 0 && (
+                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                {others.map((img, idx) => (
+                                    <div 
+                                        key={idx}
+                                        onClick={() => setSelectedZoomImage({ ...img, src: getImageSrc(img) })}
+                                        className="relative aspect-square rounded-[2rem] overflow-hidden shadow-lg border-2 border-white group cursor-pointer active:scale-95 transition-all"
+                                    >
+                                        <img 
+                                            src={getImageSrc(img)} 
+                                            alt={`Update ${idx + 2}`} 
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                        />
+                                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                        <div className="absolute bottom-3 left-3 bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/20">
+                                             <p className="text-[7px] font-black text-white uppercase tracking-widest">
+                                                 {img.date_captured ? new Date(img.date_captured).toLocaleDateString() : 'Previous'}
+                                             </p>
+                                        </div>
+                                    </div>
+                                ))}
+                                
+                                <div 
+                                    onClick={() => navigate(`/project-gallery/${id}`)}
+                                    className="aspect-square bg-blue-600 rounded-[2rem] flex flex-col items-center justify-center border-2 border-white shadow-lg active:scale-95 transition-all cursor-pointer group overflow-hidden relative"
+                                >
+                                    <TbPhoto size={32} className="text-white mb-2" />
+                                    <span className="text-[8px] font-black text-white uppercase tracking-widest text-center px-2">Total {sortedImages.length} Documentation Photos</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {isEditMode && (
+                    <div onClick={() => cameraInputRef.current?.click()} className="w-full bg-blue-50 p-4 rounded-2xl flex items-center justify-center gap-2 border-2 border-dashed border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer group">
+                        <LuImages size={20} className="text-blue-400" />
+                        <span className="text-[10px] font-black text-blue-500 uppercase">Add Progress Photo</span>
+                    </div>
+                )}
             </div>
+        );
+    };
 
-            {isEditMode && (
-                <div onClick={() => cameraInputRef.current?.click()} className="w-full bg-blue-50 p-4 rounded-2xl flex items-center justify-center gap-2 border-2 border-dashed border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer group">
-                    <LuHistory size={20} className="text-blue-400" />
-                    <span className="text-[10px] font-black text-blue-500 uppercase">Add Site Documentation Photo</span>
-                </div>
-            )}
-
+    const renderDocuments = () => (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
             <SectionHeader title="Essential Documents" />
             <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden divide-y divide-slate-50">
                 {['pow_pdf', 'dupa_pdf', 'contract_pdf'].map(docKey => (
                     <div key={docKey} className="flex justify-between items-center p-5 group">
-                        <div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{docKey.replace('_pdf', '').toUpperCase()}</p>
-                            <p className="text-xs font-bold text-slate-600">Project Support File</p>
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center">
+                                <LuFileText size={20} />
+                            </div>
+                            <div>
+                                <p className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{docKey.replace('_pdf', '').toUpperCase()}</p>
+                            </div>
                         </div>
                         {project[docKey] ? (
-                            <a href={project[docKey].startsWith('data:') ? project[docKey] : `data:application/pdf;base64,${project[docKey]}`} download={`${project.schoolName}_${docKey}.pdf`} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all">Download</a>
+                            <a href={project[docKey].startsWith('data:') ? project[docKey] : `data:application/pdf;base64,${project[docKey]}`} download={`${project.schoolName}_${docKey}.pdf`} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95">Download</a>
                         ) : (
-                            <span className="text-[10px] font-black text-slate-300 uppercase italic">Missing</span>
+                            <span className="text-[10px] font-black text-slate-300 uppercase italic px-4">Missing</span>
                         )}
                     </div>
                 ))}
@@ -1119,19 +1170,12 @@ const DetailedProjInfo = () => {
                         </button>
                         
                         <div className="flex gap-2">
-                             {isEditMode ? (
+                             {isEditMode && (
                                 <button 
                                     onClick={() => setIsEditMode(false)}
                                     className="px-4 py-2 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-red-900/40 active:scale-95 transition-all"
                                 >
                                     Cancel
-                                </button>
-                             ) : (
-                                <button
-                                    onClick={() => setEditModalOpen(true)}
-                                    className="px-4 py-2 bg-white text-[#004A99] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5"
-                                >
-                                    ✏️ Edit
                                 </button>
                              )}
                         </div>
@@ -1150,13 +1194,14 @@ const DetailedProjInfo = () => {
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                    className={`flex-none flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                                         activeTab === tab.id 
                                         ? 'bg-white text-[#004A99] shadow-lg scale-105' 
                                         : 'bg-white/10 text-white/60 hover:bg-white/20'
                                     }`}
                                 >
-                                    {tab.label}
+                                    {tab.icon}
+                                    <span className="hidden sm:inline">{tab.label}</span>
                                 </button>
                             ))}
                         </div>
@@ -1171,6 +1216,7 @@ const DetailedProjInfo = () => {
                         {activeTab === 2 && renderProcurement()}
                         {activeTab === 3 && renderFinance()}
                         {activeTab === 4 && renderMedia()}
+                        {activeTab === 5 && renderDocuments()}
                     </div>
                 </div>
 

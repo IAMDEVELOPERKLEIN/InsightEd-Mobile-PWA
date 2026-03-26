@@ -473,7 +473,8 @@ const initOtpTable = async () => {
 
         await client.query(`
             ALTER TABLE engineer_form 
-            ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
+            ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE,
+            ADD COLUMN IF NOT EXISTS procurement_status TEXT;
         `);
         console.log('✅ Checked/Added IPC column to engineer_form');
       } catch (migErr) {
@@ -1941,6 +1942,7 @@ app.put('/api/update-project/:id', async (req, res) => {
 
     // Merge new data with old data (Snapshot concept)
     const newStatus = data.status || oldData.status;
+    const newProcurementStatus = data.procurement_status || oldData.procurement_status;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
@@ -1953,7 +1955,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       oldData.contractor_name, oldData.project_allocation, oldData.batch_of_funds, newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
       oldData.ipc,         // Preserve IPC to link history
-      finalUserName        // Update Name string
+      finalUserName,        // Update Name string
+      newProcurementStatus
     ];
 
     const insertQuery = `
@@ -1962,8 +1965,8 @@ app.put('/api/update-project/:id', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        engineer_id, ipc, engineer_name, procurement_status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *;
     `;
 
@@ -1975,6 +1978,7 @@ app.put('/api/update-project/:id', async (req, res) => {
     // 3. Track Changes (History)
     const changes = [];
     if (oldData.status !== newData.status) changes.push(`Status: '${oldData.status}' -> '${newData.status}'`);
+    if (oldData.procurement_status !== newData.procurement_status) changes.push(`Procurement Status: '${oldData.procurement_status || 'N/A'}' -> '${newData.procurement_status}'`);
     if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
     if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
 
@@ -2013,6 +2017,34 @@ app.put('/api/update-project/:id', async (req, res) => {
   }
 });
 
+// --- 10a. GET: Project History by IPC ---
+app.get('/api/project-history/:ipc', async (req, res) => {
+  try {
+    const { ipc } = req.params;
+    const result = await pool.query(
+      `SELECT 
+        project_id AS id,
+        project_name AS "projectName",
+        school_name AS "schoolName",
+        engineer_name AS "engineerName",
+        status,
+        procurement_status,
+        accomplishment_percentage AS "accomplishmentPercentage",
+        other_remarks AS remarks,
+        TO_CHAR(status_as_of, 'Mon DD, YYYY') AS "statusAsOfDate",
+        TO_CHAR(created_at, 'Mon DD, YYYY HH12:MI AM') AS created_at
+      FROM engineer_form
+      WHERE ipc = $1
+      ORDER BY project_id ASC`,
+      [ipc]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching project history:', err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // --- 10. GET: Get Projects (Filtered by Engineer) ---
 app.get('/api/projects', async (req, res) => {
   try {
@@ -2022,15 +2054,22 @@ app.get('/api/projects', async (req, res) => {
     let whereClauses = [];
 
     let sql = `
-      WITH LatestProjects AS (
-          SELECT DISTINCT ON (ipc) *
+      WITH RankedProjects AS (
+          SELECT *,
+                 LAG(accomplishment_percentage) OVER (PARTITION BY ipc ORDER BY project_id ASC) as prev_perc
           FROM engineer_form
+      ),
+      LatestProjects AS (
+          SELECT DISTINCT ON (ipc) *
+          FROM RankedProjects
           ORDER BY ipc, project_id DESC
       )
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
         school_id AS "schoolId", division, region, status, ipc, engineer_name AS "engineerName",
+        procurement_status AS "procurement_status",
         accomplishment_percentage AS "accomplishmentPercentage",
+        prev_perc AS "previousPercentage",
         project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
