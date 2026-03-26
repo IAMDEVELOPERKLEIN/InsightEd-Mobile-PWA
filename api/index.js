@@ -1355,10 +1355,9 @@ app.get('/api/reference/functional-divisions', async (req, res) => {
 app.get('/api/reference/efd-locations', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT region, division 
-      FROM engineer_form 
-      WHERE region IS NOT NULL AND division IS NOT NULL
-      ORDER BY region, division;
+      SELECT region, division, district, province, municipality, legislative_district 
+      FROM all_locations 
+      ORDER BY region, division, province, municipality;
     `);
     res.json(result.rows);
   } catch (err) {
@@ -9007,10 +9006,15 @@ app.get('/api/projects', async (req, res) => {
     let whereClauses = [];
 
     let sql = `
-      WITH LatestProjects AS (
-          SELECT DISTINCT ON (COALESCE(e.ipc, e.project_id::text)) 
+      WITH RankedProjects AS (
+          SELECT 
             e.project_id, e.school_name, e.project_name, e.school_id, e.division, e.region, e.status_of_construction_phase AS status, e.ipc, e.engineer_name, e.engineer_id,
-            e.accomplishment_percentage, e.approved_budget_for_contract, e.contract_amount, e.batch_of_funds, e.contractor_name, e.other_remarks,
+            e.accomplishment_percentage,
+            LAG(e.accomplishment_percentage) OVER (
+                PARTITION BY COALESCE(e.ipc, e.project_id::text) 
+                ORDER BY e.project_id ASC
+            ) as previous_percentage,
+            e.approved_budget_for_contract, e.contract_amount, e.batch_of_funds, e.contractor_name, e.other_remarks,
             e.status_as_of, e.target_completion_date, e.actual_completion_date, e.notice_to_proceed, e.latitude, e.longitude,
             e.construction_start_date, e.project_category, e.scope_of_work,
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
@@ -9028,17 +9032,24 @@ app.get('/api/projects', async (req, res) => {
             COALESCE(f.tranche_3, 0) as tranche_3,
             COALESCE(f.liquidated_tranche_1, 0) as liquidated_tranche_1,
             COALESCE(f.liquidated_tranche_2, 0) as liquidated_tranche_2,
-            COALESCE(f.liquidated_tranche_3, 0) as liquidated_tranche_3
+            COALESCE(f.liquidated_tranche_3, 0) as liquidated_tranche_3,
+            ROW_NUMBER() OVER (
+                PARTITION BY COALESCE(e.ipc, e.project_id::text) 
+                ORDER BY e.project_id DESC
+            ) as rn
           FROM engineer_form e
           LEFT JOIN co_finance f ON e.project_id = f.project_id
           LEFT JOIN school_profiles sp ON e.school_id = sp.school_id
           LEFT JOIN engineer_documents d ON e.project_id = d.project_id
-          ORDER BY COALESCE(e.ipc, e.project_id::text), e.project_id DESC
+      ),
+      LatestProjects AS (
+          SELECT * FROM RankedProjects WHERE rn = 1
       )
       SELECT
         p.project_id AS "id", p.school_name AS "schoolName", p.school_name AS "school_name", p.project_name AS "projectName", p.project_name AS "project_name",
         p.school_id AS "schoolId", p.school_id AS "school_id", p.division, p.region, p.status AS "status", p.ipc, p.engineer_name AS "engineerName",
         p.accomplishment_percentage AS "accomplishmentPercentage", p.accomplishment_percentage AS "accomplishment_percentage",
+        p.previous_percentage AS "previousPercentage",
         p.approved_budget_for_contract AS "projectAllocation", p.approved_budget_for_contract AS "amount", 
         p.contract_amount AS "contractAmount", p.contract_amount AS "contract_amount",
         p.batch_of_funds AS "batchOfFunds",

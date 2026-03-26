@@ -11,6 +11,9 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { createPortal } from 'react-dom';
 import UpdateProjectWizard from '../components/UpdateProjectWizard';
+import ProjectLogModal from '../components/ProjectLogModal';
+import { FiActivity } from 'react-icons/fi';
+import FilterDrawer from '../components/FilterDrawer';
 
 const EFDMonitoring = () => {
     const { user } = useAuth();
@@ -18,20 +21,39 @@ const EFDMonitoring = () => {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
-    const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
+    const [viewMode, setViewMode] = useState('card'); // 'table' or 'card'
     const [currentPage, setCurrentPage] = useState(1);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedRegions, setSelectedRegions] = useState([]);
-    const [selectedCategories, setSelectedCategories] = useState([]);
+    const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
+    const [selectedRegions, setSelectedRegions] = useState(() => JSON.parse(localStorage.getItem('efd_selectedRegions') || '[]'));
+    const [selectedCategories, setSelectedCategories] = useState(() => JSON.parse(localStorage.getItem('efd_selectedCategories') || '[]'));
     const [engineers, setEngineers] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
     const [selectedEngineers, setSelectedEngineers] = useState([]);
     const [isAssigning, setIsAssigning] = useState(false);
     const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
+    const [isLogOpen, setIsLogOpen] = useState(false);
+    const [logProject, setLogProject] = useState(null);
+    const [selectedDivision, setSelectedDivision] = useState(() => localStorage.getItem('efd_selectedDivision') || '');
+    const [selectedProvince, setSelectedProvince] = useState(() => localStorage.getItem('efd_selectedProvince') || '');
+    const [selectedMunicipality, setSelectedMunicipality] = useState(() => localStorage.getItem('efd_selectedMunicipality') || '');
+    const [selectedDistrict, setSelectedDistrict] = useState(() => localStorage.getItem('efd_selectedDistrict') || '');
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [selectedProjectForEdit, setSelectedProjectForEdit] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [efdLocations, setEfdLocations] = useState([]);
+    
+    // Persistent Filter Sync
+    useEffect(() => {
+        localStorage.setItem('efd_selectedRegions', JSON.stringify(selectedRegions));
+        localStorage.setItem('efd_selectedDivision', selectedDivision);
+        localStorage.setItem('efd_selectedProvince', selectedProvince);
+        localStorage.setItem('efd_selectedMunicipality', selectedMunicipality);
+        localStorage.setItem('efd_selectedDistrict', selectedDistrict);
+        localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
+        localStorage.setItem('efd_searchQuery', searchQuery);
+    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, searchQuery]);
     
     // For UpdateWizard internal states (though Wizard handles most)
     const [internalFiles, setInternalFiles] = useState([]);
@@ -52,12 +74,14 @@ const EFDMonitoring = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const [pRes, engRes] = await Promise.all([
+                const [pRes, engRes, locRes] = await Promise.all([
                     fetch('/api/projects'),
-                    fetch('/api/engineers')
+                    fetch('/api/engineers'),
+                    fetch('/api/reference/efd-locations')
                 ]);
                 if (pRes.ok) setProjects(await pRes.json());
                 if (engRes.ok) setEngineers(await engRes.json());
+                if (locRes.ok) setEfdLocations(await locRes.json());
             } catch (error) {
                 console.error("Error fetching monitoring data:", error);
             } finally {
@@ -67,6 +91,17 @@ const EFDMonitoring = () => {
         fetchData();
         setUserData(user);
     }, [user]);
+
+    // Unique filter options
+    const regions = useMemo(() => {
+        const unique = [...new Set(projects.map(p => p.region).filter(Boolean))];
+        return unique.sort();
+    }, [projects]);
+
+    const categories = useMemo(() => {
+        const unique = [...new Set(projects.map(p => p.projectCategory).filter(Boolean))];
+        return unique.sort();
+    }, [projects]);
 
     const filteredProjects = useMemo(() => {
         return projects.filter(p => {
@@ -81,9 +116,15 @@ const EFDMonitoring = () => {
             const matchesCategory = selectedCategories.length === 0 || 
                 selectedCategories.includes(p.projectCategory);
 
-            return matchesSearch && matchesRegion && matchesCategory;
+            const normalize = (val) => val?.toString().trim().toUpperCase() || '';
+            const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
+            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
+            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
+            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
+
+            return matchesSearch && matchesRegion && matchesCategory && matchesDivision && matchesProvince && matchesMunicipality && matchesDistrict;
         });
-    }, [projects, searchQuery, selectedRegions, selectedCategories]);
+    }, [projects, searchQuery, selectedRegions, selectedCategories, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict]);
 
     const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
     const paginatedProjects = useMemo(() => {
@@ -248,19 +289,22 @@ const EFDMonitoring = () => {
                             <div className="flex flex-wrap items-center gap-3">
                                 <div className="flex bg-slate-100 p-1.5 rounded-2xl gap-1">
                                     <button 
-                                        onClick={() => setViewMode('table')}
-                                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                        <FiList size={14} /> Table
-                                    </button>
-                                    <button 
                                         onClick={() => setViewMode('card')}
                                         className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'card' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
                                         <FiGrid size={14} /> Cards
                                     </button>
+                                    <button 
+                                        onClick={() => setViewMode('table')}
+                                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <FiList size={14} /> Table
+                                    </button>
                                 </div>
-                                <button className="p-4 bg-slate-100 text-slate-500 rounded-2xl hover:bg-slate-200 transition-all active:scale-95">
+                                <button 
+                                    onClick={() => setIsFilterOpen(true)}
+                                    className={`h-[54px] px-6 rounded-2xl flex items-center gap-3 font-black text-[11px] uppercase tracking-wider transition-all shadow-lg active:scale-95 ${ (selectedRegions.length > 0 || selectedCategories.length > 0 || selectedDivision || selectedProvince || selectedMunicipality || selectedDistrict) ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white border border-slate-200 text-slate-600'}`}
+                                >
                                     <FiFilter size={18} />
                                 </button>
                             </div>
@@ -347,47 +391,47 @@ const EFDMonitoring = () => {
                                 {paginatedProjects.map((p) => {
                                     const hasEng = p.engineerName && p.engineerName !== 'UNASSIGNED';
                                     const progress = parseInt(p.accomplishmentPercentage || 0);
+                                    const prevProgress = p.previousPercentage !== null ? parseInt(p.previousPercentage) : null;
+                                    const showsProgression = prevProgress !== null && prevProgress !== progress;
+
                                     return (
                                         <div 
                                             key={p.id} 
                                             onClick={() => navigate(`/project-details/${p.id}`)}
                                             className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer relative"
                                         >
-                                            {/* Action Buttons Overlay (Top Right) */}
-                                            <div className="absolute top-4 right-4 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
-                                                    className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-sm text-blue-600 rounded-xl shadow-lg hover:bg-blue-600 hover:text-white transition-all border border-blue-50"
-                                                    title="Edit Details"
-                                                >
-                                                    <FiEdit2 size={15} />
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => handleDeleteProject(e, p.id)}
-                                                    className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-sm text-red-500 rounded-xl shadow-lg hover:bg-red-600 hover:text-white transition-all border border-red-50"
-                                                    title="Delete Project"
-                                                >
-                                                    <FiTrash2 size={15} />
-                                                </button>
-                                            </div>
+
 
                                             <div className="p-6 space-y-4 flex-1">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[8px] font-black uppercase rounded-full border border-blue-100 tracking-widest whitespace-nowrap">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="px-3 py-1 bg-blue-50 text-blue-600 text-[8px] font-black uppercase rounded-full border border-blue-100 tracking-widest leading-normal">
                                                                 {p.projectCategory || 'General'}
-                                                            </span>
-                                                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter truncate">
-                                                                IPC: {p.ipc || 'TBD'}
                                                             </span>
                                                         </div>
                                                         <h3 className="text-sm font-black text-slate-800 uppercase line-clamp-2 leading-snug group-hover:text-blue-600 transition-colors">
                                                             {p.projectName}
                                                         </h3>
+                                                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter truncate mt-0.5">
+                                                            IPC: {p.ipc || 'TBD'}
+                                                        </span>
                                                     </div>
-                                                    <div className="w-9 h-9 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center text-[10px] font-black border border-slate-100 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300 ml-3 flex-shrink-0">
-                                                        {p.id}
+                                                    <div className="flex flex-col items-end gap-1 ml-3 flex-shrink-0">
+                                                        <div className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 flex items-center justify-center text-[11px] font-black shadow-sm min-w-[40px]">
+                                                            {showsProgression && (
+                                                                <>
+                                                                    <span className="text-[9px] text-red-500 mr-1 font-bold tracking-tighter">
+                                                                        {prevProgress}%
+                                                                    </span>
+                                                                    <span className="text-[10px] text-slate-300 mx-1 font-bold">→</span>
+                                                                </>
+                                                            )}
+                                                            <span className="text-emerald-600 font-black text-base">{progress}%</span>
+                                                        </div>
+                                                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter italic pr-1">
+                                                            As of {p.statusAsOf ? new Date(p.statusAsOf).toLocaleDateString() : 'No Update'}
+                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -402,64 +446,48 @@ const EFDMonitoring = () => {
                                                             <span className="mx-1 text-slate-300">|</span>
                                                             {p.schoolId}
                                                         </p>
+                                                        <p className="text-[8px] font-bold text-slate-400 uppercase mt-1 tracking-tight leading-tight">
+                                                            {[p.region, p.province, p.division, p.municipality, (p.legislative_district || p.district)].filter(Boolean).join(' | ')}
+                                                        </p>
                                                     </div>
                                                 </div>
 
-                                                <div className="py-4 px-5 bg-slate-50/50 rounded-[2rem] border border-slate-100/50 space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Project Status</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className={`w-1.5 h-1.5 rounded-full ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500 animate-pulse'}`}></div>
-                                                                <span className="text-[10px] font-black text-slate-700 uppercase">{p.status || 'Not Yet Started'}</span>
-                                                            </div>
+                                                <div className="pt-2 px-1 space-y-4">
+                                                    {/* Procurement Status */}
+                                                    <div className="flex flex-col gap-1.5 px-1">
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Procurement Status</label>
+                                                        <div className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700">
+                                                            {p.procurement_status || 'Not Yet Procured'}
                                                         </div>
-                                                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 shadow-sm">{progress}%</span>
                                                     </div>
-                                                    <div className="w-full bg-slate-200/50 h-2.5 rounded-full overflow-hidden p-[2px]">
-                                                        <div 
-                                                            className={`h-full rounded-full transition-all duration-1000 ${progress === 100 ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-600 to-indigo-500'}`} 
-                                                            style={{ width: `${progress}%` }}
-                                                        ></div>
+
+                                                    {/* Construction Status */}
+                                                    <div className="flex flex-col gap-1.5 px-1">
+                                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Construction Status</label>
+                                                        <div className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold text-slate-700">
+                                                            {p.status || 'Not Yet Started'}
+                                                        </div>
                                                     </div>
+
+
                                                 </div>
                                             </div>
 
-                                            <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between mt-auto">
-                                                {!hasEng ? (
-                                                    <button 
-                                                        onClick={(e) => { 
-                                                            e.stopPropagation(); 
-                                                            setSelectedProject(p); 
-                                                            setSelectedEngineers(p.engineerId ? p.engineerId.split(',').map(s=>s.trim()) : []);
-                                                        }}
-                                                        className="w-full flex items-center justify-center gap-2 py-3 bg-[#FFF8F1] text-orange-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-orange-600 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-orange-100/50"
-                                                    >
-                                                        <FiUserPlus size={14} />
-                                                        Assign Engineer
-                                                    </button>
-                                                ) : (
-                                                    <div className="flex items-center justify-between w-full">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-[10px] font-black text-white shadow-lg shadow-blue-200">
-                                                                {p.engineerName?.[0]}
-                                                            </div>
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Active Engineer</span>
-                                                                <p className="text-[10px] font-black text-slate-700 uppercase tracking-tight truncate max-w-[150px]">
-                                                                    {p.engineerName?.split(',')[0].trim()}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
-                                                            className="w-8 h-8 flex items-center justify-center bg-white text-purple-600 rounded-xl border border-slate-100 hover:bg-purple-600 hover:text-white transition-all shadow-sm"
-                                                            title="Gallery"
-                                                        >
-                                                            <FiImage size={14} />
-                                                        </button>
-                                                    </div>
-                                                )}
+                                            <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-center gap-3 mt-auto">
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/project-gallery/${p.id}`); }}
+                                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-50 text-purple-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-purple-600 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-purple-100/50"
+                                                >
+                                                    <FiImage size={14} />
+                                                    Gallery
+                                                </button>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); setLogProject(p); setIsLogOpen(true); }}
+                                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-amber-50 text-amber-600 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-amber-500 hover:text-white transition-all shadow-sm active:scale-[0.98] border border-amber-100/50"
+                                                >
+                                                    <FiActivity size={14} />
+                                                    Project Log
+                                                </button>
                                             </div>
                                         </div>
                                     );
@@ -643,6 +671,31 @@ const EFDMonitoring = () => {
 
                 <BottomNav userRole={userRole} />
             </div>
+            <ProjectLogModal 
+                isOpen={isLogOpen} 
+                onClose={() => setIsLogOpen(false)} 
+                project={logProject} 
+            />
+            <FilterDrawer 
+                isOpen={isFilterOpen}
+                onClose={() => setIsFilterOpen(false)}
+                projects={projects}
+                regions={regions}
+                categories={categories}
+                selectedRegions={selectedRegions}
+                setSelectedRegions={setSelectedRegions}
+                selectedCategories={selectedCategories}
+                setSelectedCategories={setSelectedCategories}
+                selectedDivision={selectedDivision}
+                setSelectedDivision={setSelectedDivision}
+                selectedProvince={selectedProvince}
+                setSelectedProvince={setSelectedProvince}
+                selectedMunicipality={selectedMunicipality}
+                setSelectedMunicipality={setSelectedMunicipality}
+                selectedDistrict={selectedDistrict}
+                setSelectedDistrict={setSelectedDistrict}
+                locations={efdLocations}
+            />
         </PageTransition>
     );
 };

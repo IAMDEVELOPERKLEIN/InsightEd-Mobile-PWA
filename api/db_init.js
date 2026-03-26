@@ -359,9 +359,8 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
             ADD COLUMN IF NOT EXISTS uploader_type TEXT, -- EFD, Division Engineer, Non-DepEd Engineer
             ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE,
-            ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
-            ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
-            ADD COLUMN IF NOT EXISTS contract_pdf TEXT;
+            ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
+            ADD COLUMN IF NOT EXISTS procurement_status TEXT;
         `);
 
         // --- 8b. ENGINEER IMAGE EXTENSIONS ---
