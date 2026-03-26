@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiSearch, FiPlus, FiFilter, FiCamera, FiImage, FiSettings, FiChevronRight } from "react-icons/fi";
+import { FiSearch, FiPlus, FiFilter, FiCamera, FiImage, FiSettings, FiChevronRight, FiEdit, FiEye } from "react-icons/fi";
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 
 import BottomNav from "./BottomNav";
@@ -172,14 +172,15 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
 
                       <button
                         onClick={() => onView(p)}
-                        className={`w-full py-1.5 text-[10px] font-bold rounded-lg border transition-all active:scale-95 flex items-center justify-center gap-1 ${p.hasVariationOrder
+                        className={`w-full py-1.5 text-[10px] font-bold rounded-lg border transition-all active:scale-95 flex items-center justify-center gap-1.5 ${p.hasVariationOrder
                           ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 shadow-sm shadow-amber-900/10"
                           : "bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-100 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-600 hover:shadow-md"}`}
+                        title="View Project Details"
                       >
                         {p.hasVariationOrder ? (
-                          <>VIEW <span className="bg-amber-100 text-amber-700 px-1 rounded-sm text-[8px] font-black">VO</span></>
+                          <><FiEye size={14} /> <span className="bg-amber-100 text-amber-700 px-1 rounded-sm text-[8px] font-black">VO</span></>
                         ) : (
-                          <>VIEW <FiChevronRight size={12} /></>
+                          <><FiEye size={14} /> VIEW</>
                         )}
                       </button>
                       <button
@@ -198,7 +199,7 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
                               : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
                               }`}
                           >
-                            {isLocked ? "LOCKED" : "UPDATE"}
+                            {isLocked ? "LOCKED" : <FiEdit size={14} />}
                           </button>
                           <button
                             onClick={() => onDelete(p.id)}

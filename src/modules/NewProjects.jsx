@@ -11,9 +11,7 @@ import { addEngineerToOutbox, getCachedProjects } from '../db';
 const DOC_TYPES = {
     POW: "Program of Works",
     DUPA: "DUPA",
-    CONTRACT: "Signed Contract",
-    RTA: "Resolution to Award (RTA)",
-    MOA: "Memorandum of Agreement (MOA)"
+    CONTRACT: "Signed Contract"
 };
 
 // Kept for offline fallback provided logic exists elsewhere, or for images if needed (though images use compressImage)
@@ -1593,12 +1591,6 @@ const NewProjects = () => {
                                 <SectionHeader title="Project Documents" />
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {Object.entries(DOC_TYPES)
-                                        .filter(([key]) => {
-                                            if (['RTA', 'MOA'].includes(key)) {
-                                                return userRole === 'EFD';
-                                            }
-                                            return true;
-                                        })
                                         .map(([key, label]) => (
                                             <div key={key} className={`py-4 border-b border-slate-100 transition-all`}>
                                             <div className="flex justify-between items-center">
@@ -1656,14 +1648,19 @@ const NewProjects = () => {
                         {!isDummy && (
                                 activeTab < 4 ? (
                                     <button
+                                        key="btn-next"
                                         type="button"
-                                        onClick={() => setActiveTab(prev => Math.min(prev + 1, 4))}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            setActiveTab(prev => Math.min(prev + 1, 4));
+                                        }}
                                         className="flex-1 py-3 text-white font-bold text-sm bg-blue-600 rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition"
                                     >
                                         NEXT
                                     </button>
                                 ) : (
                                     <button
+                                        key="btn-submit"
                                         type="submit"
                                         disabled={isSubmitting}
                                         className="flex-1 py-3 text-white font-bold text-sm bg-[#004A99] rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition disabled:opacity-50"

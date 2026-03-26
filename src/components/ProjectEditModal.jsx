@@ -212,7 +212,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                         <Field label="Project Name">
                             <input name="projectName" value={formData.projectName} onChange={handleChange} className={inputCls} placeholder="Project name" />
                         </Field>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <Field label="School ID">
                                 <input name="schoolId" value={formData.schoolId} onChange={handleChange} className={inputCls} />
                             </Field>
@@ -226,7 +226,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                 {PROJECT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </Field>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <Field label="Program Type">
                                 <select name="program_type" value={formData.program_type} onChange={handleChange} className={inputCls}>
                                     <option value="">Select...</option>
@@ -237,7 +237,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                 <input name="funding_year" value={formData.funding_year} onChange={handleChange} className={inputCls} />
                             </Field>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <Field label="Classrooms">
                                 <input type="number" name="numberOfClassrooms" value={formData.numberOfClassrooms} onChange={handleChange} className={inputCls} />
                             </Field>
@@ -346,7 +346,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                             <Field label="Contract ID">
                                 <input name="contractId" value={formData.contractId} onChange={handleChange} className={inputCls} placeholder="Contract reference number" />
                             </Field>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Field label="Notice to Proceed (NTP)">
                                     <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} className={inputCls} />
                                 </Field>
@@ -394,7 +394,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             case 5:
                 return (
                     <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <Field label="Latitude">
                                 <input type="text" name="latitude" value={formData.latitude} onChange={handleChange} className={inputCls + " font-mono"} placeholder="e.g. 14.5995" />
                             </Field>
@@ -427,7 +427,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                             <span className="text-2xl">📂</span>
                             <div>
                                 <p className="text-xs font-black text-slate-700">Project Documents</p>
-                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">Upload or replace the POW, DUPA, and Signed Contract PDFs for this project.</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">Upload or replace the POW, DUPA, and Signed Contract PDFs for this project. Now available at any stage.</p>
                             </div>
                         </div>
                         {DOCS.map(doc => (
@@ -547,7 +547,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Field label="VO Number">
                                     <input name="vo_number" value={voForm.vo_number || ''} onChange={e => setVoForm(p => ({ ...p, vo_number: e.target.value }))} className={inputCls} placeholder="e.g. VO-01" />
                                 </Field>
@@ -559,7 +559,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                     </select>
                                 </Field>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <Field label="Additive Amount (₱)">
                                     <input type="number" value={voForm.additive_amount || ''} onChange={e => setVoForm(p => ({ ...p, additive_amount: e.target.value }))} className={inputCls} placeholder="0.00" />
                                 </Field>

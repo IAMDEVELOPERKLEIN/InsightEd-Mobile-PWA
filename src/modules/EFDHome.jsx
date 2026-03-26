@@ -957,9 +957,17 @@ const EFDHome = () => {
                                                             barSize={32} 
                                                             className="cursor-pointer"
                                                             onClick={(payload) => {
-                                                                if (payload && drillDownLevel === 'storey') {
-                                                                    setSelectedStorey(payload.storey);
-                                                                    setDrillDownLevel('prototype');
+                                                                if (payload) {
+                                                                    if (drillDownLevel === 'storey') {
+                                                                        setSelectedStorey(payload.storey);
+                                                                        setDrillDownLevel('prototype');
+                                                                    } else if (drillDownLevel === 'prototype') {
+                                                                        // Set filters for the list view to show relevant projects
+                                                                        setSelectedCategories(['New Construction']);
+                                                                        // Use a search query that typically matches the naming convention
+                                                                        setSearchQuery(`${payload.storey} Storey ${payload.classrooms} Classroom`);
+                                                                        setActiveTab('list');
+                                                                    }
                                                                 }
                                                             }}
                                                         >

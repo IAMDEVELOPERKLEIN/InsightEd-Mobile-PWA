@@ -39,3 +39,6 @@ users.json
 schema_out.json
 nohup.out
 scripts
+
+# Ignore uploads directory
+uploads/
