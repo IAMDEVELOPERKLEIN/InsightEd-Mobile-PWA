@@ -262,14 +262,14 @@ const RepairItemRow = ({ item, existingItem, isChecked, setRoomModalData, readOn
                     {/* Damage Ratio Slider */}
                     <div>
                         <div className="flex justify-between items-center mb-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Damage Ratio</label>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estimated Damage</label>
                             <span className="text-xs font-bold text-orange-600">{existingItem.damage_ratio || 0}%</span>
                         </div>
                         <input
                             type="range"
                             min="0"
                             max="100"
-                            step="5"
+                            step="10"
                             value={existingItem.damage_ratio || 0}
                             onChange={(e) => setRoomModalData(prev => ({
                                 ...prev,

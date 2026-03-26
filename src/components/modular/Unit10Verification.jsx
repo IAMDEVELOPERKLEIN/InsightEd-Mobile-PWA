@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { FiCheckCircle, FiXCircle, FiAlertCircle, FiClipboard, FiClock, FiUser, FiInfo, FiActivity } from 'react-icons/fi';
 import { TbTrophy, TbShieldCheck, TbMessageDots } from 'react-icons/tb';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import SuccessModal from '../SuccessModal';
 
 const Unit10Verification = ({ targetSchoolId }) => {
     const [loading, setLoading] = useState(true);
@@ -14,6 +15,8 @@ const Unit10Verification = ({ targetSchoolId }) => {
         lastUpdated: null,
         status: 'SUBMITTED'
     });
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
 
     useEffect(() => {
         const fetchSummary = async () => {
@@ -77,8 +80,8 @@ const Unit10Verification = ({ targetSchoolId }) => {
             });
 
             if (res.ok) {
-                alert(action === 'verify' ? "School Profile Verified Successfully!" : "Profile returned to School Head.");
-                window.location.reload(); // Refresh to show new status
+                setSuccessMessage(action === 'verify' ? "School Profile Verified Successfully! The profile is now officially committed." : "Profile returned to School Head for correction.");
+                setShowSuccess(true);
             } else {
                 const err = await res.json();
                 throw new Error(err.error || "Action failed");
@@ -99,6 +102,16 @@ const Unit10Verification = ({ targetSchoolId }) => {
 
     return (
         <div className="space-y-8 pb-32">
+            <AnimatePresence>
+                {showSuccess && (
+                    <SuccessModal 
+                        isOpen={showSuccess} 
+                        onClose={() => window.location.reload()} 
+                        message={successMessage}
+                        redirectUrl="/modular-dashboard"
+                    />
+                )}
+            </AnimatePresence>
             {/* Completion Hero */}
             <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl mx-4 mt-6">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-32 -mt-32"></div>

@@ -2,8 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { FiCamera, FiImage, FiX, FiCheck, FiChevronRight } from 'react-icons/fi';
 
-const ProjectStatus = {
+const ProcurementStatus = {
+    NotYetProcured: "Not Yet Procured",
     UnderProcurement: "Under Procurement",
+    ProcurementComplete: "Procurement Complete",
+};
+
+const ConstructionStatus = {
     NotYetStarted: "Not Yet Started",
     Ongoing: "Ongoing",
     ForFinalInspection: "For Final Inspection",
@@ -83,7 +88,8 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     const [externalFiles, setExternalFiles] = useState([]);
     const [externalPreviews, setExternalPreviews] = useState([]);
     const [activePhotoCategory, setActivePhotoCategory] = useState('Internal');
-    const [status, setStatus] = useState(project?.status || ProjectStatus.NotYetStarted);
+    const [procurementStatus, setProcurementStatus] = useState(project?.procurement_status || ProcurementStatus.NotYetProcured);
+    const [constructionStatus, setConstructionStatus] = useState(project?.status || ConstructionStatus.NotYetStarted);
     const [percentage, setPercentage] = useState(Number(project?.accomplishmentPercentage || 0));
     const [remarks, setRemarks] = useState('');
     const [statusAsOfDate, setStatusAsOfDate] = useState(new Date().toISOString().split('T')[0]);
@@ -134,7 +140,8 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     useEffect(() => {
         if (isOpen && project) {
             setStep(1);
-            setStatus(project.status || ProjectStatus.NotYetStarted);
+            setProcurementStatus(project.procurement_status || ProcurementStatus.NotYetProcured);
+            setConstructionStatus(project.status || ConstructionStatus.NotYetStarted);
             setPercentage(Number(project.accomplishmentPercentage || 0));
             setRemarks('');
             setStatusAsOfDate(new Date().toISOString().split('T')[0]);
@@ -201,11 +208,11 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
         }
     };
 
-    const handleStatusChange = (newStatus) => {
-        setStatus(newStatus);
-        if ([ProjectStatus.NotYetStarted, ProjectStatus.UnderProcurement].includes(newStatus)) {
+    const handleConstructionChange = (newStatus) => {
+        setConstructionStatus(newStatus);
+        if (newStatus === ConstructionStatus.NotYetStarted) {
             setPercentage(0);
-        } else if ([ProjectStatus.Completed, ProjectStatus.ForFinalInspection].includes(newStatus)) {
+        } else if ([ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection].includes(newStatus)) {
             setPercentage(100);
         }
         // Suspended & Terminated: percentage is preserved (no change to percentage state)
@@ -215,10 +222,10 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
         const minPct = Number(project?.accomplishmentPercentage || 0);
         const num = Math.min(100, Math.max(minPct, Number(val)));
         setPercentage(num);
-        if (num === 0) setStatus(ProjectStatus.NotYetStarted);
-        else if (num === 100 && status !== ProjectStatus.Completed) setStatus(ProjectStatus.ForFinalInspection);
-        else if (num > 0 && num < 100 && [ProjectStatus.Completed, ProjectStatus.ForFinalInspection].includes(status)) {
-            setStatus(ProjectStatus.Ongoing);
+        if (num === 0) setConstructionStatus(ConstructionStatus.NotYetStarted);
+        else if (num === 100 && constructionStatus !== ConstructionStatus.Completed) setConstructionStatus(ConstructionStatus.ForFinalInspection);
+        else if (num > 0 && num < 100 && [ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection].includes(constructionStatus)) {
+            setConstructionStatus(ConstructionStatus.Ongoing);
         }
     };
 
@@ -231,6 +238,12 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
             return { ok: false, reason: `You must attach at least one site photo for "${status}" status (COA requirement).` };
         }
         if (step === 2 && status === ProjectStatus.Completed && !actualCompletionDate) {
+    const canProceedStep2 = () => {
+        const progressive = [ConstructionStatus.Ongoing, ConstructionStatus.ForFinalInspection, ConstructionStatus.Completed];
+        if (progressive.includes(constructionStatus) && internalFiles.length === 0 && externalFiles.length === 0) {
+            return { ok: false, reason: `You must attach at least one site photo for "${constructionStatus}" status (COA requirement).` };
+        }
+        if (constructionStatus === ConstructionStatus.Completed && !actualCompletionDate) {
             return { ok: false, reason: "Please enter the Actual Completion Date to mark this project as Completed." };
         }
         return { ok: true };
@@ -246,7 +259,8 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
         onSave(
             {
                 ...project,
-                status,
+                procurement_status: procurementStatus,
+                status: constructionStatus,
                 accomplishmentPercentage: percentage,
                 otherRemarks: remarks || project.otherRemarks,
                 statusAsOfDate: isProcurementMode ? new Date().toISOString().split('T')[0] : statusAsOfDate,
@@ -268,12 +282,15 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
         onClose();
     };
 
-    const originalStatus = project.status;
-    const originalPercentage = Number(project.accomplishmentPercentage || 0);
-    const statusChanged = status !== originalStatus;
-    const percentageChanged = percentage !== originalPercentage;
-    const currentOpt = STATUS_OPTIONS.find(s => s.value === status);
-    const cols = colorMap[currentOpt?.color || 'slate'];
+    const originalConstruction = project.status;
+    const originalProcurement = project.procurement_status || ProcurementStatus.NotYetProcured;
+    const procChanged = procurementStatus !== originalProcurement;
+    const constChanged = constructionStatus !== originalConstruction;
+    
+    const procOpt = PROCUREMENT_OPTIONS.find(s => s.value === procurementStatus);
+    const constOpt = CONSTRUCTION_OPTIONS.find(s => s.value === constructionStatus);
+    const constCols = colorMap[constOpt?.color || 'slate'];
+    const procCols = colorMap[procOpt?.color || 'slate'];
 
     const activeFiles = activePhotoCategory === 'Internal' ? internalFiles : externalFiles;
     const activePreviews = activePhotoCategory === 'Internal' ? internalPreviews : externalPreviews;
@@ -482,6 +499,72 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Remarks (Optional)</label>
                                         <textarea rows={3} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add any notes..."
                                             className="w-full p-3 rounded-2xl border border-slate-200 text-xs font-medium outline-none resize-none" />
+                                        {i < arr.length - 1 && <div className="w-px h-8 bg-slate-200" />}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 2: STATUS */}
+                    {step === 2 && (
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Procurement Status</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {PROCUREMENT_OPTIONS.map(opt => {
+                                        const c = colorMap[opt.color];
+                                        const sel = procurementStatus === opt.value;
+                                        return (
+                                            <button
+                                                key={opt.value}
+                                                onClick={() => setProcurementStatus(opt.value)}
+                                                className={`flex items-center gap-3 p-3 rounded-2xl border-2 text-left transition-all ${sel ? `${c.bg} ${c.border}` : 'bg-white border-slate-100 hover:border-slate-200'}`}
+                                            >
+                                                <span className="text-lg">{opt.icon}</span>
+                                                <span className={`flex-1 text-[11px] font-black ${sel ? c.text : 'text-slate-600'}`}>{opt.label}</span>
+                                                {sel && <FiCheck size={16} className={c.text} />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Construction Status</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {CONSTRUCTION_OPTIONS.map(opt => {
+                                        const c = colorMap[opt.color];
+                                        const sel = constructionStatus === opt.value;
+                                        return (
+                                            <button
+                                                key={opt.value}
+                                                onClick={() => handleConstructionChange(opt.value)}
+                                                className={`flex items-center gap-3 p-3 rounded-2xl border-2 text-left transition-all ${sel ? `${c.bg} ${c.border}` : 'bg-white border-slate-100 hover:border-slate-200'}`}
+                                            >
+                                                <span className="text-lg">{opt.icon}</span>
+                                                <span className={`flex-1 text-[11px] font-black ${sel ? c.text : 'text-slate-600'}`}>{opt.label}</span>
+                                                {sel && <FiCheck size={16} className={c.text} />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {![ConstructionStatus.NotYetStarted].includes(constructionStatus) && (
+                                <div className={`p-4 rounded-2xl border ${constCols.bg} ${constCols.border}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <label className={`text-[10px] font-black uppercase tracking-widest ${constCols.text}`}>Accomplishment %</label>
+                                        <span className={`text-xl font-black tabular-nums ${constCols.text}`}>{percentage}%</span>
+                                    </div>
+                                    <input
+                                        type="range" min="0" max="100" value={percentage}
+                                        onChange={e => handlePercentageChange(e.target.value)}
+                                        disabled={[ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection].includes(constructionStatus)}
+                                        className="w-full accent-blue-600"
+                                    />
+                                    <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-1">
+                                        {['0%', '25%', '50%', '75%', '100%'].map(l => <span key={l}>{l}</span>)}
                                     </div>
                                 </div>
                             )}
@@ -527,6 +610,11 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                                         </div>
                                     </div>
                                     <p className="text-[10px] text-slate-400 text-center italic font-medium">Record the dates for each bidding stage to track procurement timeline.</p>
+                            {constructionStatus === ConstructionStatus.Completed && (
+                                <div>
+                                    <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">Actual Completion Date *</label>
+                                    <input type="date" value={actualCompletionDate} onChange={e => setActualCompletionDate(e.target.value)}
+                                        className="w-full p-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50/30 text-sm font-bold text-slate-700 outline-none" />
                                 </div>
                             )}
 
@@ -635,6 +723,44 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                                         </div>
                                     </div>
                                 </>
+                            {/* Procurement Status */}
+                            <div className={`p-3 rounded-2xl border ${procChanged ? `${procCols.bg} ${procCols.border}` : 'bg-slate-50 border-slate-100'}`}>
+                                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Procurement Status</p>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-slate-500 line-through">{originalProcurement}</span>
+                                    <span className="text-slate-300">→</span>
+                                    <span className={`text-[11px] font-black ${procCols.text}`}>{procurementStatus}</span>
+                                    {procChanged && <span className={`ml-auto text-[8px] font-black px-2 py-0.5 rounded-full border bg-white border-current uppercase ${procCols.text}`}>Changed</span>}
+                                </div>
+                            </div>
+
+                            {/* Construction Status */}
+                            <div className={`p-3 rounded-2xl border ${constChanged ? `${constCols.bg} ${constCols.border}` : 'bg-slate-50 border-slate-100'}`}>
+                                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Construction Status</p>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-slate-500 line-through">{originalConstruction}</span>
+                                    <span className="text-slate-300">→</span>
+                                    <span className={`text-[11px] font-black ${constCols.text}`}>{constructionStatus}</span>
+                                    {constChanged && <span className={`ml-auto text-[8px] font-black px-2 py-0.5 rounded-full border bg-white border-current uppercase ${constCols.text}`}>Changed</span>}
+                                </div>
+                            </div>
+
+                            {/* Photos */}
+                            <div className={`p-3 rounded-2xl border ${(internalFiles.length + externalFiles.length) > 0 ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-100'}`}>
+                                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Site Photos</p>
+                                <span className="text-[11px] font-black text-blue-600">
+                                    {internalFiles.length > 0 && `${internalFiles.length} Internal`}
+                                    {internalFiles.length > 0 && externalFiles.length > 0 && ', '}
+                                    {externalFiles.length > 0 && `${externalFiles.length} External`}
+                                    {internalFiles.length === 0 && externalFiles.length === 0 && <span className="text-slate-400 font-bold">No new photos</span>}
+                                </span>
+                            </div>
+
+                            {remarks && (
+                                <div className="p-3 rounded-2xl border bg-slate-50 border-slate-100">
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Remarks</p>
+                                    <p className="text-[11px] font-medium text-slate-700 italic">"{remarks}"</p>
+                                </div>
                             )}
                         </div>
                     )}

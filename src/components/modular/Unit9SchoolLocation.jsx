@@ -4,6 +4,7 @@ import { FiArrowLeft, FiMapPin, FiActivity, FiShield, FiCloudRain, FiTruck, FiNa
 import { FaBus, FaCarSide, FaWalking, FaWater, FaMountain, FaClinicMedical, FaSignal, FaMapMarkerAlt } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import SchoolLocation from '../../forms/SchoolLocation';
+import SuccessModal from '../SuccessModal';
 import BottomNav from '../../modules/BottomNav';
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
@@ -12,10 +13,12 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const formRef = React.useRef();
     const [initialDraft, setInitialDraft] = React.useState(null);
     const [showWelcomeBack, setShowWelcomeBack] = React.useState(false);
-    const [loading, setLoading] = React.useState(true);
-    const [isReadOnly, setIsReadOnly] = React.useState(propReadOnly ?? false);
     const [locationData, setLocationData] = React.useState(null);
     const [showDraftModal, setShowDraftModal] = React.useState(false);
+    const [showSuccess, setShowSuccess] = React.useState(false);
+    const [isCertified, setIsCertified] = React.useState(false);
+    const [isReadOnly, setIsReadOnly] = React.useState(propReadOnly || false);
+    const [loading, setLoading] = React.useState(true);
 
     const schoolId = targetSchoolId || localStorage.getItem('schoolId');
 
@@ -109,7 +112,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         }
 
         if (schoolId) await clearUnitDraft(9, schoolId);
-        navigate('/modular-dashboard');
+        setShowSuccess(true);
     };
 
     const SummaryDashboard = () => {
@@ -373,6 +376,29 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         )}
                     </div>
                 </section>
+
+                {/* Certification Checkbox */}
+                <section className="px-4 mt-8">
+                    <div 
+                        onClick={() => setIsCertified(!isCertified)}
+                        className={`p-6 rounded-[2rem] border-2 transition-all cursor-pointer flex items-start gap-4 ${
+                            isCertified 
+                                ? 'bg-emerald-50 border-emerald-200' 
+                                : 'bg-white border-slate-100 hover:border-slate-200'
+                        }`}
+                    >
+                        <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                            isCertified 
+                                ? 'bg-emerald-500 border-emerald-500 text-white' 
+                                : 'border-slate-300 bg-white'
+                        }`}>
+                            {isCertified && <FiCheck className="w-4 h-4" />}
+                        </div>
+                        <p className={`text-[10px] font-bold leading-relaxed ${isCertified ? 'text-emerald-900' : 'text-slate-500'}`}>
+                            I hereby certify that all data and information provided in this module/unit is true and correct
+                        </p>
+                    </div>
+                </section>
             </div>
         );
     };
@@ -436,7 +462,8 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     <div className="w-full max-w-sm flex gap-3 pointer-events-auto">
                         <button
                             onClick={() => setIsReadOnly(false)}
-                            className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+                            disabled={!isCertified}
+                            className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
                         >
                             <FiUnlock className="w-6 h-6" />
                             <span>Unlock to Audit</span>
@@ -471,7 +498,12 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     </div>
                 )}
             </AnimatePresence>
-
+            <SuccessModal 
+                isOpen={showSuccess} 
+                onClose={() => setShowSuccess(false)} 
+                message="School terrain and location audit synced successfully! ✓"
+                redirectUrl="/modular-dashboard"
+            />
         </motion.div>
     );
 };

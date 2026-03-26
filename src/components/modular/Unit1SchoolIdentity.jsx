@@ -120,6 +120,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [showFullscreenPdf, setShowFullscreenPdf] = useState(false);
     const [schoolNameWarning, setSchoolNameWarning] = useState("");
+    const [isCertified, setIsCertified] = useState(false);
 
     // ── PARALLEL data-fetch on mount ────────────────────────────────────────
     useEffect(() => {
@@ -287,10 +288,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             }
 
             // Determine if we should show review mode
-            // If they have an active draft, they are actively editing, so don't show review mode.
-            if ((d && d.unit1_completed && !draft) || propReadOnly) {
+            const dbCompleted = (d && (d.unit1 === 1 || d.unit1_completed === true));
+            if (dbCompleted || propReadOnly) {
                 setIsReviewMode(true);
             } else if (draft) {
+                // If not completed, then we can restore the draft
                 setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
@@ -366,11 +368,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     }, [formData.school_name]);
 
     useEffect(() => {
-        if (!isModeLoading) {
+        if (!isModeLoading && !isReviewMode) {
             const storedId = user?.school_id || localStorage.getItem("schoolId") || "anonymous";
             saveUnitDraft(1, storedId, { formData, step: currentStep });
         }
-    }, [formData, currentStep, isModeLoading, user]);
+    }, [formData, currentStep, isModeLoading, isReviewMode, user]);
 
     // ── Handlers ─────────────────────────────────────────────────────────────
     const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -491,7 +493,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const requiredFields = [
                 { key: 'barangay', label: 'Barangay' },
                 { key: 'leg_district', label: 'Legislative District' },
-                { key: 'ownership', label: 'Ownership Type' },
+                { key: 'ownership', label: 'Ownership' },
                 { key: 'school_type', label: 'School Classification' },
                 { key: 'curricular_offering', label: 'Curricular Offering' },
                 { key: 'latitude', label: 'Map Pin (Latitude)' },
@@ -626,7 +628,8 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         formData.established_year && (
         (formData.school_type === "with_annex" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
         (formData.school_type === "without_annex") ||
-        (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound))
+        (formData.school_type === "extension" && (formData.mother_school_id.length === 6 && /^\d+$/.test(formData.mother_school_id) && formData.extension_mother_school_name.trim().length > 0 && !motherSchoolNotFound)) ||
+        (formData.school_type !== "without_annex" && motherSchoolNotFound && formData.extension_mother_school_name.trim().length > 5)
     );
     const isCurrentStepValid = () => {
         if (currentStep === 0) return isStep0Valid;
@@ -696,7 +699,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Classification</span>
                                     <p className="font-black text-slate-700 text-sm italic">
                                         {formData.school_type === "with_annex" ? "School with Annex" : 
-                                         formData.school_type === "extension" ? "Extension School" : "Without Annex"}
+                                         formData.school_type === "extension" ? "Annex" : "Without Annex"}
                                     </p>
                                 </div>
                                 <div className="space-y-1 border-l border-slate-200 pl-6">
@@ -813,7 +816,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 <div className="space-y-6">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Land Ownership</span>
+                                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-1">Ownership</span>
                                             <p className="font-black text-slate-800 text-lg capitalize">{formData.ownership?.replace('_', ' ') || "—"}</p>
                                         </div>
                                         <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-2xl">⚖️</div>
@@ -1156,7 +1159,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
                                         {/* Ownership Question */}
                                         <div>
-                                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block mb-2">Ownership Type</label>
+                                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block mb-2">Ownership</label>
                                             <select name="ownership" value={formData.ownership} onChange={handleOwnershipChange} className={chunkySelect}>
                                                 <option value="" disabled hidden style={{color: '#999'}}>Select Ownership...</option>
                                                 <option value="deped">DepEd Owned</option>
@@ -1177,31 +1180,19 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     className={chunkySelect}
                                                 >
                                                     <option value="" disabled hidden style={{color: '#999'}}>Select Document Type...</option>
-                                                    {formData.ownership === "deped" && (
-                                                        <>
-                                                            <option value="Transfer Certificate of Title">Transfer Certificate of Title</option>
-                                                            <option value="special patents">Special Patents</option>
-                                                            <option value="presidential proclamations">Presidential Proclamations</option>
-                                                            <option value="deed of sale">Deed of Sale</option>
-                                                        </>
-                                                    )}
-                                                    {formData.ownership === "lgu_owned" && (
-                                                        <>
-                                                            <option value="deed of donation">Deed of Donation</option>
-                                                            <option value="usufruct agreement">Usufruct Agreement</option>
-                                                            <option value="memorandum of agreement">Memorandum of Agreement</option>
-                                                        </>
-                                                    )}
-                                                    {formData.ownership === "privately_owned" && (
-                                                        <>
-                                                            <option value="deed of donation (DepEd Registered)">Deed of Donation (DepEd Registered)</option>
-                                                            <option value="Deed of Donation (Unregistered)">Deed of Donation (Unregistered)</option>
-                                                            <option value="Lease Agreement">Lease Agreement</option>
-                                                            <option value="Expropriation">Expropriation</option>
-                                                            <option value="Tax Declaration Only">Tax Declaration Only</option>
-                                                            <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
-                                                        </>
-                                                    )}
+                                                    <option value="Transfer Certificate of Title">Transfer Certificate of Title</option>
+                                                    <option value="Special Patents">Special Patents</option>
+                                                    <option value="Presidential Proclamations">Presidential Proclamations</option>
+                                                    <option value="Deed of Sale">Deed of Sale</option>
+                                                    <option value="Deed of Donation">Deed of Donation</option>
+                                                    <option value="Deed of Donation (DepEd Registered)">Deed of Donation (DepEd Registered)</option>
+                                                    <option value="Deed of Donation (Unregistered)">Deed of Donation (Unregistered)</option>
+                                                    <option value="Usufruct Agreement">Usufruct Agreement</option>
+                                                    <option value="Memorandum of Agreement">Memorandum of Agreement</option>
+                                                    <option value="Lease Agreement">Lease Agreement</option>
+                                                    <option value="Expropriation">Expropriation</option>
+                                                    <option value="Tax Declaration Only">Tax Declaration Only</option>
+                                                    <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
                                                 </select>
                                                 
                                                 {/* Local Document Upload (Replaces GDrive) */}
@@ -1232,7 +1223,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     <option value="" disabled hidden style={{color: '#999'}}>Select School Type...</option>
                                                     <option value="with_annex">School with Annex</option>
                                                     <option value="without_annex">School without Annex</option>
-                                                    <option value="extension">Extension</option>
+                                                    <option value="extension">Annex</option>
                                                 </select>
                                             </motion.div>
                                         )}
@@ -1242,7 +1233,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                                                 className="space-y-3">
                                                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">
-                                                    {formData.school_type === "with_annex" && "What is the school ID of your extension school?"}
+                                                    {formData.school_type === "with_annex" && "What is your annex school id?"}
                                                     {formData.school_type === "extension" && "What is your mother school ID?"}
                                                 </label>
                                                 <div className="relative">
@@ -1290,9 +1281,32 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
                                                 {motherSchoolNotFound && (
                                                     <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                                                        className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex items-center gap-3">
-                                                        <span className="text-xl">❌</span>
-                                                        <p className="text-sm font-bold text-red-700">School ID not found in database</p>
+                                                        className="p-4 bg-amber-50 border-2 border-amber-100 rounded-[2rem] space-y-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-xl">⚠️</span>
+                                                            <p className="text-sm font-bold text-amber-800 leading-tight">School ID not found in database. Please enter the full school name manually:</p>
+                                                        </div>
+                                                        <div>
+                                                            <input 
+                                                                type="text" 
+                                                                value={formData.extension_mother_school_name} 
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setFormData(prev => ({ ...prev, extension_mother_school_name: val }));
+                                                                }}
+                                                                placeholder="Enter Official School Name"
+                                                                className={chunkyInput + " !bg-white"}
+                                                            />
+                                                            {(() => {
+                                                                const abbrList = ["ES", "NHS", "PS", "CS", "CES", "HS", "IS", "SHS", "ELEM", "MNHS"];
+                                                                const regex = new RegExp(`\\b(${abbrList.join('|')})\\b`, 'i');
+                                                                const match = formData.extension_mother_school_name.match(regex);
+                                                                if (match) {
+                                                                    return <p className="text-[10px] text-red-500 font-bold mt-2 px-4 italic leading-tight uppercase tracking-wider">🚫 No Abbreviations. Please spell out "{match[1].toUpperCase()}" (e.g., Elementary School).</p>;
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </div>
                                                     </motion.div>
                                                 )}
 
@@ -1306,17 +1320,31 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             </motion.div>
                                         )}
 
-                                        {/* Compliance Banner */}
-                                        {formData.school_type && (
-                                            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                                                className="p-5 bg-indigo-50 border-2 border-indigo-100 rounded-3xl flex gap-3 mt-8">
-                                                <div className="text-xl flex-shrink-0">✓</div>
-                                                <div className="text-sm font-bold text-indigo-800 leading-relaxed">
-                                                    <p>All information you input is for your school only.</p>
-                                                    <p className="mt-1 text-[11px] text-indigo-600">Per DepEd Order 2014-040</p>
-                                                </div>
-                                            </motion.div>
-                                        )}
+
+                                        {/* Certification Checkbox */}
+                                        <motion.div 
+                                            initial={{ opacity: 0, y: 20 }} 
+                                            animate={{ opacity: 1, y: 0 }}
+                                            onClick={() => setIsCertified(!isCertified)}
+                                            className={`p-6 rounded-[3rem] border-2 mt-8 transition-all cursor-pointer flex items-start gap-4 ${
+                                                isCertified 
+                                                    ? 'bg-emerald-50 border-emerald-200' 
+                                                    : 'bg-white border-slate-100 hover:border-slate-200 shadow-sm'
+                                            }`}
+                                        >
+                                            <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                                                isCertified 
+                                                    ? 'bg-emerald-500 border-emerald-500 text-white' 
+                                                    : 'border-slate-300 bg-white'
+                                            }`}>
+                                                {isCertified && <FiCheck className="w-4 h-4" />}
+                                            </div>
+                                            <p className={`text-[11px] font-bold leading-relaxed tracking-tight ${isCertified ? 'text-emerald-900' : 'text-slate-500 uppercase tracking-widest'}`}>
+                                                I hereby certify that all data and information provided in this module/unit is true and correct
+                                            </p>
+                                        </motion.div>
+
+
                                     </div>
                                 )}
                             </div>
@@ -1343,7 +1371,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 </button>
                             </>
                         )}
-                        <button onClick={handleNext} disabled={loading || (!hookIsSuperUser && !isCurrentStepValid())}
+                        <button onClick={handleNext} disabled={loading || (!hookIsSuperUser && !isCurrentStepValid()) || (currentStep === TOTAL_STEPS - 1 && !isCertified)}
                             className={`flex-1 h-16 rounded-[2rem] text-white font-black text-lg transition-all shadow-xl active:scale-98 disabled:opacity-30 disabled:scale-100
                                 ${(currentStep === TOTAL_STEPS - 1 && !isReadOnly) ? "bg-emerald-500 shadow-emerald-200" : "bg-blue-600 shadow-blue-200"}`}>
                             {loading ? (

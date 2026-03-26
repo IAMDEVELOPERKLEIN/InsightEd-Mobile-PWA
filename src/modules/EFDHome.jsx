@@ -8,6 +8,9 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import EditProjectModal from '../components/EditProjectModal';
 import { createPortal } from 'react-dom';
+import ProjectLogModal from '../components/ProjectLogModal';
+import FilterDrawer from '../components/FilterDrawer';
+import { FiActivity } from 'react-icons/fi';
 
 const MultiSelectDropdown = ({ label, options, selected, onChange, icon: Icon }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -79,8 +82,7 @@ const EFDHome = () => {
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
-    const [activeTab, setActiveTab] = useState('summary'); // 'summary' or 'granular' (Details)
-    const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
+    const [activeTab, setActiveTab] = useState('summary'); 
     const [engineers, setEngineers] = useState([]);
     const [selectedProjectForAssignment, setSelectedProjectForAssignment] = useState(null);
     const [selectedEngineers, setSelectedEngineers] = useState([]);
@@ -89,6 +91,8 @@ const EFDHome = () => {
     const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [selectedProjectForEdit, setSelectedProjectForEdit] = useState(null);
+    const [isLogOpen, setIsLogOpen] = useState(false);
+    const [logProject, setLogProject] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [internalFiles, setInternalFiles] = useState([]);
     const [internalPreviews, setInternalPreviews] = useState([]);
@@ -99,19 +103,23 @@ const EFDHome = () => {
     const cameraInputRef = useRef(null);
     
     useEffect(() => {
-        sessionStorage.setItem('efdHomeTab', activeTab);
+        // No longer needed to sync activeTab to sessionStorage for dual-view
     }, [activeTab]);
 
-    const [selectedRegions, setSelectedRegions] = useState([]);
-    const [selectedDivision, setSelectedDivision] = useState('');
-    const [selectedCategories, setSelectedCategories] = useState([]);
+    const [selectedRegions, setSelectedRegions] = useState(() => JSON.parse(localStorage.getItem('efd_selectedRegions') || '[]'));
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [selectedDivision, setSelectedDivision] = useState(() => localStorage.getItem('efd_selectedDivision') || '');
+    const [selectedProvince, setSelectedProvince] = useState(() => localStorage.getItem('efd_selectedProvince') || '');
+    const [selectedMunicipality, setSelectedMunicipality] = useState(() => localStorage.getItem('efd_selectedMunicipality') || '');
+    const [selectedDistrict, setSelectedDistrict] = useState(() => localStorage.getItem('efd_selectedDistrict') || '');
+    const [selectedCategories, setSelectedCategories] = useState(() => JSON.parse(localStorage.getItem('efd_selectedCategories') || '[]'));
     const [selectedYears, setSelectedYears] = useState([]);
-    const [selectedSource, setSelectedSource] = useState('All'); // 'All', 'Donated', 'BEFF'
+    const [selectedSource, setSelectedSource] = useState('All'); 
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedDonated, setSelectedDonated] = useState('All'); 
     const [selectedDocStatus, setSelectedDocStatus] = useState('All'); 
     const [fundingYears, setFundingYears] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
     const [efdLocations, setEfdLocations] = useState([]);
     const [isBeffMode, setIsBeffMode] = useState(() => window.location.pathname.toLowerCase().includes('beff'));
     const [chartMetric, setChartMetric] = useState('count'); // 'count' or 'abc'
@@ -121,6 +129,17 @@ const EFDHome = () => {
         if (role === 'deped_engineer' || role === 'DepEd Engineer') return 'Division Engineer';
         return role;
     });
+
+    // Persistent Filter Sync
+    useEffect(() => {
+        localStorage.setItem('efd_selectedRegions', JSON.stringify(selectedRegions));
+        localStorage.setItem('efd_selectedDivision', selectedDivision);
+        localStorage.setItem('efd_selectedProvince', selectedProvince);
+        localStorage.setItem('efd_selectedMunicipality', selectedMunicipality);
+        localStorage.setItem('efd_selectedDistrict', selectedDistrict);
+        localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
+        localStorage.setItem('efd_searchQuery', searchQuery);
+    }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, searchQuery]);
 
     // Building Standards State
     const [dataMode, setDataMode] = useState('masterlist');
@@ -147,12 +166,24 @@ const EFDHome = () => {
     const handleClearFilters = () => {
         setSelectedRegions([]);
         setSelectedDivision('');
+        setSelectedProvince('');
+        setSelectedMunicipality('');
+        setSelectedDistrict('');
         setSelectedCategories([]);
-        setSelectedYears([]); // Use selectedYears for the new UI
-        setSelectedSource('All'); // Clear source filter
+        setSelectedYears([]); 
+        setSelectedSource('All'); 
         setSelectedDonated('All');
         setSelectedDocStatus('All');
-        setSearchQuery(''); // Use searchQuery for the new UI
+        setSearchQuery('');
+
+        // Clear persistence to ensure sync
+        localStorage.removeItem('efd_selectedRegions');
+        localStorage.removeItem('efd_selectedDivision');
+        localStorage.removeItem('efd_selectedProvince');
+        localStorage.removeItem('efd_selectedMunicipality');
+        localStorage.removeItem('efd_selectedDistrict');
+        localStorage.removeItem('efd_selectedCategories');
+        localStorage.removeItem('efd_searchQuery');
     };
 
     const allCategories = [
@@ -194,8 +225,6 @@ const EFDHome = () => {
                     return;
                 }
                 setUserData(user);
-                if (user.region) setSelectedRegions([user.region]);
-                if (user.division) setSelectedDivision(user.division);
 
                 // Concurrent fetch for project and reference data
                 const [pRes, fyRes, locRes, engRes] = await Promise.all([
@@ -297,7 +326,14 @@ const EFDHome = () => {
             const matchesSource = selectedSource === 'All' || 
                                 (selectedSource === 'Donated' && p.program_type === 'Donated') ||
                                 (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-            return matchesRegions && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
+
+            const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
+            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
+            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
+            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
+
+            return matchesRegions && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource &&
+                   matchesDivision && matchesProvince && matchesMunicipality && matchesDistrict;
         });
 
         baseProjects.forEach(p => {
@@ -325,14 +361,45 @@ const EFDHome = () => {
 
     const allDivisions = useMemo(() => {
         if (selectedRegions.length === 0) return [];
-        const divisions = new Set();
+        const set = new Set();
         efdLocations
-            .filter(loc => selectedRegions.some(reg => loc.region?.trim().toUpperCase() === reg.toUpperCase()))
-            .forEach(loc => {
-                if (loc.division) divisions.add(loc.division.trim().toUpperCase());
-            });
-        return Array.from(divisions).sort();
+            .filter(loc => selectedRegions.some(reg => normalize(loc.region) === normalize(reg)))
+            .forEach(loc => { if (loc.division) set.add(loc.division.trim().toUpperCase()); });
+        return Array.from(set).sort();
     }, [efdLocations, selectedRegions]);
+
+    const allProvinces = useMemo(() => {
+        if (selectedRegions.length === 0) return [];
+        const set = new Set();
+        efdLocations
+            .filter(loc => selectedRegions.some(reg => normalize(loc.region) === normalize(reg)))
+            .filter(loc => !selectedDivision || normalize(loc.division) === normalize(selectedDivision))
+            .forEach(loc => { if (loc.province) set.add(loc.province.trim().toUpperCase()); });
+        return Array.from(set).sort();
+    }, [efdLocations, selectedRegions, selectedDivision]);
+
+    const allMunicipalities = useMemo(() => {
+        if (selectedRegions.length === 0) return [];
+        const set = new Set();
+        efdLocations
+            .filter(loc => selectedRegions.some(reg => normalize(loc.region) === normalize(reg)))
+            .filter(loc => !selectedDivision || normalize(loc.division) === normalize(selectedDivision))
+            .filter(loc => !selectedProvince || normalize(loc.province) === normalize(selectedProvince))
+            .forEach(loc => { if (loc.municipality) set.add(loc.municipality.trim().toUpperCase()); });
+        return Array.from(set).sort();
+    }, [efdLocations, selectedRegions, selectedDivision, selectedProvince]);
+
+    const allDistricts = useMemo(() => {
+        if (selectedRegions.length === 0) return [];
+        const set = new Set();
+        efdLocations
+            .filter(loc => selectedRegions.some(reg => normalize(loc.region) === normalize(reg)))
+            .filter(loc => !selectedDivision || normalize(loc.division) === normalize(selectedDivision))
+            .filter(loc => !selectedProvince || normalize(loc.province) === normalize(selectedProvince))
+            .filter(loc => !selectedMunicipality || normalize(loc.municipality) === normalize(selectedMunicipality))
+            .forEach(loc => { if (loc.legislative_district) set.add(loc.legislative_district.trim().toUpperCase()); });
+        return Array.from(set).sort();
+    }, [efdLocations, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality]);
 
     const allYears = useMemo(() => {
         return [...new Set(fundingYears)].sort((a, b) => b - a);
@@ -404,7 +471,13 @@ const EFDHome = () => {
             const matchesSource = selectedSource === 'All' || 
                                 (selectedSource === 'Donated' && p.program_type === 'Donated') ||
                                 (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-            return matchesRegions && matchesDivision && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
+
+            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
+            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
+            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
+
+            return matchesRegions && matchesDivision && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource &&
+                   matchesProvince && matchesMunicipality && matchesDistrict;
         });
 
         baseProjects.forEach(p => {
@@ -437,7 +510,13 @@ const EFDHome = () => {
             const matchesSource = selectedSource === 'All' || 
                                 (selectedSource === 'Donated' && p.program_type === 'Donated') ||
                                 (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-            return matchesRegions && matchesDivision && matchesCategory && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
+
+            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
+            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
+            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
+
+            return matchesRegions && matchesDivision && matchesCategory && matchesDonated && matchesDocStatus && matchesSearch && matchesSource &&
+                   matchesProvince && matchesMunicipality && matchesDistrict;
         });
 
         baseProjects.forEach(p => {
@@ -479,7 +558,13 @@ const EFDHome = () => {
             const matchesSource = selectedSource === 'All' || 
                                 (selectedSource === 'Donated' && p.program_type === 'Donated') ||
                                 (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-            return matchesRegions && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesBeff && matchesSearch && matchesSource;
+
+            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
+            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
+            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
+
+            return matchesRegions && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesBeff && matchesSearch && matchesSource &&
+                   matchesProvince && matchesMunicipality && matchesDistrict;
         });
     }, [projects, selectedRegions, selectedDivision, selectedCategories, selectedYears, searchQuery, selectedDonated, selectedDocStatus, isBeffMode, selectedSource]);
 
@@ -726,113 +811,45 @@ const EFDHome = () => {
                 </div>
 
                 <div className="px-5 mb-8 space-y-4">
-                    <div className="bg-slate-200/50 p-1.5 rounded-2xl flex border border-slate-200 gap-1.5">
-                        <button
-                            onClick={() => setActiveTab('summary')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === 'summary' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            <FiLayers size={14} /> Analytics
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('list')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${activeTab === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            <FiList size={14} /> Details
-                        </button>
-                    </div>
+                        
 
                     {/* --- FILTER CONTROL PANEL --- */}
                     <div className="space-y-4">
-                        {/* Search Bar */}
-                        <div className="relative group">
-                            <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                            <input 
-                                type="text"
-                                placeholder="Search by project name, school ID, or location..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-3xl shadow-sm text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all placeholder:text-slate-300"
-                            />
-                        </div>
-
-                        {/* Multi-Select Group */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-w-0">
-                            <MultiSelectDropdown 
-                                label="Regions" 
-                                options={allRegions} 
-                                selected={selectedRegions} 
-                                onChange={setSelectedRegions}
-                                icon={FiMapPin}
-                            />
-                            <MultiSelectDropdown 
-                                label="Categories" 
-                                options={allCategories} 
-                                selected={selectedCategories} 
-                                onChange={setSelectedCategories}
-                                icon={FiLayers}
-                            />
-                            <MultiSelectDropdown 
-                                label="Funding Years" 
-                                options={allYears} 
-                                selected={selectedYears} 
-                                onChange={setSelectedYears}
-                                icon={FiList}
-                            />
-                        </div>
-
-                        {/* Single-Select & Reset Row */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                            <div className="relative group">
-                                <FiMapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors z-10" size={12} />
-                                <select 
-                                    value={selectedDivision}
-                                    onChange={(e) => setSelectedDivision(e.target.value)}
-                                    disabled={selectedRegions.length !== 1}
-                                    className="w-full pl-9 pr-8 py-3 bg-white border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-tight text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none shadow-sm disabled:opacity-40"
-                                >
-                                    <option value="">{selectedRegions.length === 1 ? 'All Divisions' : 'Select 1 Region'}</option>
-                                    {allDivisions.map(div => <option key={div} value={div}>{div}</option>)}
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={10} />
-                            </div>
-
-                            <div className="relative group">
-                                <FiAlertCircle className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-blue-500 transition-colors z-10" size={12} />
-                                <select 
-                                    value={selectedDocStatus}
-                                    onChange={(e) => setSelectedDocStatus(e.target.value)}
-                                    className="w-full pl-9 pr-8 py-3 bg-white border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-tight text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none shadow-sm"
-                                >
-                                    <option value="All">All Doc Status</option>
-                                    <option value="Complete">Complete docs</option>
-                                    <option value="Missing RTA">Missing RTA</option>
-                                    <option value="Missing MOA">Missing MOA</option>
-                                    <option value="Missing Both">Missing Both</option>
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={10} />
-                            </div>
-
-                            <div className="relative group">
-                                <FiTrendingUp className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-amber-500 transition-colors z-10" size={12} />
-                                <select 
-                                    value={selectedSource}
-                                    onChange={(e) => setSelectedSource(e.target.value)}
-                                    className="w-full pl-9 pr-8 py-3 bg-white border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-tight text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none shadow-sm"
-                                >
-                                    <option value="All">All Sources</option>
-                                    <option value="Donated">Donated</option>
-                                    <option value="BEFF">BEFF (Gov)</option>
-                                </select>
-                                <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={10} />
+                        {/* Search Bar & Filter Toggle */}
+                        <div className="flex gap-4">
+                            <div className="relative group flex-1">
+                                <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                                <input 
+                                    type="text"
+                                    placeholder="Search by project name, school ID, or location..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-3xl shadow-sm text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all placeholder:text-slate-300"
+                                />
                             </div>
 
                             <button 
-                                onClick={handleClearFilters}
-                                className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+                                onClick={() => setIsFilterOpen(true)}
+                                className={`p-4 rounded-[1.5rem] transition-all active:scale-95 flex items-center justify-center shadow-sm ${
+                                    selectedRegions.length > 0 || selectedCategories.length > 0 || selectedDivision || selectedProvince || selectedMunicipality || selectedDistrict
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
+                                    : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'
+                                }`}
+                                title="Open Advanced Filters"
                             >
-                                <FiFilter size={12} /> Reset Filters
+                                <FiFilter size={20} />
                             </button>
                         </div>
+
+                        {/* Reset All Filters Button (Always Visible) */}
+                        <button 
+                            onClick={handleClearFilters}
+                            className={`w-full flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95 border border-slate-200 shadow-sm ${
+                                (selectedRegions.length > 0 || selectedCategories.length > 0 || selectedDivision || selectedProvince || selectedMunicipality || selectedDistrict) ? 'block' : 'hidden'
+                            }`}
+                        >
+                            <FiFilter size={12} /> Reset All Active Filters
+                        </button>
                     </div>
                 </div>
 
@@ -988,7 +1005,6 @@ const EFDHome = () => {
                                                                     setSelectedDivision('');
                                                                 } else if (selectedRegions.length === 1) {
                                                                     setSelectedDivision(data.activeLabel);
-                                                                    setActiveTab('list');
                                                                 }
                                                             }
                                                         }}
@@ -1175,18 +1191,18 @@ const EFDHome = () => {
                                 {/* View Toggle */}
                                 <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm">
                                     <button
-                                        onClick={() => setViewMode('table')}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                        <FiList size={14} />
-                                        <span className="hidden xs:inline">Table</span>
-                                    </button>
-                                    <button
                                         onClick={() => setViewMode('card')}
                                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${viewMode === 'card' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
                                         <FiGrid size={13} />
                                         <span className="hidden xs:inline">Cards</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('table')}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <FiList size={14} />
+                                        <span className="hidden xs:inline">Table</span>
                                     </button>
                                 </div>
                             </div>
@@ -1325,36 +1341,33 @@ const EFDHome = () => {
                                     {paginatedProjects.map((p) => {
                                         const isUnassigned = !p.engineerName && !p.assigned_engineer_name;
                                         const engrName = p.assigned_engineer_name || p.engineerName;
+                                        const progress = parseInt(p.accomplishmentPercentage || 0);
+                                        const parsedPrev = parseInt(p.previousPercentage);
+                                        const prevProgress = !isNaN(parsedPrev) ? parsedPrev : null;
+                                        const showsProgression = prevProgress !== null && prevProgress !== progress;
                                         
                                         return (
                                             <div key={p.id} className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-500 relative flex flex-col">
-                                                {/* Action Buttons Overlay (Top Right) */}
-                                                <div className="absolute top-4 right-4 flex gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
-                                                        className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-sm text-blue-600 rounded-xl shadow-lg hover:bg-blue-600 hover:text-white transition-all border border-blue-50"
-                                                        title="Edit Details"
-                                                    >
-                                                        <FiEdit2 size={15} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={(e) => handleDeleteProject(e, p.id)}
-                                                        className="w-9 h-9 flex items-center justify-center bg-white/90 backdrop-blur-sm text-red-500 rounded-xl shadow-lg hover:bg-red-600 hover:text-white transition-all border border-red-50"
-                                                        title="Delete Project"
-                                                    >
-                                                        <FiTrash2 size={15} />
-                                                    </button>
-                                                </div>
 
                                                 {/* Card Header (Category & Status) */}
                                                 <div className="p-6 pb-0">
                                                     <div className="flex items-center justify-between gap-4 mb-3">
-                                                        <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 tracking-widest whitespace-nowrap">
-                                                            {p.projectCategory || 'General'}
-                                                        </span>
-                                                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter truncate">
-                                                            IPC: {p.ipc || 'TBD'}
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 tracking-widest whitespace-nowrap">
+                                                                {p.projectCategory || 'General'}
+                                                            </span>
+                                                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-tighter truncate">
+                                                                IPC: {p.ipc || 'TBD'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="bg-blue-600 text-white rounded-xl px-2.5 py-1.5 flex items-center justify-center text-[10px] font-black shadow-lg shadow-blue-100 flex-shrink-0 min-w-[35px]">
+                                                            {showsProgression && (
+                                                                <span className="text-[7px] opacity-60 mr-1 font-bold tracking-tighter">
+                                                                    {prevProgress}% →
+                                                                </span>
+                                                            )}
+                                                            <span>{progress}%</span>
+                                                        </div>
                                                     </div>
                                                     <h3 className="text-sm font-black text-slate-800 leading-tight group-hover:text-blue-600 transition-colors line-clamp-2 uppercase">
                                                         {p.projectName}
@@ -1373,23 +1386,39 @@ const EFDHome = () => {
                                                         </div>
                                                     </div>
 
-                                                    <div className="grid grid-cols-2 gap-6 pl-1">
+                                                    <div className="grid grid-cols-2 gap-4 pl-1">
                                                         <div className="flex flex-col gap-1.5">
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Project Status</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className={`w-1.5 h-1.5 rounded-full ${p.status?.toLowerCase().includes('ongoing') ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`}></div>
-                                                                <span className="text-[10px] font-black text-slate-700 uppercase whitespace-nowrap">{p.status || 'Not Yet Started'}</span>
-                                                            </div>
+                                                            <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Procurement</label>
+                                                            <select 
+                                                                value={p.procurement_status || 'Not Yet Procured'}
+                                                                onChange={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleSaveProject({ ...p, procurement_status: e.target.value });
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-2 py-1.5 text-[9px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer"
+                                                            >
+                                                                <option value="Not Yet Procured">Not Yet Procured</option>
+                                                                <option value="Under Procurement">Under Procurement</option>
+                                                                <option value="Procurement Complete">Procurement Complete</option>
+                                                            </select>
                                                         </div>
-                                                        <div className="flex flex-col gap-1.5 text-right md:text-left">
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Engineer</span>
-                                                            <div className="flex items-center justify-end md:justify-start gap-1.5">
-                                                                {isUnassigned ? (
-                                                                    <span className="text-[10px] font-black text-orange-500 italic uppercase">No Assignee</span>
-                                                                ) : (
-                                                                    <span className="text-[10px] font-black text-slate-700 truncate uppercase">Engr. {engrName}</span>
-                                                                )}
-                                                            </div>
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <label className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Construction</label>
+                                                            <select 
+                                                                value={p.status || 'Not Yet Started'}
+                                                                onChange={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleSaveProject({ ...p, status: e.target.value });
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-2 py-1.5 text-[9px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500/10 appearance-none cursor-pointer"
+                                                            >
+                                                                <option value="Not Yet Started">Not Yet Started</option>
+                                                                <option value="Ongoing">Ongoing</option>
+                                                                <option value="For Final Inspection">For Final Inspection</option>
+                                                                <option value="Completed">Completed</option>
+                                                            </select>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1426,9 +1455,37 @@ const EFDHome = () => {
                                                             </button>
                                                         </div>
                                                     )}
+                                                    {/* Action Buttons Row */}
+                                                    <div className="border-t border-slate-50 pt-3 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all border border-blue-100"
+                                                                title="Edit Details"
+                                                            >
+                                                                <FiEdit2 size={11} /> Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); setLogProject(p); setIsLogOpen(true); }}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all border border-amber-100"
+                                                                title="View Activity Log"
+                                                            >
+                                                                <FiActivity size={11} /> Log
+                                                            </button>
+                                                        </div>
+                                                        {userRole !== 'EFD Engineer' && (
+                                                            <button
+                                                                onClick={(e) => handleDeleteProject(e, p.id)}
+                                                                className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all border border-red-100"
+                                                                title="Delete Project"
+                                                            >
+                                                                <FiTrash2 size={12} />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        );
+                                        )
                                     })}
                                 </div>
                             )}
@@ -1592,6 +1649,31 @@ const EFDHome = () => {
             {/* Hidden Inputs for Photos */}
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
             <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
+            <ProjectLogModal 
+                isOpen={isLogOpen} 
+                onClose={() => setIsLogOpen(false)} 
+                project={logProject} 
+            />
+            <FilterDrawer 
+                isOpen={isFilterOpen}
+                onClose={() => setIsFilterOpen(false)}
+                projects={projects}
+                regions={allRegions}
+                categories={allCategories}
+                selectedRegions={selectedRegions}
+                setSelectedRegions={setSelectedRegions}
+                selectedCategories={selectedCategories}
+                setSelectedCategories={setSelectedCategories}
+                selectedDivision={selectedDivision}
+                setSelectedDivision={setSelectedDivision}
+                selectedProvince={selectedProvince}
+                setSelectedProvince={setSelectedProvince}
+                selectedMunicipality={selectedMunicipality}
+                setSelectedMunicipality={setSelectedMunicipality}
+                selectedDistrict={selectedDistrict}
+                setSelectedDistrict={setSelectedDistrict}
+                locations={efdLocations}
+            />
         </PageTransition>
     );
 };

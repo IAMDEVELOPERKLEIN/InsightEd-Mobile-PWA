@@ -371,7 +371,7 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
     client = await pool.connect();
     const result = await client.query(
       `UPDATE ph_schools SET ${col} = 1 WHERE school_id = $1
-       RETURNING unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit_completion`,
+       RETURNING unit1, unit2, unit3, unit4, unit5, unit7, unit8, unit9, unit_completion`,
       [school_id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "School not found" });
@@ -380,7 +380,7 @@ app.patch('/api/schools/:school_id/units/:unit_number/complete', async (req, res
       success: true,
       data: {
         unit1: row.unit1, unit2: row.unit2, unit3: row.unit3, unit4: row.unit4,
-        unit5: row.unit5, unit6: row.unit6, unit7: row.unit7, unit8: row.unit8,
+        unit5: row.unit5, unit6: row.unit7, unit7: row.unit8, unit8: row.unit9,
         unit_completion: parseFloat(parseFloat(row.unit_completion || 0).toFixed(2))
       }
     });
@@ -398,9 +398,9 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
   try {
     const schoolRes = await pool.query(
       `SELECT 
-        unit1, unit2, unit3, unit4, unit5, unit6, unit7, unit8, unit9,
+        unit1, unit2, unit3, unit4, unit5, unit7, unit8, unit9,
         unit1_completed, unit2_completed, unit3_completed, unit4_completed,
-        unit5_completed, unit6_completed, unit7_completed, unit8_completed, unit9_completed,
+        unit5_completed, unit7_completed, unit8_completed, unit9_completed,
         unit_completion, region, division
        FROM ph_schools WHERE school_id = $1`,
       [schoolId]
@@ -408,16 +408,20 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
     if (schoolRes.rows.length === 0) return res.status(404).json({ error: "School not found" });
 
     const row = schoolRes.rows[0];
-    const totalUnits = 9;
+    const totalUnits = 8;
     let completedUnitsCount = 0;
     let completedFlags = {};
 
-    for (let i = 1; i <= totalUnits; i++) {
-      const intVal = parseInt(row[`unit${i}`]) || 0;
-      const boolVal = row[`unit${i}_completed`] === true;
+    // Unit 6 (Teaching Personnel) has been removed; map old units 7,8,9 to new IDs 6,7,8
+    const unitMapping = [1, 2, 3, 4, 5, 7, 8, 9]; // old DB column -> new display ID
+    for (let i = 0; i < unitMapping.length; i++) {
+      const dbIdx = unitMapping[i];
+      const displayId = i + 1;
+      const intVal = parseInt(row[`unit${dbIdx}`]) || 0;
+      const boolVal = row[`unit${dbIdx}_completed`] === true;
       const isDone = (intVal === 1 || boolVal);
 
-      completedFlags[`unit${i}`] = isDone;
+      completedFlags[`unit${displayId}`] = isDone;
       if (isDone) completedUnitsCount++;
     }
 
@@ -1356,10 +1360,9 @@ app.get('/api/reference/functional-divisions', async (req, res) => {
 app.get('/api/reference/efd-locations', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT region, division 
-      FROM engineer_form 
-      WHERE region IS NOT NULL AND division IS NOT NULL
-      ORDER BY region, division;
+      SELECT region, division, district, province, municipality, legislative_district 
+      FROM all_locations 
+      ORDER BY region, division, province, municipality;
     `);
     res.json(result.rows);
   } catch (err) {
@@ -9011,10 +9014,15 @@ app.get('/api/projects', async (req, res) => {
     let whereClauses = [];
 
     let sql = `
-      WITH LatestProjects AS (
-          SELECT DISTINCT ON (COALESCE(e.ipc, e.project_id::text)) 
+      WITH RankedProjects AS (
+          SELECT 
             e.project_id, e.school_name, e.project_name, e.school_id, e.division, e.region, e.status_of_construction_phase AS status, e.ipc, e.engineer_name, e.engineer_id,
-            e.accomplishment_percentage, e.approved_budget_for_contract, e.contract_amount, e.batch_of_funds, e.contractor_name, e.other_remarks,
+            e.accomplishment_percentage,
+            LAG(e.accomplishment_percentage) OVER (
+                PARTITION BY COALESCE(e.ipc, e.project_id::text) 
+                ORDER BY e.project_id ASC
+            ) as previous_percentage,
+            e.approved_budget_for_contract, e.contract_amount, e.batch_of_funds, e.contractor_name, e.other_remarks,
             e.status_as_of, e.target_completion_date, e.actual_completion_date, e.notice_to_proceed, e.latitude, e.longitude,
             e.construction_start_date, e.project_category, e.scope_of_work,
             e.province, e.city, e.municipality,
@@ -9033,17 +9041,24 @@ app.get('/api/projects', async (req, res) => {
             COALESCE(f.tranche_3, 0) as tranche_3,
             COALESCE(f.liquidated_tranche_1, 0) as liquidated_tranche_1,
             COALESCE(f.liquidated_tranche_2, 0) as liquidated_tranche_2,
-            COALESCE(f.liquidated_tranche_3, 0) as liquidated_tranche_3
+            COALESCE(f.liquidated_tranche_3, 0) as liquidated_tranche_3,
+            ROW_NUMBER() OVER (
+                PARTITION BY COALESCE(e.ipc, e.project_id::text) 
+                ORDER BY e.project_id DESC
+            ) as rn
           FROM engineer_form e
           LEFT JOIN co_finance f ON e.project_id = f.project_id
           LEFT JOIN school_profiles sp ON e.school_id = sp.school_id
           LEFT JOIN engineer_documents d ON e.project_id = d.project_id
-          ORDER BY COALESCE(e.ipc, e.project_id::text), e.project_id DESC
+      ),
+      LatestProjects AS (
+          SELECT * FROM RankedProjects WHERE rn = 1
       )
       SELECT
         p.project_id AS "id", p.school_name AS "schoolName", p.school_name AS "school_name", p.project_name AS "projectName", p.project_name AS "project_name",
         p.school_id AS "schoolId", p.school_id AS "school_id", p.division, p.region, p.province, p.city, p.municipality, p.status AS "status", p.ipc, p.engineer_name AS "engineerName",
         p.accomplishment_percentage AS "accomplishmentPercentage", p.accomplishment_percentage AS "accomplishment_percentage",
+        p.previous_percentage AS "previousPercentage",
         p.approved_budget_for_contract AS "projectAllocation", p.approved_budget_for_contract AS "amount", 
         p.contract_amount AS "contractAmount", p.contract_amount AS "contract_amount",
         p.batch_of_funds AS "batchOfFunds",
@@ -14857,60 +14872,24 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       }
       if (u5) { completedUnits.push(5); xp += 300; } else if (row.unit5 === 2) { incompleteUnits.push(5); }
 
-      // ── Unit 6: Teaching Personnel ──────────────────────────────────────
-      // ALWAYS re-check live data regardless of cached flag,
-      // because a teacher's load can change after the flag was set.
-      let u6 = false;
-      const u6Teachers = await pool.query(
-        `SELECT COUNT(*) as total,
-                SUM(CASE WHEN (COALESCE(monday_mins,0) + COALESCE(tuesday_mins,0) + COALESCE(wednesday_mins,0) + COALESCE(thursday_mins,0) + COALESCE(friday_mins,0)) = 0 THEN 1 ELSE 0 END) as zero_load
-         FROM ph_teachers_list WHERE school_id = $1`, [schoolId]
-      ).catch(() => ({ rows: [{ total: 0, zero_load: 0 }] }));
-      const { total: u6Total, zero_load: u6ZeroLoad } = u6Teachers.rows[0] || { total: 0, zero_load: 0 };
-      if (parseInt(u6Total) > 0) {
-        if (parseInt(u6ZeroLoad) > 0) {
-          // Teachers exist but some have 0 teaching load → Incomplete
-          incompleteUnits.push(6);
-          backfillClauses.push(`unit6_completed = FALSE, unit6 = 2`);
-        } else {
-          // All teachers have loads assigned → Done
-          u6 = true;
-          backfillClauses.push(`unit6_completed = TRUE, unit6 = 1`);
-        }
-      }
-      if (u6) { completedUnits.push(6); xp += 300; }
 
-      // ── Unit 7: School Resources ────────────────────────────────────────
-      let u7 = row.unit7_completed;
-      if (!u7) {
-        const ck = await pool.query(`SELECT unit7_furniture FROM ph_schools WHERE school_id = $1 AND unit7_furniture IS NOT NULL LIMIT 1`, [schoolId]).catch(() => ({ rows: [] }));
-        if (ck.rows.length > 0) { u7 = true; backfillClauses.push(`unit7_completed = TRUE, unit7 = 1`); }
-      }
-      if (u7) { completedUnits.push(7); xp += 350; } else if (row.unit7 === 2) { incompleteUnits.push(7); }
 
-      // ── Unit 8: Physical Facilities ─────────────────────────────────────
-      let u8 = row.unit8_completed || (row.unit8 === 1);
-      if (!u8) {
-        const ck = await pool.query(`
-          SELECT (SELECT COUNT(*) FROM ph_buildings_inventory WHERE school_id = $1) as inv,
-                 (SELECT COUNT(*) FROM ph_buildings_repairs WHERE school_id = $1) as rep,
-                 (SELECT COUNT(*) FROM ph_buildings_demolition WHERE school_id = $1) as demo
-        `, [schoolId]).catch(() => ({ rows: [{ inv: 0, rep: 0, demo: 0 }] }));
-        const c = ck.rows[0];
-        if (parseInt(c.inv) > 0 || parseInt(c.rep) > 0 || parseInt(c.demo) > 0) { u8 = true; backfillClauses.push(`unit8_completed = TRUE, unit8 = 1`); }
-      }
-      if (u8) { completedUnits.push(8); xp += 500; } else if (row.unit8 === 2) { incompleteUnits.push(8); }
+      // ── Unit 6: School Resources (Old Unit 7) ──────────────────────────
+      if (row.unit7_completed) { completedUnits.push(6); xp += 400; } else if (row.unit7 === 2) { incompleteUnits.push(6); }
 
-      // ── Unit 9: School Location ─────────────────────────────────────────
+      // ── Unit 7: Physical Facilities (Old Unit 8) ────────────────────────
+      if (row.unit8_completed) { completedUnits.push(7); xp += 450; } else if (row.unit8 === 2) { incompleteUnits.push(7); }
+
+      // ── Unit 8: School Terrain (Old Unit 9) ─────────────────────────────
       let u9 = row.unit9_completed;
       if (!u9) {
         const ck = await pool.query(`SELECT COUNT(*) as cnt FROM school_location_profiles WHERE school_id = $1`, [schoolId]).catch(() => ({ rows: [{ cnt: 0 }] }));
         if (parseInt(ck.rows[0]?.cnt) > 0) { u9 = true; backfillClauses.push(`unit9_completed = TRUE, unit9 = 1`); }
       }
-      if (u9) { completedUnits.push(9); xp += 500; } else if (row.unit9 === 2) { incompleteUnits.push(9); }
+      if (u9) { completedUnits.push(8); xp += 500; } else if (row.unit9 === 2) { incompleteUnits.push(8); }
 
-      // ── Unit 10 ─────────────────────────────────────────────────────────
-      if (row.unit10_completed) { completedUnits.push(10); xp += 500; } else if (row.unit10 === 2) { incompleteUnits.push(10); }
+      // ── Unit 9: Verification (Old Unit 10) ──────────────────────────────
+      if (row.unit10_completed) { completedUnits.push(9); xp += 500; } else if (row.unit10 === 2) { incompleteUnits.push(9); }
 
       // ── Retroactive Backfill (fire-and-forget) ──────────────────────────
       if (backfillClauses.length > 0) {
@@ -14934,11 +14913,10 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
           unit3: row?.unit3_updated_at,
           unit4: row?.unit4_updated_at,
           unit5: row?.unit5_updated_at,
-          unit6: row?.unit6_updated_at,
-          unit7: row?.unit7_updated_at,
-          unit8: row?.unit8_updated_at,
-          unit9: row?.unit9_updated_at,
-          unit10: row?.unit10_updated_at,
+          unit6: row?.unit7_updated_at,
+          unit7: row?.unit8_updated_at,
+          unit8: row?.unit9_updated_at,
+          unit9: row?.unit10_updated_at,
         }
       } 
     });
@@ -15186,15 +15164,9 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     const isCompleted = !!(
       data.barangay && 
       data.leg_district && 
-      data.ownership && 
-      data.school_type &&
-      data.curricular_offering &&
-      data.latitude &&
-      data.longitude &&
       data.school_name &&
-      data.google_drive_file_id &&
-      data.established_month &&
-      data.established_year
+      data.region &&
+      data.division
     );
 
     // Save Google Drive document link to ownership_documents table if provided
@@ -15922,20 +15894,8 @@ app.put('/api/ph_schools/unit6/:schoolId', async (req, res) => {
 */
 
 // --- 27g-GET: [LEGACY] Old Teaching Personnel Data (Use Unified Roster instead) ---
-app.get('/api/ph_schools/unit6-legacy/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    const result = await pool.query('SELECT * FROM teaching_personnel WHERE school_id = $1', [schoolId]);
-    if (result.rows.length > 0) {
-      res.json({ exists: true, data: result.rows[0] });
-    } else {
-      res.json({ exists: false, data: null });
-    }
-  } catch (err) {
-    console.error("Fetch Teaching Personnel Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
+// Unit 6 legacy teaching personnel endpoint removed.
+
 
 // --- 27g. [LEGACY] Old Save Teaching Personnel (Use Unified Roster instead) ---
 /*
@@ -15944,244 +15904,16 @@ app.put('/api/ph_schools/unit7/:schoolId', async (req, res) => {
 });
 */
 
-// ===============================================
-// UNIT 6: UNIFIED TEACHER ROSTER & WORKLOADS
-// ===============================================
+// Unit 6 Unified Teacher Roster & Workload endpoints removed.
 
-/**
- * GET: Fetch Full Roster for a School
- * Returns an array of teacher objects, each with a nested 'workloads' array.
- */
-app.get('/api/ph_schools/:schoolId/teachers', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    // 1. Fetch teachers
-    const query = `
-      SELECT * FROM ph_teachers_list 
-      WHERE school_id = $1
-      ORDER BY last_name ASC, first_name ASC
-    `;
-    const result = await pool.query(query, [schoolId]);
-
-    // 2. Auto-Seeding Logic (Legacy Sync)
-    // If roster is empty, attempt to pull from the master 'teachers_list'
-    if (result.rows.length === 0) {
-      console.log(`[Unit 6] Roster empty for ${schoolId}. Checking master for auto-seed...`);
-      const legacyTeachers = await pool.query('SELECT * FROM teachers_list WHERE CAST("school.id" AS TEXT) = $1', [schoolId]);
-
-      if (legacyTeachers.rows.length > 0) {
-        for (const t of legacyTeachers.rows) {
-          await pool.query(`
-            INSERT INTO ph_teachers_list (
-              school_id, first_name, middle_name, last_name, position
-            ) VALUES ($1, $2, $3, $4, $5)
-          `, [
-            schoolId,
-            t.first || null,
-            t.middle || null,
-            t.last || null,
-            t.position || null
-          ]);
-        }
-        // Refetch after seeding
-        const seededResult = await pool.query(query, [schoolId]);
-        return res.json({ success: true, data: seededResult.rows, seeded: true });
-      }
-    }
-
-    res.json({ success: true, data: result.rows });
-  } catch (err) {
-    console.error("Fetch Unified Roster Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-/**
- * PUT: Update Teacher Profile & Workloads
- * Transactional 'Delete and Replace' for workloads to ensure integrity.
- */
-app.put('/api/teachers/:teacherId', async (req, res) => {
-  const { teacherId } = req.params;
-  const {
-    first_name, middle_name, last_name, position,
-    specialization, sex, experience_bracket, funding_source, role_designation,
-    monday_mins, tuesday_mins, wednesday_mins, thursday_mins, friday_mins,
-    workloads, designations
-  } = req.body;
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Step A: Update Teacher Profile
-    const updateProfileQuery = `
-      UPDATE ph_teachers_list 
-      SET 
-        first_name = $1, middle_name = $2, last_name = $3, position = $4,
-        specialization = $5, sex = $6, experience_bracket = $7, 
-        funding_source = $8, role_designation = $9, designations = $10,
-        monday_mins = $11, tuesday_mins = $12, wednesday_mins = $13,
-        thursday_mins = $14, friday_mins = $15,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $16
-      RETURNING *
-    `;
-    const profileValues = [
-      first_name, middle_name, last_name, position,
-      specialization, sex, experience_bracket, funding_source, role_designation, designations,
-      monday_mins || 0, tuesday_mins || 0, wednesday_mins || 0,
-      thursday_mins || 0, friday_mins || 0,
-      teacherId
-    ];
-    const profileRes = await client.query(updateProfileQuery, profileValues);
-
-    if (profileRes.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-
-    // Step B: Replace Workloads
-    // 1. Clear existing
-    await client.query('DELETE FROM ph_teachers_workload WHERE teacher_id = $1', [teacherId]);
-
-    // 2. Batch Insert new workloads
-    if (workloads && Array.isArray(workloads) && workloads.length > 0) {
-      const schoolId = profileRes.rows[0].school_id;
-      for (const w of workloads) {
-        await client.query(`
-          INSERT INTO ph_teachers_workload (
-            teacher_id, school_id, grade_level, subject_name, subject_code, duration_minutes
-          ) VALUES ($1, $2, $3, $4, $5, $6)
-        `, [
-          teacherId,
-          schoolId,
-          w.grade_level,
-          w.subject_name,
-          w.subject_code,
-          w.duration_minutes ? parseInt(w.duration_minutes) : 0
-        ]);
-      }
-    }
-
-    await client.query('COMMIT');
-    res.json({ success: true, message: "Teacher updated successfully!" });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(`[Unit 6] Update Error for teacher ${teacherId}:`, err.message);
-    if (err.detail) console.error("Detail:", err.detail);
-    res.status(500).json({ error: "Internal Server Error", message: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-/**
- * DELETE: Remove Teacher
- * Relies on ON DELETE CASCADE for workloads.
- */
-app.delete('/api/teachers/:teacherId', async (req, res) => {
-  const { teacherId } = req.params;
-  try {
-    const result = await pool.query('DELETE FROM ph_teachers_list WHERE id = $1 RETURNING *', [teacherId]);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Teacher not found" });
-    }
-    res.json({ success: true, message: "Teacher removed from roster." });
-  } catch (err) {
-    console.error("Delete Teacher Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-/**
- * GET: Search Master Directory (teacher_list)
- * Hits the 800k+ master table with ILIKE and a strict LIMIT 20.
- */
-app.get('/api/master-teachers/search', async (req, res) => {
-  const { name } = req.query;
-  if (!name || name.length < 2) {
-    return res.json({ success: true, data: [] });
-  }
-
-  try {
-    const query = `
-      SELECT * FROM teachers_list 
-      WHERE first ILIKE $1 OR last ILIKE $1
-      LIMIT 20
-    `;
-    const result = await pool.query(query, [`%${name}%`]);
-    res.json({ success: true, data: result.rows });
-  } catch (err) {
-    console.error("Master Search Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-// GET: All Unique Specializations from master list
-app.get('/api/specializations', async (req, res) => {
-  try {
-    const query = `
-      SELECT DISTINCT "specialization.final" as spec 
-      FROM teachers_list 
-      WHERE "specialization.final" IS NOT NULL 
-        AND "specialization.final" != '' 
-        AND "specialization.final" != '0'
-      ORDER BY spec ASC
-    `;
-    const result = await pool.query(query);
-    res.json({ success: true, data: result.rows.map(r => r.spec) });
-  } catch (err) {
-    console.error("Fetch Specializations Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-// GET: All Subjects from ph_subjects
-app.get('/api/subjects', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM ph_subjects ORDER BY category, subject_name ASC');
-    res.json({ success: true, data: result.rows });
-  } catch (err) {
-    console.error("Fetch Subjects Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
 
 /**
  * POST: Add New Teacher to Roster (Initial Blank)
  */
 
 
-app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
-  const { schoolId } = req.params;
-  const {
-    first_name, last_name, position, sex,
-    specialization, experience_bracket, funding_source, role_designation, designations
-  } = req.body;
+// Unit 6 (Teaching Personnel) teacher registration endpoint removed.
 
-  try {
-    const query = `
-      INSERT INTO ph_teachers_list (
-        school_id, first_name, last_name, position, sex, 
-        specialization, experience_bracket, funding_source, role_designation, designations
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
-    `;
-    const values = [
-      schoolId, first_name, last_name, position || 'Teacher I', sex || '',
-      specialization || '', experience_bracket || '',
-      funding_source || 'DepEd Nationally Funded',
-      role_designation || 'Non-Advisory',
-      designations || ''
-    ];
-    const result = await pool.query(query, values);
-    res.json({ success: true, data: result.rows[0] });
-  } catch (err) {
-    console.error("Add Teacher Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
 
 /* 
   DEPRECATED: Old Unit 8 Personnel Routes
@@ -16193,102 +15925,12 @@ app.post('/api/ph_schools/:schoolId/teachers', async (req, res) => {
 // app.put('/api/personnel/:id', ...)
 // app.put('/api/personnel/:id/workload', ...)
 
-// --- POST: Finalize Unit 6 (Teacher Registration & Workloads) ---
-app.post('/api/ph_schools/unit6/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    // 1. Ensure columns exist
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6_completed BOOLEAN DEFAULT FALSE;`);
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit6 INTEGER DEFAULT 0;`);
-    await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS total_teachers_registered INTEGER DEFAULT 0;`);
+// Unit 6 (Teaching Personnel) finalize endpoint removed.
 
-    // 2. Mark unit6 status
-    const { partial } = req.body;
-    if (partial) {
-      // Partial Submission: unit6 = 2, unit6_completed = FALSE
-      await pool.query(`UPDATE ph_schools SET unit6_completed = FALSE, unit6 = 2 WHERE school_id = $1`, [schoolId]);
-    } else {
-      // Full Submission: unit6 = 1, unit6_completed = TRUE
-      await pool.query(`UPDATE ph_schools SET unit6_completed = TRUE, unit6 = 1, unit6_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, [schoolId]);
-    }
-
-    // 3. Calculate baseline total from registry for Unit 7's reference
-    const countRes = await pool.query('SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1', [schoolId]);
-    const count = parseInt(countRes.rows[0].count) || 0;
-
-    // 4. Store baseline in ph_schools
-    await pool.query('UPDATE ph_schools SET total_teachers_registered = $1 WHERE school_id = $2', [count, schoolId]);
-
-    res.json({ success: true, message: "Unit 6 finalized!", total: count });
-  } catch (err) {
-    console.error("Finalize Unit 6 Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
 
 // --- GET: Workload Summary Dashboard (Unit 6) ---
-app.get('/api/schools/:schoolId/workload-summary', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    // 1. Total Headcount
-    const headcountRes = await pool.query('SELECT COUNT(*) FROM ph_teachers_list WHERE school_id = $1', [schoolId]);
-    const totalHeadcount = parseInt(headcountRes.rows[0].count);
+// Unit 6 (Teaching Personnel) workload summary endpoint removed.
 
-    // 2. Demographic Groupings
-    const sexDist = await pool.query('SELECT sex as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY sex', [schoolId]);
-    const expDist = await pool.query('SELECT experience_bracket as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY experience_bracket', [schoolId]);
-    const fundDist = await pool.query('SELECT funding_source as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY funding_source', [schoolId]);
-    const roleDist = await pool.query('SELECT role_designation as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY role_designation', [schoolId]);
-    const specDist = await pool.query('SELECT specialization as label, COUNT(*) as value FROM ph_teachers_list WHERE school_id = $1 GROUP BY specialization', [schoolId]);
-
-    // 3. Deployment Metrics (Joined from Workload)
-    const gradeDist = await pool.query(`
-      SELECT grade_level as label, COUNT(DISTINCT teacher_id) as value 
-      FROM ph_teachers_workload 
-      WHERE school_id = $1 
-      GROUP BY grade_level 
-      ORDER BY grade_level ASC
-    `, [schoolId]);
-
-    const subjectDist = await pool.query(`
-      SELECT subject_name as label, COUNT(DISTINCT teacher_id) as value 
-      FROM ph_teachers_workload 
-      WHERE school_id = $1 
-      GROUP BY subject_name 
-      ORDER BY value DESC
-    `, [schoolId]);
-
-    // 4. Killer Metric: Average Daily Teaching Load
-    // Sum of all minutes for all teachers / Total teachers / 5 days
-    const totalMinsRes = await pool.query('SELECT SUM(duration_minutes) FROM ph_teachers_workload WHERE school_id = $1', [schoolId]);
-    const totalMins = parseInt(totalMinsRes.rows[0].sum) || 0;
-    const avgWorkload = totalHeadcount > 0 ? Math.round(totalMins / totalHeadcount / 5) : 0;
-
-    res.json({
-      success: true,
-      data: {
-        totalHeadcount,
-        demographics: {
-          sex: sexDist.rows,
-          experience: expDist.rows,
-          funding: fundDist.rows,
-          role: roleDist.rows,
-          specialization: specDist.rows
-        },
-        deployment: {
-          byGrade: gradeDist.rows,
-          bySubject: subjectDist.rows
-        },
-        avgWorkloadMinutes: avgWorkload,
-        totalWorkloadMinutes: totalMins
-      }
-    });
-
-  } catch (err) {
-    console.error("Workload Summary Error:", err);
-    res.status(500).json({ error: "Failed to generate workload summary." });
-  }
-});
 
 
 // --- POST: Finalize Unit 7 (School Resources) ---

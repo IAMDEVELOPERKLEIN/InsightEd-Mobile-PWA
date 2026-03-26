@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
@@ -70,8 +70,15 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [sectionData, setSectionData] = useState({});
 
     // Summary & Enrollment State
-    const [isReadOnly, setIsReadOnly] = useState(false);
+    const [isReadOnly, setIsReadOnly] = useState(propReadOnly || false);
+    
+    useEffect(() => {
+        if (propReadOnly !== undefined) {
+            setIsReadOnly(propReadOnly);
+        }
+    }, [propReadOnly]);
     const [totalEnrollment, setTotalEnrollment] = useState(0);
+    const [isCertified, setIsCertified] = useState(false);
 
     const effectiveReadOnly = propReadOnly || isReadOnly;
 
@@ -447,10 +454,6 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
             await clearUnitDraft(3, schoolId);
             setShowSuccess(true);
-            setTimeout(() => {
-                setShowSuccess(false);
-                navigate("/modular-dashboard");
-            }, 2500);
         } catch (err) {
             alert(err.message);
         }
@@ -623,6 +626,8 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     </div>
                 </div>
 
+
+
                 {/* Unlock Action */}
                 {!propReadOnly && isReadOnly && (
                     <motion.div 
@@ -633,7 +638,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     >
                         <button 
                             onClick={() => setIsReadOnly(false)}
-                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-teal-100 text-teal-700 font-black text-lg shadow-xl shadow-teal-100/50 hover:border-teal-200 hover:bg-teal-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3"
+                            className="group relative w-full py-6 rounded-[2rem] bg-white border-4 border-teal-100 text-teal-700 font-black text-lg shadow-xl shadow-teal-100/50 hover:border-teal-200 hover:bg-teal-50 transition-all duration-300 overflow-hidden flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
                         >
                             <div className="absolute inset-0 bg-gradient-to-r from-teal-500/0 via-teal-500/5 to-teal-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                             <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -650,7 +655,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     return (
         <div className="min-h-screen bg-gray-50 pb-32">
             <AnimatePresence>
-                {showSuccess && <SuccessModal title="Data Saved!" message="Section Counts updated." />}
+                {showSuccess && <SuccessModal isOpen={showSuccess} onClose={() => setShowSuccess(false)} message="Section Counts updated." redirectUrl="/modular-dashboard" />}
             </AnimatePresence>
 
             {/* Welcome Back Toast */}
@@ -868,7 +873,25 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                             </div>
                         </div>
 
-                        <div className="h-10" />
+                        <div 
+                            onClick={() => setIsCertified(!isCertified)}
+                            className={`p-6 rounded-[2.5rem] border-2 transition-all cursor-pointer flex items-start gap-4 mb-10 ${
+                                isCertified 
+                                    ? 'bg-emerald-50 border-emerald-200 shadow-sm' 
+                                    : 'bg-white border-slate-100 hover:border-slate-200 shadow-sm'
+                            }`}
+                        >
+                            <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                                isCertified 
+                                    ? 'bg-emerald-500 border-emerald-500 text-white' 
+                                    : 'border-slate-300 bg-white'
+                            }`}>
+                                {isCertified && <FiCheck className="w-4 h-4" />}
+                            </div>
+                            <p className={`text-xs font-bold leading-relaxed ${isCertified ? 'text-emerald-900' : 'text-slate-500 uppercase tracking-widest'}`}>
+                                I hereby certify that all data and information provided in this module/unit is true and correct
+                            </p>
+                        </div>
                     </motion.div>
                 )}
                 </>
@@ -910,7 +933,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     
                     {/* Next / Submit Button */}
                         <button 
-                            disabled={loading || (currentStep <= totalSteps && !isCurrentStepValid)} 
+                            disabled={loading || (currentStep <= totalSteps && !isCurrentStepValid) || (currentStep > totalSteps && !isCertified)} 
                             onClick={currentStep > totalSteps ? handleFinalSubmit : handleNext} 
                             className={`flex-1 h-16 rounded-2xl text-white font-black text-lg text-center transition-all disabled:opacity-50 disabled:bg-slate-300 disabled:border-slate-400 disabled:text-slate-500 disabled:translate-y-0 shadow-lg flex items-center justify-center gap-2 ${currentStep > totalSteps ? 'bg-emerald-500 border-emerald-700' : 'bg-indigo-500 border-indigo-700'} border-b-[5px] active:border-b-0 active:translate-y-[5px]`}
                         >

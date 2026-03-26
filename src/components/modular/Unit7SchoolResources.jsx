@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiX, FiCheckCircle, FiChevronRight, FiCheck, FiArrowLeft, FiTrash2, FiPlus, FiUnlock, FiMonitor, FiDroplet, FiSave, FiAlertTriangle, FiAlertCircle } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
+import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -66,12 +67,13 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     const [loading, setLoading] = useState(true);
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [isCertified, setIsCertified] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
 
     // Core Workflow State
     const [currentPhase, setCurrentPhase] = useState(1); 
-
+    const [showSuccess, setShowSuccess] = useState(false);
     // PHASE 1 State
     const [gradesData, setGradesData] = useState([]);
     const [selectedGradeId, setSelectedGradeId] = useState(null);
@@ -741,37 +743,39 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             });
 
             if (res.ok) {
-                await clearUnitDraft(7, storedId);
-                try {
-                    await fetch(`/api/ph_schools/unit9/${storedId}/ecarts`, {
+                // Perform secondary syncs in parallel to speed up UI response
+                const syncPromises = [
+                    fetch(`/api/ph_schools/unit9/${storedId}/ecarts`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ ecarts: eCarts })
-                    });
-                } catch (e) { console.warn("Relational eCart sync failed", e); }
+                    }).catch(e => console.warn("Relational eCart sync failed", e)),
+                    
+                    fetch('/api/user/progress', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ unitId: 7, schoolId: storedId })
+                    }).catch(e => console.warn("Progress sync failed", e))
+                ];
 
-                // Update local quest progress to unlock Unit 10
+                // Update local quest progress immediately
                 try {
                     const stored = localStorage.getItem('quest_progress');
                     let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
                     if (!progress.completedUnits.includes(7)) {
                         progress.completedUnits.push(7);
-                        progress.xp += 500;
+                        progress.xp = (progress.xp || 0) + 500;
                         localStorage.setItem('quest_progress', JSON.stringify(progress));
                     }
-                } catch (e) { console.warn("Local progress update failed", e); }
+                } catch (e) {
+                    console.warn("Local progress update failed", e);
+                }
 
-                // Sync progress to dashboard
-                try {
-                    await fetch('/api/user/progress', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ unitId: 7, schoolId: storedId })
-                    });
-                } catch (e) { console.warn("Progress sync failed", e); }
-
-                alert("School Resources module completed and saved successfully!");
-                navigate("/modular-dashboard");
+                await clearUnitDraft(7, storedId);
+                await Promise.allSettled(syncPromises);
+                
+                setShowSuccess(true);
+                setLoading(false);
             } else {
                 alert("Failed to save. Please check your connection.");
                 setLoading(false);
@@ -1699,7 +1703,6 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     </AnimatePresence>
                                 </div>
 
-                                {/* Verified Water Source Card (Read-Only) */}
                                 <div className="bg-emerald-50 border-2 border-emerald-100 rounded-3xl p-5 shadow-sm mb-4 flex items-center justify-between opacity-80 cursor-not-allowed">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center text-xl">🔒</div>
@@ -1710,6 +1713,30 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     </div>
                                     <FiCheckCircle className="w-6 h-6 text-emerald-400" />
                                 </div>
+
+                                {/* Certification Checkbox */}
+                                <motion.div 
+                                    onClick={() => setIsCertified(!isCertified)}
+                                    className={`mt-6 p-6 rounded-[2.5rem] border-2 flex items-start gap-4 cursor-pointer transition-all ${
+                                        isCertified 
+                                            ? 'bg-emerald-50 border-emerald-300' 
+                                            : 'bg-white border-slate-200'
+                                    }`}
+                                >
+                                    <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                                        isCertified 
+                                            ? 'bg-emerald-500 border-emerald-500 text-white' 
+                                            : 'border-slate-300 bg-white'
+                                    }`}>
+                                        {isCertified && <FiCheck className="w-4 h-4" />}
+                                    </div>
+                                    <div>
+                                        <p className={`text-[13px] font-black leading-tight ${isCertified ? 'text-emerald-900' : 'text-slate-500'}`}>
+                                            I hereby certify that all data and information provided in this module/unit are true and correct.
+                                        </p>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Data Integrity Gate</p>
+                                    </div>
+                                </motion.div>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -1742,7 +1769,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 Continue to Phase 5 (Utilities) <FiChevronRight className="w-5 h-5" />
                             </button>
                         ) : (
-                            <button disabled={!isPhase5Valid || loading} onClick={handleFinalSubmit} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                            <button disabled={!isPhase5Valid || !isCertified || loading} onClick={handleFinalSubmit} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                                 {loading ? "Submitting..." : "Submit School Resources"} <FiCheckCircle className="w-5 h-5" />
                             </button>
                         )}
@@ -1937,6 +1964,13 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     </div>
                 )}
             </AnimatePresence>
+
+            <SuccessModal 
+                isOpen={showSuccess} 
+                onClose={() => setShowSuccess(false)} 
+                message="Your school resources and utility profile have been synced to the registry. Brilliant!" 
+                redirectUrl="/modular-dashboard" 
+            />
         </div>
     );
 };

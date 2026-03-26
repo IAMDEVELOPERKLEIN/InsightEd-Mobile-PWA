@@ -473,7 +473,8 @@ const initOtpTable = async () => {
 
         await client.query(`
             ALTER TABLE engineer_form 
-            ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
+            ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE,
+            ADD COLUMN IF NOT EXISTS procurement_status TEXT;
         `);
         console.log('✅ Checked/Added IPC column to engineer_form');
       } catch (migErr) {
@@ -1941,6 +1942,7 @@ app.put('/api/update-project/:id', async (req, res) => {
 
     // Merge new data with old data (Snapshot concept)
     const newStatus = data.status || oldData.status;
+    const newProcurementStatus = data.procurement_status || oldData.procurement_status;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
@@ -1953,7 +1955,8 @@ app.put('/api/update-project/:id', async (req, res) => {
       oldData.contractor_name, oldData.project_allocation, oldData.batch_of_funds, newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
       oldData.ipc,         // Preserve IPC to link history
-      finalUserName        // Update Name string
+      finalUserName,        // Update Name string
+      newProcurementStatus
     ];
 
     const insertQuery = `
@@ -1962,8 +1965,8 @@ app.put('/api/update-project/:id', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        engineer_id, ipc, engineer_name, procurement_status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *;
     `;
 
@@ -1975,6 +1978,7 @@ app.put('/api/update-project/:id', async (req, res) => {
     // 3. Track Changes (History)
     const changes = [];
     if (oldData.status !== newData.status) changes.push(`Status: '${oldData.status}' -> '${newData.status}'`);
+    if (oldData.procurement_status !== newData.procurement_status) changes.push(`Procurement Status: '${oldData.procurement_status || 'N/A'}' -> '${newData.procurement_status}'`);
     if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
     if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
 
@@ -2019,6 +2023,34 @@ app.put('/api/update-project/:id', async (req, res) => {
   }
 });
 
+// --- 10a. GET: Project History by IPC ---
+app.get('/api/project-history/:ipc', async (req, res) => {
+  try {
+    const { ipc } = req.params;
+    const result = await pool.query(
+      `SELECT 
+        project_id AS id,
+        project_name AS "projectName",
+        school_name AS "schoolName",
+        engineer_name AS "engineerName",
+        status,
+        procurement_status,
+        accomplishment_percentage AS "accomplishmentPercentage",
+        other_remarks AS remarks,
+        TO_CHAR(status_as_of, 'Mon DD, YYYY') AS "statusAsOfDate",
+        TO_CHAR(created_at, 'Mon DD, YYYY HH12:MI AM') AS created_at
+      FROM engineer_form
+      WHERE ipc = $1
+      ORDER BY project_id ASC`,
+      [ipc]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching project history:', err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // --- 10. GET: Get Projects (Filtered by Engineer) ---
 app.get('/api/projects', async (req, res) => {
   try {
@@ -2028,15 +2060,22 @@ app.get('/api/projects', async (req, res) => {
     let whereClauses = [];
 
     let sql = `
-      WITH LatestProjects AS (
-          SELECT DISTINCT ON (ipc) *
+      WITH RankedProjects AS (
+          SELECT *,
+                 LAG(accomplishment_percentage) OVER (PARTITION BY ipc ORDER BY project_id ASC) as prev_perc
           FROM engineer_form
+      ),
+      LatestProjects AS (
+          SELECT DISTINCT ON (ipc) *
+          FROM RankedProjects
           ORDER BY ipc, project_id DESC
       )
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
         school_id AS "schoolId", division, region, status, ipc, engineer_name AS "engineerName",
+        procurement_status AS "procurement_status",
         accomplishment_percentage AS "accomplishmentPercentage",
+        prev_perc AS "previousPercentage",
         project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
@@ -3118,6 +3157,111 @@ app.get('/api/leaderboard', async (req, res) => {
     console.error("Leaderboard Error:", err);
     res.status(500).json({ error: "Failed to fetch leaderboard" });
   }
+});
+
+// --- 30c. GET: Activity Data for Individual School Snapshot ---
+app.get('/api/schools/:schoolId/activity', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    // Shared completion calculation logic (aligned with leaderboard)
+    const calculation = `
+      (
+        (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+        (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+        (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
+        (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+        (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+        (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+        (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+        (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + 
+        (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+        (CASE WHEN (build_classrooms_total IS NOT NULL OR EXISTS (SELECT 1 FROM engineer_form WHERE school_id = $1)) THEN 1 ELSE 0 END)
+      ) * 100.0 / 10.0`;
+
+    // Fetch the school's own performance context
+    const profileRes = await pool.query(`SELECT school_name, division, region, ${calculation} as percentage FROM school_profiles WHERE school_id = $1`, [schoolId]);
+
+    const school = profileRes.rows[0] || { name: 'My School', percentage: 0, division: '', region: '' };
+    const percentage = Math.round(parseFloat(school.percentage || 0));
+
+    // Comparative Stats for the Chart
+    const compQuery = `
+      SELECT 'District' as name, AVG(${calculation}) as completed FROM school_profiles WHERE division = $1
+      UNION ALL
+      SELECT 'My School' as name, ${percentage} as completed
+      UNION ALL
+      SELECT 'Division' as name, AVG(${calculation}) as completed FROM school_profiles WHERE region = $2
+    `;
+    const compRes = await pool.query(compQuery, [school.division, school.region]);
+
+    // Progress Flags (Modular Beta)
+    const modularRes = await pool.query('SELECT total_enrollment, enroll_kinder, verified_as_of FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const m = modularRes.rows[0] || {};
+    
+    // Construct response
+    res.json({
+      success: true,
+      data: {
+        progress: {
+          percentage,
+          completedUnits: Math.floor(percentage / 10),
+          totalUnits: 10,
+          flags: {
+            unit1: !!school.school_name,
+            unit2: !!m.enroll_kinder,
+            unit7: !!school.res_water_source,
+            unit8: !!school.build_classrooms_total
+          }
+        },
+        gamification: {
+            fastest_sprint: { unit: 1, time_text: '1h 20m' } // Mocked for now
+        },
+        comparative: compRes.rows.map(r => ({ name: r.name, completed: Math.round(parseFloat(r.completed || 0)) }))
+      }
+    });
+  } catch (err) {
+    console.error("Activity API Error:", err);
+    res.status(500).json({ error: "Failed to fetch activity dashboard data" });
+  }
+});
+
+// --- 30d. POST: Sync Quest Progress ---
+app.post('/api/user/progress', async (req, res) => {
+    const { unitId, schoolId } = req.body;
+    try {
+        console.log(`[Sync] Updating progress for Unit ${unitId} in School ${schoolId}`);
+        // Log it to activity log so it counts towards 'recent activity'
+        await pool.query('INSERT INTO audit_logs (school_id, action, details) VALUES ($1, $2, $3)', 
+            [schoolId, 'UNIT_COMPLETE', `Completed Unit ${unitId}`]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to sync progress" });
+    }
+});
+
+// --- 30e. PUT: Generic Modular Unit Update ---
+// Handles Unit 3-9 which send various JSON payloads to school_profiles
+app.put('/api/ph_schools/:schoolId', async (req, res) => {
+    const { schoolId } = req.params;
+    const data = req.body;
+    try {
+        // Dynamically build update based on keys provided
+        const keys = Object.keys(data).filter(k => k !== 'school_id' && k !== 'unit7_completed' && k !== 'is_modular');
+        if (keys.length === 0) return res.json({ success: true });
+
+        const setClause = keys.map((k, i) => `${k} = $${i+2}`).join(', ');
+        const values = [schoolId, ...keys.map(k => data[k])];
+
+        await pool.query(`UPDATE school_profiles SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1`, values);
+        
+        // Also ensure record exists in ph_schools for secondary sync
+        await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
+
+        res.json({ success: true, message: "Modular unit data synced successfully" });
+    } catch (err) {
+        console.error("Modular Sync Error:", err);
+        res.status(500).json({ error: "Failed to sync modular data" });
+    }
 });
 
 // --- 30b. GET: Aggregated Regional Stats (For Central Office) ---

@@ -14,6 +14,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
     const [riskIndex, setRiskIndex] = useState(null);
     const [currentStep, setCurrentStep] = useState(initialValues?.currentStep || 1);
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [isCertified, setIsCertified] = useState(false);
 
     const { register, handleSubmit, watch, setValue, formState: { errors, isValid }, reset, getValues } = useForm({
         mode: 'onChange',
@@ -877,6 +878,30 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                     )}
                                 </AnimatePresence>
                             </div>
+
+                            {/* Certification Checkbox */}
+                            <motion.div 
+                                onClick={() => setIsCertified(!isCertified)}
+                                className={`mt-10 p-6 rounded-[2.5rem] border-2 flex items-start gap-4 cursor-pointer transition-all ${
+                                    isCertified 
+                                        ? 'bg-emerald-50 border-emerald-300' 
+                                        : 'bg-white border-slate-200'
+                                }`}
+                            >
+                                <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                                    isCertified 
+                                        ? 'bg-emerald-500 border-emerald-500 text-white' 
+                                        : 'border-slate-300 bg-white'
+                                }`}>
+                                    {isCertified && <FiSave className="w-4 h-4" />}
+                                </div>
+                                <div>
+                                    <p className={`text-[13px] font-black leading-tight ${isCertified ? 'text-emerald-900' : 'text-slate-500'}`}>
+                                        I hereby certify that all data and information provided in this module/unit are true and correct.
+                                    </p>
+                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Data Integrity Gate</p>
+                                </div>
+                            </motion.div>
                         </div>
                     </motion.div>
                 );
@@ -961,8 +986,8 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
                                     <button 
                                         key="btn-save"
                                         type="submit" 
-                                        disabled={loading || !isStep3Valid()}
-                                        className={`flex-[2] font-black py-4 rounded-2xl shadow-lg transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 ${!isStep3Valid() ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white shadow-emerald-500/30'}`}
+                                        disabled={loading || !isCertified || !isStep3Valid()}
+                                        className={`flex-[2] font-black py-4 rounded-2xl shadow-lg transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 ${(!isCertified || !isStep3Valid()) ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-600 text-white shadow-emerald-500/30'}`}
                                     >
                                         {loading ? (
                                             <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
