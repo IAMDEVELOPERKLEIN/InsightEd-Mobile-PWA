@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { FiSearch, FiPlus, FiFilter, FiCamera, FiImage, FiSettings, FiChevronRight, FiEdit, FiEye, FiX } from "react-icons/fi";
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
@@ -11,6 +12,7 @@ import { compressImage } from "../utils/imageCompression";
 import { uploadFileInChunks } from '../utils/chunkedUploader'; // NEW CHUNK UPLOADER
 
 import LocationPickerMap from '../components/LocationPickerMap';
+import UpdateProjectWizard from "../components/UpdateProjectWizard";
 
 // --- CONSTANTS ---
 const ProjectStatus = {
@@ -145,9 +147,21 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
                 )}
                 {/* Accomplishment Percentage Badge */}
                 <div className="relative">
-                  <div className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-[14px] font-black text-emerald-600 dark:text-emerald-300 rounded-xl border-2 border-emerald-100 dark:border-emerald-800 shadow-sm flex flex-col items-center leading-none">
-                    <span className="text-[18px] mb-[-2px]">{p.accomplishmentPercentage || 0}%</span>
-                    <span className="text-[7px] uppercase tracking-tighter opacity-70">Physical</span>
+                  <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 rounded-xl border-2 border-emerald-100 dark:border-emerald-800 shadow-sm flex flex-col items-center leading-tight">
+                    <div className="flex items-center gap-1.5">
+                      {(p.previousPercentage !== undefined && p.previousPercentage !== null && Number(p.previousPercentage) !== Number(p.accomplishmentPercentage)) || (p.previousPercentage === null && Number(p.accomplishmentPercentage) !== 0) ? (
+                        <>
+                          <span className="text-[10px] font-bold opacity-40 line-through">{p.previousPercentage ?? 0}%</span>
+                          <span className="text-[10px] font-black opacity-30">→</span>
+                        </>
+                      ) : null}
+                      <span className="text-[18px] font-black">{p.accomplishmentPercentage || 0}%</span>
+                    </div>
+                    {p.statusAsOf && (
+                      <span className="text-[7px] font-black uppercase tracking-tighter opacity-60 mt-0.5">
+                        As of {new Date(p.statusAsOf).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    )}
                   </div>
                   {p.status === "Terminated" && (
                     <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
@@ -165,9 +179,16 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 leading-tight mb-2 group-hover:text-[#004A99] dark:group-hover:text-blue-400 transition-colors">
               {p.projectName}
             </h3>
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mb-4 bg-slate-50 dark:bg-slate-900/50 w-fit px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-700">
-              <span className="opacity-50 uppercase tracking-widest">School ID:</span>
-              <span className="text-slate-600 dark:text-slate-300">{p.schoolId}</span>
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 dark:bg-slate-900/50 w-fit px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-700">
+                <span className="opacity-50 uppercase tracking-widest">School ID:</span>
+                <span className="text-slate-600 dark:text-slate-300">{p.schoolId}</span>
+              </div>
+              {p.projectCategory && (
+                <div className="flex items-center gap-1.5 text-[9px] font-black text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20 w-fit px-2 py-1 rounded-lg border border-blue-100/50 dark:border-blue-800/50 uppercase tracking-wider">
+                  {p.projectCategory}
+                </div>
+              )}
             </div>
 
             {/* Micro Progress Bar */}
@@ -217,12 +238,18 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Construction Status</label>
                 <select
                   value={p.status || ""}
+                  required
                   onChange={(e) => handleStatusChange(p, 'construction', e.target.value)}
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
+                  disabled={["Completed", "Terminated"].includes(p.status)}
+                  className={`w-full border rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                    ["Completed", "Terminated"].includes(p.status)
+                      ? 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer'
+                  }`}
                 >
                   <option value="" disabled>— Please select —</option>
-                  <option value="Not Yet Started">Not Yet Started</option>
-                  <option value="Ongoing">Ongoing</option>
+                  <option value="Not Yet Started" disabled={["Ongoing", "For Final Inspection", "Completed", "Suspended", "Terminated"].includes(p.status)}>Not Yet Started</option>
+                  <option value="Ongoing" disabled={["For Final Inspection", "Completed", "Terminated"].includes(p.status)}>Ongoing</option>
                   <option value="For Final Inspection">For Final Inspection</option>
                   <option value="Completed">Completed</option>
                   <option value="Suspended">Suspended</option>
@@ -237,9 +264,14 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
             <div className="flex items-center gap-3 flex-1" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => onEdit(p, 'quick')}
-                className="flex-1 py-2.5 bg-[#004A99] text-white text-[10px] font-black rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2"
+                disabled={["Completed", "Terminated"].includes(p.status)}
+                className={`flex-1 py-2.5 text-[10px] font-black rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  ["Completed", "Terminated"].includes(p.status)
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                    : 'bg-[#004A99] text-white shadow-blue-500/20 hover:bg-blue-800'
+                }`}
               >
-                <LuActivity size={14} /> UPDATE
+                <LuActivity size={14} /> {["Completed", "Terminated"].includes(p.status) ? "LOCKED" : "UPDATE"}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onViewLog(p); }}
@@ -260,11 +292,6 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
     </div>
   );
 };
-
-
-import EditProjectModal from "../components/EditProjectModal";
-import UpdateProjectWizard from "../components/UpdateProjectWizard";
-
 
 // --- MAIN PROJECT LIST COMPONENT ---
 
@@ -426,7 +453,7 @@ const EngineerProjects = () => {
               accomplishmentPercentage: item.accomplishmentPercentage,
               projectAllocation: item.projectAllocation,
               targetCompletionDate: item.targetCompletionDate,
-              statusAsOfDate: item.statusAsOfDate,
+              statusAsOf: item.statusAsOf,
               otherRemarks: item.otherRemarks,
               contractorName: item.contractorName,
               ipc: item.ipc,
@@ -455,7 +482,17 @@ const EngineerProjects = () => {
               region: item.region,
               division: item.division,
               municipality: item.municipality,
-              city: item.city
+              city: item.city,
+              previousPercentage: item.previousPercentage,
+              isRealigned: item.isRealigned,
+              updateType: item.updateType,
+              savings: item.savings,
+              isDonated: item.isDonated,
+              programType: item.programType,
+              fundingYearJustification: item.fundingYearJustification,
+              sangguniang_resolution_id: item.sangguniang_resolution_id,
+              mother_moa_id: item.mother_moa_id,
+              supplamental_moa_id: item.supplamental_moa_id
             }));
 
             // Update Cache on success
@@ -549,13 +586,18 @@ const EngineerProjects = () => {
       payload.otherRemarks = remarks || project.otherRemarks;
 
       // Optimistic Update
-      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, ...payload } : p));
+      setProjects(prev => prev.map(p => p.id === project.id ? { 
+        ...p, 
+        ...payload,
+        previousPercentage: p.accomplishmentPercentage 
+      } : p));
 
       const response = await fetch(`${API_BASE}/api/update-project/${project.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...payload,
+          previousPercentage: project.accomplishmentPercentage,
           uid: user?.uid,
           modifiedBy: userName,
           update_type: 'Status Quick Update'
@@ -940,8 +982,8 @@ const EngineerProjects = () => {
         <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
 
         {/* --- PROJECT LOG MODAL --- */}
-        {logModalOpen && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
+        {logModalOpen && createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
             <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
               {/* Header */}
               <div className="px-8 pt-8 pb-6 border-b border-slate-100 dark:border-slate-700">
@@ -997,10 +1039,10 @@ const EngineerProjects = () => {
                           <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-700/50">
                             <div className="flex justify-between items-center mb-2">
                               <p className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">{item.engineerName || item.engineer_name}</p>
-                              <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">{item.accomplishmentPercentage || item.accomplishment_percentage}%</p>
+                              <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">{item.accomplishmentPercentage || item.accomplishment_percentage || 0}%</p>
                             </div>
-                            <p className={`text-[10px] font-bold px-2 py-1 rounded-lg w-fit mb-3 border ${getStatusColor(item.status_design_phase || item.status || item.status_of_construction_phase)}`}>
-                              {item.status_design_phase || item.status || item.status_of_construction_phase}
+                            <p className={`text-[10px] font-bold px-2 py-1 rounded-lg w-fit mb-3 border ${getStatusColor(item.status || item.status_design_phase || item.status_of_construction_phase)}`}>
+                              {item.status || item.status_design_phase || item.status_of_construction_phase}
                             </p>
                             {item.remarks && (
                               <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed italic font-medium">"{item.remarks}"</p>
@@ -1020,7 +1062,8 @@ const EngineerProjects = () => {
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         <UpdateProjectWizard
@@ -1041,27 +1084,31 @@ const EngineerProjects = () => {
         />
 
         {/* --- CHECKBOX REASON MODAL (Bugs 4 & 5) --- */}
-        {checkboxModal.open && (
-           <div className="fixed inset-0 z-[20000] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+        {checkboxModal.open && createPortal(
+           <div className="fixed inset-0 z-[99999] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
              <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-white/20">
-               <div className="px-8 pt-8 pb-4">
-                 <h3 className="text-xl font-black text-slate-800 dark:text-white mb-1 leading-tight">{checkboxModal.title}</h3>
-                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{checkboxModal.project?.projectName}</p>
-               </div>
-               
-               <div className="flex-1 overflow-y-auto px-8 py-4 space-y-4 custom-scrollbar">
+                <div className="px-8 pt-6 pb-2">
+                  <h3 className="text-xl font-black text-slate-800 dark:text-white mb-1 leading-tight">{checkboxModal.title}</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{checkboxModal.project?.projectName}</p>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto px-8 py-2 space-y-3 custom-scrollbar">
                  {checkboxModal.options.map((opt, i) => (
                    <label key={i} className={`flex gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedReasons.includes(opt) ? 'bg-blue-50/50 border-blue-500/50 dark:bg-blue-900/20' : 'bg-slate-50 border-transparent dark:bg-slate-900/50 hover:border-slate-200'}`}>
                      <div className="pt-0.5">
-                       <input 
-                         type="checkbox" 
-                         checked={selectedReasons.includes(opt)}
-                         onChange={(e) => {
-                           if (e.target.checked) setSelectedReasons([...selectedReasons, opt]);
-                           else setSelectedReasons(selectedReasons.filter(r => r !== opt));
-                         }}
-                         className="w-4 h-4 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                       />
+                        <input 
+                          type={checkboxModal.newValue === 'Under procurement' ? "radio" : "checkbox"}
+                          checked={selectedReasons.includes(opt)}
+                          onChange={(e) => {
+                            if (checkboxModal.newValue === 'Under procurement') {
+                              setSelectedReasons([opt]);
+                            } else {
+                              if (e.target.checked) setSelectedReasons([...selectedReasons, opt]);
+                              else setSelectedReasons(selectedReasons.filter(r => r !== opt));
+                            }
+                          }}
+                          className="w-4 h-4 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
                      </div>
                      <span className={`text-[11px] font-bold leading-snug transition-colors ${selectedReasons.includes(opt) ? 'text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}>
                        {opt}
@@ -1070,23 +1117,24 @@ const EngineerProjects = () => {
                  ))}
                </div>
 
-               <div className="p-8 space-y-3">
+               <div className="p-8 pt-4 space-y-3">
                  <button 
                    onClick={handleCheckboxConfirm}
                    disabled={selectedReasons.length === 0}
-                   className="w-full py-4 bg-blue-600 dark:bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 dark:hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                   className="w-full py-3.5 bg-blue-600 dark:bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 dark:hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
                  >
                    Confirm Selection
                  </button>
                  <button 
                    onClick={() => setCheckboxModal({ ...checkboxModal, open: false })}
-                   className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                   className="w-full py-3.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
                  >
                    Cancel
                  </button>
                </div>
              </div>
-           </div>
+           </div>,
+           document.body
         )}
 
         <BottomNav userRole={userRole} />

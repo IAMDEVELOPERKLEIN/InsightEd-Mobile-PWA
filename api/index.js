@@ -767,13 +767,24 @@ const initDB = async () => {
           ALTER TABLE engineer_form ALTER COLUMN supplamental_moa_id TYPE TEXT USING supplamental_moa_id::text;
 
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS status_design_phase TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS contract_id VARCHAR(255);
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year INTEGER;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS mode_of_project VARCHAR(50);
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS no_of_units INTEGER DEFAULT 0;
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS procurement_status TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS status_of_construction_phase TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS status_design_phase TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS assigned_engineer_id TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS assigned_engineer_name TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS uploader_id_moa_rta TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS province TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS city TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS municipality TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS program_type TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS delay_reason TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS revised_target_completion_date TIMESTAMP;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS time_lapsed_days INTEGER;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS time_lapsed_percentage TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS pow_pdf TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS dupa_pdf TEXT;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
         `);
 
         currentSegment = `${dbLabel} Seg 5: variation_orders table`;
@@ -853,6 +864,16 @@ const initDB = async () => {
     await checkAndAddColumn('engineer_form', 'number_of_sites', 'INTEGER DEFAULT 1');
     await checkAndAddColumn('engineer_form', 'number_of_storeys', 'INTEGER DEFAULT 0');
     await checkAndAddColumn('engineer_form', 'program_type', 'TEXT');
+
+    // Migration: Rename status to status_of_construction_phase (Teammate consistency)
+    await pool.query(`
+      DO $$ 
+      BEGIN 
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='status') THEN
+          ALTER TABLE engineer_form RENAME COLUMN status TO status_of_construction_phase;
+        END IF;
+      END $$;
+    `).catch(err => console.error("Migration Error (status rename):", err.message));
 
     currentSegment = "Segment 12: buildable_spaces and facility tables";
     await pool.query(`
@@ -8342,7 +8363,8 @@ app.put('/api/update-project/:id', upload.fields([
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
-    const newProcurementStatus = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status;
+    const newProcurementStatus = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status || oldData.status_design_phase;
+    const newStatusDesignPhase = valueOrNull(data.statusDesignPhase || data.procurement_status) || oldData.status_design_phase || oldData.procurement_status;
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
     const newLat = valueOrNull(data.latitude) || oldData.latitude;
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
@@ -8372,7 +8394,7 @@ app.put('/api/update-project/:id', upload.fields([
       valueOrNull(data.fundsUtilized) || oldData.funds_utilized,
       valueOrNull(data.update_type) || 'Status Update',
       Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation) - Number(valueOrNull(data.contract_amount) || oldData.contract_amount),
-      valueOrNull(data.statusDesignPhase) || oldData.status_design_phase,
+      newStatusDesignPhase,
       valueOrNull(data.contractId) || oldData.contract_id,
       valueOrNull(data.dateNoticeOfAward) || oldData.date_notice_of_award,
       valueOrNull(data.issuanceOfInvitationToBid) || oldData.issuance_of_invitation_to_bid,
@@ -8589,7 +8611,7 @@ app.put('/api/update-project/:id', upload.fields([
 
     // 3. Track Changes (History)
     const changes = [];
-    if (oldData.status_of_construction_phase !== newData.status) changes.push(`Status: '${oldData.status_of_construction_phase}' -> '${newData.status_of_construction_phase}'`);
+    if (oldData.status_of_construction_phase !== newData.status_of_construction_phase) changes.push(`Status: '${oldData.status_of_construction_phase}' -> '${newData.status_of_construction_phase}'`);
     if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
     if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
 
@@ -8613,7 +8635,7 @@ app.put('/api/update-project/:id', upload.fields([
       data.uid,
       finalUserName,
       'Engineer',
-      'UPDATE',
+      newData.status_of_construction_phase || 'UPDATE', // Dynamic Action Label
       `Project: ${newData.project_name} (${newData.ipc || 'No IPC'})`,
       JSON.stringify(historyLog) // Storing structured history
     );
@@ -9019,7 +9041,7 @@ app.get('/api/projects', async (req, res) => {
             e.project_id, e.school_name, e.project_name, e.school_id, e.division, e.region, e.status_of_construction_phase AS status, e.ipc, e.engineer_name, e.engineer_id,
             e.accomplishment_percentage,
             LAG(e.accomplishment_percentage) OVER (
-                PARTITION BY COALESCE(e.ipc, e.project_id::text) 
+                PARTITION BY COALESCE(e.ipc, e.school_id || '-' || e.project_name) 
                 ORDER BY e.project_id ASC
             ) as previous_percentage,
             e.approved_budget_for_contract, e.contract_amount, e.batch_of_funds, e.contractor_name, e.other_remarks,
@@ -9043,7 +9065,7 @@ app.get('/api/projects', async (req, res) => {
             COALESCE(f.liquidated_tranche_2, 0) as liquidated_tranche_2,
             COALESCE(f.liquidated_tranche_3, 0) as liquidated_tranche_3,
             ROW_NUMBER() OVER (
-                PARTITION BY COALESCE(e.ipc, e.project_id::text) 
+                PARTITION BY COALESCE(e.ipc, e.school_id || '-' || e.project_name) 
                 ORDER BY e.project_id DESC
             ) as rn
           FROM engineer_form e
@@ -9553,6 +9575,23 @@ app.get('/api/project-history/:ipc', async (req, res) => {
     const statusCol = isLgu ? "project_status" : "status_of_construction_phase";
     const statusAsOfCol = isLgu ? "status_as_of_date" : "status_as_of";
 
+    // Resolve identifier if ipc is a project_id
+    let resolvedIpc = ipc;
+    let fallbackWhere = isLgu ? `lgu_project_id = $1` : `ipc = $1`;
+    
+    if (!isLgu && !isNaN(ipc)) {
+      const pRes = await pool.query('SELECT ipc, school_id, project_name FROM engineer_form WHERE project_id = $1', [ipc]);
+      if (pRes.rows.length > 0) {
+        const p = pRes.rows[0];
+        if (p.ipc) {
+          resolvedIpc = p.ipc;
+        } else {
+          resolvedIpc = [p.school_id, p.project_name];
+          fallbackWhere = `school_id = $1 AND project_name = $2 AND ipc IS NULL`;
+        }
+      }
+    }
+
     const query = `
       SELECT 
         *,
@@ -9571,7 +9610,7 @@ app.get('/api/project-history/:ipc', async (req, res) => {
         number_of_storeys AS "numberOfStoreys",
         number_of_sites AS "numberOfSites",
         funds_utilized AS "fundsUtilized",
-        TO_CHAR(${statusAsOfCol}, 'YYYY-MM-DD') AS "statusAsOfDate",
+        TO_CHAR(${statusAsOfCol}, 'YYYY-MM-DD') AS "statusAsOf",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
@@ -9587,10 +9626,12 @@ app.get('/api/project-history/:ipc', async (req, res) => {
         TO_CHAR(opening_of_quotation, 'YYYY-MM-DD') AS "opening_of_quotation",
         created_at
       FROM ${tableName}
-      WHERE ipc = $1
-      ORDER BY ${idColumn} DESC;
+      WHERE ${fallbackWhere}
+      ORDER BY project_id DESC
     `;
-    const result = await pool.query(query, [ipc]);
+
+    const queryParams = Array.isArray(resolvedIpc) ? resolvedIpc : [resolvedIpc];
+    const result = await pool.query(query, queryParams);
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch Project History Error:", err);
