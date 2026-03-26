@@ -66,9 +66,11 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [gradeTotals, setGradeTotals] = useState({});
     const [gradeAvailability, setGradeAvailability] = useState({});
     
-    // Step 3: Special Learners (SNED / Non-Graded)
-    const [hasSnedSelfContained, setHasSnedSelfContained] = useState(null);
-    const [sned_self_contained_count, setSnedSelfContainedCount] = useState("");
+    // Step 5: Special Learners (SNED / Non-Graded)
+    const [hasSNED, setHasSNED] = useState(null);
+    const [snedTotalCount, setSnedTotalCount] = useState("");
+    const [snedProgramType, setSnedProgramType] = useState(null); // 'MAIN STREAM' | 'SELF CONTAINED'
+    const [snedOrganizedClassCount, setSnedOrganizedClassCount] = useState("");
     const [snedLanguage, setSnedLanguage] = useState("en"); // "en" | "ph"
 
     // Step 3: ARAL Program (Conditional)
@@ -105,10 +107,12 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             c.grades.forEach(lvl => sum += (parseInt(gradeTotals[lvl]) || 0));
         });
         // SNED
-        if (hasSnedSelfContained) sum += (parseInt(sned_self_contained_count) || 0);
+        if (hasSNED) {
+            sum += (parseInt(snedTotalCount) || 0);
+        }
 
         return sum;
-    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSnedSelfContained, sned_self_contained_count, gradeAvailability]);
+    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSNED, snedTotalCount, gradeAvailability]);
 
     const genderSum = useMemo(() => {
         return (parseInt(genderTotals.male) || 0) + (parseInt(genderTotals.female) || 0);
@@ -171,8 +175,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             setMgCombinations(draft2.mgCombinations || []);
                             setGradeTotals(draft2.gradeTotals || {});
                             setGradeAvailability(draft2.gradeAvailability || {});
-                            setHasSnedSelfContained(draft2.hasSnedSelfContained);
-                            setSnedSelfContainedCount(draft2.sned_self_contained_count || "");
+                            setHasSNED(draft2.hasSNED);
+                            setSnedTotalCount(draft2.snedTotalCount || "");
+                            setSnedProgramType(draft2.snedProgramType || null);
+                            setSnedOrganizedClassCount(draft2.snedOrganizedClassCount || "");
                             setHasAralMath(draft2.hasAralMath);
                             setAralMath(draft2.aralMath || {});
                             setHasAralReading(draft2.hasAralReading);
@@ -268,8 +274,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         setKinderEnrollment(q.kinderEnrollment || "");
                                         setGradeTotals(q.gradeTotals || {});
                                         setGradeAvailability(q.gradeAvailability || {});
-                                        setHasSnedSelfContained(q.hasSnedSelfContained);
-                                        setSnedSelfContainedCount(q.sned_self_contained_count || "");
+                                        setHasSNED(q.hasSNED);
+                                        setSnedTotalCount(q.snedTotalCount || "");
+                                        setSnedProgramType(q.snedProgramType || null);
+                                        setSnedOrganizedClassCount(q.snedOrganizedClassCount || "");
                                         setHasAralMath(q.hasAralMath);
                                         setAralMath(q.aralMath || {});
                                         setHasAralReading(q.hasAralReading);
@@ -309,15 +317,20 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     }, [activeMonogrades.length, currentStep, loading, currentGradeIndex]);
 
     // --- Handlers ---
+    const sanitizeNumeric = (val, maxLen = 4) => {
+        let cleaned = val.replace(/[^0-9]/g, ''); 
+        if (cleaned.length > maxLen) cleaned = cleaned.slice(0, maxLen);
+        return cleaned;
+    };
+
     const handleGradeChange = (gradeId, val) => {
-        let limitedVal = val;
-        if (limitedVal.length > 4) limitedVal = limitedVal.slice(0, 4);
-        setGradeTotals(prev => ({ ...prev, [gradeId]: limitedVal }));
+        setGradeTotals(prev => ({ ...prev, [gradeId]: sanitizeNumeric(val) }));
     };
 
     const toggleAvailability = (gradeId) => {
         setGradeAvailability(prev => {
-            const newState = !prev[gradeId];
+            const current = (prev[gradeId] === undefined) ? true : prev[gradeId];
+            const newState = !current;
             if (!newState) {
                 // If turning OFF, force total to 0
                 if (gradeId === 'kinder') {
@@ -331,27 +344,27 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     };
 
     const handleAralChange = (subject, gradeId, val) => {
-        let limitedVal = val;
-        if (limitedVal.length > 4) limitedVal = limitedVal.slice(0, 4);
-        if (subject === 'math') setAralMath(prev => ({ ...prev, [gradeId]: limitedVal }));
-        if (subject === 'reading') setAralReading(prev => ({ ...prev, [gradeId]: limitedVal }));
-        if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: limitedVal }));
+        const sanitized = sanitizeNumeric(val);
+        if (subject === 'math') setAralMath(prev => ({ ...prev, [gradeId]: sanitized }));
+        if (subject === 'reading') setAralReading(prev => ({ ...prev, [gradeId]: sanitized }));
+        if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: sanitized }));
     };
 
     const handleGenderChange = (field, val) => {
-        const numVal = parseInt(val) || 0;
-        const cappedVal = Math.min(Math.max(0, numVal), grandTotal);
-        const otherVal = grandTotal - cappedVal;
+        const sanitized = sanitizeNumeric(val, 6); // Allow up to 6 digits for gender if needed
+        const numVal = parseInt(sanitized) || 0;
+        const cappedVal = Math.min(numVal, grandTotal);
+        const otherVal = Math.max(0, grandTotal - cappedVal);
 
         if (field === 'male') {
             setGenderTotals({
-                male: val === "" ? "" : cappedVal.toString(),
-                female: val === "" ? "" : otherVal.toString()
+                male: sanitized === "" ? "" : cappedVal.toString(),
+                female: sanitized === "" ? "" : otherVal.toString()
             });
         } else {
             setGenderTotals({
-                male: val === "" ? "" : otherVal.toString(),
-                female: val === "" ? "" : cappedVal.toString()
+                male: sanitized === "" ? "" : otherVal.toString(),
+                female: sanitized === "" ? "" : cappedVal.toString()
             });
         }
     };
@@ -496,8 +509,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             mgCombinations,
             gradeTotals,
             gradeAvailability,
-            hasSnedSelfContained,
-            sned_self_contained_count,
+            hasSNED,
+            snedTotalCount,
+            snedProgramType,
+            snedOrganizedClassCount,
             hasAralMath, aralMath,
             hasAralReading, aralReading,
             hasAralScience, aralScience,
@@ -523,8 +538,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 mgCombinations,
                 gradeTotals,
                 gradeAvailability,
-                hasSnedSelfContained,
-                sned_self_contained_count: parseInt(sned_self_contained_count) || 0,
+                hasSNED,
+                snedTotalCount: parseInt(snedTotalCount) || 0,
+                snedProgramType,
+                snedOrganizedClassCount: parseInt(snedOrganizedClassCount) || 0,
                 hasAralMath, aralMath: hasAralMath ? aralMath : {},
                 hasAralReading, aralReading: hasAralReading ? aralReading : {},
                 hasAralScience, aralScience: hasAralScience ? aralScience : {},
@@ -592,7 +609,10 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                     unit2_simplified_enrollment: payload,
-                    sned_self_contained_count: parseInt(sned_self_contained_count) || 0,
+                    has_sned: hasSNED,
+                    sned_total_count: parseInt(snedTotalCount) || 0,
+                    sned_program_type: snedProgramType,
+                    sned_organized_class_count: parseInt(snedOrganizedClassCount) || 0,
                     multigrade_groupings_1: mg_1,
                     multigrade_groupings_2: mg_2,
                     multigrade_groupings_3: mg_3,
@@ -719,18 +739,32 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     {/* SNED Block */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest">SNED Self-Contained</span>
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${hasSnedSelfContained ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
-                                {hasSnedSelfContained ? "Active" : "None"}
+                            <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Special Learners (SNED)</span>
+                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${hasSNED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                {hasSNED ? "Active" : "None"}
                             </span>
                         </div>
-                        {hasSnedSelfContained && (
-                            <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between">
-                                <div>
-                                    <p className="text-2xl font-black text-emerald-900 leading-none">{sned_self_contained_count}</p>
-                                    <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">Non-Graded Learners</p>
+                        {hasSNED && (
+                            <div className="space-y-3">
+                                <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-2xl font-black text-emerald-900 leading-none">{snedTotalCount}</p>
+                                        <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">Total Learners</p>
+                                    </div>
+                                    <div className="text-3xl">🧩</div>
                                 </div>
-                                <div className="text-3xl">🧩</div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Program Type</p>
+                                        <p className="font-black text-slate-700 text-xs">{snedProgramType}</p>
+                                    </div>
+                                    {snedProgramType === 'Self-Contained' && (
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Organized Class</p>
+                                            <p className="font-black text-emerald-700 text-sm">{snedOrganizedClassCount}</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -896,7 +930,14 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             return !isAvailable || (gradeTotals[g.id] && parseInt(gradeTotals[g.id]) > 0);
         }
         if (currentStep === 5) {
-            return hasSnedSelfContained === false || (hasSnedSelfContained === true && sned_self_contained_count);
+            if (hasSNED === false) return true;
+            if (hasSNED === true) {
+                if (!snedTotalCount) return false;
+                if (!snedProgramType) return false;
+                if (snedProgramType === 'Self-Contained' && !snedOrganizedClassCount) return false;
+                return true;
+            }
+            return false;
         }
         if (currentStep === 6) {
             return (hasAralMath !== null && hasAralReading !== null && hasAralScience !== null) &&
@@ -1002,9 +1043,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 value={kinderEnrollment}
                                                 disabled={!isAvailable}
                                                 onChange={(e) => {
-                                                    let val = e.target.value;
-                                                    if (val.length > 4) val = val.slice(0, 4);
-                                                    setKinderEnrollment(val);
+                                                    setKinderEnrollment(sanitizeNumeric(e.target.value));
                                                 }}
                                                 placeholder="0"
                                                 className={`${chunkyInput} ${!isAvailable ? 'bg-slate-50 border-slate-100 text-slate-300' : ''}`}
@@ -1300,12 +1339,12 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         </motion.div>
                     )}
 
-                    {/* STEP 5: Special Learners / SNED Self-Contained */}
+                    {/* STEP 5: Special Learners */}
                     {currentStep === 5 && (
                         <motion.div key="step5" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
-                            <div className="text-center mb-8 relative">
-                                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 text-indigo-500 rounded-2xl text-2xl mb-4">🌟</div>
-                                <h1 className="text-3xl font-black text-slate-800 mb-3">Step 5: Special Learners</h1>
+                            <div className="text-center mb-10 relative">
+                                <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 text-indigo-500 rounded-2xl text-2xl mb-4 shadow-sm border border-indigo-200">🌟</div>
+                                <h1 className="text-4xl font-black text-slate-800 mb-3 tracking-tight">Step 5: Special Learners</h1>
                                 <p className="text-slate-500 font-medium px-4">Do you have learners enrolled in specific special programs outside of the standard grade levels?</p>
                             </div>
 
@@ -1329,61 +1368,114 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 <div className="mb-8 pr-16">
                                     <h3 className="text-xl font-black text-slate-800 leading-tight">
                                         {snedLanguage === "en" 
-                                            ? "Do you have Special Needs Education Learners organized in self-contained classes (non-graded)?" 
-                                            : "Mayroon ba kayong Special Needs Education Learners na naka-organisa sa self-contained classes (non-graded)?"
+                                            ? "Do you have Special Needs Education Learners?" 
+                                            : "Mayroon ba kayong Special Needs Education Learners?"
                                         }
                                     </h3>
                                 </div>
 
-                                <div className="bg-slate-50 rounded-3xl p-5 mb-8 border-2 border-slate-100 italic">
-                                    <p className="text-sm font-bold text-slate-500 leading-relaxed text-center">
-                                        {snedLanguage === "en"
-                                            ? "The self-contained class is exclusively for those LWDs who are diagnosed or identified to have severe to profound disabilities. They are the non-graded LWDs or those who are in the transition program."
-                                            : "Ang self-contained class ay eksklusibo para sa mga LWD na may severe hanggang profound na kapansanan. Sila ang mga non-graded LWD o ang mga nasa transition program."
-                                        }
-                                    </p>
-                                </div>
-
                                 <div className="flex gap-4 mb-8">
                                     <button 
-                                        onClick={() => setHasSnedSelfContained(true)}
-                                        className={`flex-1 flex flex-col items-center gap-2 p-6 rounded-[2rem] border-4 transition-all ${hasSnedSelfContained === true ? 'bg-indigo-50 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 grayscale opacity-60'}`}
+                                        onClick={() => setHasSNED(true)}
+                                        className={`flex-1 flex flex-col items-center gap-2 p-6 rounded-[2rem] border-4 transition-all ${hasSNED === true ? 'bg-indigo-50 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 grayscale opacity-40 hover:opacity-100 hover:grayscale-0'}`}
                                     >
                                         <span className="text-3xl">🙋‍♂️</span>
-                                        <span className={`font-black uppercase tracking-widest text-xs ${hasSnedSelfContained === true ? 'text-indigo-600' : 'text-slate-400'}`}>Yes, we have</span>
+                                        <span className={`font-black uppercase tracking-widest text-xs ${hasSNED === true ? 'text-indigo-600' : 'text-slate-400'}`}>Yes, we have</span>
                                     </button>
                                     <button 
-                                        onClick={() => { setHasSnedSelfContained(false); setSnedSelfContainedCount(""); }}
-                                        className={`flex-1 flex flex-col items-center gap-2 p-6 rounded-[2rem] border-4 transition-all ${hasSnedSelfContained === false ? 'bg-indigo-50 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 grayscale opacity-60'}`}
+                                        onClick={() => { 
+                                            setHasSNED(false); 
+                                            setSnedTotalCount(""); 
+                                            setSnedProgramType(null); 
+                                            setSnedOrganizedClassCount(""); 
+                                        }}
+                                        className={`flex-1 flex flex-col items-center gap-2 p-6 rounded-[2rem] border-4 transition-all ${hasSNED === false ? 'bg-indigo-50 border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 grayscale opacity-40 hover:opacity-100 hover:grayscale-0'}`}
                                     >
                                         <span className="text-3xl">✕</span>
-                                        <span className={`font-black uppercase tracking-widest text-xs ${hasSnedSelfContained === false ? 'text-indigo-600' : 'text-slate-400'}`}>No, none</span>
+                                        <span className={`font-black uppercase tracking-widest text-xs ${hasSNED === false ? 'text-indigo-600' : 'text-slate-400'}`}>No, none</span>
                                     </button>
                                 </div>
 
                                 <AnimatePresence>
-                                    {hasSnedSelfContained === true && (
+                                    {hasSNED === true && (
                                         <motion.div 
-                                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                                            className="flex flex-col items-center pt-4 border-t-2 border-indigo-50"
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: "auto" }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            className="space-y-8 pt-4 border-t-2 border-indigo-50"
                                         >
-                                            <label className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-4">
-                                                Number of Non-Graded Learners
-                                            </label>
-                                            <input 
-                                                type="number" 
-                                                min="0" 
-                                                placeholder="0" 
-                                                value={sned_self_contained_count} 
-                                                onChange={(e) => {
-                                                    let val = e.target.value;
-                                                    if (val.length > 4) val = val.slice(0, 4);
-                                                    setSnedSelfContainedCount(val);
-                                                }} 
-                                                className="w-48 h-24 text-5xl font-black text-center rounded-3xl bg-indigo-50 border-4 border-indigo-200 text-indigo-700 outline-none focus:bg-white focus:border-indigo-500 shadow-lg"
-                                            />
+                                            {/* How many? */}
+                                            <div className="flex flex-col items-center py-4">
+                                                <label className="text-xs font-black uppercase text-indigo-400 tracking-[0.2em] mb-4">
+                                                    {snedLanguage === "en" ? "How many?" : "Ilan sila?"}
+                                                </label>
+                                                <input 
+                                                    type="number" 
+                                                    placeholder="0" 
+                                                    value={snedTotalCount} 
+                                                    onChange={(e) => {
+                                                        const val = sanitizeNumeric(e.target.value, 3);
+                                                        setSnedTotalCount(val);
+                                                        if (val === "") {
+                                                            setSnedProgramType(null);
+                                                            setSnedOrganizedClassCount("");
+                                                        }
+                                                    }} 
+                                                    className="w-48 h-24 text-6xl font-black text-center rounded-[2rem] bg-indigo-50 border-4 border-indigo-200 text-indigo-700 outline-none focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/30"
+                                                />
+                                            </div>
+
+                                            {/* Classification Buttons */}
+                                            {snedTotalCount.length > 0 && (
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: 20 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="space-y-6"
+                                                >
+                                                    <div className="text-center">
+                                                        <label className="text-xs font-black uppercase text-indigo-400 tracking-[0.2em] mb-4 block">
+                                                            {snedLanguage === "en" ? "Program Classification" : "Uri ng Program"}
+                                                        </label>
+                                                        <div className="flex gap-3">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setSnedProgramType('Mainstreamed');
+                                                                    setSnedOrganizedClassCount("");
+                                                                }}
+                                                                className={`flex-1 py-4 rounded-2xl font-black text-sm border-2 transition-all ${snedProgramType === 'Mainstreamed' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-white'}`}
+                                                            >
+                                                                MAINSTREAMED
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setSnedProgramType('Self-Contained')}
+                                                                className={`flex-1 py-4 rounded-2xl font-black text-sm border-2 transition-all ${snedProgramType === 'Self-Contained' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-white'}`}
+                                                            >
+                                                                SELF-CONTAINED
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Organized Class Input (If Self Contained) */}
+                                                    {snedProgramType === 'Self-Contained' && (
+                                                        <motion.div 
+                                                            initial={{ opacity: 0, scale: 0.9 }}
+                                                            animate={{ opacity: 1, scale: 1 }}
+                                                            className="flex flex-col items-center p-6 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200"
+                                                        >
+                                                            <label className="text-[11px] font-black uppercase text-indigo-500 tracking-widest mb-4 text-center">
+                                                                {snedLanguage === "en" ? "How many is the Organized Class?" : "Ilan ang Organized Class?"}
+                                                            </label>
+                                                            <input 
+                                                                type="number" 
+                                                                placeholder="0" 
+                                                                value={snedOrganizedClassCount} 
+                                                                onChange={(e) => setSnedOrganizedClassCount(sanitizeNumeric(e.target.value, 2))} 
+                                                                className="w-32 h-16 text-3xl font-black text-center rounded-2xl bg-white border-2 border-indigo-100 text-indigo-600 outline-none focus:border-indigo-500 shadow-sm"
+                                                            />
+                                                        </motion.div>
+                                                    )}
+                                                </motion.div>
+                                            )}
                                         </motion.div>
                                     )}
                                 </AnimatePresence>

@@ -517,6 +517,12 @@ const runAutoMigrations = async () => {
     await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;');
     await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB');
     await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0');
+    
+    // New SNED Redesign Columns
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS has_sned BOOLEAN DEFAULT FALSE');
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_total_count INTEGER DEFAULT 0');
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_program_type TEXT');
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_organized_class_count INTEGER DEFAULT 0');
 
     // Multi-grade columns
     const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];

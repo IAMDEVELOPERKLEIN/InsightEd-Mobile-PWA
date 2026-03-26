@@ -139,15 +139,18 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         const mgLabels = activeClasses.map(ac => ac.label.toLowerCase());
 
         // Determine which single grades are actually active in the school
-        let co = (d.curricular_offering || "").toLowerCase();
+        // Prioritize local storage or draft offering if Unit 1 was recently changed
+        const storedOffering = localStorage.getItem("schoolOffering");
+        let co = (storedOffering || d.curricular_offering || "").toLowerCase();
+
         let offeringGrades = [];
         if (co === "purely elementary") {
             offeringGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'];
-        } else if (co === "elementary school and junior high school (k-10)") {
+        } else if (co === "elementary school and junior high school (k-10)" || co.includes("k-10") || co.includes("k to 10")) {
             offeringGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10'];
         } else if (co === "junior high and senior high") {
             offeringGrades = ['g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
-        } else if (co === "all offering (k to 12)") {
+        } else if (co === "all offering (k to 12)" || co.includes("k-12") || co.includes("k to 12") || co.includes("integrated")) {
             offeringGrades = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
         } else if (co === "purely junior high school") {
             offeringGrades = ['g7', 'g8', 'g9', 'g10'];
@@ -156,6 +159,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         } else {
             // Fallback for legacy data
             if (co.includes("integrated") || co.includes("k-12") || co.includes("k to 12") || co.includes("k-10") || co.includes("k to 10")) {
+                // Keep pattern for super-legacy but prioritized by explicit checks above
                 offeringGrades = singleGradeMappings.map(m => m.id);
             } else {
                 if (co.includes("kinder")) offeringGrades.push("kinder");
@@ -184,10 +188,11 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             const u2Data = u2ActiveGrades[mapping.id];
             
             // If u2Data exists, it must be active and have count > 0.
-            // If u2Data doesn't exist (not saved yet), we fall back to general offering.
+            // If u2Data doesn't exist but Unit 2 IS saved, we assume it's NOT active.
+            // If Unit 2 is not saved yet, we fall back to general offering.
             const isActuallyActive = u2Data 
                 ? (u2Data.is_active && u2Data.total > 0)
-                : isOffered;
+                : (d.unit2_simplified_enrollment ? false : isOffered);
 
             if (!isActuallyActive) return;
 
@@ -342,7 +347,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         if (isEditingGrade && currentGrade) {
             const data = sectionData[currentGrade.id] || { total_sections: 0, col_below: 0, col_within: 0, col_above: 0 };
             const total = parseInt(data.total_sections) || 0;
-            if (total === 0) return true; // Can bypass if 0 sections
+            if (total === 0) return false; // MUST ENTER TOTAL SECTION
             
             const sum = (parseInt(data.col_below) || 0) + (parseInt(data.col_within) || 0) + (parseInt(data.col_above) || 0);
             return sum === total;
@@ -771,7 +776,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="space-y-6">
                                                 <div className="pt-6 border-t border-slate-100 mt-6">
                                                     <p className={`text-center font-bold mb-6 ${!isCurrentStepValid ? 'text-indigo-500' : 'text-emerald-500'}`}>
-                                                        {isCurrentStepValid ? "✨ Sections Distributed!" : `Distribute the ${total} ${total === 1 ? 'section' : 'sections'} by size:`}
+                                                        {isCurrentStepValid ? "✨ Sections Distributed!" : total > 0 ? `Distribute the ${total} ${total === 1 ? 'section' : 'sections'} by size:` : "Please enter total sections"}
                                                     </p>
                                                     
                                                     <div className="grid grid-cols-3 gap-4">

@@ -99,11 +99,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         head_last_name: "",
         head_sex: "",
         head_position_title: "",
-        head_date_of_birth: "",
         head_date_hired: "",
-        head_dob_month: "",
-        head_dob_day: "",
-        head_dob_year: "",
         head_hired_month: "",
         head_hired_day: "",
         head_hired_year: "",
@@ -216,17 +212,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     local_file_path: d.local_file_path || merged.local_file_path,
                     head_position_title: d.head_position_title || merged.head_position_title,
                     ...(() => {
-                        const dobVal = (d.head_date_of_birth) ? d.head_date_of_birth.split('T')[0] : merged.head_date_of_birth;
                         const hiredVal = (d.head_date_hired) ? d.head_date_hired.split('T')[0] : merged.head_date_hired;
-                        const dobParts = dobVal ? dobVal.split('-') : [];
                         const hiredParts = hiredVal ? hiredVal.split('-') : [];
                         
                         return {
-                            head_date_of_birth: dobVal,
                             head_date_hired: hiredVal,
-                            head_dob_year: dobParts[0] || "",
-                            head_dob_month: dobParts[1] ? new Date(dobVal).toLocaleString('default', { month: 'short' }).replace('.', '') : "",
-                            head_dob_day: dobParts[2] ? parseInt(dobParts[2]).toString() : "",
                             head_hired_year: hiredParts[0] || "",
                             head_hired_month: hiredParts[1] ? new Date(hiredVal).toLocaleString('default', { month: 'short' }).replace('.', '') : "",
                             head_hired_day: hiredParts[2] ? parseInt(hiredParts[2]).toString() : "",
@@ -344,16 +334,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     }, [formData.region, formData.division]);
 
     // ── Date Sync Logic ──────────────────────────────────────────────────────
-    useEffect(() => {
-        if (formData.head_dob_month && formData.head_dob_day && formData.head_dob_year) {
-            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            const m = (months.indexOf(formData.head_dob_month) + 1).toString().padStart(2, '0');
-            const d = formData.head_dob_day.padStart(2, '0');
-            const y = formData.head_dob_year;
-            const res = `${y}-${m}-${d}`;
-            if (res !== formData.head_date_of_birth) setFormData(prev => ({ ...prev, head_date_of_birth: res }));
-        }
-    }, [formData.head_dob_month, formData.head_dob_day, formData.head_dob_year]);
+
 
     useEffect(() => {
         if (formData.head_hired_month && formData.head_hired_day && formData.head_hired_year) {
@@ -564,7 +545,6 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 head_last_name: formData.head_last_name,
                 head_sex: formData.head_sex,
                 head_position_title: formData.head_position_title,
-                head_date_of_birth: formData.head_date_of_birth,
                 head_date_hired: formData.head_date_hired,
                 local_file_path: formData.local_file_path,
             };
@@ -1093,30 +1073,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 </select>
                                             </div>
                                             <div className="space-y-4">
-                                                {/* Date of Birth Selection */}
-                                                <div className="space-y-2">
-                                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4 block">Date of Birth</label>
-                                                    <div className="grid grid-cols-3 gap-3">
-                                                        <select name="head_dob_month" value={formData.head_dob_month} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
-                                                            <option value="" disabled hidden>Month</option>
-                                                            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(m => (
-                                                                <option key={m} value={m}>{m}</option>
-                                                            ))}
-                                                        </select>
-                                                        <select name="head_dob_day" value={formData.head_dob_day} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
-                                                            <option value="" disabled hidden>Day</option>
-                                                            {Array.from({ length: 31 }, (_, i) => (i + 1).toString()).map(d => (
-                                                                <option key={d} value={d}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                        <select name="head_dob_year" value={formData.head_dob_year} onChange={handleChange} className={chunkySelect + " !text-sm text-left px-4"}>
-                                                            <option value="" disabled hidden>Year</option>
-                                                            {Array.from({ length: 120 }, (_, i) => (new Date().getFullYear() - i).toString()).map(y => (
-                                                                <option key={y} value={y}>{y}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </div>
+
 
                                                 {/* Date Assigned Selection */}
                                                 <div className="space-y-2">
