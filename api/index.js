@@ -769,6 +769,7 @@ const initDB = async () => {
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funding_year INTEGER;
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS mode_of_project VARCHAR(50);
           ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS no_of_units INTEGER DEFAULT 0;
+          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS procurement_status TEXT;
         `);
 
         currentSegment = `${dbLabel} Seg 5: variation_orders table`;
@@ -8338,6 +8339,7 @@ app.put('/api/update-project/:id', upload.fields([
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
+    const newProcurementStatus = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status;
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
     const newLat = valueOrNull(data.latitude) || oldData.latitude;
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
@@ -8396,7 +8398,8 @@ app.put('/api/update-project/:id', upload.fields([
       valueOrNull(data.province) || oldData.province,
       valueOrNull(data.city) || oldData.city,
       valueOrNull(data.municipality) || oldData.municipality,
-      pow_pdf_base64, dupa_pdf_base64, contract_pdf_base64
+      pow_pdf_base64, dupa_pdf_base64, contract_pdf_base64,
+      newProcurementStatus
     ];
 
     const insertQuery = `
@@ -8417,8 +8420,9 @@ app.put('/api/update-project/:id', upload.fields([
         mode_of_project, assigned_engineer_id, assigned_engineer_name,
         implementing_agency, implementing_agency_specific, uploader_id_moa_rta, no_of_units, program_type,
         province, city, municipality,
-        pow_pdf, dupa_pdf, contract_pdf
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62)
+        pow_pdf, dupa_pdf, contract_pdf,
+        procurement_status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63)
       RETURNING *;
     `;
 
@@ -9013,6 +9017,7 @@ app.get('/api/projects', async (req, res) => {
             e.accomplishment_percentage, e.approved_budget_for_contract, e.contract_amount, e.batch_of_funds, e.contractor_name, e.other_remarks,
             e.status_as_of, e.target_completion_date, e.actual_completion_date, e.notice_to_proceed, e.latitude, e.longitude,
             e.construction_start_date, e.project_category, e.scope_of_work,
+            e.province, e.city, e.municipality,
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
             e.is_donated, e.program_type, e.status_design_phase, e.actions, e.savings, e.funding_year, e.funding_year_justification,
             e.sangguniang_resolution_id, e.mother_moa_id, e.supplamental_moa_id,
@@ -9037,7 +9042,7 @@ app.get('/api/projects', async (req, res) => {
       )
       SELECT
         p.project_id AS "id", p.school_name AS "schoolName", p.school_name AS "school_name", p.project_name AS "projectName", p.project_name AS "project_name",
-        p.school_id AS "schoolId", p.school_id AS "school_id", p.division, p.region, p.status AS "status", p.ipc, p.engineer_name AS "engineerName",
+        p.school_id AS "schoolId", p.school_id AS "school_id", p.division, p.region, p.province, p.city, p.municipality, p.status AS "status", p.ipc, p.engineer_name AS "engineerName",
         p.accomplishment_percentage AS "accomplishmentPercentage", p.accomplishment_percentage AS "accomplishment_percentage",
         p.approved_budget_for_contract AS "projectAllocation", p.approved_budget_for_contract AS "amount", 
         p.contract_amount AS "contractAmount", p.contract_amount AS "contract_amount",
@@ -9070,6 +9075,7 @@ app.get('/api/projects', async (req, res) => {
         p.has_contract AS "hasContract",
         p.implementing_agency AS "implementingAgency",
         p.implementing_agency_specific AS "implementingAgencySpecific",
+        p.province, p.city, p.municipality,
         p.tranche_1, p.tranche_2, p.tranche_3,
         p.liquidated_tranche_1, p.liquidated_tranche_2, p.liquidated_tranche_3
       FROM LatestProjects p

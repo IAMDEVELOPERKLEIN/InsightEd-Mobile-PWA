@@ -1990,15 +1990,21 @@ app.put('/api/update-project/:id', async (req, res) => {
       }
     };
 
-    // 4. Log Activity
-    // Note: finalUserName is already computed above logic
-
+    // 4. Log Activity — build a descriptive action_type based on what changed
+    let actionLabel = 'Project Updated';
+    if (oldData.status !== newData.status) {
+      actionLabel = `Status → ${newData.status}`;
+    } else if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) {
+      actionLabel = `Progress → ${newData.accomplishment_percentage}%`;
+    } else if (oldData.other_remarks !== newData.other_remarks) {
+      actionLabel = 'Remarks Updated';
+    }
 
     await logActivity(
       data.uid,
       finalUserName,
       'Engineer',
-      'UPDATE',
+      actionLabel,
       `Project: ${newData.project_name} (${newData.ipc || 'No IPC'})`,
       JSON.stringify(historyLog) // Storing structured history
     );

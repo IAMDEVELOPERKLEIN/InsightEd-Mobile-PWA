@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiSearch, FiPlus, FiFilter, FiCamera, FiImage, FiSettings, FiChevronRight, FiEdit, FiEye } from "react-icons/fi";
+import { FiSearch, FiPlus, FiFilter, FiCamera, FiImage, FiSettings, FiChevronRight, FiEdit, FiEye, FiX } from "react-icons/fi";
 import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
 
 import BottomNav from "./BottomNav";
@@ -19,6 +19,8 @@ const ProjectStatus = {
   Ongoing: "Ongoing",
   ForFinalInspection: "For Final Inspection",
   Completed: "Completed",
+  Suspended: "Suspended",
+  Terminated: "Terminated",
 };
 
 const DOC_TYPES = {
@@ -40,6 +42,26 @@ const processPdfFileChunked = async (file, onProgress) => {
 };
 
 // --- HELPERS ---
+const getStatusColor = (status) => {
+  switch (status) {
+    case "Completed":
+      return "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20";
+    case "Ongoing":
+    case "Under Procurement":
+    case "For Final Inspection":
+      return "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20";
+    case "Not Yet Started":
+    case "Not yet procured":
+      return "bg-slate-50 text-slate-400 border-slate-100 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20";
+    case "Suspended":
+      return "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20";
+    case "Terminated":
+      return "bg-red-50 text-red-600 border-red-100 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20";
+    default:
+      return "bg-slate-50 text-slate-400 border-slate-100 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20";
+  }
+};
+
 const formatAllocation = (value) => {
   const num = Number(value) || 0;
   return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -57,38 +79,30 @@ const formatDateShort = (dateString) => {
 
 // --- SUB-COMPONENTS ---
 
-const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading, searchQuery, readOnly, uploadProgress = {}, handlePdfUpload }) => {
-  const navigate = useNavigate();
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case ProjectStatus.Completed:
-        return "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800";
-      case ProjectStatus.Ongoing:
-        return "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-800";
-      case ProjectStatus.UnderProcurement:
-        return "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800";
-      case ProjectStatus.ForFinalInspection:
-        return "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border-purple-100 dark:border-purple-800";
-      default:
-        return "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-700";
-    }
-  };
+const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading, searchQuery, readOnly, handleStatusChange }) => {
 
   if (isLoading) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 h-[450px] flex items-center justify-center flex-col">
-        <div className="w-10 h-10 border-4 border-slate-100 dark:border-slate-700 border-t-[#004A99] dark:border-t-blue-500 rounded-full animate-spin mb-4"></div>
-        <p className="text-sm font-medium text-slate-400">Loading your projects...</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 animate-pulse">
+            <div className="h-4 w-3/4 bg-slate-100 dark:bg-slate-700 rounded-lg mb-4"></div>
+            <div className="h-6 w-1/2 bg-slate-200 dark:bg-slate-600 rounded-lg mb-6"></div>
+            <div className="space-y-3">
+              <div className="h-3 w-full bg-slate-50 dark:bg-slate-700/50 rounded-lg"></div>
+              <div className="h-3 w-5/6 bg-slate-50 dark:bg-slate-700/50 rounded-lg"></div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (projects.length === 0) {
     return (
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 h-[300px] flex items-center justify-center flex-col p-8 text-center">
-        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
-          <LuClipboardList size={32} className="text-slate-300 dark:text-slate-500" />
+      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-[300px] flex items-center justify-center flex-col p-8 text-center mt-6">
+        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4 text-slate-300">
+          <LuClipboardList size={32} />
         </div>
         <p className="text-lg font-bold text-slate-700 dark:text-slate-200">
           {searchQuery ? "No matching projects" : "No Projects Yet"}
@@ -101,123 +115,148 @@ const ProjectTable = ({ projects, onEdit, onDelete, onAnalyze, onView, isLoading
   }
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-700 flex flex-col h-[calc(100vh-220px)] overflow-hidden">
-      <div className="overflow-auto flex-1 relative custom-scrollbar">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-100 dark:border-slate-700">
-            <tr>
-              <th className="sticky left-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 w-full">
-                Project Info
-              </th>
-              <th className="sticky right-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 min-w-[80px] text-center">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50 dark:divide-slate-700 text-xs text-slate-600 dark:text-slate-300">
-            {projects.map((p, idx) => {
-              // DEBUG: Check values for "Warning" logic
-              if (idx === 0) console.log("DEBUG RENDER Project[0]:", { id: p.id, school: p.schoolName, pow: p.pow_pdf, dupa: p.dupa_pdf, contract: p.contract_pdf });
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6 pb-12">
+      {projects.map((p, idx) => (
+        <div
+          key={p.id}
+          onClick={() => onView(p)}
+          className="group bg-white dark:bg-slate-800 rounded-3xl shadow-xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-slate-700 hover:border-[#004A99] dark:hover:border-blue-500 transition-all duration-300 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 cursor-pointer"
+          style={{ animationDelay: `${idx * 100}ms` }}
+        >
+          {/* Card Header (Location & IPC) */}
+          <div className="p-6 pb-0">
+            <div className="flex justify-between items-start mb-2">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#004A99] dark:text-blue-400 opacity-60">
+                   {p.region} • {p.division}
+                </span>
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-300">
+                  {p.province}
+                </span>
+                <span className="text-[11px] font-bold text-slate-400">
+                  {p.municipality || p.city || "Municipality Not Set"}
+                </span>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                {p.ipc && (
+                  <div className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-[9px] font-black text-[#004A99] dark:text-blue-300 rounded-lg border border-blue-100 dark:border-blue-800 uppercase tracking-tighter">
+                    IPC {p.ipc}
+                  </div>
+                )}
+                {/* Accomplishment Percentage Badge */}
+                <div className="relative">
+                  <div className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-[14px] font-black text-emerald-600 dark:text-emerald-300 rounded-xl border-2 border-emerald-100 dark:border-emerald-800 shadow-sm flex flex-col items-center leading-none">
+                    <span className="text-[18px] mb-[-2px]">{p.accomplishmentPercentage || 0}%</span>
+                    <span className="text-[7px] uppercase tracking-tighter opacity-70">Physical</span>
+                  </div>
+                  {p.status === "Terminated" && (
+                    <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
+                      🚫 TERMINATED
+                    </div>
+                  )}
+                  {p.status === "Suspended" && (
+                    <div className="absolute -top-2 -right-2 bg-amber-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg border border-white animate-pulse">
+                      ⏸ SUSPENDED
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 leading-tight mb-2 group-hover:text-[#004A99] dark:group-hover:text-blue-400 transition-colors">
+              {p.projectName}
+            </h3>
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 mb-4 bg-slate-50 dark:bg-slate-900/50 w-fit px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-700">
+              <span className="opacity-50 uppercase tracking-widest">School ID:</span>
+              <span className="text-slate-600 dark:text-slate-300">{p.schoolId}</span>
+            </div>
 
-              const isLocked = p.status === ProjectStatus.Completed;
-              const progress = p.accomplishmentPercentage || 0;
+            {/* Micro Progress Bar */}
+            <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-4">
+              <div 
+                className="h-full bg-emerald-500 transition-all duration-1000 ease-out"
+                style={{ width: `${p.accomplishmentPercentage || 0}%` }}
+              ></div>
+            </div>
+          </div>
 
+          {/* Status Selectors */}
+          <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-900/30 border-y border-slate-100/50 dark:border-slate-700/50 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+            {/* Procurement Status */}
+            {(() => {
+              const constructionStarted = p.statusDesignPhase === 'Completed' && !!p.status;
               return (
-                <tr
-                  key={p.id}
-                  className="hover:bg-blue-50/30 dark:hover:bg-blue-900/20 transition-all duration-200 group animate-in fade-in slide-in-from-bottom-2"
-                  style={{ animationDelay: `${idx * 50}ms` }}
-                >
-                  <td className="sticky left-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4">
-                    <div className="flex flex-col gap-1">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-[#004A99] dark:text-blue-400 opacity-70">
-                        {p.schoolName}
-                      </div>
-                      <div className="font-bold text-slate-800 dark:text-slate-100 text-[13px] leading-snug group-hover:text-[#004A99] transition-colors">
-                        {p.projectName}
-                      </div>
-                      
-                      <div className="flex items-center gap-2 mt-1">
-                        <div className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
-                          <LuCalendar size={10} className="text-slate-300" />
-                          Latest Update: {formatDateShort(p.statusAsOfDate)}
-                        </div>
-                        {p.accomplishmentPercentage > 0 && (
-                          <div className={`text-[9px] font-black px-1.5 py-0.5 rounded ${p.accomplishmentPercentage === 100 ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
-                            {p.accomplishmentPercentage}%
-                          </div>
-                        )}
-                      </div>
-
-                      {/* ID Badges (Smaller) */}
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {p.ipc && (
-                          <div className="px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100 text-[8px] font-black text-slate-400">
-                            IPC {p.ipc}
-                          </div>
-                        )}
-                        <div className="px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100 text-[8px] font-black text-slate-400 uppercase">
-                          ID {p.schoolId}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="sticky right-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-l border-slate-50 dark:border-slate-700 text-center">
-                    <div className="flex flex-col gap-2">
-                      {/* CONDITIONAL ACTION: Upload Docs / View Docs */}
-
-
-
-
-                      <button
-                        onClick={() => onView(p)}
-                        className={`w-full py-1.5 text-[10px] font-bold rounded-lg border transition-all active:scale-95 flex items-center justify-center gap-1.5 ${p.hasVariationOrder
-                          ? "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 shadow-sm shadow-amber-900/10"
-                          : "bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-100 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-600 hover:shadow-md"}`}
-                        title="View Project Details"
-                      >
-                        {p.hasVariationOrder ? (
-                          <><FiEye size={14} /> <span className="bg-amber-100 text-amber-700 px-1 rounded-sm text-[8px] font-black">VO</span></>
-                        ) : (
-                          <><FiEye size={14} /> VIEW</>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => navigate(`/project-gallery/${p.id}`)}
-                        className="w-full py-1.5 bg-amber-50/50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/50 hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
-                      >
-                        <FiImage size={12} /> GALLERY
-                      </button>
-                      {!readOnly && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => onEdit(p, 'quick')}
-                            disabled={isLocked}
-                            className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${isLocked
-                              ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
-                              : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
-                              }`}
-                          >
-                            {isLocked ? "LOCKED" : <FiEdit size={14} />}
-                          </button>
-                          <button
-                            onClick={() => onDelete(p.id)}
-                            className="p-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg border border-red-100 transition-all active:scale-95"
-                            title="Delete Project"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Procurement Status</label>
+                    {constructionStarted && (
+                      <span className="text-[8px] font-bold text-amber-500 uppercase tracking-wider">🔒 Locked</span>
+                    )}
+                  </div>
+                  <select
+                    value={p.statusDesignPhase || ""}
+                    onChange={(e) => handleStatusChange(p, 'procurement', e.target.value)}
+                    disabled={constructionStarted}
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                      constructionStarted
+                        ? 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer'
+                    }`}
+                  >
+                    <option value="" disabled>— Please select —</option>
+                    <option value="Not yet procured">Not yet procured</option>
+                    <option value="Under procurement">Under procurement</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
               );
-            })}
-          </tbody>
-        </table>
-      </div>
+            })()}
+
+            {/* Construction Status - Conditional */}
+            {(p.statusDesignPhase === "Completed") && (
+              <div className="flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Construction Status</label>
+                <select
+                  value={p.status || ""}
+                  onChange={(e) => handleStatusChange(p, 'construction', e.target.value)}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
+                >
+                  <option value="" disabled>— Please select —</option>
+                  <option value="Not Yet Started">Not Yet Started</option>
+                  <option value="Ongoing">Ongoing</option>
+                  <option value="For Final Inspection">For Final Inspection</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Suspended">Suspended</option>
+                  <option value="Terminated">Terminated</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="p-6 mt-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => onEdit(p, 'quick')}
+                className="flex-1 py-2.5 bg-[#004A99] text-white text-[10px] font-black rounded-2xl shadow-lg shadow-blue-500/20 hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <LuActivity size={14} /> UPDATE
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onViewLog(p); }}
+                className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 text-[10px] font-black rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <LuClipboardList size={14} /> LOGS
+              </button>
+            </div>
+            <button
+               onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
+               className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 };
@@ -267,6 +306,59 @@ const EngineerProjects = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+
+  // --- Project Log State ---
+  const [logModalOpen, setLogModalOpen] = useState(false);
+  const [logProject, setLogProject] = useState(null);
+  const [projectHistory, setProjectHistory] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+
+  // --- Checkbox Reason Modal State (Bugs 4 & 5) ---
+  const [checkboxModal, setCheckboxModal] = useState({ 
+    open: false, type: null, project: null, newValue: null, options: [], title: '' 
+  });
+  const [selectedReasons, setSelectedReasons] = useState([]);
+
+  const REASON_OPTIONS = {
+    // Procurement Status Reasons
+    'Not yet procured': [
+      'Lacking Buildability Requirements: Incomplete Detailed Engineering Design (DED) or Program of Works (POW)',
+      'Site Ownership Issues: No Deed of Donation, missing Transfer Certificate of Title (TCT), or ongoing land disputes',
+      'Permitting Delays: Pending Environmental Compliance Certificate (ECC) or Building Permits from the LGU',
+      'Site Readiness: The location requires demolition of old structures or massive earth-filling before a contractor can bid',
+      'Budget Realignment: The initial allocation is insufficient for current material costs, requiring a request for additional funds',
+    ],
+    'Under procurement': [
+      'Pre-Procurement Conference: Finalizing the Bidding Documents',
+      'Advertisement/Posting: Published on PhilGEPS',
+      'Pre-Bid Conference: Clarifications with potential contractors',
+      'Submission and Receipt of Bids: The "Opening of Bids" stage',
+      'Bid Evaluation: Determining the Lowest Calculated Bid (LCB)',
+      'Post-Qualification: Validating the contractor\'s legal and technical capacity',
+      'Notice of Award (NOA): The project is officially assigned to a winner',
+      'Contract Signing & Notice to Proceed (NTP): Finalizing the legal start date',
+    ],
+    // Construction Status Reasons
+    'Not Yet Started': [
+      'Right-of-Way (ROW) Issues: Access to the school site is blocked by private property or informal settlers',
+      'Obstruction Removal: Existing utility lines (electric poles, water pipes) need relocation',
+      'Adverse Weather: Premature heavy rains or typhoons preventing mobilization',
+      'Contractor Mobilization Delay: Failure of the contractor to bring equipment or manpower to the site on time',
+      'Unavailability of Materials: Shortage of specific supplies in remote areas (e.g., Oriental Mindoro)',
+    ],
+    'Suspended': [
+      'Variation Order Pending: Changes in design require a budget/contract adjustment',
+      'Force Majeure: Natural disasters or unforeseen site conditions (e.g., discovering a sinkhole)',
+      'Peace and Order: Security threats in the immediate area',
+      'Non-Payment of Claims: Contractor stops work due to delayed progress billing payments',
+    ],
+    'Terminated': [
+      'Default by Contractor: Negative slippage (delay) exceeds 15% of the total project duration',
+      'Abandonment: The contractor has pulled out all staff and equipment without notice',
+      'Fundamental Design Flaw: The site is found to be geologically unsafe for the proposed structure',
+      'Convenience of the Government: Project is canceled due to a change in department priority or policy',
+    ],
+  };
 
   const API_BASE = "";
 
@@ -358,7 +450,12 @@ const EngineerProjects = () => {
               variationOrderPdf: item.variationOrderPdf,
               contractAmount: item.contractAmount,
               statusDesignPhase: item.statusDesignPhase,
-              fundingYear: item.fundingYear
+              fundingYear: item.fundingYear,
+              province: item.province,
+              region: item.region,
+              division: item.division,
+              municipality: item.municipality,
+              city: item.city
             }));
 
             // Update Cache on success
@@ -413,6 +510,116 @@ const EngineerProjects = () => {
     } catch (err) {
       console.error("Delete Error:", err);
       alert(`Error: ${err.message}`);
+    }
+  };
+
+  const openCheckboxModal = (project, type, newValue) => {
+    const options = REASON_OPTIONS[newValue] || [];
+    const titles = {
+      'Not yet procured': '🔴 Reason for Not Yet Procured',
+      'Under procurement': '📋 Current Procurement Stage',
+      'Not Yet Started': '⏸ Reason for Not Yet Started',
+      'Suspended': '⏸ Reason for Suspension',
+      'Terminated': '🚫 Reason for Termination',
+    };
+    setSelectedReasons([]);
+    setCheckboxModal({ open: true, type, project, newValue, options, title: titles[newValue] || 'Select Reason' });
+  };
+
+  const handleCheckboxConfirm = async () => {
+    const { type, project, newValue } = checkboxModal;
+    const remarks = selectedReasons.join('; ');
+    setCheckboxModal(c => ({ ...c, open: false }));
+    await applyStatusChange(project, type, newValue, remarks);
+  };
+
+  const applyStatusChange = async (project, type, newValue, remarks) => {
+    try {
+      const payload = { ...project };
+      if (type === 'procurement') {
+        payload.statusDesignPhase = newValue;
+      } else {
+        payload.status = newValue;
+        // Bug 3: Auto-set percentage for specific statuses
+        if (newValue === 'For Final Inspection' || newValue === 'Completed') {
+          payload.accomplishmentPercentage = 100;
+        }
+        // Terminated / Suspended: preserve last percentage — do NOT change it
+      }
+      payload.otherRemarks = remarks || project.otherRemarks;
+
+      // Optimistic Update
+      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, ...payload } : p));
+
+      const response = await fetch(`${API_BASE}/api/update-project/${project.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          uid: user?.uid,
+          modifiedBy: userName,
+          update_type: 'Status Quick Update'
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update status");
+      console.log(`Status (${type}) updated to: ${newValue}`);
+    } catch (err) {
+      console.error("Status Update Error:", err);
+      alert("Failed to update project status. Please try again.");
+      const original = projects.find(p => p.id === project.id);
+      if (original) setProjects(prev => prev.map(p => p.id === project.id ? original : p));
+    }
+  };
+
+  const handleStatusChange = async (project, type, newValue) => {
+    const needsCheckbox = Object.keys(REASON_OPTIONS).includes(newValue);
+
+    if (type === 'procurement') {
+      if (newValue === 'Not yet procured' || newValue === 'Under procurement') {
+        openCheckboxModal(project, type, newValue);
+        return;
+      }
+      // 'Completed' procurement — save directly
+      await applyStatusChange(project, type, newValue, '');
+      return;
+    }
+
+    // Construction statuses
+    if (needsCheckbox) {
+      openCheckboxModal(project, type, newValue);
+      return;
+    }
+
+    // 'Ongoing' — no reason needed, but Completed needs cert confirmation
+    if (newValue === 'Completed') {
+      const hasCert = window.confirm("Does this project have a Certificate of Completion?");
+      const remarks = hasCert ? "With Certificate of Completion" : "Without Certificate of Completion";
+      await applyStatusChange(project, type, newValue, remarks);
+      return;
+    }
+
+    // All other statuses (Ongoing, For Final Inspection) — save directly
+    await applyStatusChange(project, type, newValue, '');
+  };
+
+  const handleViewLog = async (project) => {
+    setLogProject(project);
+    setLogModalOpen(true);
+    setIsHistoryLoading(true);
+    setProjectHistory([]); // Clear previous
+    try {
+      const resp = await fetch(`${API_BASE}/api/project-history/${project.ipc || project.id}`);
+      if (resp.ok) {
+        const history = await resp.json();
+        setProjectHistory(history);
+      } else {
+        console.warn("Project history fetch failed.");
+      }
+    } catch (err) {
+      console.error("Log Fetch Error:", err);
+    } finally {
+      setIsHistoryLoading(false);
     }
   };
 
@@ -670,7 +877,7 @@ const EngineerProjects = () => {
                   Project Monitoring
                 </h1>
               </div>
-              {userRole !== 'Super User' && (
+              {/* {userRole !== 'Super User' && (
                 <button
                   onClick={() => navigate("/new-project")}
                   className="group bg-white text-[#004A99] px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
@@ -678,7 +885,7 @@ const EngineerProjects = () => {
                   <FiPlus size={16} className="group-hover:rotate-90 transition-transform" />
                   New Project
                 </button>
-              )}
+              )} */}
             </div>
 
             {/* --- GLASSMORPHISM SEARCH BAR --- */}
@@ -702,17 +909,17 @@ const EngineerProjects = () => {
         </div>
 
         {/* --- PROJECT LISTING --- */}
-        <div className="px-5 -mt-12 relative z-20">
-          <ProjectTable
+        <div className="px-5 mt-6 relative z-20">
+          <ProjectCards
             projects={filteredProjects}
             onEdit={handleEditProject}
             onDelete={handleDeleteProject}
             onView={handleViewProject}
+            onViewLog={handleViewLog}
             isLoading={isLoading}
             searchQuery={searchQuery}
             readOnly={userRole === 'Super User'}
-            uploadProgress={uploadProgress}
-            handlePdfUpload={handlePdfUpload}
+            handleStatusChange={handleStatusChange}
           />
 
           <div className="flex items-center justify-center gap-4 mt-4">
@@ -732,6 +939,90 @@ const EngineerProjects = () => {
         <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
         <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
 
+        {/* --- PROJECT LOG MODAL --- */}
+        {logModalOpen && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+              {/* Header */}
+              <div className="px-8 pt-8 pb-6 border-b border-slate-100 dark:border-slate-700">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white leading-tight">Project History</h2>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 truncate max-w-[280px]">
+                      {logProject?.projectName}
+                    </p>
+                  </div>
+                  <button onClick={() => setLogModalOpen(false)} className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-2xl text-slate-400 transition-colors">
+                    <FiX size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Timeline */}
+              <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+                {isHistoryLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                    <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fetching logs...</p>
+                  </div>
+                ) : projectHistory.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center">
+                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4 text-slate-300">
+                      <LuClipboardList size={32} />
+                    </div>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">No Transaction Records</p>
+                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">Original data entry only</p>
+                  </div>
+                ) : (
+                  <div className="relative space-y-8">
+                    {/* Vertical Line */}
+                    <div className="absolute left-[15px] top-4 bottom-4 w-[2px] bg-slate-100 dark:bg-slate-700"></div>
+                    
+                    {projectHistory.map((item, i) => (
+                      <div key={i} className="relative flex gap-6 animate-in slide-in-from-left-4 duration-500" style={{ animationDelay: `${i * 100}ms` }}>
+                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center z-10 shadow-sm border-4 border-white dark:border-slate-800 transition-all ${i === 0 ? 'bg-blue-600 text-white scale-110' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
+                          {i === 0 ? <LuActivity size={14} /> : <div className="w-1.5 h-1.5 bg-current rounded-full"></div>}
+                        </div>
+                        <div className="flex-1 pt-0.5">
+                          <div className="flex justify-between items-start mb-2">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                {formatDateShort(item.created_at || item.timestamp || item.status_as_of)}
+                             </p>
+                             {item.update_type && (
+                               <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-[8px] font-black text-blue-600 dark:text-blue-300 rounded-full border border-blue-100 dark:border-blue-800 uppercase tracking-tighter">
+                                 {item.update_type}
+                               </span>
+                             )}
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-700/50">
+                            <div className="flex justify-between items-center mb-2">
+                              <p className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">{item.engineerName || item.engineer_name}</p>
+                              <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">{item.accomplishmentPercentage || item.accomplishment_percentage}%</p>
+                            </div>
+                            <p className={`text-[10px] font-bold px-2 py-1 rounded-lg w-fit mb-3 border ${getStatusColor(item.status_design_phase || item.status || item.status_of_construction_phase)}`}>
+                              {item.status_design_phase || item.status || item.status_of_construction_phase}
+                            </p>
+                            {item.remarks && (
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed italic font-medium">"{item.remarks}"</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-8 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30">
+                <button onClick={() => setLogModalOpen(false)} className="w-full py-4 bg-slate-800 dark:bg-slate-700 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-xl hover:bg-slate-900 transition-all active:scale-95">
+                  Close Log
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <UpdateProjectWizard
           project={selectedProject}
           isOpen={editModalOpen}
@@ -748,6 +1039,55 @@ const EngineerProjects = () => {
             setExternalFiles(prevExternal);
           }}
         />
+
+        {/* --- CHECKBOX REASON MODAL (Bugs 4 & 5) --- */}
+        {checkboxModal.open && (
+           <div className="fixed inset-0 z-[20000] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+             <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-white/20">
+               <div className="px-8 pt-8 pb-4">
+                 <h3 className="text-xl font-black text-slate-800 dark:text-white mb-1 leading-tight">{checkboxModal.title}</h3>
+                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{checkboxModal.project?.projectName}</p>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto px-8 py-4 space-y-4 custom-scrollbar">
+                 {checkboxModal.options.map((opt, i) => (
+                   <label key={i} className={`flex gap-3 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${selectedReasons.includes(opt) ? 'bg-blue-50/50 border-blue-500/50 dark:bg-blue-900/20' : 'bg-slate-50 border-transparent dark:bg-slate-900/50 hover:border-slate-200'}`}>
+                     <div className="pt-0.5">
+                       <input 
+                         type="checkbox" 
+                         checked={selectedReasons.includes(opt)}
+                         onChange={(e) => {
+                           if (e.target.checked) setSelectedReasons([...selectedReasons, opt]);
+                           else setSelectedReasons(selectedReasons.filter(r => r !== opt));
+                         }}
+                         className="w-4 h-4 rounded-md border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                       />
+                     </div>
+                     <span className={`text-[11px] font-bold leading-snug transition-colors ${selectedReasons.includes(opt) ? 'text-blue-700 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                       {opt}
+                     </span>
+                   </label>
+                 ))}
+               </div>
+
+               <div className="p-8 space-y-3">
+                 <button 
+                   onClick={handleCheckboxConfirm}
+                   disabled={selectedReasons.length === 0}
+                   className="w-full py-4 bg-blue-600 dark:bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 hover:bg-blue-700 dark:hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                 >
+                   Confirm Selection
+                 </button>
+                 <button 
+                   onClick={() => setCheckboxModal({ ...checkboxModal, open: false })}
+                   className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                 >
+                   Cancel
+                 </button>
+               </div>
+             </div>
+           </div>
+        )}
 
         <BottomNav userRole={userRole} />
       </div>
