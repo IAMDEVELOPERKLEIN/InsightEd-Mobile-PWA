@@ -128,8 +128,8 @@ const ModularDashboard = () => {
             if (!schoolId) return;
 
             const drafts = {};
-            // Check Units 1-9
-            for (let i = 1; i <= 9; i++) {
+            // Check Units 1-8 (Unit 6 Teaching Personnel has been removed)
+            for (let i = 1; i <= 8; i++) {
                 try {
                     const draft = await getUnitDraft(i, schoolId);
                     if (draft) {

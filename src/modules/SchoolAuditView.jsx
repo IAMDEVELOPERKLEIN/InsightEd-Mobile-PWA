@@ -10,7 +10,6 @@ import Unit2Learners from '../components/modular/Unit2Learners';
 import Unit3OrganizedClasses from '../components/modular/Unit3OrganizedClasses';
 import Unit4LearnerProfile from '../components/modular/Unit4LearnerProfile';
 import Unit5ShiftingModality from '../components/modular/Unit5ShiftingModality';
-import TeachingPersonnel from '../components/modular/TeachingPersonnel'; // Unit 6
 import Unit7SchoolResources from '../components/modular/Unit7SchoolResources';
 import Unit8PhysicalFacilities from '../components/modular/Unit8PhysicalFacilities';
 import Unit9SchoolLocation from '../components/modular/Unit9SchoolLocation';
@@ -81,11 +80,10 @@ const SchoolAuditView = () => {
                         <TabButton active={activeTab === 'u3'} onClick={() => setActiveTab('u3')} icon={<FiLayers />} label="Classes (U3)" />
                         <TabButton active={activeTab === 'u4'} onClick={() => setActiveTab('u4')} icon={<FiActivity />} label="Learners (U4)" />
                         <TabButton active={activeTab === 'u5'} onClick={() => setActiveTab('u5')} icon={<TbReportAnalytics />} label="Modality (U5)" />
-                        <TabButton active={activeTab === 'u6'} onClick={() => setActiveTab('u6')} icon={<FiUser />} label="Personnel (U6)" />
-                        <TabButton active={activeTab === 'u7'} onClick={() => setActiveTab('u7')} icon={<FiBox />} label="Resources (U7)" />
-                        <TabButton active={activeTab === 'u8'} onClick={() => setActiveTab('u8')} icon={<FiServer />} label="Facilities (U8)" />
-                        <TabButton active={activeTab === 'u9'} onClick={() => setActiveTab('u9')} icon={<FiActivity />} label="Location (U9)" />
-                        <TabButton active={activeTab === 'u10'} onClick={() => setActiveTab('u10')} icon={<FiCheckCircle />} label="Verification (U10)" />
+                        <TabButton active={activeTab === 'u6'} onClick={() => setActiveTab('u6')} icon={<FiBox />} label="Resources (U6)" />
+                        <TabButton active={activeTab === 'u7'} onClick={() => setActiveTab('u7')} icon={<FiServer />} label="Facilities (U7)" />
+                        <TabButton active={activeTab === 'u8'} onClick={() => setActiveTab('u8')} icon={<FiActivity />} label="Location (U8)" />
+                        <TabButton active={activeTab === 'u9'} onClick={() => setActiveTab('u9')} icon={<FiCheckCircle />} label="Verification (U9)" />
                     </div>
                 </div>
             </div>
@@ -104,11 +102,10 @@ const SchoolAuditView = () => {
                     {activeTab === 'u3' && <Unit3OrganizedClasses targetSchoolId={schoolData.id} isReadOnly={true} />}
                     {activeTab === 'u4' && <Unit4LearnerProfile targetSchoolId={schoolData.id} isReadOnly={true} />}
                     {activeTab === 'u5' && <Unit5ShiftingModality targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u6' && <TeachingPersonnel targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u7' && <Unit7SchoolResources targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u8' && <Unit8PhysicalFacilities targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u9' && <Unit9SchoolLocation targetSchoolId={schoolData.id} isReadOnly={true} />}
-                    {activeTab === 'u10' && <Unit10Verification targetSchoolId={schoolData.id} />}
+                    {activeTab === 'u6' && <Unit7SchoolResources targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u7' && <Unit8PhysicalFacilities targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u8' && <Unit9SchoolLocation targetSchoolId={schoolData.id} isReadOnly={true} />}
+                    {activeTab === 'u9' && <Unit10Verification targetSchoolId={schoolData.id} />}
                 </div>
             </div>
         </div>

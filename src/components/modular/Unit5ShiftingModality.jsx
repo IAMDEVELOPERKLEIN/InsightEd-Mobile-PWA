@@ -61,6 +61,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [isCertified, setIsCertified] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [curricularOffering, setCurricularOffering] = useState("");
     const [showDraftModal, setShowDraftModal] = useState(false);
@@ -787,15 +788,18 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                     </div>
                                 </div>
 
-                                <button
+                                <motion.div
+                                    whileTap={{ scale: 0.98 }}
                                     onClick={() => setIsVerified(!isVerified)}
-                                    className={`w-full p-4 rounded-2xl flex items-center justify-center gap-3 border-2 transition-all ${isVerified ? "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold" : "bg-white border-gray-200 text-gray-500 font-medium"}`}
+                                    className={`w-full p-6 rounded-[2rem] flex items-start text-left gap-4 border-2 transition-all duration-300 cursor-pointer ${isVerified ? "bg-emerald-50 border-emerald-200 shadow-sm" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"}`}
                                 >
-                                    <div className={`w-6 h-6 rounded border flex items-center justify-center ${isVerified ? "bg-emerald-500 border-emerald-600" : "bg-white border-gray-300"}`}>
-                                        {isVerified && <FiCheck strokeWidth={4} className="text-white w-4 h-4" />}
+                                    <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex-shrink-0 flex items-center justify-center transition-all ${isVerified ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white border-slate-300"}`}>
+                                        {isVerified && <FiCheck strokeWidth={4} className="w-4 h-4" />}
                                     </div>
-                                    <span className="text-sm">I verify this setup is correct.</span>
-                                </button>
+                                    <p className={`text-xs font-bold leading-relaxed ${isVerified ? 'text-emerald-900' : 'text-slate-500 italic uppercase tracking-widest'}`}>
+                                        I hereby certify that all data and information provided in this module/unit is true and correct
+                                    </p>
+                                </motion.div>
                             </motion.div>
                         )}
 
@@ -851,14 +855,6 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 </div>
             )}
 
-            <SuccessModal 
-                isOpen={showSuccess} 
-                onClose={() => navigate("/modular-dashboard")} 
-                redirectUrl="/modular-dashboard"
-                title="Amazing!" 
-                message="You've successfully mapped out your Shifting and Modalities." 
-                buttonText="Back to Quest Board" 
-            />
             <AnimatePresence>
                 {showDraftModal && (
                     <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-end justify-center">
@@ -885,6 +881,12 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                     </div>
                 )}
             </AnimatePresence>
+            <SuccessModal 
+                isOpen={showSuccess} 
+                onClose={() => setShowSuccess(false)} 
+                message="You've successfully mapped out your Shifting and Modalities. Units synced!" 
+                redirectUrl="/modular-dashboard" 
+            />
         </div>
     );
 };

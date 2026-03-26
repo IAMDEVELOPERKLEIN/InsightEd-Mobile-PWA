@@ -65,10 +65,8 @@ import SchoolProfile from './forms/SchoolProfile';
 import SchoolInformation from './forms/SchoolInformation';
 import Enrolement from './forms/Enrolment';
 import OrganizedClasses from './forms/OrganizedClasses';
-import TeachingPersonnel from './forms/TeachingPersonnel';
 import ShiftingModalities from './forms/ShiftingModalities';
 import SchoolResources from './forms/SchoolResources';
-import TeacherSpecialization from './forms/TeacherSpecialization';
 import PhysicalFacilities from './forms/PhysicalFacilities';
 import LearnerStatistics from './forms/LearnerStatistics';
 
@@ -90,7 +88,6 @@ import Unit2Learners from './components/modular/Unit2Learners';
 import Unit3OrganizedClasses from './components/modular/Unit3OrganizedClasses';
 import Unit4LearnerProfile from './components/modular/Unit4LearnerProfile';
 import Unit5ShiftingModality from './components/modular/Unit5ShiftingModality';
-import TeachingPersonnelUnit from './components/modular/TeachingPersonnel';
 import Unit7SchoolResources from './components/modular/Unit7SchoolResources';
 import Unit8PhysicalFacilities from './components/modular/Unit8PhysicalFacilities';
 import Unit9SchoolLocation from './components/modular/Unit9SchoolLocation';
@@ -345,7 +342,7 @@ const AnimatedRoutes = () => {
           path="/modular/unit-6"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
-              <TeachingPersonnelUnit />
+              <Unit7SchoolResources />
             </ProtectedRoute>
           }
         />
@@ -353,20 +350,12 @@ const AnimatedRoutes = () => {
           path="/modular/unit-7"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
-              <Unit7SchoolResources />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/modular/unit-8"
-          element={
-            <ProtectedRoute allowedRoles={['School Head']}>
               <Unit8PhysicalFacilities />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/modular/unit-9"
+          path="/modular/unit-8"
           element={
             <ProtectedRoute allowedRoles={['School Head']}>
               <Unit9SchoolLocation />
@@ -390,11 +379,9 @@ const AnimatedRoutes = () => {
       <Route path="/school-information" element={<ProtectedRoute allowedRoles={['School Head']}><SchoolInformation /></ProtectedRoute>} />
       <Route path="/enrolment" element={<ProtectedRoute allowedRoles={['School Head']}><Enrolement /></ProtectedRoute>} />
       <Route path="/organized-classes" element={<ProtectedRoute allowedRoles={['School Head']}><OrganizedClasses /></ProtectedRoute>} />
-      <Route path="/teaching-personnel" element={<ProtectedRoute allowedRoles={['School Head']}><TeachingPersonnel /></ProtectedRoute>} />
-      <Route path="/school-resources" element={<ProtectedRoute allowedRoles={['School Head']}><SchoolResources /></ProtectedRoute>} />
-      <Route path="/physical-facilities" element={<ProtectedRoute allowedRoles={['School Head']}><PhysicalFacilities /></ProtectedRoute>} />
-      <Route path="/teacher-specialization" element={<ProtectedRoute allowedRoles={['School Head']}><TeacherSpecialization /></ProtectedRoute>} />
-      <Route path="/shifting-modalities" element={<ProtectedRoute allowedRoles={['School Head']}><ShiftingModalities /></ProtectedRoute>} />
+        <Route path="/shifting-modalities" element={<ProtectedRoute allowedRoles={['School Head']}><ShiftingModalities /></ProtectedRoute>} />
+        <Route path="/school-resources" element={<ProtectedRoute allowedRoles={['School Head']}><SchoolResources /></ProtectedRoute>} />
+        <Route path="/physical-facilities" element={<ProtectedRoute allowedRoles={['School Head']}><PhysicalFacilities /></ProtectedRoute>} />
       <Route path="/learner-statistics" element={<ProtectedRoute allowedRoles={['School Head']}><LearnerStatistics /></ProtectedRoute>} />
       <Route path="/project-validation" element={<ProtectedRoute allowedRoles={['School Head']}><ProjectValidation /></ProtectedRoute>} />
       <Route path="/leaderboard" element={<ProtectedRoute allowedRoles={['School Head']}><Leaderboard /></ProtectedRoute>} />

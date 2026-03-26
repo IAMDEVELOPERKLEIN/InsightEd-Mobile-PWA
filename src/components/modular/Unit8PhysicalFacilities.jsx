@@ -58,6 +58,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [isCertified, setIsCertified] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
     const [schoolData, setSchoolData] = useState(null);
     const [currentPage, setCurrentPage] = useState(1); // 1-5 Wizard Stages
@@ -602,7 +603,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         const reconstructedState = {};
         roomGroup.items.forEach(itm => {
             reconstructedState[itm.item] = {
-                made_of: itm.made_of || "",
+                oms: itm.oms || "",
                 condition: itm.condition,
                 damage_ratio: itm.damage_ratio || 0,
                 recommend_action: itm.recommend_action || "Routine Repair",
@@ -1846,8 +1847,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                                             <div className="flex gap-4">
                                                                 <div className="flex-1">
-                                                                    <label className="text-xs font-bold text-gray-500">Damage Ratio</label>
-                                                                    <input type="range" min="0" max="100" value={itemData.damage_ratio} onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
+                                                                    <label className="text-xs font-bold text-gray-500">Estimated Damage</label>
+                                                                    <input type="range" min="0" max="100" step="10" value={itemData.damage_ratio} onChange={(e) => handleUpdateRepairItem(category, 'damage_ratio', parseInt(e.target.value))}
                                                                         className="w-full mt-2 accent-amber-500 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                                                                     <div className="text-right text-xs font-black text-amber-600 mt-1">{itemData.damage_ratio}%</div>
                                                                 </div>
@@ -1856,7 +1857,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                             <div>
                                                                 <label className="text-[10px] font-bold text-gray-400 ml-1">REMARKS</label>
                                                                 <input type="text" value={itemData.remarks} onChange={(e) => handleUpdateRepairItem(category, 'remarks', e.target.value)}
-                                                                    className="w-full bg-white border-2 border-gray-100 mt-0.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 outline-none focus:border-amber-400" placeholder="Additional notes..." />
+                                                                    className="w-full bg-white border-2 border-gray-100 mt-0.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 outline-none focus:border-amber-400" />
                                                             </div>
                                                         </div>
                                                     )}

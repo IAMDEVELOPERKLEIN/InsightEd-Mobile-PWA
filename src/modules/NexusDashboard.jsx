@@ -110,13 +110,21 @@ const NodesDashboard = () => {
         {
             id: 'school-info',
             title: 'CLOUD',
-            subtitle: 'Forms & History',
+            subtitle: (
+                <span className="inline-flex items-baseline flex-wrap gap-x-0.5">
+                    <span className="text-[14px] text-slate-800 font-extrabold mr-[1px]">C</span>onsole for 
+                    <span className="text-[14px] text-slate-800 font-extrabold ml-1 mr-[1px]">L</span>earning and 
+                    <span className="text-[14px] text-slate-800 font-extrabold ml-1 mr-[1px]">O</span>peration in 
+                    <span className="text-[14px] text-slate-800 font-extrabold ml-1 mr-[1px]">U</span>nified 
+                    <span className="text-[14px] text-slate-800 font-extrabold ml-1 mr-[1px]">D</span>atabase
+                </span>
+            ),
             emoji: '🏛️',
             icon: <FiBookOpen className="w-8 h-8" />,
             color: 'from-blue-500 to-blue-700',
             textColor: 'text-blue-600',
             bgLight: 'bg-blue-50',
-            progress: calculateProgress([1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            progress: calculateProgress([1, 2, 3, 4, 5, 6, 7, 8]),
             route: '/my-activity',
             description: 'CLOUD will look into getting to know more about a school.',
             isLocked: dynamicLocks['school-info'] || false,
@@ -204,7 +212,7 @@ const NodesDashboard = () => {
                                 <div className="flex justify-between items-start mb-8">
                                     <div className="flex flex-col">
                                         <h4 className={`font-black leading-tight mb-1 ${isPrimary ? 'text-2xl' : 'text-xl'}`}>{mod.title}</h4>
-                                        <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>{mod.subtitle}</p>
+                                        <p className={`text-[12px] font-black uppercase tracking-[0.15em] leading-tight ${isPrimary ? 'text-blue-200' : 'text-slate-400'}`}>{mod.subtitle}</p>
                                     </div>
                                     {mod.isLocked ? (
                                         <div className={`p-2 rounded-xl ${isPrimary ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-400'}`}>

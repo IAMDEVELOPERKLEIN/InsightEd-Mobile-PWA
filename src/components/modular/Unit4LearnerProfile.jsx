@@ -73,6 +73,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
+    const [isCertified, setIsCertified] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [savedData, setSavedData] = useState(null);
     const [showDraftModal, setShowDraftModal] = useState(false);
@@ -1184,16 +1185,18 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
                                 </div>
 
-                                <motion.button
+                                <motion.div
                                     whileTap={{ scale: 0.98 }}
                                     onClick={() => setIsVerified(!isVerified)}
-                                    className={`w-full p-6 rounded-[2rem] flex items-center justify-center gap-4 border-4 transition-all duration-300 ${isVerified ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-xl shadow-emerald-100" : "bg-white border-slate-100 text-slate-400"}`}
+                                    className={`w-full p-6 rounded-[2rem] flex items-start text-left gap-4 border-2 transition-all duration-300 cursor-pointer ${isVerified ? "bg-emerald-50 border-emerald-200 shadow-sm" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"}`}
                                 >
-                                    <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all ${isVerified ? "bg-emerald-500 border-emerald-600 shadow-md" : "bg-white border-slate-200"}`}>
-                                        {isVerified && <FiCheck strokeWidth={4} className="text-white w-5 h-5" />}
+                                    <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex-shrink-0 flex items-center justify-center transition-all ${isVerified ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white border-slate-300"}`}>
+                                        {isVerified && <FiCheck strokeWidth={4} className="w-4 h-4" />}
                                     </div>
-                                    <span className="font-black text-sm uppercase tracking-widest">I verify this data is correct</span>
-                                </motion.button>
+                                    <p className={`text-xs font-bold leading-relaxed ${isVerified ? 'text-emerald-900' : 'text-slate-500 italic uppercase tracking-widest'}`}>
+                                        I hereby certify that all data and information provided in this module/unit is true and correct
+                                    </p>
+                                </motion.div>
 
                             </motion.div>
                         )}

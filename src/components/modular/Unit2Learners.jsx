@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft } from 'react-icons/fi';
+import { FiArrowRight, FiCheckCircle, FiChevronLeft, FiAlertTriangle, FiUnlock, FiSave, FiArrowLeft, FiCheck } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import SuccessModal from '../SuccessModal';
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from '../../db';
@@ -43,6 +43,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [isReviewMode, setIsReviewMode] = useState(false); 
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [isCertified, setIsCertified] = useState(false);
 
     // Final read-only determination: prop takes precedence
     const effectiveReadOnly = propReadOnly || isReadOnly;
@@ -82,8 +83,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [aralReading, setAralReading] = useState({});
     const [aralScience, setAralScience] = useState({});
 
-    // Step 4: Global Gender
-    const [genderTotals, setGenderTotals] = useState({ male: "", female: "" });
+    // Step 4: Gender Breakdown (Per-grade logic)
+    const [gradeGenderMap, setGradeGenderMap] = useState({}); // { [gradeId]: { male: "0", female: "0" } }
 
     // --- Derived State ---
     const lockedGrades = useMemo(() => {
@@ -102,9 +103,13 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         let sum = (parseInt(kinderEnrollment) || 0);
         // Monograde totals
         activeMonogrades.forEach(g => sum += (parseInt(gradeTotals[g.id]) || 0));
-        // Multigrade combinations
+        // Multigrade combinations - count individual grades since we moved to per-grade gender inputs
         mgCombinations.forEach(c => {
-            c.grades.forEach(lvl => sum += (parseInt(gradeTotals[lvl]) || 0));
+            c.grades.forEach(lvl => {
+                const m = parseInt(gradeGenderMap[lvl]?.male) || 0;
+                const f = parseInt(gradeGenderMap[lvl]?.female) || 0;
+                sum += (m + f);
+            });
         });
         // SNED
         if (hasSNED) {
@@ -112,11 +117,38 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         }
 
         return sum;
-    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSNED, snedTotalCount, gradeAvailability]);
+    }, [kinderEnrollment, gradeTotals, activeMonogrades, mgCombinations, hasSNED, snedTotalCount, gradeGenderMap]);
 
     const genderSum = useMemo(() => {
-        return (parseInt(genderTotals.male) || 0) + (parseInt(genderTotals.female) || 0);
-    }, [genderTotals]);
+        // We sum up the final mapping that will actually be saved
+        let s = 0;
+        
+        // Kinder
+        if (gradeAvailability.kinder !== false) {
+            s += (parseInt(gradeGenderMap['kinder']?.male) || 0) + (parseInt(gradeGenderMap['kinder']?.female) || 0);
+        }
+        
+        // Monogrades
+        activeMonogrades.forEach(g => {
+            if (gradeAvailability[g.id] !== false) {
+                s += (parseInt(gradeGenderMap[g.id]?.male) || 0) + (parseInt(gradeGenderMap[g.id]?.female) || 0);
+            }
+        });
+        
+        // Multigrades
+        mgCombinations.forEach(c => {
+            c.grades.forEach(lvl => {
+                s += (parseInt(gradeGenderMap[lvl]?.male) || 0) + (parseInt(gradeGenderMap[lvl]?.female) || 0);
+            });
+        });
+        
+        // SNED
+        if (hasSNED) {
+            s += (parseInt(gradeGenderMap['sned']?.male) || 0) + (parseInt(gradeGenderMap['sned']?.female) || 0);
+        }
+        
+        return s;
+    }, [gradeGenderMap, gradeAvailability, activeMonogrades, mgCombinations, hasSNED]);
 
     const gradeCapacities = useMemo(() => {
         const caps = {};
@@ -185,7 +217,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             setAralReading(draft2.aralReading || {});
                             setHasAralScience(draft2.hasAralScience);
                             setAralScience(draft2.aralScience || {});
-                            setGenderTotals(draft2.genderTotals || { male: "", female: "" });
+                            setGradeGenderMap(draft2.gradeGenderMap || {});
                             setCurrentStep(draft2.step || 1);
                             setCurrentGradeIndex(draft2.currentGradeIndex || 0);
                             
@@ -284,7 +316,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                         setAralReading(q.aralReading || {});
                                         setHasAralScience(q.hasAralScience);
                                         setAralScience(q.aralScience || {});
-                                        setGenderTotals(q.genderTotals || { male: "", female: "" });
+                                        setGradeGenderMap(q.gradeGenderMap || {});
                                         if (q.orgType) setOrgType(q.orgType);
                                         if (q.mgCombinations) setMgCombinations(q.mgCombinations);
                                     }
@@ -350,23 +382,35 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: sanitized }));
     };
 
-    const handleGenderChange = (field, val) => {
-        const sanitized = sanitizeNumeric(val, 6); // Allow up to 6 digits for gender if needed
-        const numVal = parseInt(sanitized) || 0;
-        const cappedVal = Math.min(numVal, grandTotal);
-        const otherVal = Math.max(0, grandTotal - cappedVal);
+    const handleGradeGenderChange = (gradeId, enrollment, malVal) => {
+        const total = parseInt(enrollment) || 0;
+        const male = Math.min(parseInt(sanitizeNumeric(malVal, 6)) || 0, total);
+        const female = Math.max(0, total - male);
+        setGradeGenderMap(prev => ({
+            ...prev,
+            [gradeId]: { 
+                male: male.toString(), 
+                female: female.toString() 
+            }
+        }));
+    };
 
-        if (field === 'male') {
-            setGenderTotals({
-                male: sanitized === "" ? "" : cappedVal.toString(),
-                female: sanitized === "" ? "" : otherVal.toString()
-            });
-        } else {
-            setGenderTotals({
-                male: sanitized === "" ? "" : otherVal.toString(),
-                female: sanitized === "" ? "" : cappedVal.toString()
-            });
-        }
+    const handleFemaleGenderChange = (gradeId, enrollment, femVal) => {
+        const total = parseInt(enrollment) || 0;
+        const female = Math.min(parseInt(sanitizeNumeric(femVal, 6)) || 0, total);
+        const male = Math.max(0, total - female);
+        setGradeGenderMap(prev => ({
+            ...prev,
+            [gradeId]: { 
+                male: male.toString(),
+                female: female.toString() 
+            }
+        }));
+    };
+
+    const handleGenderChange = (field, val) => {
+        // Legacy support if needed, but we should move to per-grade.
+        // For now, let's keep it minimal or ignore.
     };
 
     const handleNext = () => {
@@ -516,7 +560,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             hasAralMath, aralMath,
             hasAralReading, aralReading,
             hasAralScience, aralScience,
-            genderTotals,
+            gradeGenderMap,
             step: currentStep,
             currentGradeIndex
         };
@@ -545,37 +589,43 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 hasAralMath, aralMath: hasAralMath ? aralMath : {},
                 hasAralReading, aralReading: hasAralReading ? aralReading : {},
                 hasAralScience, aralScience: hasAralScience ? aralScience : {},
-                genderTotals,
+                gradeGenderMap, // New per-grade map
                 grandTotal
             };
 
-            // Backwards compatibility for Unit 3 and Unit 9: Construct the downstream grades array
+            // Backwards compatibility & Database Mapping
             const monogrades = activeMonogrades.map(g => {
                 const totalActive = gradeAvailability[g.id] !== false;
                 const count = parseInt(gradeTotals[g.id]) || 0;
+                const gender = gradeGenderMap[g.id] || { male: 0, female: 0 };
                 return {
                     grade_level: g.id,
                     is_active: totalActive,
                     total: totalActive ? count : 0,
-                    male: 0, female: 0
+                    male: parseInt(gender.male) || 0,
+                    female: parseInt(gender.female) || 0
                 };
             });
 
-            // For Multigrade combinations, map the individual inputs directly down to the database columns
             const mgGrades = mgCombinations.flatMap(c => {
-                return c.grades.map((id) => ({
-                    grade_level: id,
-                    is_active: true,
-                    total: parseInt(gradeTotals[id]) || 0,
-                    male: 0, female: 0
-                }));
+                return c.grades.map((id) => {
+                    const gender = gradeGenderMap[id] || { male: 0, female: 0 };
+                    return {
+                        grade_level: id,
+                        is_active: true,
+                        total: (parseInt(gender.male) || 0) + (parseInt(gender.female) || 0),
+                        male: parseInt(gender.male) || 0,
+                        female: parseInt(gender.female) || 0
+                    };
+                });
             });
 
             const kinderGrade = hasKinder ? [{
                 grade_level: 'kinder',
                 is_active: gradeAvailability.kinder !== false,
                 total: (gradeAvailability.kinder !== false) ? (parseInt(kinderEnrollment) || 0) : 0,
-                male: 0, female: 0
+                male: parseInt(gradeGenderMap['kinder']?.male) || 0,
+                female: parseInt(gradeGenderMap['kinder']?.female) || 0
             }] : [];
 
             const downstreamGrades = [...kinderGrade, ...monogrades, ...mgGrades];
@@ -585,13 +635,11 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 questionnaire: questionnaire 
             };
 
-            // Calculate the 3 multigrade string slots for DB fixed-column parity
             const buildMgString = (gradesArray) => {
                 if (!gradesArray || gradesArray.length === 0) return null;
-                const labels = gradesArray.map(gId => gId.replace('g', '')); // 'g1' -> '1'
+                const labels = gradesArray.map(gId => gId.replace('g', ''));
                 if (labels.length === 1) return `Grade ${labels[0]}`;
                 if (labels.length === 2) return `Grade ${labels[0]} & ${labels[1]}`;
-                
                 const last = labels.pop();
                 return `Grade ${labels.join(', ')} & ${last}`;
             };
@@ -618,19 +666,18 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     multigrade_groupings_3: mg_3,
                     multigrade_enrollment_1: mg_1_enrollment,
                     multigrade_enrollment_2: mg_2_enrollment,
-                    multigrade_enrollment_3: mg_3_enrollment
+                    multigrade_enrollment_3: mg_3_enrollment,
+                    gradeGenderMap // Send the full map for column-level extraction
                 })
             });
 
             if (res.ok) {
-                // Sync progress to cloud for Activity Dashboard (fire-and-forget)
                 fetch(`/api/user/progress`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ unitId: 2, schoolId: storedId })
                 }).catch(e => console.warn("Activity sync failed:", e));
 
-                // Update localStorage so ModularDashboard immediately reflects completion
                 const stored = localStorage.getItem('quest_progress');
                 let progress = stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
                 if (!progress.completedUnits.includes(2)) {
@@ -644,7 +691,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 setShowSuccess(true);
                 await clearUnitDraft(2, storedId);
             } else {
-                alert("Failed to save enrollment. Please try again.");
+                alert("Failed to save enrollment.");
             }
         } catch (e) {
             console.error(e);
@@ -668,15 +715,23 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
     // --- Internal Summary Component ---
     const Unit2Summary = () => {
-        const maleVal = parseInt(genderTotals.male) || 0;
-        const femaleVal = parseInt(genderTotals.female) || 0;
-        const malePercent = grandTotal > 0 ? Math.round((maleVal / grandTotal) * 100) : 0;
-        const femalePercent = grandTotal > 0 ? Math.round((femaleVal / grandTotal) * 100) : 0;
-        
+        const maleTotal = Object.values(gradeGenderMap).reduce((s, g) => s + (parseInt(g.male) || 0), 0);
+        const femaleTotal = Object.values(gradeGenderMap).reduce((s, g) => s + (parseInt(g.female) || 0), 0);
+
         return (
-            <div className="max-w-md mx-auto pb-32 mt-4 space-y-8">
-                {/* Header */}
-                <div className="text-center mb-10">
+            <div className="max-w-md mx-auto pb-32 mt-4 space-y-8 px-2">
+                {/* Header Section */}
+                <div className="relative text-center mb-10">
+                    {/* Floating Back Button for Read Mode */}
+                    <div className="absolute left-0 top-0">
+                        <button 
+                            onClick={() => navigate("/modular-dashboard")}
+                            className="p-3 rounded-2xl bg-slate-50 text-slate-400 hover:text-slate-900 transition-colors border border-slate-100 shadow-sm"
+                        >
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
+                    </div>
+
                     <motion.div 
                         initial={{ scale: 0 }} 
                         animate={{ scale: 1 }} 
@@ -685,210 +740,169 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         <span className="text-4xl text-white">👥</span>
                     </motion.div>
                     <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-[0.2em] mb-3 shadow-sm border border-indigo-100">
-                        Unit 2 • Learner Demographics
+                        Unit 2 • Learner Profile Summary
                     </span>
-                    <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight px-4">Enrollment Registry</h1>
-                    <p className="text-slate-500 font-medium mt-2 italic px-4">"Total enrollment verified and synced with ESF7 Registry"</p>
+                    <h1 className="text-3xl font-black text-slate-800 leading-tight tracking-tight">Enrollment Overview</h1>
+                    <p className="text-slate-500 font-medium mt-2 italic">Verified via ESF7 Parity Registry</p>
                 </div>
 
-                {/* Primary Metric Card */}
-                <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-100 relative overflow-hidden group border border-white/5">
-                    <div className="absolute top-0 right-0 p-8 text-8xl opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-700">📚</div>
-                    <div className="relative z-10">
-                        <p className="text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Total Combined Enrollment</p>
-                        <div className="flex items-baseline gap-2">
-                            <h2 className="text-6xl font-black leading-none tracking-tighter">{grandTotal}</h2>
-                            <span className="text-indigo-400 font-bold text-lg uppercase tracking-widest">Learners</span>
-                        </div>
-                        <div className="mt-8 flex items-center gap-4 p-4 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                            <div className="flex-1">
-                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-2 text-indigo-200">
-                                    <span>Gender Split</span>
-                                    <span>{malePercent}% M / {femalePercent}% F</span>
-                                </div>
-                                <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden flex">
-                                    <div style={{ width: `${malePercent}%` }} className="h-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]" />
-                                    <div style={{ width: `${femalePercent}%` }} className="h-full bg-rose-400 shadow-[0_0_10px_rgba(244,114,182,0.5)]" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Gender Breakdown Blocks */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-blue-50 border border-blue-100/50 rounded-3xl p-6 flex flex-col items-center text-center shadow-sm">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-500 flex items-center justify-center mb-3 shadow-lg shadow-blue-200 text-2xl text-white">👦</div>
-                        <span className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Male Total</span>
-                        <span className="text-3xl font-black text-blue-700 mt-1">{maleVal}</span>
-                    </div>
-                    <div className="bg-rose-50 border border-rose-100/50 rounded-3xl p-6 flex flex-col items-center text-center shadow-sm">
-                        <div className="w-12 h-12 rounded-2xl bg-rose-500 flex items-center justify-center mb-3 shadow-lg shadow-rose-200 text-2xl text-white">👧</div>
-                        <span className="text-[10px] font-black uppercase text-rose-400 tracking-widest">Female Total</span>
-                        <span className="text-3xl font-black text-rose-700 mt-1">{femaleVal}</span>
-                    </div>
-                </div>
-
-                {/* Special Groups: SNED & ARAL */}
-                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm space-y-8">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Specialized Programs</h3>
+                {/* Grand Total Hero Card */}
+                <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-xl shadow-slate-200 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-8 text-7xl opacity-10 grayscale group-hover:grayscale-0 transition-all duration-700">📊</div>
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="w-1.5 h-6 bg-blue-400 rounded-full" />
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Grand Enrollment Stats</h3>
                     </div>
                     
-                    {/* SNED Block */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Special Learners (SNED)</span>
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${hasSNED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
-                                {hasSNED ? "Active" : "None"}
-                            </span>
+                    <div className="flex items-end gap-3 mb-8">
+                        <span className="text-6xl font-black leading-none tracking-tighter">{grandTotal}</span>
+                        <span className="text-blue-400 font-black uppercase tracking-widest text-xs mb-2">Total Learners</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6 pt-6 border-t border-white/10">
+                        <div>
+                            <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest block mb-1">👦 Male</span>
+                            <p className="text-2xl font-black text-blue-400">{maleTotal}</p>
                         </div>
-                        {hasSNED && (
-                            <div className="space-y-3">
-                                <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between">
+                        <div className="border-l border-white/10 pl-6">
+                            <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest block mb-1">👧 Female</span>
+                            <p className="text-2xl font-black text-rose-400">{femaleTotal}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Detailed Demographics by Program */}
+                <section className="space-y-6">
+                    <div className="flex items-center gap-2 mb-2 ml-2">
+                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em]">Grade-Level Registry</h3>
+                    </div>
+
+                    {/* Kinder Card */}
+                    <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-colors">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-xl shadow-inner group-hover:bg-indigo-100 transition-colors">🎈</div>
+                            <div>
+                                <h4 className="font-black text-slate-700">Kindergarten</h4>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Early Childhood</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-4 text-right">
+                            {gradeAvailability.kinder === false ? (
+                                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full">Disabled</span>
+                            ) : (
+                                <>
                                     <div>
-                                        <p className="text-2xl font-black text-emerald-900 leading-none">{snedTotalCount}</p>
-                                        <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">Total Learners</p>
+                                        <p className="text-[10px] font-black text-blue-400">M</p>
+                                        <p className="font-black text-slate-800">{gradeGenderMap['kinder']?.male || 0}</p>
                                     </div>
-                                    <div className="text-3xl">🧩</div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Program Type</p>
-                                        <p className="font-black text-slate-700 text-xs">{snedProgramType}</p>
+                                    <div>
+                                        <p className="text-[10px] font-black text-rose-400">F</p>
+                                        <p className="font-black text-slate-800">{gradeGenderMap['kinder']?.female || 0}</p>
                                     </div>
-                                    {snedProgramType === 'Self-Contained' && (
-                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Organized Class</p>
-                                            <p className="font-black text-emerald-700 text-sm">{snedOrganizedClassCount}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ARAL Participation */}
-                    <div className="space-y-4 pt-4 border-t border-slate-50">
-                        <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest block mb-4">ARAL Program Participation</span>
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className={`p-4 rounded-2xl border text-center ${hasAralMath ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
-                                <p className="text-[9px] font-black uppercase text-indigo-400 mb-2">Math</p>
-                                <p className={`text-xl font-black ${hasAralMath ? 'text-indigo-900' : 'text-slate-300'}`}>
-                                    {hasAralMath ? Object.values(aralMath).reduce((s, v) => s + (parseInt(v) || 0), 0) : 0}
-                                </p>
-                            </div>
-                            <div className={`p-4 rounded-2xl border text-center ${hasAralReading ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
-                                <p className="text-[9px] font-black uppercase text-indigo-400 mb-2">Reading</p>
-                                <p className={`text-xl font-black ${hasAralReading ? 'text-indigo-900' : 'text-slate-300'}`}>
-                                    {hasAralReading ? Object.values(aralReading).reduce((s, v) => s + (parseInt(v) || 0), 0) : 0}
-                                </p>
-                            </div>
-                            <div className={`p-4 rounded-2xl border text-center ${hasAralScience ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
-                                <p className="text-[9px] font-black uppercase text-indigo-400 mb-2">Science</p>
-                                <p className={`text-xl font-black ${hasAralScience ? 'text-indigo-900' : 'text-slate-300'}`}>
-                                    {hasAralScience ? Object.values(aralScience).reduce((s, v) => s + (parseInt(v) || 0), 0) : 0}
-                                </p>
-                            </div>
+                                </>
+                            )}
                         </div>
                     </div>
+
+                    {/* Multigrade Sections */}
+                    {mgCombinations.map(c => (
+                        <div key={`sum-mg-${c.id}`} className="bg-indigo-50/30 rounded-[2.5rem] p-1 border-2 border-indigo-100/50 overflow-hidden">
+                            <div className="px-6 py-4 flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">Multigrade Combo</span>
+                                <span className="text-xs font-black text-indigo-900 bg-white px-3 py-1 rounded-full shadow-sm border border-indigo-100">
+                                    {c.grades.map(g => g.replace('g','')).join('-')}
+                                </span>
+                            </div>
+                            <div className="bg-white rounded-[2rem] p-4 space-y-3">
+                                {c.grades.map(lvl => (
+                                    <div key={`lvl-${lvl}`} className="flex justify-between items-center px-4 py-2 border-b border-slate-50 last:border-0">
+                                        <span className="font-bold text-slate-600 text-sm">{ALL_GRADES.find(x => x.id === lvl)?.label || lvl}</span>
+                                        {gradeAvailability[lvl] === false ? (
+                                            <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Disabled</span>
+                                        ) : (
+                                            <div className="flex gap-4">
+                                                <span className="font-black text-blue-600 text-sm">{gradeGenderMap[lvl]?.male || 0}</span>
+                                                <span className="font-black text-rose-600 text-sm">{gradeGenderMap[lvl]?.female || 0}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                <div className="pt-2 flex justify-between items-center px-4">
+                                    <span className="text-[10px] font-black text-indigo-400 uppercase italic">Subtotal</span>
+                                    <div className="flex gap-4">
+                                        <span className="font-black text-slate-900">{c.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.male) || 0), 0)}</span>
+                                        <span className="font-black text-slate-900">{c.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.female) || 0), 0)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* Monograde Cards */}
+                    {activeMonogrades.map(g => (
+                        <div key={`sum-${g.id}`} className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-slate-200 transition-colors">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-xl shadow-inner group-hover:bg-slate-100 transition-colors">📚</div>
+                                <div>
+                                    <h4 className="font-black text-slate-700">{g.label}</h4>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Monograde</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-4 text-right">
+                                {gradeAvailability[g.id] === false ? (
+                                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full">Disabled</span>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <p className="text-[10px] font-black text-blue-400">M</p>
+                                            <p className="font-black text-slate-800">{gradeGenderMap[g.id]?.male || 0}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-rose-400">F</p>
+                                            <p className="font-black text-slate-800">{gradeGenderMap[g.id]?.female || 0}</p>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* SNED Card */}
+                    {hasSNED && (
+                        <div className="bg-amber-50 rounded-[2.5rem] p-1 border-2 border-amber-100 shadow-sm overflow-hidden">
+                            <div className="bg-white rounded-[2.2rem] p-6">
+                                <div className="flex items-center gap-4 mb-6">
+                                    <div className="w-14 h-14 rounded-[1.5rem] bg-amber-100 flex items-center justify-center text-2xl shadow-inner">🌟</div>
+                                    <div>
+                                        <h4 className="font-black text-slate-800">Special Education (SNED)</h4>
+                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{snedProgramType || "Organized Class"}</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Male</span>
+                                        <span className="text-xl font-black text-blue-600">{gradeGenderMap['sned']?.male || 0}</span>
+                                    </div>
+                                    <div className="bg-slate-50 rounded-2xl p-4 flex justify-between items-center">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Female</span>
+                                        <span className="text-xl font-black text-rose-600">{gradeGenderMap['sned']?.female || 0}</span>
+                                    </div>
+                                </div>
+                                <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center px-2">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Organized Classes</span>
+                                    <span className="font-black text-slate-800">{snedOrganizedClassCount || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </section>
 
-                {/* Multigrade Joinings */}
-                {mgCombinations.length > 0 && (
-                    <section className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2 ml-2">
-                            <div className="w-1.5 h-6 bg-rose-500 rounded-full" />
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Multigrade Joinings</h3>
-                        </div>
-                        <div className="grid gap-4">
-                            {mgCombinations.map((c) => {
-                                const labels = c.grades.map(g => g.replace('g', ''));
-                                let labelStr = "";
-                                if (labels.length === 1) labelStr = `Grade ${labels[0]}`;
-                                else if (labels.length === 2) labelStr = `Grade ${labels[0]} & ${labels[1]}`;
-                                else if (labels.length > 2) {
-                                    const last = labels.pop();
-                                    labelStr = `Grade ${labels.join(', ')} & ${last}`;
-                                }
-                                
-                                const totalJoined = c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0);
-                                return (
-                                    <div key={c.id} className="bg-white rounded-[2rem] p-6 border border-rose-100 shadow-sm relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-full blur-2xl opacity-50" />
-                                        <div className="relative z-10 flex items-center justify-between">
-                                            <div className="flex-1">
-                                                <h4 className="text-xl font-black text-rose-900 tracking-tight">{labelStr}</h4>
-                                                <div className="flex flex-wrap gap-2 mt-2">
-                                                    {c.grades.map(gId => (
-                                                        <span key={gId} className="text-[9px] bg-slate-50 text-slate-500 border border-slate-100 px-2 py-1 rounded-lg font-black uppercase">
-                                                            G{gId.replace('g','')}: {parseInt(gradeTotals[gId]) || 0}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            <div className="text-right ml-4">
-                                                <p className="text-[9px] font-black text-rose-400 uppercase mb-1">Total Joined</p>
-                                                <div className="bg-rose-600 text-white px-5 py-2 rounded-2xl font-black text-xl shadow-lg border border-rose-700">
-                                                    {totalJoined}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </section>
-                )}
-
-                {/* Grade Breakdown */}
-                <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-2 mb-6">
-                        <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Monograde Stats</h3>
-                    </div>
-                    <div className="grid gap-3">
-                        {availableGrades.map((g) => {
-                            const count = g.id === 'kinder' ? (parseInt(kinderEnrollment) || 0) : (parseInt(gradeTotals[g.id]) || 0);
-                            const isInactive = gradeAvailability[g.id] === false;
-                            const isMG = lockedGrades.has(g.id);
-                            
-                            if (isMG) return null; // Skip if handled in MG section above
-                            if (count === 0 && isInactive) return null; // Skip if inactive AND zero
-
-                            return (
-                                <div key={g.id} className="flex items-center justify-between p-4 bg-slate-50rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-colors">
-                                    <div className="flex flex-col">
-                                        <span className="font-black text-slate-700 text-lg tracking-tight group-hover:text-indigo-600 transition-colors leading-none">{g.label}</span>
-                                        <span className="text-[9px] text-indigo-400 font-black uppercase mt-1 tracking-widest">{isInactive ? "Not Offered" : "Standard Class"}</span>
-                                    </div>
-                                    <div className="bg-white px-5 py-2 rounded-xl border border-slate-200 shadow-sm">
-                                        <span className="font-black text-indigo-700 text-xl">{count}</span>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </section>
-
-                {/* Unlock Action */}
                 {!propReadOnly && isReadOnly && (
-                    <div className="fixed bottom-0 left-0 w-full p-6 pb-20 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-[60]">
-                        <div className="w-full max-w-sm flex gap-3">
-                            <button
-                                onClick={() => {
-                                    setIsReadOnly(false);
-                                    if (orgType === 'pure_mg' || orgType === 'mixed') {
-                                        setCurrentStep(3);
-                                    }
-                                }}
-                                className="flex-1 py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl shadow-indigo-100/50 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
-                            >
-                                <FiUnlock className="w-6 h-6" />
-                                <span>Unlock to Audit</span>
-                            </button>
-                        </div>
+                    <div className="fixed bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-[60]">
+                        <button onClick={() => setIsReadOnly(false)} className="w-full max-w-sm py-5 rounded-[2rem] bg-indigo-600 text-white font-black text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform">
+                            <FiUnlock className="w-6 h-6" /> Unlock to Audit
+                        </button>
                     </div>
                 )}
             </div>
@@ -901,19 +915,22 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const canContinue = (() => {
         if (currentStep === 1) {
             const isAvailable = gradeAvailability.kinder !== false;
-            return !isAvailable || (kinderEnrollment && parseInt(kinderEnrollment) > 0);
+            const hasEnrollment = !isAvailable || (kinderEnrollment && parseInt(kinderEnrollment) > 0);
+            const hasGender = !isAvailable || (gradeGenderMap['kinder']?.male !== undefined && gradeGenderMap['kinder']?.male !== "");
+            return hasEnrollment && hasGender;
         }
         if (currentStep === 2) return !!orgType;
         if (currentStep === 3) {
-            const hasValidCombos = mgCombinations.length > 0 && mgCombinations.every(c => 
-                c.grades.length > 0 && 
-                c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0) > 0
-            );
+            const hasValidCombos = mgCombinations.length > 0 && mgCombinations.every(c => {
+                const total = c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0);
+                const hasTotal = total > 0;
+                const hasGender = gradeGenderMap[c.id]?.male !== undefined && gradeGenderMap[c.id]?.male !== "";
+                return c.grades.length > 0 && hasTotal && hasGender;
+            });
 
             if (!hasValidCombos) return false;
 
             if (orgType === 'pure_mg') {
-                // Ensure all offered elementary grades that are NOT disabled are included in some combination
                 const assignedGrades = new Set(mgCombinations.flatMap(c => c.grades));
                 const offeredElemGrades = availableGrades
                     .filter(g => g.type === 'elem' && g.id !== 'kinder' && gradeAvailability[g.id] !== false)
@@ -927,7 +944,9 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             const g = activeMonogrades[currentGradeIndex];
             if (!g) return true;
             const isAvailable = gradeAvailability[g.id] !== false;
-            return !isAvailable || (gradeTotals[g.id] && parseInt(gradeTotals[g.id]) > 0);
+            const hasEnrollment = !isAvailable || (gradeTotals[g.id] && parseInt(gradeTotals[g.id]) > 0);
+            const hasGender = !isAvailable || (gradeGenderMap[g.id]?.male !== undefined && gradeGenderMap[g.id]?.male !== "");
+            return hasEnrollment && hasGender;
         }
         if (currentStep === 5) {
             if (hasSNED === false) return true;
@@ -935,7 +954,8 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 if (!snedTotalCount) return false;
                 if (!snedProgramType) return false;
                 if (snedProgramType === 'Self-Contained' && !snedOrganizedClassCount) return false;
-                return true;
+                const hasGender = gradeGenderMap['sned']?.male !== undefined && gradeGenderMap['sned']?.male !== "";
+                return hasGender;
             }
             return false;
         }
@@ -945,7 +965,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 !(hasAralReading === true && (Object.values(aralReading).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralReading[lvl]) || 0) > (gradeCapacities[lvl] || 0)))) &&
                 !(hasAralScience === true && (Object.values(aralScience).reduce((sum, val) => sum + (parseInt(val) || 0), 0) === 0 || ELEM_GRADES.some(lvl => (parseInt(aralScience[lvl]) || 0) > (gradeCapacities[lvl] || 0))));
         }
-        if (currentStep === 7) return isMathPerfect;
+        if (currentStep === 7) return true; // Step 7 is now a summary/confirmation table
         return true;
     })();
 
@@ -1046,9 +1066,34 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                     setKinderEnrollment(sanitizeNumeric(e.target.value));
                                                 }}
                                                 placeholder="0"
-                                                className={`${chunkyInput} ${!isAvailable ? 'bg-slate-50 border-slate-100 text-slate-300' : ''}`}
                                                 autoFocus={isAvailable}
+                                                className={chunkyInput + " !text-5xl text-center border-indigo-100 hover:border-indigo-400 focus:border-indigo-600 mb-8"}
                                             />
+
+                                            {isAvailable && (
+                                                <div className="w-full mt-8 pt-8 border-t-2 border-slate-50 grid grid-cols-2 gap-6">
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">👦 Male</label>
+                                                        <input 
+                                                            type="number"
+                                                            value={gradeGenderMap['kinder']?.male || ""}
+                                                            onChange={(e) => handleGradeGenderChange('kinder', kinderEnrollment, e.target.value)}
+                                                            placeholder="0"
+                                                            className={chunkyInput + " !text-3xl text-center border-blue-100 focus:border-blue-500"}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">👧 Female</label>
+                                                        <input 
+                                                            type="number"
+                                                            value={gradeGenderMap['kinder']?.female || ""}
+                                                            onChange={(e) => handleFemaleGenderChange('kinder', kinderEnrollment, e.target.value)}
+                                                            placeholder="0"
+                                                            className={chunkyInput + " !text-3xl text-center border-rose-100 focus:border-rose-500"}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
                                             <div className={`mt-8 p-4 rounded-2xl border-2 flex gap-3 items-center ${isAvailable ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100 opacity-50'}`}>
                                                 <span className="text-2xl">💡</span>
                                                 <p className={`text-sm font-medium leading-snug ${isAvailable ? 'text-amber-700' : 'text-slate-400'}`}>
@@ -1168,29 +1213,75 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 </div>
                                                 {c.grades.length > 0 && (
                                                     <div className="mt-4 pt-4 border-t-2 border-slate-100">
-                                                        <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-4">Individual Grade Totals</label>
-                                                        <div className="grid grid-cols-2 gap-4">
+                                                        <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-4 italic">Individual Grade Populations</label>
+                                                        <div className="space-y-6">
                                                             {c.grades.map(lvl => {
                                                                 const gName = ALL_GRADES.find(x => x.id === lvl)?.label || lvl;
+                                                                const grTotal = (parseInt(gradeGenderMap[lvl]?.male) || 0) + (parseInt(gradeGenderMap[lvl]?.female) || 0);
+                                                                
                                                                 return (
-                                                                    <div key={`mg-input-${lvl}`} className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm">
-                                                                        <label className="text-[10px] font-black uppercase text-indigo-400 tracking-widest block mb-2">{gName}</label>
-                                                                        <input 
-                                                                            type="number"
-                                                                            placeholder="0"
-                                                                            value={gradeTotals[lvl] || ""}
-                                                                            onChange={(e) => handleGradeChange(lvl, e.target.value)}
-                                                                            className={`${chunkyInput} !h-16 !text-3xl`}
-                                                                        />
+                                                                    <div key={`mg-gender-${lvl}`} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
+                                                                        <div className="flex justify-between items-center mb-4">
+                                                                            <label className="text-xs font-black uppercase text-indigo-600 tracking-widest">{gName}</label>
+                                                                            <span className="bg-indigo-50 px-3 py-1 rounded-lg text-[10px] font-black text-indigo-600 uppercase">Total: {grTotal}</span>
+                                                                        </div>
+                                                                        <div className="grid grid-cols-2 gap-4">
+                                                                            <div>
+                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Boys</label>
+                                                                                <input 
+                                                                                    type="number"
+                                                                                    placeholder="0"
+                                                                                    value={gradeGenderMap[lvl]?.male || ""}
+                                                                                    onChange={(e) => {
+                                                                                        const val = sanitizeNumeric(e.target.value, 6);
+                                                                                        setGradeGenderMap(prev => ({
+                                                                                            ...prev,
+                                                                                            [lvl]: { ...prev[lvl], male: val }
+                                                                                        }));
+                                                                                    }}
+                                                                                    className={chunkyInput + " !h-14 !text-2xl border-blue-50 focus:border-blue-500"}
+                                                                                />
+                                                                            </div>
+                                                                            <div>
+                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Girls</label>
+                                                                                <input 
+                                                                                    type="number"
+                                                                                    placeholder="0"
+                                                                                    value={gradeGenderMap[lvl]?.female || ""}
+                                                                                    onChange={(e) => {
+                                                                                        const val = sanitizeNumeric(e.target.value, 6);
+                                                                                        setGradeGenderMap(prev => ({
+                                                                                            ...prev,
+                                                                                            [lvl]: { ...prev[lvl], female: val }
+                                                                                        }));
+                                                                                    }}
+                                                                                    className={chunkyInput + " !h-14 !text-2xl border-rose-50 focus:border-rose-500"}
+                                                                                />
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
                                                                 );
                                                             })}
                                                         </div>
-                                                        <div className="mt-4 flex items-center justify-between bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-100">
-                                                            <span className="text-xs font-black uppercase text-indigo-600 tracking-widest">Total Joined Enrollment</span>
-                                                            <span className="text-2xl font-black text-indigo-800">
-                                                                {c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0)}
-                                                            </span>
+                                                        <div className="mt-6 flex items-center justify-between bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">
+                                                            <div>
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-1">Total Combination Enrollment</p>
+                                                                <span className="text-4xl font-black italic tracking-tighter">
+                                                                    {c.grades.reduce((sum, g) => {
+                                                                        const m = parseInt(gradeGenderMap[g]?.male) || 0;
+                                                                        const f = parseInt(gradeGenderMap[g]?.female) || 0;
+                                                                        return sum + m + f;
+                                                                    }, 0)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">M / F Split</p>
+                                                                <p className="text-lg font-black tracking-tight leading-none">
+                                                                    <span className="text-blue-400">{c.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.male) || 0), 0)}</span>
+                                                                    <span className="text-slate-500 mx-2">/</span>
+                                                                    <span className="text-rose-400">{c.grades.reduce((sum, g) => sum + (parseInt(gradeGenderMap[g]?.female) || 0), 0)}</span>
+                                                                </p>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}
@@ -1324,6 +1415,31 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         </div>
                                                     </div>
                                                 </div>
+
+                                                {isAvailable && (
+                                                    <div className="w-full mt-8 pt-8 border-t-2 border-slate-50 grid grid-cols-2 gap-6">
+                                                        <div>
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">👦 Male</label>
+                                                            <input 
+                                                                type="number"
+                                                                value={gradeGenderMap[g.id]?.male || ""}
+                                                                onChange={(e) => handleGradeGenderChange(g.id, gradeTotals[g.id], e.target.value)}
+                                                                placeholder="0"
+                                                                className={chunkyInput + " !text-3xl text-center border-blue-100 focus:border-blue-500"}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">👧 Female</label>
+                                                            <input 
+                                                                type="number"
+                                                                value={gradeGenderMap[g.id]?.female || ""}
+                                                                onChange={(e) => handleFemaleGenderChange(g.id, gradeTotals[g.id], e.target.value)}
+                                                                placeholder="0"
+                                                                className={chunkyInput + " !text-3xl text-center border-rose-100 focus:border-rose-500"}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -1421,8 +1537,31 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                             setSnedOrganizedClassCount("");
                                                         }
                                                     }} 
-                                                    className="w-48 h-24 text-6xl font-black text-center rounded-[2rem] bg-indigo-50 border-4 border-indigo-200 text-indigo-700 outline-none focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/30"
+                                                    className={`w-48 h-24 text-5xl font-black text-center rounded-3xl transition-all duration-300 bg-indigo-50 border-4 border-indigo-200 text-indigo-700 focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/50`}
                                                 />
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">👦 SNED Male</label>
+                                                    <input 
+                                                        type="number"
+                                                        value={gradeGenderMap['sned']?.male || ""}
+                                                        onChange={(e) => handleGradeGenderChange('sned', snedTotalCount, e.target.value)}
+                                                        placeholder="0"
+                                                        className={chunkyInput + " !text-2xl text-center border-blue-100 focus:border-blue-500"}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">👧 SNED Female</label>
+                                                    <input 
+                                                        type="number"
+                                                        value={gradeGenderMap['sned']?.female || ""}
+                                                        onChange={(e) => handleFemaleGenderChange('sned', snedTotalCount, e.target.value)}
+                                                        placeholder="0"
+                                                        className={chunkyInput + " !text-2xl text-center border-rose-100 focus:border-rose-500"}
+                                                    />
+                                                </div>
                                             </div>
 
                                             {/* Classification Buttons */}
@@ -1624,66 +1763,130 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         </motion.div>
                     )}
 
-                    {/* STEP 7: Global Gender Breakdown */}
+                    {/* STEP 7: Gender Breakdown Confirmation Table */}
                     {currentStep === 7 && (
                         <motion.div key="step7" variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
                             <div className="text-center mb-10">
                                 <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
-                                    Step 7 • Final Validation
+                                    Step 7 • Final Confirmation
                                 </span>
                                 <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
-                                    Gender Breakdown
+                                    Learner Data Summary
                                 </h1>
-                                <p className="text-slate-500 font-medium">Verify the male and female totals match the grand total of {grandTotal}.</p>
+                                <p className="text-slate-500 font-medium italic">Please review and confirm your school's gender breakdown before saving.</p>
                             </div>
 
-                            <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border-4 border-indigo-100/50 mb-8">
-                                <div className="space-y-8">
-                                    <div>
-                                        <div className="flex items-center justify-between mb-4 ml-2">
-                                            <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Male Learners 👦</label>
-                                            <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-3 py-1 rounded-lg uppercase">Auto-calculates</span>
-                                        </div>
-                                        <input 
-                                            type="number" 
-                                            value={genderTotals.male} 
-                                            onChange={(e) => handleGenderChange('male', e.target.value)}
-                                            placeholder="0"
-                                            className={chunkyInput}
-                                        />
-                                    </div>
+                            <div className="bg-white rounded-[3rem] shadow-2xl border-4 border-indigo-100/50 overflow-hidden mb-8">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-50 border-b-2 border-slate-100">
+                                                <th className="px-6 py-5 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Grade Level / Combo</th>
+                                                <th className="px-6 py-5 text-center text-[10px] font-black uppercase tracking-widest text-blue-500">Male 👦</th>
+                                                <th className="px-6 py-5 text-center text-[10px] font-black uppercase tracking-widest text-rose-500">Female 👧</th>
+                                                <th className="px-6 py-5 text-center text-[10px] font-black uppercase tracking-widest text-indigo-500">Total Σ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {/* Kindergarten */}
+                                            {gradeAvailability.kinder !== false && (
+                                                <tr className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-6 py-5">
+                                                        <span className="text-sm font-black text-slate-700">Kindergarten</span>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center font-bold text-blue-600">{gradeGenderMap['kinder']?.male || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-bold text-rose-600">{gradeGenderMap['kinder']?.female || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-black text-slate-800 bg-indigo-50/30">{kinderEnrollment || 0}</td>
+                                                </tr>
+                                            )}
 
-                                    <div>
-                                        <div className="flex items-center justify-between mb-4 ml-2">
-                                            <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Female Learners 👧</label>
-                                            <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-3 py-1 rounded-lg uppercase">Auto-calculates</span>
-                                        </div>
-                                        <input 
-                                            type="number" 
-                                            value={genderTotals.female} 
-                                            onChange={(e) => handleGenderChange('female', e.target.value)}
-                                            placeholder="0"
-                                            className={chunkyInput}
-                                        />
-                                    </div>
+                                            {/* Monograde / Multigrade Combinations */}
+                                            {mgCombinations.map(c => (
+                                                <tr key={`summary-${c.id}`} className="hover:bg-slate-50/50 transition-colors border-l-4 border-l-indigo-500">
+                                                    <td className="px-6 py-5">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-black text-slate-700">Combination {c.grades.map(g => g.replace('g','')).join('-')}</span>
+                                                            <span className="text-[9px] font-bold text-slate-400 uppercase">Multigrade</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center font-bold text-blue-600">{gradeGenderMap[c.id]?.male || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-bold text-rose-600">{gradeGenderMap[c.id]?.female || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-black text-slate-800 bg-indigo-50/30">
+                                                        {c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0)}
+                                                    </td>
+                                                </tr>
+                                            ))}
 
-                                    <div className={`mt-10 p-6 rounded-3xl border-4 transition-all flex items-center gap-4 ${isMathPerfect ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-lg ${isMathPerfect ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}`}>
-                                            {isMathPerfect ? '✅' : '⚖️'}
-                                        </div>
-                                        <div className="flex-1">
-                                            <h4 className={`font-black uppercase tracking-widest text-[10px] mb-1 ${isMathPerfect ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                                {isMathPerfect ? 'Verification Pass' : 'Verification Pending'}
-                                            </h4>
-                                            <p className={`text-sm font-bold leading-tight ${isMathPerfect ? 'text-emerald-800' : 'text-amber-800'}`}>
-                                                {isMathPerfect 
-                                                    ? "Male + Female perfectly matches the grand enrollment total. You're ready to save!" 
-                                                    : `The total (${genderSum}) must exactly match the grand total of ${grandTotal}.`
-                                                }
-                                            </p>
-                                        </div>
-                                    </div>
+                                            {/* Standalone Monogrades */}
+                                            {activeMonogrades.map(g => (
+                                                <tr key={`summary-${g.id}`} className="hover:bg-slate-50/50 transition-colors">
+                                                    <td className="px-6 py-5">
+                                                        <span className="text-sm font-black text-slate-700">{g.label}</span>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center font-bold text-blue-600">{gradeGenderMap[g.id]?.male || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-bold text-rose-600">{gradeGenderMap[g.id]?.female || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-black text-slate-800 bg-indigo-50/30">{gradeTotals[g.id] || 0}</td>
+                                                </tr>
+                                            ))}
+
+                                            {/* SNED */}
+                                            {hasSNED === true && (
+                                                <tr className="hover:bg-slate-50/50 transition-colors border-l-4 border-l-amber-500">
+                                                    <td className="px-6 py-5">
+                                                        <span className="text-sm font-black text-amber-700">Special Needs (SNED)</span>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-center font-bold text-blue-600">{gradeGenderMap['sned']?.male || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-bold text-rose-600">{gradeGenderMap['sned']?.female || 0}</td>
+                                                    <td className="px-6 py-5 text-center font-black text-slate-800 bg-indigo-50/30">{snedTotalCount || 0}</td>
+                                                </tr>
+                                            )}
+
+                                            {/* Grand Total Row */}
+                                            <tr className="bg-slate-900 text-white">
+                                                <td className="px-6 py-6 text-sm font-black uppercase tracking-widest">Grand Total Learners</td>
+                                                <td className="px-6 py-6 text-center text-xl font-black text-blue-300">
+                                                    {[
+                                                        gradeGenderMap['kinder']?.male || 0,
+                                                        ...mgCombinations.map(c => gradeGenderMap[c.id]?.male || 0),
+                                                        ...activeMonogrades.map(g => gradeGenderMap[g.id]?.male || 0),
+                                                        hasSNED === true ? (gradeGenderMap['sned']?.male || 0) : 0
+                                                    ].reduce((a, b) => parseInt(a) + parseInt(b), 0)}
+                                                </td>
+                                                <td className="px-6 py-6 text-center text-xl font-black text-rose-300">
+                                                    {[
+                                                        gradeGenderMap['kinder']?.female || 0,
+                                                        ...mgCombinations.map(c => gradeGenderMap[c.id]?.female || 0),
+                                                        ...activeMonogrades.map(g => gradeGenderMap[g.id]?.female || 0),
+                                                        hasSNED === true ? (gradeGenderMap['sned']?.female || 0) : 0
+                                                    ].reduce((a, b) => parseInt(a) + parseInt(b), 0)}
+                                                </td>
+                                                <td className="px-6 py-6 text-center text-3xl font-black text-indigo-400">
+                                                    {grandTotal}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
+                            </div>
+                            
+                             <div 
+                                onClick={() => setIsCertified(!isCertified)}
+                                className={`p-6 rounded-[2.5rem] border-2 transition-all cursor-pointer flex items-start gap-4 ${
+                                    isCertified 
+                                        ? 'bg-emerald-50 border-emerald-200 shadow-sm' 
+                                        : 'bg-white border-slate-100 hover:border-slate-200'
+                                }`}
+                            >
+                                <div className={`mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-colors ${
+                                    isCertified 
+                                        ? 'bg-emerald-500 border-emerald-500 text-white' 
+                                        : 'border-slate-300 bg-white'
+                                }`}>
+                                    {isCertified && <FiCheck className="w-4 h-4" />}
+                                </div>
+                                <p className={`text-xs font-bold leading-relaxed ${isCertified ? 'text-emerald-900' : 'text-slate-500 italic'}`}>
+                                    I hereby certify that all data and information provided in this module/unit is true and correct
+                                </p>
                             </div>
                         </motion.div>
                     )}
@@ -1714,7 +1917,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         )}
                         <button 
                             onClick={currentStep === 7 ? handleSave : handleNext}
-                            disabled={!canContinue || (currentStep === 7 && isSaving)}
+                            disabled={!canContinue || (currentStep === 7 && (isSaving || !isCertified))}
                             className={`flex-1 h-16 rounded-[2rem] ${currentStep === 7 ? 'bg-emerald-600 shadow-emerald-200' : 'bg-blue-600 shadow-blue-200'} text-white font-black text-[15px] shadow-xl active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:bg-slate-700 disabled:shadow-none uppercase tracking-widest`}
                         >
                             {currentStep === 7 ? (
@@ -1760,6 +1963,12 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     </div>
                 )}
             </AnimatePresence>
+            <SuccessModal 
+                isOpen={showSuccess} 
+                onClose={() => setShowSuccess(false)} 
+                message="School learners profile has been successfully saved to the cloud registry! ✓" 
+                redirectUrl="/modular-dashboard" 
+            />
         </div>
     );
 };
