@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InsightEd: Complete School Head Guide</title>
+    <title>InsightEd: Operational Guide for School Heads</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,25 +28,96 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
         .gif-placeholder {
-            background: linear-gradient(135deg, #1d2d50 0%, #0A192F 100%);
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
             border: 2px dashed #3b82f6;
-            min-height: 250px;
-            margin: 1.5rem 0;
+            min-height: 120px;
+            max-width: 280px;
+            margin: 1.5rem auto;
+            border-radius: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .phone-mockup {
+            max-width: 280px;
+            margin: 0 auto;
+            border: 8px solid #1e293b;
+            border-radius: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            background: #000;
+            overflow: hidden;
+            position: relative;
+        }
+        .phone-mockup::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 20px;
+            background: #1e293b;
+            border-bottom-left-radius: 1rem;
+            border-bottom-right-radius: 1rem;
+            z-index: 10;
         }
         .step-pill {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 2rem;
-            height: 2rem;
-            background: #0A192F;
+            width: 2.5rem;
+            height: 2.5rem;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
             color: white;
-            border-radius: 9999px;
-            font-size: 0.875rem;
-            font-weight: 700;
-            margin-right: 0.75rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-right: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .unit-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            padding: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        .unit-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .magic-math {
+            background: linear-gradient(to right, #eff6ff, #f0f9ff);
+            border-left: 5px solid #3b82f6;
+            padding: 1.25rem;
+            border-radius: 0.75rem;
+            margin: 1.5rem 0;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+        }
+        .accent-heading {
+            background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
     </style>
 </head>
@@ -54,11 +125,12 @@
 
     <!-- Top Navigation -->
     <nav class="sticky top-0 z-50 bg-navy-950 text-white border-b border-navy-800 backdrop-blur-md bg-opacity-95">
-        <div class="max-w-4xl mx-auto px-6 h-16 flex items-center">
+        <div class="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black text-white italic text-xs">IE</div>
-                <span class="font-bold tracking-tight text-lg uppercase italic text-sm">InsightEd <span class="text-blue-400 font-normal">SOP Master Guide</span></span>
+                <span class="font-bold tracking-tight text-lg uppercase italic text-sm">InsightEd <span class="text-blue-400 font-normal">Operational Guide</span></span>
             </div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v2.0 Beta</div>
         </div>
     </nav>
 
@@ -66,202 +138,376 @@
         <main class="w-full">
             
             <!-- Global Header -->
-            <header class="mb-20 text-center">
-                <div class="inline-block px-3 py-1 bg-navy-950 text-white text-[10px] font-black rounded uppercase tracking-[0.2em] mb-4">Official Pilot Phase II</div>
-                <h1 class="text-4xl md:text-5xl font-black text-navy-950 mb-6 tracking-tight">Complete Operational Guide for School Heads</h1>
-                <p class="text-lg text-slate-600 leading-relaxed mx-auto italic font-medium">
-                    The mandatory technical manual for achieving 100% Data Health compliance.
+            <header class="mb-24 text-center">
+                <div class="inline-block px-4 py-1.5 bg-navy-950 text-white text-[10px] font-black rounded-lg uppercase tracking-[0.3em] mb-6 shadow-xl">Official Technical Manual</div>
+                <h1 class="text-5xl md:text-6xl font-black text-slate-900 mb-6 tracking-tight leading-tight">InsightEd <span class="accent-heading">Operational Guide</span></h1>
+                <p class="text-xl md:text-2xl text-slate-500 leading-relaxed mx-auto font-medium max-w-2xl italic tracking-tight underline decoration-blue-500 decoration-4 underline-offset-8">
+                    Empowering School Leadership through Data-Driven Insights
                 </p>
             </header>
 
-            <!-- Module 1: Installation & Landing -->
-            <section class="mb-32">
+            <!-- 1. Quick Start & Installation -->
+            <section class="mb-24">
                 <div class="flex items-center mb-8">
-                    <span class="step-pill">1</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Installation & Landing</h2>
+                    <span class="step-pill">01</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Quick Start & Installation</h2>
                 </div>
-                <div class="space-y-12 text-slate-700 leading-relaxed">
+                <div class="unit-card">
+                    <p class="mb-8 text-lg font-medium text-slate-600 leading-relaxed border-b pb-6 border-slate-100">InsightEd is a **Progressive Web App (PWA)** designed to operate directly from your mobile browser while remaining "offline-ready."</p>
                     
-                    <!-- 1.1 Installation -->
-                    <div class="flex flex-col md:flex-row gap-8 items-start">
-                        <div class="flex-1">
-                            <h3 class="text-lg font-bold text-navy-950 mb-4 border-b-2 border-slate-100 pb-2">1.1 PWA Installation</h3>
-                            <p class="mb-4">InsightEd is a **Progressive Web App (PWA)**. It operates directly from your mobile browser for offline-readiness.</p>
-                            <ul class="list-disc pl-5 space-y-2 font-medium text-sm mb-6 text-slate-600">
-                                <li>Open Chrome (Android) or Safari (iOS).</li>
-                                <li>Navigate to: <code class="bg-slate-200 px-2 py-0.5 rounded text-navy-950 italic">tinyurl.com/InsightEdV2</code></li>
-                                <li>Select <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong> from your browser menu.</li>
-                            </ul>
-                            
-                            <!-- Balanced Callout -->
-                            <div class="p-4 bg-slate-100 border-l-4 border-navy-950 rounded shadow-sm text-xs leading-relaxed">
-                                <p class="font-extrabold uppercase tracking-tight mb-1 text-navy-950">Technical Protocol: Offline-First</p>
-                                <p class="text-slate-500 italic">Unlike traditional apps, InsightEd's PWA architecture allows you to continue monitoring even in low-signal areas. Any data entered while offline is safely cached until you perform a manual sync.</p>
+                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                        <div class="space-y-8">
+                            <div class="group">
+                                <h3 class="font-black text-navy-950 uppercase tracking-widest text-sm mb-2 flex items-center gap-2">
+                                    <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span> 1.1 PWA Installation
+                                </h3>
+                                <p class="text-slate-500 leading-relaxed">Open Chrome (Android) or Safari (iOS) and navigate to <code class="bg-blue-50 px-2 py-1 rounded text-blue-700 font-bold border border-blue-100">tinyurl.com/InsightEdV2</code>.</p>
+                            </div>
+                            <div class="group">
+                                <h3 class="font-black text-navy-950 uppercase tracking-widest text-sm mb-2 flex items-center gap-2">
+                                    <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span> 1.2 Add to Home Screen
+                                </h3>
+                                <p class="text-slate-500 leading-relaxed">Select <strong class="text-slate-900">"Add to Home Screen"</strong> or <strong class="text-slate-900">"Install App"</strong> from your browser menu.</p>
+                            </div>
+                            <div class="group">
+                                <h3 class="font-black text-navy-950 uppercase tracking-widest text-sm mb-2 flex items-center gap-2">
+                                    <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span> 1.3 Launch
+                                </h3>
+                                <p class="text-slate-500 leading-relaxed">Open the InsightEd icon from your home screen to begin.</p>
                             </div>
                         </div>
-                        <div class="w-full md:w-56 shrink-0 rounded-xl overflow-hidden shadow-lg border border-slate-200 md:-mt-10">
-                            <img src="public/pwa_installation_flow.gif" alt="PWA Installation Process" class="w-full h-auto">
+                        <div class="phone-mockup">
+                            <img src="public/pwa_installation_flow.gif" alt="PWA Installation Flow" class="w-full h-auto">
                         </div>
                     </div>
+                </div>
+            </section>
 
-                    <!-- 1.2 Path Selection -->
-                    <div class="flex flex-col md:flex-row gap-8 items-start">
-                        <div class="w-full md:w-56 shrink-0 rounded-xl overflow-hidden shadow-lg border border-slate-200 md:-mt-10">
+            <!-- 2. Choosing Your Portal -->
+            <section class="mb-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">02</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">The Nexus Gateway</h2>
+                </div>
+                <div class="unit-card">
+                    <p class="mb-8 font-medium text-slate-600 border-b pb-6 border-slate-100 italic">Upon launching, navigate to the correct entry point to unlock your administrative nodes.</p>
+                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                        <div class="phone-mockup">
                             <img src="public/nexus_portal_selection.gif" alt="Nexus Portal Selection" class="w-full h-auto">
                         </div>
-                        <div class="flex-1">
-                            <h3 class="text-lg font-bold text-navy-950 mb-4 border-b-2 border-slate-100 pb-2">1.2 Choosing Your Portal (The Nexus)</h3>
-                            <p class="mb-4">Upon launching the app, you will arrive at the **InsightED Nexus**. You must select the correct path to access your tools:</p>
-                            <ol class="list-decimal pl-5 space-y-2 font-medium text-sm text-slate-600">
-                                <li>Select the <strong class="text-blue-600 uppercase italic">"InsightED (For HROD)"</strong> path.</li>
-                                <li>Locate and select the <strong class="text-blue-600 uppercase italic">"School Head Portal"</strong> from the options.</li>
-                            </ol>
-                        </div>
-                    </div>
-
-                </div>
-            </section>
-
-            <!-- Module 2: Registration -->
-            <section class="mb-32">
-                <div class="flex items-center mb-8">
-                    <span class="step-pill">2</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Registration & Identity</h2>
-                </div>
-                <div class="space-y-6 text-slate-700 leading-relaxed">
-                    <p>Select the <strong>"School Head"</strong> role. You must complete the 5-step hierarchical school selection mapping.</p>
-                    <div class="grid grid-cols-5 gap-2 px-4 py-3 bg-white border border-slate-200 rounded-lg text-[10px] font-black uppercase text-center text-slate-400">
-                        <span>Reg</span><span>Div</span><span>Dist</span><span>Mun</span><span class="text-blue-600">School</span>
-                    </div>
-                    <div class="gif-placeholder shadow-inner rounded-xl flex flex-col items-center justify-center gap-4 text-white">
-                        <div class="px-6 py-2 bg-black/40 rounded-full font-mono text-sm tracking-wider">file_name: <span class="text-blue-400">registration_school_mapping.gif</span></div>
-                    </div>
-                    <div class="p-4 bg-navy-950 text-white rounded-xl">
-                        <p class="text-xs uppercase font-black text-blue-400 mb-2">Protocol Requirement</p>
-                        <p class="text-sm font-medium italic">Capturing your **IERN (InsightEd ID)** post-registration is non-negotiable.</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Module 3: Sign-In -->
-            <section class="mb-32">
-                <div class="flex items-center mb-8">
-                    <span class="step-pill">3</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Administrative Sign-In</h2>
-                </div>
-                <div class="space-y-6 text-slate-700 leading-relaxed">
-                    <p>Use your **6-digit School ID** as your Username. Grant all device permissions (Camera, Location, Storage) to ensure functionality.</p>
-                    <div class="gif-placeholder shadow-inner rounded-xl flex flex-col items-center justify-center gap-4 text-white">
-                        <div class="px-6 py-2 bg-black/40 rounded-full font-mono text-sm tracking-wider">file_name: <span class="text-blue-400">login_permissions_flow.gif</span></div>
-                    </div>
-
-                    <!-- Nexus Dashboard Sub-Section -->
-                    <div class="mt-12 pt-8 border-t border-slate-200">
-                        <h3 class="text-lg font-bold text-navy-950 mb-4">Navigating the Nexus Dashboard</h3>
-                        <p class="text-slate-600 text-sm mb-6">
-                            Upon successful sign-in, you will land on the **Nexus Dashboard**. This is your primary navigation hub where you pick which department or module (e.g., School Profile, Physical Facilities) you want to oversee.
-                        </p>
-                        <div class="gif-placeholder shadow-inner rounded-xl flex flex-col items-center justify-center gap-4 text-white">
-                            <div class="px-6 py-2 bg-black/40 rounded-full font-mono text-sm tracking-wider">file_name: <span class="text-blue-400">nexus_dashboard_navigation.gif</span></div>
+                        <div class="space-y-6">
+                            <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 transition-colors hover:bg-white hover:border-blue-400 group">
+                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-2 tracking-widest group-hover:text-blue-500">Step Alpha</h4>
+                                <p class="text-slate-700 font-bold">Select the <span class="bg-blue-100 text-blue-700 px-2 rounded">"InsightED (For HROD)"</span> path.</p>
+                            </div>
+                            <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 transition-colors hover:bg-white hover:border-blue-400 group">
+                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-2 tracking-widest group-hover:text-blue-500">Step Beta</h4>
+                                <p class="text-slate-700 font-bold">Locate and select the <span class="text-navy-950 underline decoration-2 decoration-blue-500">"School Head Portal"</span>.</p>
+                            </div>
+                            <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 transition-colors hover:bg-white hover:border-blue-400 group text-center border-dashed">
+                                <p class="text-sm font-black uppercase text-navy-950 tracking-tighter italic">Click "Create Account" for Digital Identity.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Module 4: Data Health -->
-            <section class="mb-32">
+            <!-- 3. Registration & Identity -->
+            <section class="mb-24">
                 <div class="flex items-center mb-8">
-                    <span class="step-pill">4</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Achieving 100% Data Health</h2>
+                    <span class="step-pill">03</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Registration & Identity</h2>
                 </div>
-                <div class="space-y-12">
-                    
-                    <!-- Sub 4.1 -->
-                    <div>
-                        <h3 class="text-lg font-bold text-navy-950 mb-4 border-b-2 border-slate-100 pb-2">4.1 School Profile & Geo-Tagging</h3>
-                        <p class="text-slate-600 text-sm mb-4">Validate your School ID and manually drag the map pin to the exact entrance coordinates.</p>
-                        <div class="gif-placeholder shadow-inner rounded-xl flex flex-col items-center justify-center gap-4 text-white">
-                            <div class="px-6 py-2 bg-black/40 rounded-full font-mono text-sm tracking-wider">file_name: <span class="text-blue-400">geotagging_validation.gif</span></div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-8">
+                            <div class="p-6 bg-navy-950 text-white rounded-2xl shadow-xl relative overflow-hidden group">
+                                <div class="absolute -right-4 -top-4 w-24 h-24 bg-blue-600/20 rounded-full blur-2xl group-hover:bg-blue-600/40 transition-colors"></div>
+                                <h3 class="text-xs font-black text-blue-400 uppercase tracking-[0.2em] mb-4">3.3 IERN Registry</h3>
+                                <p class="text-sm leading-relaxed mb-4">Your unique **IERN (Institutional Entity Reference Number)** is your primary digital key. <span class="text-blue-300 italic">Record this immediately—it is required for all future syncs.</span></p>
+                            </div>
+                            <div class="space-y-4">
+                                <h4 class="font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="w-2 h-2 bg-slate-300 rounded-full"></span> 3.1 Personal Mapping
+                                </h4>
+                                <p class="text-sm text-slate-500 pl-4 border-l-2 border-slate-100 italic">First/Last Name, official Email, and Contact Number are mandatory fields.</p>
+                                
+                                <h4 class="font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="w-2 h-2 bg-slate-300 rounded-full"></span> 3.2 Hierarchy Path
+                                </h4>
+                                <p class="text-sm text-slate-500 pl-4 border-l-2 border-slate-100 italic">Region &rarr; Division &rarr; District &rarr; School Level &rarr; School ID.</p>
+                            </div>
                         </div>
-                    </div>
-
-                    <!-- Sub 4.2 -->
-                    <div>
-                        <h3 class="text-lg font-bold text-navy-950 mb-4 border-b-2 border-slate-100 pb-2">4.2 Enrollment & Classes</h3>
-                        <p class="text-slate-600 text-sm mb-4">Enter accurate learner counts and section tallies. Include ARAL program data.</p>
-                        <div class="gif-placeholder shadow-inner rounded-xl flex flex-col items-center justify-center gap-4 text-white">
-                            <div class="px-6 py-2 bg-black/40 rounded-full font-mono text-sm tracking-wider">file_name: <span class="text-blue-400">enrollment_entry_grid.gif</span></div>
-                        </div>
-                    </div>
-
-                    <!-- Sub 4.3 -->
-                    <div>
-                        <h3 class="text-lg font-bold text-navy-950 mb-4 border-b-2 border-slate-100 pb-2">4.3 Physical Facilities & Buildings</h3>
-                        <p class="text-slate-600 text-sm mb-4">Add Buildings (New, Good Condition, or Demolition). Use the **Room Assessment** tool for repair tracking.</p>
-                        <div class="gif-placeholder shadow-inner rounded-xl flex flex-col items-center justify-center gap-4 text-white">
-                            <div class="px-6 py-2 bg-black/40 rounded-full font-mono text-sm tracking-wider">file_name: <span class="text-blue-400">building_inventory_add.gif</span></div>
-                        </div>
-                        <div class="p-4 bg-amber-50 border-l-4 border-amber-500 rounded text-xs text-amber-900 leading-relaxed">
-                            <strong>Strict Rule:</strong> Photographic evidence is required for all facility assessments.
+                        <div class="space-y-6">
+                            <div class="phone-mockup">
+                                <img src="public/geotagging_validation.gif" alt="Geotagging Validation" class="w-full h-auto">
+                            </div>
+                            <p class="text-[11px] text-center font-bold text-slate-400 uppercase tracking-widest italic tracking-tight">3.4 Precision Mapping: Drag the pin to the school's geographical center.</p>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Module 5: Scoring -->
-            <section class="mb-32">
+            <!-- 4. The Nexus Dashboard -->
+            <section class="mb-24">
                 <div class="flex items-center mb-8">
+                    <span class="step-pill">04</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Nexus Nodes Dashboard</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                        <div class="phone-mockup">
+                            <img src="public/nexus_dashboard_navigation.gif" alt="Nexus Dashboard Navigation" class="w-full h-auto">
+                        </div>
+                        <div class="space-y-4">
+                            <div class="group p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-blue-400 transition-all">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-[10px] font-black text-blue-600 uppercase tracking-widest">Master Cloud</span>
+                                    <span class="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded">Active</span>
+                                </div>
+                                <h4 class="font-bold text-slate-900 italic">CLOUD (Units 1-9)</h4>
+                                <p class="text-xs text-slate-500 italic leading-relaxed">The primary repository for school monitoring and digitized records.</p>
+                            </div>
+                            <div class="group p-4 bg-white border border-slate-100 rounded-2xl shadow-sm hover:border-blue-400 transition-all">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Faculty Management</span>
+                                </div>
+                                <h4 class="font-bold text-slate-900 italic uppercase">ESF7 Uploader</h4>
+                                <p class="text-xs text-slate-500 italic leading-relaxed">Portal to Upload ESF7 files for faculty management.</p>
+                            </div>
+                            <div class="group p-4 bg-red-50/50 border border-red-100 rounded-2xl shadow-sm opacity-60 grayscale hover:grayscale-0 transition-all cursor-not-allowed">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-[10px] font-black text-red-600 uppercase tracking-widest">Building Updates</span>
+                                    <span class="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded">Locked</span>
+                                </div>
+                                <h4 class="font-bold text-red-950 italic">NSPP Node</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. Unit 1: School Profile -->
+            <section class="mb-20">
+                <div class="flex items-center mb-6">
                     <span class="step-pill">5</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Data Health Scoring Logic</h2>
+                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Unit 1: School Profile & Identity</h2>
                 </div>
-                <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                    <div class="bg-navy-950 p-4 text-white text-xs font-bold tracking-widest uppercase text-center">Protocol Deductions (-25 pts each)</div>
-                    <div class="p-8 space-y-4 text-sm text-slate-600">
-                        <div class="flex items-start gap-4 p-3 bg-red-50 rounded italic border-l-4 border-red-500">
-                             Enrollment reported without corresponding teachers, toilets, or classrooms.
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div class="text-sm space-y-4">
+                            <p><strong class="text-navy-950">5.1 Basic Info:</strong> DO NOT use abbreviations for the School Name. Verify all location details.</p>
+                            <p><strong class="text-navy-950">5.2 Curricular Offering:</strong> Select specific authorized offering (e.g., K-6, K-12).</p>
+                            <p><strong class="text-navy-950">5.3 School Head Info:</strong> Name autofilled. Input Middle Name, Sex, Position, DOB, Date Appointed.</p>
+                            <p><strong class="text-navy-950">5.4 Ownership:</strong> Select Month/Year established and Ownership Type.</p>
                         </div>
-                        <div class="flex items-start gap-4 p-3 bg-red-50 rounded italic border-l-4 border-red-500">
-                             Unrealistic Pupil-to-Teacher ratios (<15 or >65 students per class).
+                        <div class="text-sm space-y-4 border-l md:pl-8 border-slate-100">
+                            <p><strong class="text-navy-950">5.5 Documentation:</strong> Upload supporting document (Deed of Donation, etc.) in **PDF format** only.</p>
+                            <p><strong class="text-navy-950">5.6 Annex/Extension:</strong> Input Extension School ID or Mother School ID accordingly.</p>
                         </div>
-                        <div class="flex items-start gap-4 p-3 bg-red-50 rounded italic border-l-4 border-red-500">
-                             Zero counts on critical facilities in active schools.
+                    </div>
+                </div>
+            </section>            <!-- 6. Unit 2: Enrollment -->
+            <section class="mb-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">06</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 2: Modular Enrollment</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="mb-10 p-5 border border-blue-100 bg-blue-50/50 rounded-2xl shadow-inner group">
+                        <h4 class="text-blue-700 font-black text-xs uppercase mb-2 tracking-[0.2em] italic flex items-center gap-2">
+                             6.2 The Mandatory Disable Gate
+                        </h4>
+                        <p class="text-slate-600 text-sm italic leading-relaxed">You MUST either input enrollment or click <strong class="text-blue-600">"Disable"</strong> for every grade level. This dynamic filter hides inactive grades across all subsequent units to streamline your workflow.</p>
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="phone-mockup">
+                            <img src="public/enrollment_entry_grid.gif" alt="Enrollment Entry Grid" class="w-full h-auto">
+                        </div>
+                        <div class="space-y-6">
+                            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                                <h4 class="font-black text-slate-900 uppercase text-xs mb-3 italic">6.5 Gender Validation</h4>
+                                <p class="text-sm text-slate-500 leading-relaxed italic">The "Magic Math" validation automatically triggers once Total Male and Total Female counts are encoded. Discrepancies will block unit finalization.</p>
+                            </div>
+                            <div class="p-6 bg-slate-900 text-white rounded-2xl">
+                                <h4 class="text-blue-400 font-bold text-xs uppercase mb-3 italic tracking-widest">6.4 Special Populations</h4>
+                                <p class="text-sm italic opacity-80 leading-relaxed">Ensure precise reporting for SNEd (Special Needs) and ARAL program participants.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Module 6: Sync -->
-            <section class="mb-32">
+            <!-- 7. Unit 3: Sectioning -->
+            <section class="mb-24">
                 <div class="flex items-center mb-8">
-                    <span class="step-pill">6</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Offline Sync Protocol</h2>
+                    <span class="step-pill">07</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 3: Section Standards</h2>
                 </div>
-                <div class="space-y-6 text-slate-700 leading-relaxed">
-                    <p>The app saves inputs locally. Navigate to the **Sync Dashboard** once a stable connection is established to transmit data.</p>
-                    <div class="gif-placeholder shadow-inner rounded-xl flex flex-col items-center justify-center gap-4 text-white">
-                        <div class="px-6 py-2 bg-black/40 rounded-full font-mono text-sm tracking-wider">file_name: <span class="text-blue-400">manual_data_sync_success.gif</span></div>
-                    </div>
-                    <div class="p-4 bg-red-950 text-white rounded-xl">
-                        <p class="text-xs uppercase font-black text-red-400 mb-2">DO NOT LOG OUT</p>
-                        <p class="text-sm font-medium italic">Logging out while sync is pending will result in permanent data loss.</p>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                        <div class="space-y-6">
+                            <div class="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                <h4 class="font-black text-navy-950 uppercase text-xs mb-3 italic">7.2 Standards Breakdown</h4>
+                                <p class="text-sm text-slate-500 leading-relaxed italic">Distribute your total sections into three specific categories: <strong class="text-slate-900">Less than Standard</strong>, <strong class="text-slate-900">Within Standard</strong>, and <strong class="text-slate-900">Above Standard</strong>.</p>
+                            </div>
+                            <div class="p-6 bg-navy-950 text-white rounded-2xl shadow-xl border-l-4 border-blue-500">
+                                <h4 class="text-blue-400 font-bold text-xs uppercase mb-2 italic">7.3 Mathematical Integrity</h4>
+                                <p class="text-xs italic opacity-80 leading-relaxed uppercase tracking-tighter">The sum of these three categories must **EXACTLY match** the Total Sections for that grade level.</p>
+                            </div>
+                        </div>
+                        <div class="p-10 bg-slate-50 border border-slate-200 rounded-[2rem] text-center shadow-inner group">
+                            <div class="text-[10px] uppercase font-black text-slate-400 mb-4 tracking-[0.4em] group-hover:text-blue-500 transition-colors">Algorithm Guard</div>
+                            <div class="text-3xl font-black font-mono text-navy-950 mb-2">LT + WS + AS</div>
+                            <div class="text-blue-600 font-black text-lg font-mono">= TOTAL SECTIONS</div>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Module 7: Troubleshooting -->
-            <section class="mb-32">
+            <!-- 8. Unit 4: Learner Profile -->
+            <section class="mb-24">
                 <div class="flex items-center mb-8">
-                    <span class="step-pill">7</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Maintenance</h2>
+                    <span class="step-pill">08</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 4: Specialized Profiles</h2>
                 </div>
-                <div class="space-y-6">
-                    <p class="text-slate-600 text-sm">Every Monday, navigate to **Settings** and select **"Check for Updates"** to ensure compliance with the latest templates.</p>
-                    <div class="p-6 bg-slate-100 rounded-xl border-2 border-dashed border-slate-300">
-                        <h4 class="font-bold text-navy-950 mb-2 underline tracking-tighter uppercase italic">Resolve UI Glitches</h4>
-                        <p class="text-xs text-slate-500 italic">Settings > Troubleshoot > Clear Cache</p>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-6">
+                            <div class="p-6 bg-slate-50 border border-slate-200 rounded-2xl">
+                                <h4 class="font-black text-navy-950 uppercase text-xs mb-3 italic">8.1 Community Toggles</h4>
+                                <p class="text-sm text-slate-500 leading-relaxed italic">Toggle ALS, Muslim, IP, Displaced, or Overage groups. Only selected groups will activate input fields to reduce data clutter.</p>
+                            </div>
+                            <div class="p-6 bg-blue-950 text-white rounded-3xl shadow-2xl relative overflow-hidden">
+                                <div class="absolute -right-8 -bottom-8 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl"></div>
+                                <h4 class="text-blue-400 font-bold text-xs uppercase mb-3 italic">8.3 Nutritional Matrix</h4>
+                                <p class="text-sm italic mb-4 leading-relaxed opacity-90">Input counts for Severely Wasted, Wasted, and Overweight/Obese.</p>
+                                <div class="py-3 px-4 bg-white/10 border border-white/10 rounded-xl font-black italic text-xs uppercase tracking-widest text-center">
+                                    Normal status: SYSTEM CALCULATED
+                                </div>
+                            </div>
+                        </div>
+                        <div class="space-y-4 flex flex-col justify-center bg-white p-8 rounded-2xl border border-slate-100 shadow-sm">
+                            <h4 class="font-black text-slate-900 uppercase text-xs mb-2">8.2 Attrition Data</h4>
+                            <p class="text-sm text-slate-500 italic border-l-4 border-slate-200 pl-4">If repeaters or dropouts are present, select "Yes" to unlock grade-level specific reporting.</p>
+                        </div>
                     </div>
                 </div>
             </section>
+
+            <!-- 9. Unit 5: Learning Modality -->
+            <section class="mb-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">09</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 5: Modality & Shifting</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-4">
+                            <div class="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-blue-400 transition-all">
+                                <h4 class="font-black text-navy-950 uppercase text-xs mb-2 italic">9.1 100% In-Person Setup</h4>
+                                <p class="text-xs text-slate-500 italic leading-relaxed">Answer "Yes" only if the school operates on a **100% In-Person, Single Shift** model.</p>
+                            </div>
+                            <div class="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-blue-400 transition-all">
+                                <h4 class="font-black text-navy-950 uppercase text-xs mb-2 italic">9.2 Mixed Shifting Models</h4>
+                                <p class="text-xs text-slate-500 italic leading-relaxed">Configure Double or Triple shifts and specialized delivery modes (Blended/Distance) per active grade.</p>
+                            </div>
+                        </div>
+                        <div class="p-8 bg-red-950 text-white rounded-[2.5rem] shadow-2xl border-2 border-red-500/50 flex flex-col justify-center text-center">
+                            <h4 class="text-red-400 font-black text-xs uppercase mb-3 tracking-[0.2em] italic">9.3 Emergency ADM Node</h4>
+                            <p class="text-sm italic opacity-90 leading-relaxed px-4">Identify Alternative Delivery Modes (Modular, Online) activated due to local disasters or extreme congestion.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 10. Unit 7: School Resources -->
+            <section class="mb-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">10</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 7: Infrastructure Audit</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-6">
+                            <div class="p-6 bg-slate-950 text-white rounded-[2rem] shadow-2xl relative overflow-hidden group">
+                                <div class="absolute right-0 bottom-0 w-24 h-24 bg-blue-600/10 rounded-full blur-2xl group-hover:bg-blue-600/30 transition-all"></div>
+                                <h4 class="font-black text-blue-400 text-xs uppercase mb-3 italic tracking-widest">10.1 Seating Audit Node</h4>
+                                <p class="text-sm italic leading-relaxed opacity-90 mb-4">Input functional and broken seats. Critical shortages require the manual verification keyword:</p>
+                                <div class="bg-white/5 py-2 rounded-lg font-mono text-blue-300 text-center font-bold tracking-[0.5em]">"CONFIRM"</div>
+                            </div>
+                            <div class="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                <h4 class="font-black text-slate-900 uppercase text-[10px] mb-2 tracking-widest">10.3 WASH & Utilities</h4>
+                                <p class="text-sm text-slate-500 italic leading-relaxed">Report water sources and toilet counts. Off-grid power status also requires explicit confirmation.</p>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-8 rounded-3xl border border-dashed border-slate-200 flex flex-col justify-center">
+                            <h4 class="font-black text-navy-950 uppercase text-xs mb-4 italic tracking-widest">10.2 ICT & eCarts Inventory</h4>
+                            <p class="text-xs text-slate-500 italic leading-relaxed pl-4 border-l-2 border-blue-500">Catalog all digital assets. For <strong class="text-navy-950 uppercase">eCarts</strong>, specify Batch Name, Funding Year, and official Source.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 11. Unit 8: Physical Facilities -->
+            <section class="mb-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">11</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 8: Building Register</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-6 flex flex-col justify-center">
+                            <div class="space-y-4">
+                                <p class="text-slate-600 font-medium flex items-start gap-3"><span class="text-blue-500 font-black italic">11.1</span> Define spaces with precise length/width mapping.</p>
+                                <p class="text-slate-600 font-medium flex items-start gap-3"><span class="text-blue-500 font-black italic">11.2</span> Log Building Name, Storeys, and Condition status.</p>
+                                <p class="text-slate-600 font-medium flex items-start gap-3"><span class="text-blue-500 font-black italic">11.3</span> Assign Room functionality (Instructional vs Non-Instructional).</p>
+                            </div>
+                            <div class="p-5 bg-amber-50 border border-amber-100 rounded-2xl">
+                                <h4 class="font-black text-amber-800 text-[10px] uppercase mb-1 tracking-widest">11.4 Repair Protocol</h4>
+                                <p class="text-[11px] text-amber-700 italic leading-relaxed">Use the 0-100% damage slider to trigger repair action items.</p>
+                            </div>
+                        </div>
+                        <div class="phone-mockup">
+                            <img src="public/building_inventory_add.gif" alt="Building Inventory Add" class="w-full h-auto">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 12. Unit 9: School Terrain -->
+            <section class="mb-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">12</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 9: Environment Profile</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-6">
+                            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                                <h4 class="font-black text-slate-900 uppercase text-xs mb-3 italic">12.1 Terrain & Accessibility</h4>
+                                <p class="text-sm text-slate-500 leading-relaxed italic">Record transportation modes, road passability, and proximity to environmental hazards.</p>
+                            </div>
+                            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                                <h4 class="font-black text-slate-900 uppercase text-xs mb-3 italic">12.3 Proximity Matrix</h4>
+                                <p class="text-sm text-slate-500 leading-relaxed italic">Quantify distance (km) and travel time (mins) to Hospital, Brgy Hall, and SDO.</p>
+                            </div>
+                        </div>
+                        <div class="bg-navy-950 p-10 rounded-[2.5rem] text-center shadow-2xl relative overflow-hidden group">
+                            <div class="absolute -left-10 -top-10 w-40 h-40 bg-blue-600/10 rounded-full blur-3xl"></div>
+                            <h4 class="text-blue-400 font-black text-xs uppercase tracking-[0.3em] mb-4 italic">12.4 Holistic Risk Score</h4>
+                            <p class="text-sm italic mb-6 leading-relaxed text-slate-300">System generates a 0–10 Risk Profile based on environmental inputs. Finalization triggers the Division sync.</p>
+                            <div class="text-5xl font-black font-mono text-white tracking-widest bg-white/5 py-4 rounded-2xl border border-white/10 group-hover:scale-105 transition-transform">0-10</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CRITICAL WARNING: NO LOGOUT -->
+            <div class="mb-32 p-8 bg-red-950 text-white rounded-2xl shadow-2xl border-4 border-red-500 max-w-2xl mx-auto text-center transform hover:scale-[1.02] transition-transform">
+                <p class="text-sm uppercase font-black text-red-400 mb-4 italic tracking-[0.2em]">⚠️ CRITICAL PROTOCOL</p>
+                <h3 class="text-2xl font-black mb-3 uppercase tracking-tighter italic">We highly advised NOT TO LOG OUT.</h3>
+            </div>
 
             <!-- Final Support -->
             <footer class="mt-40 pt-16 border-t border-slate-200 text-center">
@@ -272,7 +518,7 @@
                         support.stride@deped.gov.ph
                     </div>
                 </div>
-                <p class="mt-20 text-[10px] text-slate-300 uppercase tracking-[0.5em] font-black pb-12">InsightEd © 2026 Master SOP Guide</p>
+                <p class="mt-20 text-[10px] text-slate-300 uppercase tracking-[0.5em] font-black pb-12 italic">InsightEd &copy; 2026 Operational Guide</p>
             </footer>
 
         </main>
