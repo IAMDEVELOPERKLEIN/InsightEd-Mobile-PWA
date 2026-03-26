@@ -585,16 +585,24 @@ const EngineerProjects = () => {
       ];
 
       if (allFiles.length > 0) {
+        // Small delay to ensure the new project record is fully visible in DB across replicas if any
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         for (const item of allFiles) {
           try {
             const base64Image = await compressImage(item.file);
             await fetch(`${API_BASE}/api/upload-image`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: uid, category: item.category }),
+              body: JSON.stringify({ 
+                projectId: resData.project.project_id, // Use the NEW ID returned from the server
+                imageData: base64Image, 
+                uploadedBy: uid, 
+                category: item.category 
+              }),
             });
           } catch (err) {
-            console.error("Compression failed for file:", item.file.name, err);
+            console.error("Compression/Upload failed for file:", item.file.name, err);
           }
         }
       }
