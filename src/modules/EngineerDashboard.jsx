@@ -277,7 +277,7 @@ const EngineerDashboard = () => {
               hasRta: item.hasRta
             }));
 
-            if (roleFromDb !== 'Super User') {
+            if (userRole !== 'Super User') {
               await cacheProjects(currentProjects);
             }
 

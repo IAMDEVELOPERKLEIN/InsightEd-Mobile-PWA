@@ -653,7 +653,7 @@ const DetailedProjInfo = () => {
             setImageLoading(true);
             try {
                 // Network First
-                const res = await fetch(`/api/project-images/${id}`);
+                const res = await fetch(`/api/project-images/${id}?t=${Date.now()}`);
                 const data = await res.json();
 
                 if (Array.isArray(data)) {

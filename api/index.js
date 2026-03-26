@@ -320,6 +320,41 @@ const processPdfFile = async (file) => {
         if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     }
 };
+
+const processPdfInBackground = (file, projectId, type, ipc, uid, isLgu = false) => {
+    const fieldMap = {
+        'POW': 'pow_pdf',
+        'DUPA': 'dupa_pdf',
+        'CONTRACT': 'contract_pdf',
+        'RTA': 'rta_pdf',
+        'MOA': 'moa_pdf'
+    };
+    const field = fieldMap[type];
+    if (!field) return;
+
+    processPdfFile(file).then(async (base64) => {
+        if (!base64) return;
+        try {
+            const table = isLgu ? 'lgu_forms' : 'engineer_documents';
+            await pool.query(`UPDATE ${table} SET ${field} = $1 WHERE project_id = $2`, [base64, projectId]);
+            console.log(`✅ [BG] ${type} compressed and saved for ${isLgu ? 'LGU ' : ''}Project ${projectId}`);
+            
+            if (poolNew) {
+                try {
+                    const targetId = isLgu ? (ipc || projectId) : projectId;
+                    const targetCol = isLgu ? (ipc ? 'ipc' : 'project_id') : 'project_id';
+                    await poolNew.query(`UPDATE ${table} SET ${field} = $1 WHERE ${targetCol} = $2`, [base64, targetId]);
+                } catch (dwErr) {
+                    console.error(`❌ [BG] Dual-Write Update Failed for ${field}:`, dwErr.message);
+                }
+            }
+        } catch (err) {
+            console.error(`❌ [BG] DB Update Failed for ${field}:`, err.message);
+        }
+    }).catch(err => {
+        console.error(`❌ [BG] Compression Failed for ${field}:`, err.message);
+    });
+};
 //               CORE DASHBOARD ENDPOINTS
 // ==================================================================
 
@@ -9704,95 +9739,38 @@ const bulkUploadFields = upload.fields([
 app.post('/api/bulk-upload-project-documents', bulkUploadFields, async (req, res) => {
   const { projectId, uid } = req.body;
 
-  console.log(`📂 Incoming Bulk Doc Upload (Multer) for Project [${projectId}]`);
-
   if (!projectId) {
     return res.status(400).json({ error: "Missing required project ID" });
   }
 
-  // Wait for DPI compression and DB save before responding
   try {
-    console.log(`⚙️ Started PDF Compression for Project [${projectId}]`);
-    const documents = {};
-    if (req.files && req.files['POW'] && req.files['POW'].length > 0) documents.POW = await processPdfFile(req.files['POW'][0]);
-    if (req.files && req.files['DUPA'] && req.files['DUPA'].length > 0) documents.DUPA = await processPdfFile(req.files['DUPA'][0]);
-      if (req.files && req.files['CONTRACT'] && req.files['CONTRACT'].length > 0) documents.CONTRACT = await processPdfFile(req.files['CONTRACT'][0]);
-      if (req.files && req.files['RTA'] && req.files['RTA'].length > 0) documents.RTA = await processPdfFile(req.files['RTA'][0]);
-      if (req.files && req.files['MOA'] && req.files['MOA'].length > 0) documents.MOA = await processPdfFile(req.files['MOA'][0]);
-
-      if (Object.keys(documents).length === 0) {
-        console.log(`ℹ️ No valid documents provided or processed for project [${projectId}]. Nothing to do.`);
-        return res.status(200).json({ success: true, message: "No documents to upload" });
-      }
-
-      let client;
-      try {
-        client = await pool.connect();
-
-        const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
-        if (projectRes.rows.length === 0) {
-          console.log(`❌ Project ${projectId} not found in database.`);
-          return res.status(404).json({ error: "Project not found" });
-        }
-        const { ipc } = projectRes.rows[0];
-
-        const docEntries = Object.entries(documents);
-        const updateCols = [];
-        const values = [parseInt(projectId), ipc, uid || null];
-
-        docEntries.forEach(([type, base64], index) => {
-          let col = '';
-          if (type === 'POW') col = 'pow_pdf';
-          else if (type === 'DUPA') col = 'dupa_pdf';
-          else if (type === 'CONTRACT') col = 'contract_pdf';
-          else if (type === 'RTA') col = 'rta_pdf';
-          else if (type === 'MOA') col = 'moa_pdf';
-
-          if (col) {
-            updateCols.push({ name: col, index: values.length + 1 });
-            values.push(base64);
-          }
-        });
-
-        if (updateCols.length === 0) {
-          return res.status(200).json({ success: true, message: "No columns updated" });
-        }
-
-        const colList = updateCols.map(c => c.name).join(', ');
-        const placeholderList = updateCols.map(c => `$${c.index}`).join(', ');
-        const updateSet = updateCols.map(c => `${c.name} = EXCLUDED.${c.name}`).join(', ');
-
-        const bulkUpsertQuery = `
-          INSERT INTO engineer_documents (project_id, ipc, uploader_id, ${colList})
-          VALUES ($1, $2, $3, ${placeholderList})
-          ON CONFLICT (project_id) 
-          DO UPDATE SET 
-            ${updateSet},
-            uploader_id = EXCLUDED.uploader_id,
-            created_at = CURRENT_TIMESTAMP
-          RETURNING project_id;
-        `;
-
-        await client.query(bulkUpsertQuery, values);
-        console.log(`✅ Background Task: Bulk updated compressed documents in engineer_documents for project_id ${projectId}`);
-
-        if (poolNew) {
-          try {
-            await poolNew.query(bulkUpsertQuery, values);
-            console.log(`✅ Background Task: Dual-Write UPSERT Synced!`);
-          } catch (dwErr) {
-            console.error("❌ Dual-Write Bulk Doc UPSERT Error:", dwErr.message);
-          }
-        }
-
-        res.status(200).json({ success: true, projectId: projectId, message: "Documents successfully compressed and saved." });
-      } finally {
-        if (client) client.release();
-      }
-    } catch (err) {
-      console.error("❌ PDF Compression Error:", err.message);
-      res.status(500).json({ error: "Failed to compress and save documents" });
+    const projectRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
+    if (projectRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
     }
+    const { ipc } = projectRes.rows[0];
+
+    // Response immediately to avoid timeout
+    res.status(200).json({ 
+      success: true, 
+      projectId: projectId, 
+      message: "Sync started. Documents are being optimized in the background." 
+    });
+
+    // Process files in background
+    if (req.files) {
+      ['POW', 'DUPA', 'CONTRACT', 'RTA', 'MOA'].forEach(type => {
+        if (req.files[type] && req.files[type][0]) {
+          processPdfInBackground(req.files[type][0], projectId, type, ipc, uid, false);
+        }
+      });
+    }
+  } catch (err) {
+    console.error("❌ Bulk Upload Error:", err.message);
+    if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to initiate bulk upload" });
+    }
+  }
 });
 
 // --- LGU Bulk Document Upload Support ---
@@ -9801,63 +9779,34 @@ app.post('/api/lgu/bulk-upload-project-documents', bulkUploadFields, async (req,
 
   if (!projectId) return res.status(400).json({ error: "Missing required project ID" });
 
-  // Wait for DPI compression and DB save before responding
   try {
-    console.log(`⚙️ Started LGU PDF Compression for Project [${projectId}]`);
-      const documents = {};
-      if (req.files && req.files['POW'] && req.files['POW'].length > 0) documents.POW = await processPdfFile(req.files['POW'][0]);
-      if (req.files && req.files['DUPA'] && req.files['DUPA'].length > 0) documents.DUPA = await processPdfFile(req.files['DUPA'][0]);
-      if (req.files && req.files['CONTRACT'] && req.files['CONTRACT'].length > 0) documents.CONTRACT = await processPdfFile(req.files['CONTRACT'][0]);
-      if (req.files && req.files['RTA'] && req.files['RTA'].length > 0) documents.RTA = await processPdfFile(req.files['RTA'][0]);
-      if (req.files && req.files['MOA'] && req.files['MOA'].length > 0) documents.MOA = await processPdfFile(req.files['MOA'][0]);
+    const projectRes = await pool.query('SELECT ipc FROM lgu_forms WHERE project_id = $1', [parseInt(projectId)]);
+    if (projectRes.rows.length === 0) {
+      return res.status(404).json({ error: "LGU Project not found" });
+    }
+    const { ipc } = projectRes.rows[0];
 
-      if (Object.keys(documents).length === 0) {
-          return res.status(200).json({ success: true, message: "No documents to upload" });
-      }
+    // Respond immediately
+    res.status(200).json({ 
+      success: true, 
+      projectId: projectId, 
+      message: "LGU Documents optimization started in background." 
+    });
 
-      const docEntries = Object.entries(documents);
-      const updateCols = [];
-      const values = [];
-
-      docEntries.forEach(([type, base64]) => {
-        let col = '';
-        if (type === 'POW') col = 'pow_pdf';
-        else if (type === 'DUPA') col = 'dupa_pdf';
-        else if (type === 'CONTRACT') col = 'contract_pdf';
-        else if (type === 'RTA') col = 'rta_pdf';
-        else if (type === 'MOA') col = 'moa_pdf';
-
-        if (col) {
-          values.push(base64);
-          updateCols.push(`${col} = $${values.length}`);
+    // Background process for each file
+    if (req.files) {
+      ['POW', 'DUPA', 'CONTRACT', 'RTA', 'MOA'].forEach(type => {
+        if (req.files[type] && req.files[type][0]) {
+          processPdfInBackground(req.files[type][0], projectId, type, ipc, uid, true);
         }
       });
-
-      if (updateCols.length > 0) {
-        values.push(parseInt(projectId));
-        const query = `UPDATE lgu_forms SET ${updateCols.join(', ')} WHERE project_id = $${values.length}`;
-        await pool.query(query, values);
-        
-        if (poolNew) {
-          try {
-            const ipcRes = await pool.query('SELECT ipc FROM lgu_forms WHERE project_id = $1', [parseInt(projectId)]);
-            if (ipcRes.rows.length > 0) {
-              const ipc = ipcRes.rows[0].ipc;
-              values[values.length - 1] = ipc;
-              await poolNew.query(`UPDATE lgu_forms SET ${updateCols.join(', ')} WHERE ipc = $${values.length}`, values);
-              console.log("✅ Background Task: Dual-Write LGU Bulk Upload Synced via IPC!");
-            }
-          } catch (dwErr) {
-            console.error("❌ Dual-Write LGU Bulk Upload Error:", dwErr.message);
-        }
-        }
-      }
-
-      res.status(200).json({ success: true, projectId: projectId, message: "LGU Documents successfully compressed and saved." });
-    } catch (err) {
-      console.error("❌ LGU PDF Compression Error:", err.message);
-      res.status(500).json({ error: "Failed to compress and save documents" });
     }
+  } catch (err) {
+    console.error("❌ LGU Bulk Upload Error:", err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to initiate LGU bulk upload" });
+    }
+  }
 });
 
 
