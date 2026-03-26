@@ -9710,23 +9710,19 @@ app.post('/api/bulk-upload-project-documents', bulkUploadFields, async (req, res
     return res.status(400).json({ error: "Missing required project ID" });
   }
 
-  // 1. Instantly resolve the client request so the UI doesn't hang waiting for DPI compression
-  res.status(200).json({ success: true, projectId: projectId, message: "Documents queued for background DPI compression" });
-
-  // 2. Execute processPdfFile heavily in the background fire-and-forget thread
-  (async () => {
-    try {
-      console.log(`⚙️ Background thread started: PDF Compression for Project [${projectId}]`);
-      const documents = {};
-      if (req.files && req.files['POW'] && req.files['POW'].length > 0) documents.POW = await processPdfFile(req.files['POW'][0]);
-      if (req.files && req.files['DUPA'] && req.files['DUPA'].length > 0) documents.DUPA = await processPdfFile(req.files['DUPA'][0]);
+  // Wait for DPI compression and DB save before responding
+  try {
+    console.log(`⚙️ Started PDF Compression for Project [${projectId}]`);
+    const documents = {};
+    if (req.files && req.files['POW'] && req.files['POW'].length > 0) documents.POW = await processPdfFile(req.files['POW'][0]);
+    if (req.files && req.files['DUPA'] && req.files['DUPA'].length > 0) documents.DUPA = await processPdfFile(req.files['DUPA'][0]);
       if (req.files && req.files['CONTRACT'] && req.files['CONTRACT'].length > 0) documents.CONTRACT = await processPdfFile(req.files['CONTRACT'][0]);
       if (req.files && req.files['RTA'] && req.files['RTA'].length > 0) documents.RTA = await processPdfFile(req.files['RTA'][0]);
       if (req.files && req.files['MOA'] && req.files['MOA'].length > 0) documents.MOA = await processPdfFile(req.files['MOA'][0]);
 
       if (Object.keys(documents).length === 0) {
-        console.log(`ℹ️ No valid documents provided or processed for project [${projectId}]. Background task ending.`);
-        return;
+        console.log(`ℹ️ No valid documents provided or processed for project [${projectId}]. Nothing to do.`);
+        return res.status(200).json({ success: true, message: "No documents to upload" });
       }
 
       let client;
@@ -9735,8 +9731,8 @@ app.post('/api/bulk-upload-project-documents', bulkUploadFields, async (req, res
 
         const projectRes = await client.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [parseInt(projectId)]);
         if (projectRes.rows.length === 0) {
-          console.log(`❌ Background Task: Project ${projectId} not found in database.`);
-          return;
+          console.log(`❌ Project ${projectId} not found in database.`);
+          return res.status(404).json({ error: "Project not found" });
         }
         const { ipc } = projectRes.rows[0];
 
@@ -9758,7 +9754,9 @@ app.post('/api/bulk-upload-project-documents', bulkUploadFields, async (req, res
           }
         });
 
-        if (updateCols.length === 0) return;
+        if (updateCols.length === 0) {
+          return res.status(200).json({ success: true, message: "No columns updated" });
+        }
 
         const colList = updateCols.map(c => c.name).join(', ');
         const placeholderList = updateCols.map(c => `$${c.index}`).join(', ');
@@ -9786,13 +9784,15 @@ app.post('/api/bulk-upload-project-documents', bulkUploadFields, async (req, res
             console.error("❌ Dual-Write Bulk Doc UPSERT Error:", dwErr.message);
           }
         }
+
+        res.status(200).json({ success: true, projectId: projectId, message: "Documents successfully compressed and saved." });
       } finally {
         if (client) client.release();
       }
     } catch (err) {
-      console.error("❌ Background PDF Compression Error:", err.message);
+      console.error("❌ PDF Compression Error:", err.message);
+      res.status(500).json({ error: "Failed to compress and save documents" });
     }
-  })();
 });
 
 // --- LGU Bulk Document Upload Support ---
@@ -9801,11 +9801,9 @@ app.post('/api/lgu/bulk-upload-project-documents', bulkUploadFields, async (req,
 
   if (!projectId) return res.status(400).json({ error: "Missing required project ID" });
 
-  res.status(200).json({ success: true, projectId: projectId, message: "LGU Documents queued for background DPI compression" });
-
-  (async () => {
-    try {
-      console.log(`⚙️ Background thread started: LGU PDF Compression for Project [${projectId}]`);
+  // Wait for DPI compression and DB save before responding
+  try {
+    console.log(`⚙️ Started LGU PDF Compression for Project [${projectId}]`);
       const documents = {};
       if (req.files && req.files['POW'] && req.files['POW'].length > 0) documents.POW = await processPdfFile(req.files['POW'][0]);
       if (req.files && req.files['DUPA'] && req.files['DUPA'].length > 0) documents.DUPA = await processPdfFile(req.files['DUPA'][0]);
@@ -9813,7 +9811,9 @@ app.post('/api/lgu/bulk-upload-project-documents', bulkUploadFields, async (req,
       if (req.files && req.files['RTA'] && req.files['RTA'].length > 0) documents.RTA = await processPdfFile(req.files['RTA'][0]);
       if (req.files && req.files['MOA'] && req.files['MOA'].length > 0) documents.MOA = await processPdfFile(req.files['MOA'][0]);
 
-      if (Object.keys(documents).length === 0) return;
+      if (Object.keys(documents).length === 0) {
+          return res.status(200).json({ success: true, message: "No documents to upload" });
+      }
 
       const docEntries = Object.entries(documents);
       const updateCols = [];
@@ -9849,13 +9849,15 @@ app.post('/api/lgu/bulk-upload-project-documents', bulkUploadFields, async (req,
             }
           } catch (dwErr) {
             console.error("❌ Dual-Write LGU Bulk Upload Error:", dwErr.message);
-          }
+        }
         }
       }
+
+      res.status(200).json({ success: true, projectId: projectId, message: "LGU Documents successfully compressed and saved." });
     } catch (err) {
-      console.error("❌ LGU Background PDF Compression Error:", err.message);
+      console.error("❌ LGU PDF Compression Error:", err.message);
+      res.status(500).json({ error: "Failed to compress and save documents" });
     }
-  })();
 });
 
 
