@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom';
 import { FiCamera, FiImage, FiX, FiCheck, FiChevronRight } from 'react-icons/fi';
 
 const ProcurementStatus = {
-    NotYetProcured: "Not Yet Procured",
-    UnderProcurement: "Under Procurement",
-    ProcurementComplete: "Procurement Complete",
+    NotYetProcured: "Not yet procured",
+    UnderProcurement: "Under procurement",
+    ProcurementComplete: "Completed",
 };
 
 const ConstructionStatus = {
@@ -29,7 +29,7 @@ const STATUS_OPTIONS = [
 const PROCUREMENT_OPTIONS = [
     { value: ProcurementStatus.NotYetProcured, label: "Not Yet Procured", color: "red", icon: "🔴" },
     { value: ProcurementStatus.UnderProcurement, label: "Under Procurement", color: "amber", icon: "📋" },
-    { value: ProcurementStatus.ProcurementComplete, label: "Procurement Complete", color: "emerald", icon: "✅" },
+    { value: ProcurementStatus.ProcurementComplete, label: "Completed", color: "emerald", icon: "✅" },
 ];
 
 const CONSTRUCTION_OPTIONS = [
@@ -102,8 +102,8 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     const [externalFiles, setExternalFiles] = useState([]);
     const [externalPreviews, setExternalPreviews] = useState([]);
     const [activePhotoCategory, setActivePhotoCategory] = useState('Internal');
-    const [procurementStatus, setProcurementStatus] = useState(project?.procurement_status || ProcurementStatus.NotYetProcured);
-    const [constructionStatus, setConstructionStatus] = useState(project?.status || ""); // Starts empty to show placeholder
+    const [procurementStatus, setProcurementStatus] = useState(project?.procurement_status || "");
+    const [constructionStatus, setConstructionStatus] = useState((project?.status === ConstructionStatus.NotYetStarted || !project?.status) ? "" : project.status); // Force placeholder if not yet started
     const [percentage, setPercentage] = useState(Number(project?.accomplishmentPercentage || 0));
     const [remarks, setRemarks] = useState('');
     const [statusAsOfDate, setStatusAsOfDate] = useState(new Date().toISOString().split('T')[0]);
@@ -154,8 +154,8 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     useEffect(() => {
         if (isOpen && project) {
             setStep(1);
-            setProcurementStatus(project.procurement_status || ProcurementStatus.NotYetProcured);
-            setConstructionStatus(project.status || ""); // Preserve placeholder if no status
+            setProcurementStatus(project.procurement_status || "");
+            setConstructionStatus((project.status === ConstructionStatus.NotYetStarted || !project.status) ? "" : project.status); // Force placeholder if not yet started
             setPercentage(Number(project.accomplishmentPercentage || 0));
             setRemarks('');
             setStatusAsOfDate(new Date().toISOString().split('T')[0]);
@@ -237,7 +237,10 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
         const num = Math.min(100, Math.max(minPct, Number(val)));
         setPercentage(num);
         // Only auto-set status if one is already selected (don't override placeholder)
-        if (num === 0 && constructionStatus) setConstructionStatus(ConstructionStatus.NotYetStarted);
+        // Auto-set status only if moving from 0% and a status is ALREADY selected (not placeholder)
+        if (num === 0 && constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted) {
+            setConstructionStatus(ConstructionStatus.NotYetStarted);
+        }
         else if (num === 100 && constructionStatus !== ConstructionStatus.Completed) setConstructionStatus(ConstructionStatus.ForFinalInspection);
         else if (num > 0 && num < 100 && [ConstructionStatus.Completed, ConstructionStatus.ForFinalInspection].includes(constructionStatus)) {
             setConstructionStatus(ConstructionStatus.Ongoing);
@@ -247,6 +250,9 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     const canProceedNext = () => {
         if (isProcurementMode) {
             return { ok: true };
+        }
+        if (step === 2 && !constructionStatus) {
+            return { ok: false, reason: "Please select a construction status." };
         }
         const progressive = [ConstructionStatus.Ongoing, ConstructionStatus.ForFinalInspection, ConstructionStatus.Completed];
         if (step === 2 && progressive.includes(constructionStatus) && internalFiles.length === 0 && externalFiles.length === 0) {
@@ -265,10 +271,13 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     };
 
     const handleSubmit = () => {
+        const check = canProceedNext();
+        if (!check.ok) { alert(`⚠️ ${check.reason}`); return; }
         onSave(
             {
                 ...project,
                 procurement_status: procurementStatus,
+                statusDesignPhase: procurementStatus, // ensuring the backend fallback also updates
                 status: constructionStatus,
                 accomplishmentPercentage: percentage,
                 previousPercentage: project.accomplishmentPercentage,
