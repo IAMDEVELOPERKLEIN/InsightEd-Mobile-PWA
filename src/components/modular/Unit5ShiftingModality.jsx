@@ -60,6 +60,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
+    const [iern, setIern] = useState("");
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [isCertified, setIsCertified] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
@@ -104,6 +105,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 if (res.ok) {
                     const saved = await res.json();
                     let d = (saved.exists && saved.data) ? saved.data : {};
+                    if (d.iern) setIern(d.iern);
 
                     // Fallback to local quest progress for curricular offering
                     if (!d.curricular_offering) {
@@ -354,6 +356,7 @@ const Unit5ShiftingModality = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             const finalAdm = hasAdms ? admData : { adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false };
 
             const payload = {
+                iern,
                 has_standard_shifting: hasStandardShifting,
                 ...mapData,
                 ...finalAdm

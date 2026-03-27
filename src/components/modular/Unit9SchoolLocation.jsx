@@ -14,6 +14,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [initialDraft, setInitialDraft] = React.useState(null);
     const [showWelcomeBack, setShowWelcomeBack] = React.useState(false);
     const [locationData, setLocationData] = React.useState(null);
+    const [iern, setIern] = React.useState("");
     const [showDraftModal, setShowDraftModal] = React.useState(false);
     const [showSuccess, setShowSuccess] = React.useState(false);
     const [isCertified, setIsCertified] = React.useState(false);
@@ -58,11 +59,21 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     const result = await res.json();
                     if (result.success && result.data) {
                         setLocationData(result.data);
+                        if (result.data.iern) setIern(result.data.iern);
                     }
                 }
 
                 // Check for Draft (only if not viewing a completed unit)
                 if (!effectiveReadOnly) {
+                    // Also fetch IERN from the main school record to ensure we have it for the form
+                    const schoolRes = await fetch(`/api/ph_schools/${schoolId}?t=${Date.now()}`);
+                    if (schoolRes.ok) {
+                        const schoolData = await schoolRes.json();
+                        if (schoolData.exists && schoolData.data && schoolData.data.iern) {
+                            setIern(schoolData.data.iern);
+                        }
+                    }
+
                     const draft = await getUnitDraft(9, schoolId);
                     if (draft) {
                         setInitialDraft(draft);
@@ -443,6 +454,7 @@ const Unit9SchoolLocation = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             <SchoolLocation 
                                 ref={formRef}
                                 schoolId={schoolId} 
+                                iern={iern}
                                 onSaveSuccess={handleSaveSuccess}
                                 onSaveDraft={handleSaveDraftAndExit}
                                 initialValues={initialDraft}

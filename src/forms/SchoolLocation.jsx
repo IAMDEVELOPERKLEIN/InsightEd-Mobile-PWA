@@ -9,7 +9,7 @@ import {
 import { FiSave, FiClock, FiMapPin } from 'react-icons/fi';
 import PageTransition from '../components/PageTransition';
 
-const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft, isReadOnly = false, initialValues = null }, ref) => {
+const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSaveDraft, isReadOnly = false, initialValues = null }, ref) => {
     const [loading, setLoading] = useState(false);
     const [riskIndex, setRiskIndex] = useState(null);
     const [currentStep, setCurrentStep] = useState(initialValues?.currentStep || 1);
@@ -132,7 +132,7 @@ const SchoolLocation = React.forwardRef(({ schoolId, onSaveSuccess, onSaveDraft,
             const res = await fetch('/api/school-location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...data, school_id: schoolId })
+                body: JSON.stringify({ ...data, school_id: schoolId, iern })
             });
             const result = await res.json();
             console.log("Save Result:", result);

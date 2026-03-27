@@ -72,6 +72,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
+    const [iern, setIern] = useState("");
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [isCertified, setIsCertified] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
@@ -113,6 +114,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 if (res.ok) {
                     const saved = await res.json();
                     let d = (saved.exists && saved.data) ? saved.data : {};
+                    if (d.iern) setIern(d.iern);
                     setSavedData(d);
 
                     // 1. Determine Allowed Grades
@@ -339,6 +341,7 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
 
             // Payload builder
             const payload = {
+                iern,
                 selected_learner_groups: selectedGroups,
             };
 

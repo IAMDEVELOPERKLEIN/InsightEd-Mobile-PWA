@@ -660,6 +660,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 body: JSON.stringify({
                     schoolId: schoolId,
                     school_id: schoolId,
+                    iern: schoolData?.iern,
                     inventoryEntries: inventoryPayload,
                     rooms: roomsData,
                     repairEntries: repairPayload,
@@ -738,6 +739,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                 body: JSON.stringify({
                     schoolId: schoolId,
                     school_id: schoolId, // Backward fallback
+                    iern: schoolData?.iern,
                     inventoryEntries: inventoryPayload,
                     rooms: roomsData,
                     repairEntries: repairPayload,

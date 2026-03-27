@@ -106,6 +106,11 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         ownership_doc_id: null,
     });
 
+    // ── School ID Unlock Safeguard ───────────────────────────────────────────
+    const [isSchoolIdLocked, setIsSchoolIdLocked] = useState(true);
+    const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+    const [unlockInput, setUnlockInput] = useState("");
+
     const [provinceOptions, setProvinceOptions] = useState([]);
     const [cityOptions, setCityOptions] = useState([]);
     const [barangayOptions, setBarangayOptions] = useState([]);
@@ -296,6 +301,13 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 setCurrentStep(Math.min(draft.step, TOTAL_STEPS - 1));
                 setShowWelcomeBack(true);
                 setTimeout(() => setShowWelcomeBack(false), 3000);
+            }
+
+            // Initially lock if school_id exists
+            if (merged.school_id) {
+                setIsSchoolIdLocked(true);
+            } else {
+                setIsSchoolIdLocked(false);
             }
 
             setIsModeLoading(false);
@@ -882,12 +894,93 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 {currentStep === 0 && (
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest pl-4">6-Digit School ID</label>
+                                            <div className="flex items-center justify-between pl-4 mb-2">
+                                                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">6-Digit School ID</label>
+                                                {isSchoolIdLocked ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">Autolocked</span>
+                                                        <button 
+                                                            onClick={() => setShowUnlockDialog(true)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                                                        >
+                                                            <FiUnlock className="w-3 h-3" />
+                                                            Unlock
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 flex items-center gap-1.5 shadow-sm">
+                                                        <FiCheck className="w-3.5 h-3.5" /> Editing Enabled
+                                                    </span>
+                                                )}
+                                            </div>
                                             <div className="relative">
-                                                <input type="tel" name="school_id" value={formData.school_id} onChange={handleChange} maxLength={6} placeholder="e.g. 101010" className={chunkyInput} autoFocus />
+                                                <input 
+                                                    type="tel" 
+                                                    name="school_id" 
+                                                    value={formData.school_id} 
+                                                    onChange={handleChange} 
+                                                    maxLength={6} 
+                                                    placeholder="e.g. 101010" 
+                                                    className={`${chunkyInput} ${isSchoolIdLocked ? '!bg-slate-50 !text-slate-500 font-black cursor-not-allowed border-dashed' : 'bg-white'}`} 
+                                                    readOnly={isSchoolIdLocked}
+                                                    onClick={() => isSchoolIdLocked && setShowUnlockDialog(true)}
+                                                    autoFocus={!isSchoolIdLocked} 
+                                                />
                                                 {isStep0Valid && <FiCheckCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-emerald-500 w-6 h-6" />}
                                             </div>
                                         </div>
+
+                                        {/* Unlock Confirmation Section */}
+                                        <AnimatePresence>
+                                            {showUnlockDialog && (
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }} 
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="p-6 bg-slate-900 rounded-[2.5rem] border-4 border-indigo-500/20 text-white space-y-5 shadow-2xl">
+                                                        <div className="flex items-start gap-4">
+                                                            <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center text-2xl shadow-xl shadow-indigo-500/20 flex-shrink-0">🔐</div>
+                                                            <div className="space-y-1">
+                                                                <h4 className="font-black text-xs uppercase tracking-[0.2em] text-indigo-400">Security Requirement</h4>
+                                                                <p className="text-[12px] text-slate-300 font-bold leading-relaxed">Type <span className="text-white bg-white/20 px-1.5 py-0.5 rounded-md font-black">Confirm</span> exactly to unlock this protected field.</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <input 
+                                                                type="text" 
+                                                                value={unlockInput}
+                                                                onChange={(e) => setUnlockInput(e.target.value)}
+                                                                placeholder="Type here..."
+                                                                className="w-full p-4 bg-white/10 border-2 border-white/5 rounded-3xl text-white font-black text-center text-lg focus:outline-none focus:border-indigo-500/50 transition-all placeholder:text-slate-600"
+                                                                autoFocus
+                                                            />
+                                                        </div>
+                                                        <div className="flex gap-3">
+                                                            <button 
+                                                                onClick={() => { setShowUnlockDialog(false); setUnlockInput(""); }}
+                                                                className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button 
+                                                                disabled={unlockInput !== "Confirm"}
+                                                                onClick={() => {
+                                                                    setIsSchoolIdLocked(false);
+                                                                    setShowUnlockDialog(false);
+                                                                    setUnlockInput("");
+                                                                }}
+                                                                className="flex-1 py-4 bg-indigo-500 disabled:opacity-20 text-slate-900 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-indigo-500/20"
+                                                            >
+                                                                Unlock ID
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
                                         {formData.iern && (
                                             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="p-5 bg-emerald-50 border-2 border-emerald-100 rounded-3xl flex items-center gap-4">
                                                 <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold">✓</div>

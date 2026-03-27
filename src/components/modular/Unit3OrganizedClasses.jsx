@@ -50,6 +50,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [schoolId, setSchoolId] = useState("");
+    const [iern, setIern] = useState("");
     const [showWelcomeBack, setShowWelcomeBack] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
 
@@ -254,6 +255,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 const saved = await res.json();
                 if (saved.exists && saved.data) {
                     const d = saved.data;
+                    if (d.iern) setIern(d.iern);
                     setTotalEnrollment(d.total_enrollment || 0);
                     
                     // --- New Fixed-Column Hydration ---
@@ -398,6 +400,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             });
 
             const payload = {
+                iern,
                 has_multigrade: availableGrades.some(g => g.id.startsWith("mg_")),
                 multigrade_sections_count: 0,
                 multigrade_groups: null,

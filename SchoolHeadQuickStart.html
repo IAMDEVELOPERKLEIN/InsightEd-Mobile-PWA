@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InsightEd: Operational Guide for School Heads</title>
+    <title>InsightEd: Complete Operational Guide for School Heads</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,231 +28,520 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(226, 232, 240, 0.8);
-            border-radius: 1.5rem;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
+        /* Luxury Design System */
+        :root {
+            --primary: #3B82F6;
+            --primary-focus: #2563EB;
+            --navy-dark: #0A192F;
+            --slate-body: #F8FAFC;
         }
-        .glass-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--slate-body); 
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
         }
-        .gif-placeholder {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border: 2px dashed #3b82f6;
-            min-height: 120px;
-            max-width: 280px;
-            margin: 1.5rem auto;
-            border-radius: 1.5rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-        .phone-mockup {
-            max-width: 280px;
-            margin: 0 auto;
-            border: 8px solid #1e293b;
-            border-radius: 2rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            background: #000;
-            overflow: hidden;
+
+        /* Premium Card Architecture */
+        .unit-card {
+            background: #ffffff;
+            border: 1px solid rgba(241, 245, 249, 0.8);
+            border-radius: 2.5rem;
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.02),
+                0 20px 25px -5px rgba(0, 0, 0, 0.03);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 3rem;
+            margin-bottom: 6rem;
             position: relative;
+            overflow: hidden;
         }
-        .phone-mockup::after {
+
+        .unit-card::before {
             content: '';
             position: absolute;
             top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 100px;
-            height: 20px;
-            background: #1e293b;
-            border-bottom-left-radius: 1rem;
-            border-bottom-right-radius: 1rem;
-            z-index: 10;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0;
+            transition: opacity 0.5s ease;
         }
+
+        .unit-card:hover { 
+            transform: translateY(-8px);
+            box-shadow: 0 40px 60px -15px rgba(15, 23, 42, 0.08);
+        }
+
+        .unit-card:hover::before { opacity: 1; }
+
+        /* Icon & Step Styling */
         .step-pill {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 2.5rem;
-            height: 2.5rem;
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            color: white;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 800;
-            margin-right: 1rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        .unit-card {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(226, 232, 240, 0.8);
-            border-radius: 1.5rem;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            width: 3.5rem;
+            height: 3.5rem;
+            background: var(--navy-dark);
+            color: #ffffff;
+            border-radius: 1.25rem;
+            font-size: 1.25rem;
+            font-weight: 900;
+            margin-right: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1);
             transition: all 0.3s ease;
-            padding: 1.5rem;
-            margin-bottom: 3rem;
         }
-        .unit-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+        .unit-card:hover .step-pill {
+            transform: scale(1.1) rotate(-5deg);
+            background: var(--primary);
         }
-        .magic-math {
-            background: linear-gradient(to right, #eff6ff, #f0f9ff);
-            border-left: 5px solid #3b82f6;
-            padding: 1.25rem;
-            border-radius: 0.75rem;
-            margin: 1.5rem 0;
-            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+
+        /* Phone Mockup (User requested to keep this frame) */
+        .phone-mockup {
+            max-width: 280px;
+            margin: 0 auto;
+            border: 10px solid #1e293b;
+            border-radius: 2.5rem;
+            box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.15);
+            background: #000;
+            overflow: hidden;
+            position: relative;
         }
-        .accent-heading {
-            background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
+
+        /* Navigation Accents */
+        .toc-link {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .toc-link:hover { padding-left: 1.5rem; color: var(--primary); }
+        .toc-link:hover .step-num { background-color: var(--primary); color: white; transform: scale(1.1); }
+
+        /* Hide Scrollbar but keep functionality */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Mobile Overlay Transition */
+        .mobile-overlay { transition: opacity 0.3s ease; }
+
+        /* Mobile Sidebar Customization */
+        #mobile-nav-toggle:checked ~ #mobile-sidebar { transform: translateX(0); }
+        #mobile-nav-toggle:checked ~ .mobile-overlay { display: block; opacity: 1; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 scroll-smooth">
 
-    <!-- Top Navigation -->
-    <nav class="sticky top-0 z-50 bg-navy-950 text-white border-b border-navy-800 backdrop-blur-md bg-opacity-95">
-        <div class="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black text-white italic text-xs">IE</div>
-                <span class="font-bold tracking-tight text-lg uppercase italic text-sm">InsightEd <span class="text-blue-400 font-normal">Operational Guide</span></span>
+    <!-- Mobile Navigation Toggle (Checkbox Hack) -->
+    <input type="checkbox" id="mobile-nav-toggle" class="hidden">
+    
+    <!-- Mobile Sidebar Overlay -->
+    <label for="mobile-nav-toggle" class="mobile-overlay fixed inset-0 bg-slate-900/50 z-[60] hidden transition-opacity opacity-0 cursor-pointer"></label>
+    
+    <!-- Mobile Sidebar Drawer -->
+    <aside id="mobile-sidebar" class="fixed top-0 left-0 w-72 h-full bg-white z-[70] shadow-2xl transform -translate-x-full transition-transform duration-300 md:hidden overflow-y-auto">
+        <div class="p-6 border-b border-slate-50 bg-slate-50/50">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-3">
+                     <img src="public/InsightEd1.png" alt="Logo" class="h-8 w-auto border border-slate-200 rounded-lg shadow-sm">
+                     <div class="flex flex-col">
+                         <span class="text-[10px] font-black text-slate-900 uppercase tracking-widest leading-none">InsightEd</span>
+                         <span class="text-[8px] font-bold text-blue-600 uppercase tracking-tighter">Operational Guide</span>
+                     </div>
+                </div>
+                <label for="mobile-nav-toggle" class="text-slate-400 hover:text-slate-900 cursor-pointer p-2 bg-white rounded-xl shadow-sm border border-slate-100 transition-all active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </label>
             </div>
-            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">v2.0 Beta</div>
+        </div>
+        <div class="p-6">
+            <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Documentation Index</h3>
+        <nav class="space-y-1">
+            <a href="#unit-1" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">01</span>
+                <span>Quick Start</span>
+            </a>
+            <a href="#unit-2" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">02</span>
+                <span>Gateway</span>
+            </a>
+            <a href="#unit-3" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">03</span>
+                <span>Registration</span>
+            </a>
+            <a href="#unit-4" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">04</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="#unit-5" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px] text-blue-600 font-black">05</span>
+                <span>Unit 1: Profile</span>
+            </a>
+            <a href="#unit-6" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">06</span>
+                <span>Unit 2: Enrollment</span>
+            </a>
+            <a href="#unit-7" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">07</span>
+                <span>Unit 3: Sectioning</span>
+            </a>
+            <a href="#unit-8" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">08</span>
+                <span>Unit 4: Profiles</span>
+            </a>
+            <a href="#unit-9" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">09</span>
+                <span>Unit 5: Modality</span>
+            </a>
+            <a href="#unit-10" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">10</span>
+                <span>Unit 7: Resources</span>
+            </a>
+            <a href="#unit-11" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">11</span>
+                <span>Unit 8: Facilities</span>
+            </a>
+            <a href="#unit-12" onclick="document.getElementById('mobile-nav-toggle').checked = false" class="toc-link flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all">
+                <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">12</span>
+                <span>Unit 9: Terrain</span>
+            </a>
+        </nav>
+        </div>
+    </aside>
+
+    <!-- Floating Action Button (Mobile Only) -->
+    <label for="mobile-nav-toggle" class="fixed bottom-6 right-6 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl z-50 flex items-center justify-center md:hidden cursor-pointer hover:scale-110 active:scale-95 transition-all">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+    </label>
+
+    <!-- Top Navigation -->
+    <nav class="sticky top-0 z-50 bg-white/90 border-b border-slate-50 backdrop-blur-xl shadow-sm">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-5">
+                <div class="relative group cursor-pointer">
+                    <div class="absolute inset-0 bg-blue-600 blur-md opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                    <img src="public/InsightEd1.png" alt="Logo" class="h-10 w-auto border border-slate-200 rounded-xl relative z-10 shadow-sm">
+                </div>
+                <div class="flex flex-col">
+                    <span class="font-black tracking-[0.2em] uppercase text-[10px] text-slate-900 leading-none mb-1">InsightEd</span>
+                    <span class="text-[8px] font-bold text-blue-600 uppercase tracking-tighter">Complete Operational Guide</span>
+                </div>
+            </div>
+            <div class="hidden md:flex items-center gap-4">
+                <div class="px-4 py-1.5 bg-slate-50 border border-slate-100 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    v2.0.4 - Operational
+                </div>
+            </div>
         </div>
     </nav>
 
-    <div class="max-w-4xl mx-auto px-6 py-12">
-        <main class="w-full">
+    <div class="max-w-7xl mx-auto px-6 py-12 flex flex-col md:flex-row gap-12">
+        <!-- Table of Contents Sidebar (Desktop) -->
+        <aside class="md:w-64 flex-shrink-0 hidden md:block">
+            <div class="sticky top-24">
+                <div class="px-4 mb-6">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">Guide Content</h3>
+                    <div class="h-1 w-8 bg-blue-600 rounded-full"></div>
+                </div>
+                <nav class="space-y-1">
+                    <a href="#unit-1" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px] transition-all">01</span>
+                        <span>Quick Start</span>
+                    </a>
+                    <a href="#unit-2" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px] transition-all">02</span>
+                        <span>Gateway</span>
+                    </a>
+                    <a href="#unit-3" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px] transition-all">03</span>
+                        <span>Registration</span>
+                    </a>
+                    <a href="#unit-4" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px] transition-all">04</span>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="#unit-5" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px] text-blue-600 font-black">05</span>
+                        <span>Unit 1: Profile</span>
+                    </a>
+                    <a href="#unit-6" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">06</span>
+                        <span>Unit 2: Enrollment</span>
+                    </a>
+                    <a href="#unit-7" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">07</span>
+                        <span>Unit 3: Sectioning</span>
+                    </a>
+                    <a href="#unit-8" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">08</span>
+                        <span>Unit 4: Profiles</span>
+                    </a>
+                    <a href="#unit-9" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">09</span>
+                        <span>Unit 5: Modality</span>
+                    </a>
+                    <a href="#unit-10" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">10</span>
+                        <span>Unit 7: Resources</span>
+                    </a>
+                    <a href="#unit-11" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">11</span>
+                        <span>Unit 8: Facilities</span>
+                    </a>
+                    <a href="#unit-12" class="toc-link flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
+                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-[10px]">12</span>
+                        <span>Unit 9: Terrain</span>
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <main class="flex-1 min-w-0">
             
-            <!-- Global Header -->
-            <header class="mb-24 text-center">
-                <div class="inline-block px-4 py-1.5 bg-navy-950 text-white text-[10px] font-black rounded-lg uppercase tracking-[0.3em] mb-6 shadow-xl">Official Technical Manual</div>
-                <h1 class="text-5xl md:text-6xl font-black text-slate-900 mb-6 tracking-tight leading-tight">InsightEd <span class="accent-heading">Operational Guide</span></h1>
-                <p class="text-xl md:text-2xl text-slate-500 leading-relaxed mx-auto font-medium max-w-2xl italic tracking-tight underline decoration-blue-500 decoration-4 underline-offset-8">
-                    Empowering School Leadership through Data-Driven Insights
-                </p>
+            <!-- Global Content Header -->
+            <header class="mb-32 relative group">
+                <!-- Sophisticated Background Element -->
+                <div class="absolute inset-0 bg-slate-50/50 rounded-[3rem] -z-10 blur-2xl group-hover:blur-3xl transition-all duration-700"></div>
+                
+                <div class="flex flex-col items-center justify-center py-20 px-8 rounded-[3rem] border border-slate-100 bg-white shadow-2xl shadow-slate-200/50 overflow-hidden relative">
+                     <!-- Mesh Gradient Accents -->
+                     <div class="absolute -top-24 -left-24 w-64 h-64 bg-blue-100/40 rounded-full blur-[80px]"></div>
+                     <div class="absolute -bottom-24 -right-24 w-64 h-64 bg-slate-200/40 rounded-full blur-[80px]"></div>
+
+                     <div class="flex items-center justify-center gap-10 mb-14 relative z-10">
+                         <img src="public/logo1.png" alt="Logo 1" class="h-20 w-auto hover:rotate-3 transition-transform cursor-pointer">
+                         <img src="public/logo2.png" alt="Logo 2" class="h-24 w-auto drop-shadow-2xl">
+                         <img src="public/logo3.png" alt="Logo 3" class="h-20 w-auto hover:-rotate-3 transition-transform cursor-pointer">
+                     </div>
+                     
+                     <div class="text-center relative z-10 max-w-4xl">
+                         <div class="inline-flex items-center gap-3 px-6 py-2 bg-slate-900 text-white text-[10px] font-black rounded-full uppercase tracking-[0.4em] mb-10 shadow-xl border border-white/20">
+                              <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span>
+                              Verified Operational Protocol 2026
+                         </div>
+                         
+                         <h1 class="text-5xl md:text-7xl font-black text-slate-900 mb-8 tracking-tighter leading-[0.9] uppercase">
+                            InsightEd <br>
+                            <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-slate-800 to-slate-900">Operational Guide</span>
+                         </h1>
+                         
+                         <div class="h-1.5 w-32 bg-slate-900 mx-auto mb-10 rounded-full"></div>
+                         
+                         <p class="text-xl md:text-2xl text-slate-500 leading-relaxed font-medium italic tracking-tight mx-auto max-w-2xl px-4">
+                             "A high-fidelity framework for modern school governance, empowering leadership through advanced data intelligence."
+                         </p>
+                    </div>
+                </div>
             </header>
 
-            <!-- 1. Quick Start & Installation -->
-            <section class="mb-24">
-                <div class="flex items-center mb-8">
-                    <span class="step-pill">01</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Quick Start & Installation</h2>
-                </div>
+            <section id="unit-1" class="mb-32 scroll-mt-24">
+                <header class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                    <div class="flex items-center">
+                        <span class="step-pill">01</span>
+                        <div>
+                            <span class="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Operational Phase</span>
+                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Quick Start</h2>
+                        </div>
+                    </div>
+                    <div class="h-px flex-1 bg-slate-200 hidden md:block mx-8 mb-4"></div>
+                    <div class="text-right">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Installation Guide</span>
+                    </div>
+                </header>
+
                 <div class="unit-card">
-                    <p class="mb-8 text-lg font-medium text-slate-600 leading-relaxed border-b pb-6 border-slate-100">InsightEd is a **Progressive Web App (PWA)** designed to operate directly from your mobile browser while remaining "offline-ready."</p>
+                    <div class="mb-12 border-l-4 border-blue-600 pl-8">
+                        <p class="text-xl font-medium text-slate-800 leading-relaxed italic">"InsightEd is a Progressive Web App (PWA) designed to operate directly from your mobile browser."</p>
+                    </div>
                     
-                    <div class="grid md:grid-cols-2 gap-12 items-center">
-                        <div class="space-y-8">
-                            <div class="group">
-                                <h3 class="font-black text-navy-950 uppercase tracking-widest text-sm mb-2 flex items-center gap-2">
-                                    <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span> 1.1 PWA Installation
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="space-y-10">
+                            <div class="relative pl-8 border-l border-slate-100">
+                                <span class="absolute left-0 top-0 w-1 h-full bg-slate-100 group-hover:bg-blue-600 transition-colors"></span>
+                                <h3 class="font-black text-slate-900 uppercase tracking-[0.2em] text-xs mb-3 flex items-center gap-3">
+                                    <span class="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span> 1.1 PWA Installation
                                 </h3>
-                                <p class="text-slate-500 leading-relaxed">Open Chrome (Android) or Safari (iOS) and navigate to <code class="bg-blue-50 px-2 py-1 rounded text-blue-700 font-bold border border-blue-100">tinyurl.com/InsightEdV2</code>.</p>
-                            </div>
-                            <div class="group">
-                                <h3 class="font-black text-navy-950 uppercase tracking-widest text-sm mb-2 flex items-center gap-2">
-                                    <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span> 1.2 Add to Home Screen
-                                </h3>
-                                <p class="text-slate-500 leading-relaxed">Select <strong class="text-slate-900">"Add to Home Screen"</strong> or <strong class="text-slate-900">"Install App"</strong> from your browser menu.</p>
-                            </div>
-                            <div class="group">
-                                <h3 class="font-black text-navy-950 uppercase tracking-widest text-sm mb-2 flex items-center gap-2">
-                                    <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span> 1.3 Launch
-                                </h3>
-                                <p class="text-slate-500 leading-relaxed">Open the InsightEd icon from your home screen to begin.</p>
+                                <p class="text-slate-500 leading-relaxed text-sm">Open Chrome (Android) or Safari (iOS) and navigate to <code class="bg-blue-50/50 px-3 py-1 rounded-lg text-blue-600 font-black border border-blue-100">tinyurl.com/InsightEdV2</code>.</p>
                             </div>
                         </div>
                         <div class="phone-mockup">
                             <img src="public/pwa_installation_flow.gif" alt="PWA Installation Flow" class="w-full h-auto">
                         </div>
                     </div>
+                    
+                    <div class="mt-16 p-10 bg-slate-950 text-white rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
+                        <div class="absolute right-0 top-0 w-32 h-32 bg-blue-600/10 rounded-full blur-3xl group-hover:bg-blue-600/20 transition-all"></div>
+                        <h4 class="font-black text-blue-400 uppercase text-[10px] mb-6 tracking-[0.4em]">Official Installation Protocol</h4>
+                        <div class="grid md:grid-cols-2 gap-8 text-xs">
+                            <div class="space-y-4">
+                                <p class="flex items-start gap-3"><span class="text-blue-500 font-black italic">STEP 1:</span> <span class="opacity-80 leading-relaxed">Launch Chrome (Android) or Safari (iOS). Navigate to the official URL provided above.</span></p>
+                                <p class="flex items-start gap-3"><span class="text-blue-500 font-black italic">STEP 2:</span> <span class="opacity-80 leading-relaxed">Locate the "Add to Home Screen" option in your browser menu.</span></p>
+                            </div>
+                            <div class="p-6 bg-white/5 rounded-2xl border border-white/10">
+                                <ul class="space-y-3 italic">
+                                    <li class="flex items-center gap-3 text-slate-300">
+                                        <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
+                                        <strong>Android:</strong> Tap <span class="text-white font-bold">⋮</span> &rarr; "Add to Home Screen".
+                                    </li>
+                                    <li class="flex items-center gap-3 text-slate-300">
+                                        <span class="w-1.5 h-1.5 bg-blue-600 rounded-full"></span>
+                                        <strong>iOS:</strong> Tap <span class="text-white font-bold">Share</span> &rarr; "Add to Home Screen".
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
-            <!-- 2. Choosing Your Portal -->
-            <section class="mb-24">
-                <div class="flex items-center mb-8">
-                    <span class="step-pill">02</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">The Nexus Gateway</h2>
-                </div>
+            <section id="unit-2" class="mb-32 scroll-mt-24">
+                <header class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                    <div class="flex items-center">
+                        <span class="step-pill">02</span>
+                        <div>
+                            <span class="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Authorization Path</span>
+                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Nexus Gateway</h2>
+                        </div>
+                    </div>
+                    <div class="h-px flex-1 bg-slate-200 hidden md:block mx-8 mb-4"></div>
+                    <div class="text-right">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Portal Logic</span>
+                    </div>
+                </header>
+
                 <div class="unit-card">
-                    <p class="mb-8 font-medium text-slate-600 border-b pb-6 border-slate-100 italic">Upon launching, navigate to the correct entry point to unlock your administrative nodes.</p>
-                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <div class="mb-12">
+                        <p class="text-lg font-medium text-slate-500 italic leading-relaxed">"Upon launching, navigate to the correct entry point to unlock your administrative nodes."</p>
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
                         <div class="phone-mockup">
                             <img src="public/nexus_portal_selection.gif" alt="Nexus Portal Selection" class="w-full h-auto">
                         </div>
-                        <div class="space-y-6">
-                            <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 transition-colors hover:bg-white hover:border-blue-400 group">
-                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-2 tracking-widest group-hover:text-blue-500">Step Alpha</h4>
-                                <p class="text-slate-700 font-bold">Select the <span class="bg-blue-100 text-blue-700 px-2 rounded">"InsightED (For HROD)"</span> path.</p>
+                        <div class="space-y-4">
+                            <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm transition-all hover:shadow-xl hover:border-blue-400 group">
+                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-2 tracking-[0.3em] group-hover:text-blue-500">Step Alpha</h4>
+                                <p class="text-slate-700 font-bold text-lg tracking-tight">Select <span class="bg-blue-600 text-white px-3 py-0.5 rounded-lg text-sm italic">InsightED (For HROD)</span></p>
                             </div>
-                            <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 transition-colors hover:bg-white hover:border-blue-400 group">
-                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-2 tracking-widest group-hover:text-blue-500">Step Beta</h4>
-                                <p class="text-slate-700 font-bold">Locate and select the <span class="text-navy-950 underline decoration-2 decoration-blue-500">"School Head Portal"</span>.</p>
+                            <div class="p-6 rounded-3xl bg-white border border-slate-100 shadow-sm transition-all hover:shadow-xl hover:border-blue-400 group">
+                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-2 tracking-[0.3em] group-hover:text-blue-500">Step Beta</h4>
+                                <p class="text-slate-700 font-bold text-lg tracking-tight">Select <span class="text-navy-950 underline decoration-[3px] decoration-blue-500 underline-offset-4">School Head Portal</span></p>
                             </div>
-                            <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 transition-colors hover:bg-white hover:border-blue-400 group text-center border-dashed">
-                                <p class="text-sm font-black uppercase text-navy-950 tracking-tighter italic">Click "Create Account" for Digital Identity.</p>
+                            <div class="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center relative overflow-hidden group shadow-2xl">
+                                <div class="absolute inset-0 bg-blue-600/5 translate-y-full group-hover:translate-y-0 transition-transform"></div>
+                                <p class="text-sm font-black uppercase text-blue-400 tracking-widest italic relative z-10">Click "Create Account" for Digital Identity</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-16 p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] relative">
+                        <div class="absolute right-8 top-[-1.5rem] px-5 py-2 bg-slate-900 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-xl">Detailed Logic</div>
+                        <div class="grid md:grid-cols-3 gap-8 text-sm pt-4">
+                            <div class="space-y-2">
+                                <h5 class="font-black text-slate-400 text-[10px] uppercase tracking-widest">01 / Selection</h5>
+                                <p class="text-slate-600 italic">Select the "InsightED (For HROD)" tile on the landing screen.</p>
+                            </div>
+                            <div class="space-y-2">
+                                <h5 class="font-black text-slate-400 text-[10px] uppercase tracking-widest">02 / Roles</h5>
+                                <p class="text-slate-600 italic">From the list of portals, click on the "School Head Portal."</p>
+                            </div>
+                            <div class="space-y-2">
+                                <h5 class="font-black text-slate-400 text-[10px] uppercase tracking-widest">03 / Initiation</h5>
+                                <p class="text-slate-600 italic">Click the "Create Account" button below the login fields.</p>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- 3. Registration & Identity -->
-            <section class="mb-24">
-                <div class="flex items-center mb-8">
-                    <span class="step-pill">03</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Registration & Identity</h2>
-                </div>
+            <section id="unit-3" class="mb-32 scroll-mt-24">
+                <header class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                    <div class="flex items-center">
+                        <span class="step-pill">03</span>
+                        <div>
+                            <span class="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Entity Mapping</span>
+                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Identity Registry</h2>
+                        </div>
+                    </div>
+                    <div class="h-px flex-1 bg-slate-200 hidden md:block mx-8 mb-4"></div>
+                </header>
+
                 <div class="unit-card">
-                    <div class="grid md:grid-cols-2 gap-12">
-                        <div class="space-y-8">
-                            <div class="p-6 bg-navy-950 text-white rounded-2xl shadow-xl relative overflow-hidden group">
-                                <div class="absolute -right-4 -top-4 w-24 h-24 bg-blue-600/20 rounded-full blur-2xl group-hover:bg-blue-600/40 transition-colors"></div>
-                                <h3 class="text-xs font-black text-blue-400 uppercase tracking-[0.2em] mb-4">3.3 IERN Registry</h3>
-                                <p class="text-sm leading-relaxed mb-4">Your unique **IERN (Institutional Entity Reference Number)** is your primary digital key. <span class="text-blue-300 italic">Record this immediately—it is required for all future syncs.</span></p>
+                    <div class="grid md:grid-cols-2 gap-16">
+                        <div class="space-y-10">
+                            <div class="p-10 bg-navy-950 text-white rounded-[2.5rem] shadow-2xl relative overflow-hidden group border border-white/5">
+                                <div class="absolute -right-4 -top-4 w-32 h-32 bg-blue-600/10 rounded-full blur-3xl group-hover:bg-blue-600/30 transition-all"></div>
+                                <h3 class="text-[10px] font-black text-blue-400 uppercase tracking-[0.4em] mb-6">3.3 IERN Registry</h3>
+                                <p class="text-lg leading-relaxed mb-6 font-medium tracking-tight">Your unique IERN (InsightEd Reference Number) is your primary digital key. <span class="text-blue-400 italic font-bold">Record this immediately—it is required for all future syncs.</span></p>
+                                <div class="h-1 w-12 bg-blue-600 rounded-full"></div>
                             </div>
-                            <div class="space-y-4">
-                                <h4 class="font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2 h-2 bg-slate-300 rounded-full"></span> 3.1 Personal Mapping
-                                </h4>
-                                <p class="text-sm text-slate-500 pl-4 border-l-2 border-slate-100 italic">First/Last Name, official Email, and Contact Number are mandatory fields.</p>
-                                
-                                <h4 class="font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2 h-2 bg-slate-300 rounded-full"></span> 3.2 Hierarchy Path
-                                </h4>
-                                <p class="text-sm text-slate-500 pl-4 border-l-2 border-slate-100 italic">Region &rarr; Division &rarr; District &rarr; School Level &rarr; School ID.</p>
+                            <div class="space-y-8 pl-6 border-l-2 border-slate-100">
+                                <div class="group">
+                                    <h4 class="font-black text-slate-900 uppercase tracking-[0.2em] text-xs flex items-center gap-3 mb-2">
+                                        <span class="w-2 h-2 bg-blue-600 rounded-full"></span> 3.1 Personal Mapping
+                                    </h4>
+                                    <p class="text-sm text-slate-500 italic leading-relaxed pl-5 tracking-tight">"First/Last Name, official Email, and Contact Number are mandatory fields."</p>
+                                </div>
+                                <div class="group">
+                                    <h4 class="font-black text-slate-900 uppercase tracking-[0.2em] text-xs flex items-center gap-3 mb-2">
+                                        <span class="w-2 h-2 bg-blue-600 rounded-full"></span> 3.2 Hierarchy Path
+                                    </h4>
+                                    <p class="text-sm text-slate-500 italic leading-relaxed pl-5 tracking-tight font-black uppercase tracking-widest text-[9px] text-blue-600">Region &rarr; Division &rarr; District &rarr; Level &rarr; School ID</p>
+                                </div>
                             </div>
                         </div>
-                        <div class="space-y-6">
+                        <div class="space-y-10">
                             <div class="phone-mockup">
-                                <img src="public/geotagging_validation.gif" alt="Geotagging Validation" class="w-full h-auto">
+                                <img src="public/registration_school_mapping.gif" alt="Registration School Mapping" class="w-full h-auto">
                             </div>
-                            <p class="text-[11px] text-center font-bold text-slate-400 uppercase tracking-widest italic tracking-tight">3.4 Precision Mapping: Drag the pin to the school's geographical center.</p>
+                            <div class="text-center">
+                                <span class="bg-slate-900 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl inline-block mb-4">Precision Mapping</span>
+                                <p class="text-xs text-slate-400 italic uppercase font-bold tracking-tight">Drag the pin to the school's geographical center.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Re-inserting the missing detailed section for Unit 3 -->
+                    <div class="mt-16 p-10 bg-slate-50 border border-slate-100 rounded-[2.5rem] shadow-inner">
+                        <h4 class="font-black text-navy-950 uppercase text-xs mb-6 tracking-widest group-hover:text-blue-500">Account Creation & Hierarchical Mapping</h4>
+                        <div class="grid md:grid-cols-2 gap-10 text-sm italic">
+                             <div class="space-y-6">
+                                 <div>
+                                     <h5 class="font-black text-slate-900 text-[10px] uppercase mb-2">3.1 Personal & Contact Details</h5>
+                                     <p class="text-slate-500 leading-relaxed">Input your official First Name and Last Name. Use a DepEd email address and active mobile number.</p>
+                                 </div>
+                                 <div>
+                                     <h5 class="font-black text-slate-900 text-[10px] uppercase mb-2">3.3 IERN & Geotagging</h5>
+                                     <p class="text-slate-500 leading-relaxed">The IERN is your Institutional Entity Reference Number. Geotagging sets the exact coordinates for disaster risk mapping.</p>
+                                 </div>
+                             </div>
+                             <div class="p-8 bg-white border border-slate-100 rounded-3xl shadow-sm">
+                                 <h5 class="font-black text-blue-600 text-[10px] uppercase mb-4 tracking-widest">3.2 The 5-Step Hierarchy</h5>
+                                 <ol class="space-y-2 text-[11px] font-bold text-slate-700">
+                                     <li>1. Select Region</li>
+                                     <li>2. Select Division (SDO)</li>
+                                     <li>3. Select District</li>
+                                     <li>4. Select School Level</li>
+                                     <li>5. Select School Name & ID</li>
+                                 </ol>
+                                 <p class="mt-4 text-[9px] text-slate-400 uppercase font-black">Creates Filtered Security Tunnel</p>
+                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- 4. The Nexus Dashboard -->
-            <section class="mb-24">
+            <section id="unit-4" class="mb-24 scroll-mt-24">
                 <div class="flex items-center mb-8">
                     <span class="step-pill">04</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Nexus Nodes Dashboard</h2>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 4: Nexus Nodes Dashboard</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-12 items-center">
@@ -284,65 +573,78 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <div class="mt-8 p-6 bg-slate-50 rounded-2xl border border-slate-200">
+                        <h4 class="font-black text-navy-950 uppercase text-xs mb-4 tracking-widest">Navigation: Nodes & Activity</h4>
+                        <div class="space-y-4 text-sm text-slate-600">
+                            <p>Once logged in, you will use the Nodes-Dashboard (also known as the Nexus Dashboard).</p>
+                            <ul class="list-disc pl-6 space-y-2">
+                                <li><strong class="text-slate-900">CLOUD (Units 1-9):</strong> This is where you perform your periodic school audits.</li>
+                                <li><strong class="text-slate-900">ESF7:</strong> The portal for uploading your Electronic School Form 7 (Personnel).</li>
+                                <li><strong class="text-slate-900">NSPP:</strong> Currently LOCKED for future national updates.</li>
+                                <li><strong class="text-slate-900">My Activity:</strong> Accessible from the sidebar. It shows your submission history. Click the "UNIT" button here to enter the Modular Dashboard and begin auditing Units 1–9.</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
-            </section>
-
-            <!-- 5. Unit 1: School Profile -->
-            <section class="mb-20">
-                <div class="flex items-center mb-6">
-                    <span class="step-pill">5</span>
-                    <h2 class="text-2xl font-black text-navy-950 uppercase tracking-tight">Unit 1: School Profile & Identity</h2>
+            </sect            <section id="unit-5" class="mb-24 scroll-mt-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">05</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">05: Unit 1: School Profile & Identity</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-8">
                         <div class="text-sm space-y-4">
                             <p><strong class="text-navy-950">5.1 Basic Info:</strong> DO NOT use abbreviations for the School Name. Verify all location details.</p>
                             <p><strong class="text-navy-950">5.2 Curricular Offering:</strong> Select specific authorized offering (e.g., K-6, K-12).</p>
-                            <p><strong class="text-navy-950">5.3 School Head Info:</strong> Name autofilled. Input Middle Name, Sex, Position, DOB, Date Appointed.</p>
-                            <p><strong class="text-navy-950">5.4 Ownership:</strong> Select Month/Year established and Ownership Type.</p>
                         </div>
                         <div class="text-sm space-y-4 border-l md:pl-8 border-slate-100">
                             <p><strong class="text-navy-950">5.5 Documentation:</strong> Upload supporting document (Deed of Donation, etc.) in **PDF format** only.</p>
-                            <p><strong class="text-navy-950">5.6 Annex/Extension:</strong> Input Extension School ID or Mother School ID accordingly.</p>
                         </div>
                     </div>
-                </div>
-            </section>            <!-- 6. Unit 2: Enrollment -->
-            <section class="mb-24">
-                <div class="flex items-center mb-8">
-                    <span class="step-pill">06</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 2: Modular Enrollment</h2>
-                </div>
-                <div class="unit-card">
-                    <div class="mb-10 p-5 border border-blue-100 bg-blue-50/50 rounded-2xl shadow-inner group">
-                        <h4 class="text-blue-700 font-black text-xs uppercase mb-2 tracking-[0.2em] italic flex items-center gap-2">
-                             6.2 The Mandatory Disable Gate
-                        </h4>
-                        <p class="text-slate-600 text-sm italic leading-relaxed">You MUST either input enrollment or click <strong class="text-blue-600">"Disable"</strong> for every grade level. This dynamic filter hides inactive grades across all subsequent units to streamline your workflow.</p>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-12">
-                        <div class="phone-mockup">
-                            <img src="public/enrollment_entry_grid.gif" alt="Enrollment Entry Grid" class="w-full h-auto">
-                        </div>
-                        <div class="space-y-6">
-                            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                                <h4 class="font-black text-slate-900 uppercase text-xs mb-3 italic">6.5 Gender Validation</h4>
-                                <p class="text-sm text-slate-500 leading-relaxed italic">The "Magic Math" validation automatically triggers once Total Male and Total Female counts are encoded. Discrepancies will block unit finalization.</p>
-                            </div>
-                            <div class="p-6 bg-slate-900 text-white rounded-2xl">
-                                <h4 class="text-blue-400 font-bold text-xs uppercase mb-3 italic tracking-widest">6.4 Special Populations</h4>
-                                <p class="text-sm italic opacity-80 leading-relaxed">Ensure precise reporting for SNEd (Special Needs) and ARAL program participants.</p>
-                            </div>
+                    
+                    <div class="mt-8 p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200">
+                        <h4 class="font-black text-slate-900 uppercase text-xs mb-4 tracking-widest">Unit 1 Identity & Ownership Details</h4>
+                        <div class="space-y-4 text-sm text-slate-600 italic">
+                            <p>This unit establishes the legal and physical identity of your school. Ensure school nomenclature precisely matches official SDO records.</p>
                         </div>
                     </div>
                 </div>
             </section>
+            <section id="unit-6" class="mb-32 scroll-mt-24">
+                <header class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                    <div class="flex items-center">
+                        <span class="step-pill">06</span>
+                        <div>
+                            <span class="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Data Flow</span>
+                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 2: Learners</h2>
+                        </div>
+                    </div>
+                </header>
 
-            <!-- 7. Unit 3: Sectioning -->
-            <section class="mb-24">
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-20 items-center">
+                        <div class="phone-mockup">
+                            <img src="public/unit2_learners_enrollment.gif" alt="Unit 2 Learners Enrollment" class="w-full h-auto">
+                        </div>
+                        <div class="space-y-10">
+                            <div class="p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 relative group overflow-hidden">
+                                <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-4 italic">"Enrollment Logic"</h3>
+                                <p class="text-sm text-slate-600 leading-relaxed italic">Input the Enrollment Per Grade Level. The <span class="bg-blue-600 text-white px-2 py-0.5 rounded-lg text-[10px]">MAGIC MATH</span> validation ensures the sum of Male and Female exactly equals the total enrollment.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-16 p-10 bg-slate-950 text-white rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                        <h4 class="text-blue-400 font-bold text-xs uppercase mb-4 tracking-widest italic">Unit 2 Enrollment Logic Details</h4>
+                        <p class="text-xs italic leading-relaxed opacity-90 italic">The "Magic Math" validation protocol enforces exact summation of Male + Female counts. You MUST either input enrollment or click "Disable" for every grade level.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="unit-7" class="mb-24 scroll-mt-24">
                 <div class="flex items-center mb-8">
                     <span class="step-pill">07</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 3: Section Standards</h2>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">07: Unit 3: Section Standards</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-12 items-center">
@@ -362,14 +664,18 @@
                             <div class="text-blue-600 font-black text-lg font-mono">= TOTAL SECTIONS</div>
                         </div>
                     </div>
+                    
+                    <div class="mt-8 p-6 bg-slate-50 border border-slate-200 rounded-2xl border-dashed">
+                        <h4 class="font-black text-slate-900 uppercase text-[10px] mb-3 tracking-widest">Unit 3 Sectioning Guard</h4>
+                        <p class="text-xs text-slate-500 italic leading-relaxed">Categorize sections into **LT** (Below), **WS** (Within), and **AS** (Above) standards. The sum must exactly match the total sections reported per grade.</p>
+                    </div>
                 </div>
             </section>
 
-            <!-- 8. Unit 4: Learner Profile -->
-            <section class="mb-24">
+            <section id="unit-8" class="mb-24 scroll-mt-24">
                 <div class="flex items-center mb-8">
                     <span class="step-pill">08</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 4: Specialized Profiles</h2>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">08: Unit 4: Specialized Profiles</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-12">
@@ -392,14 +698,18 @@
                             <p class="text-sm text-slate-500 italic border-l-4 border-slate-200 pl-4">If repeaters or dropouts are present, select "Yes" to unlock grade-level specific reporting.</p>
                         </div>
                     </div>
+                    
+                    <div class="mt-8 p-6 bg-slate-50 border border-slate-200 rounded-2xl">
+                        <h4 class="font-black text-slate-900 uppercase text-xs mb-3 italic tracking-widest">Unit 4 Health & Community Protocol</h4>
+                        <p class="text-xs text-slate-500 italic leading-relaxed">Report community groups (IP, ALS, etc.) and nutritional status. Normal status calculation is entirely automated via the system matrix.</p>
+                    </div>
                 </div>
             </section>
 
-            <!-- 9. Unit 5: Learning Modality -->
-            <section class="mb-24">
+            <section id="unit-9" class="mb-24 scroll-mt-24">
                 <div class="flex items-center mb-8">
                     <span class="step-pill">09</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 5: Modality & Shifting</h2>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">09: Unit 5: Modality & Shifting</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-12">
@@ -418,14 +728,18 @@
                             <p class="text-sm italic opacity-90 leading-relaxed px-4">Identify Alternative Delivery Modes (Modular, Online) activated due to local disasters or extreme congestion.</p>
                         </div>
                     </div>
+                    
+                    <div class="mt-8 p-6 bg-red-50/30 border border-red-100 rounded-2xl">
+                        <h4 class="font-black text-red-900 uppercase text-xs mb-2 italic">Unit 5 Delivery Modes Protocol</h4>
+                        <p class="text-xs text-red-700 italic leading-relaxed font-medium">Map operational shifts (Single/Double) and Alternative Delivery Modes (ADM) triggered by local hazards or extreme congestion.</p>
+                    </div>
                 </div>
             </section>
 
-            <!-- 10. Unit 7: School Resources -->
-            <section class="mb-24">
+            <section id="unit-10" class="mb-24 scroll-mt-24">
                 <div class="flex items-center mb-8">
                     <span class="step-pill">10</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 7: Infrastructure Audit</h2>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">10: Unit 7: Infrastructure Audit</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-12">
@@ -446,14 +760,18 @@
                             <p class="text-xs text-slate-500 italic leading-relaxed pl-4 border-l-2 border-blue-500">Catalog all digital assets. For <strong class="text-navy-950 uppercase">eCarts</strong>, specify Batch Name, Funding Year, and official Source.</p>
                         </div>
                     </div>
+                    
+                    <div class="mt-8 p-6 bg-slate-900 text-white rounded-2xl shadow-xl">
+                        <h4 class="text-blue-400 font-bold text-xs uppercase mb-3 italic tracking-widest">Unit 7 Asset & WASH Protocol</h4>
+                        <p class="text-xs italic leading-relaxed opacity-90">Audit seating, ICT assets, DCP packages, and WASH (water/sanitation) infrastructure. Critical shortages require keyword verification.</p>
+                    </div>
                 </div>
             </section>
 
-            <!-- 11. Unit 8: Physical Facilities -->
-            <section class="mb-24">
+            <section id="unit-11" class="mb-24 scroll-mt-24">
                 <div class="flex items-center mb-8">
                     <span class="step-pill">11</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 8: Building Register</h2>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">11: Unit 8: Building Register</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-12">
@@ -472,14 +790,18 @@
                             <img src="public/building_inventory_add.gif" alt="Building Inventory Add" class="w-full h-auto">
                         </div>
                     </div>
+                    
+                    <div class="mt-8 p-6 bg-amber-50 border border-amber-100 rounded-2xl">
+                        <h4 class="text-amber-800 font-black text-xs uppercase mb-2 tracking-widest italic">Unit 8 Facility Management</h4>
+                        <p class="text-xs text-amber-700 italic leading-relaxed">Register physical structures and classrooms. The "Damage Proportionality" slider (0-100%) prioritizes maintenance and rehabilitation requests.</p>
+                    </div>
                 </div>
             </section>
 
-            <!-- 12. Unit 9: School Terrain -->
-            <section class="mb-24">
+            <section id="unit-12" class="mb-24 scroll-mt-24">
                 <div class="flex items-center mb-8">
                     <span class="step-pill">12</span>
-                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">Unit 9: Environment Profile</h2>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter">12: Unit 9: School Terrain</h2>
                 </div>
                 <div class="unit-card">
                     <div class="grid md:grid-cols-2 gap-12">
@@ -500,6 +822,14 @@
                             <div class="text-5xl font-black font-mono text-white tracking-widest bg-white/5 py-4 rounded-2xl border border-white/10 group-hover:scale-105 transition-transform">0-10</div>
                         </div>
                     </div>
+                    
+                    <div class="mt-8 p-6 bg-navy-950 text-white rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
+                        <div class="absolute inset-0 bg-blue-600/10 opacity-50 group-hover:scale-110 transition-transform duration-700"></div>
+                        <div class="relative z-10 text-center">
+                            <h4 class="text-blue-400 font-black text-xs uppercase tracking-[0.4em] mb-4 italic">Unit 9 Risk & Hazards Protocol</h4>
+                            <p class="text-xs italic leading-relaxed text-slate-300 max-w-xl mx-auto italic">Quantify road passability, transportation modes, and proximity to environmental hazards to generate a Holistic Risk Score (0-10) for your master profile.</p>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -512,13 +842,18 @@
             <!-- Final Support -->
             <footer class="mt-40 pt-16 border-t border-slate-200 text-center">
                 <div class="max-w-md mx-auto">
+                    <div class="flex items-center justify-center gap-6 mb-8">
+                        <img src="public/logo1.png" alt="Logo 1" class="h-16 w-auto">
+                        <img src="public/logo2.png" alt="Logo 2" class="h-16 w-auto">
+                        <img src="public/logo3.png" alt="Logo 3" class="h-16 w-auto">
+                    </div>
                     <h2 class="text-xl font-black text-navy-950 uppercase mb-4 tracking-widest">Technical Support Desk</h2>
                     <p class="text-sm text-slate-500 mb-8 italic">For critical inquiries, contact the Stratcom/Stride team via Google Chat.</p>
                     <div class="bg-navy-950 p-6 rounded-2xl text-white font-mono text-xs shadow-2xl">
                         support.stride@deped.gov.ph
                     </div>
                 </div>
-                <p class="mt-20 text-[10px] text-slate-300 uppercase tracking-[0.5em] font-black pb-12 italic">InsightEd &copy; 2026 Operational Guide</p>
+                <p class="mt-20 text-[10px] text-slate-300 uppercase tracking-[0.5em] font-black pb-12 italic">InsightEd: Complete Operational Guide for School Heads &copy; 2026</p>
             </footer>
 
         </main>

@@ -35,6 +35,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [iern, setIern] = useState("");
     const [showSuccess, setShowSuccess] = useState(false);
     const [isReadOnly, setIsReadOnly] = useState(propReadOnly || false);
     const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -186,6 +187,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     const data = await res.json();
                     if (data.exists && data.data) {
                         const d = data.data;
+                        if (d.iern) setIern(d.iern);
                         
                         // Check for Drafts
                         const [draft2, draft1] = await Promise.all([
@@ -356,7 +358,27 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     };
 
     const handleGradeChange = (gradeId, val) => {
-        setGradeTotals(prev => ({ ...prev, [gradeId]: sanitizeNumeric(val) }));
+        const sanitized = sanitizeNumeric(val);
+        setGradeTotals(prev => ({ ...prev, [gradeId]: sanitized }));
+        if (sanitized === "" || sanitized === "0") {
+            setGradeGenderMap(prev => {
+                const newMap = { ...prev };
+                delete newMap[gradeId];
+                return newMap;
+            });
+        }
+    };
+
+    const handleKinderChange = (val) => {
+        const sanitized = sanitizeNumeric(val);
+        setKinderEnrollment(sanitized);
+        if (sanitized === "" || sanitized === "0") {
+            setGradeGenderMap(prev => {
+                const newMap = { ...prev };
+                delete newMap['kinder'];
+                return newMap;
+            });
+        }
     };
 
     const toggleAvailability = (gradeId) => {
@@ -380,6 +402,18 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (subject === 'math') setAralMath(prev => ({ ...prev, [gradeId]: sanitized }));
         if (subject === 'reading') setAralReading(prev => ({ ...prev, [gradeId]: sanitized }));
         if (subject === 'science') setAralScience(prev => ({ ...prev, [gradeId]: sanitized }));
+    };
+
+    const handleSnedTotalChange = (val) => {
+        const sanitized = sanitizeNumeric(val);
+        setSnedTotalCount(sanitized);
+        if (sanitized === "" || sanitized === "0") {
+            setGradeGenderMap(prev => {
+                const newMap = { ...prev };
+                delete newMap['sned'];
+                return newMap;
+            });
+        }
     };
 
     const handleGradeGenderChange = (gradeId, enrollment, malVal) => {
@@ -656,6 +690,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
+                    iern,
                     unit2_simplified_enrollment: payload,
                     has_sned: hasSNED,
                     sned_total_count: parseInt(snedTotalCount) || 0,
@@ -922,10 +957,15 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
         if (currentStep === 2) return !!orgType;
         if (currentStep === 3) {
             const hasValidCombos = mgCombinations.length > 0 && mgCombinations.every(c => {
-                const total = c.grades.reduce((sum, g) => sum + (parseInt(gradeTotals[g]) || 0), 0);
-                const hasTotal = total > 0;
-                const hasGender = gradeGenderMap[c.id]?.male !== undefined && gradeGenderMap[c.id]?.male !== "";
-                return c.grades.length > 0 && hasTotal && hasGender;
+                if (c.grades.length === 0) return false;
+                
+                // Check if every grade in this combo has enrollment and gender data
+                return c.grades.every(lvl => {
+                    const total = parseInt(gradeTotals[lvl]) || 0;
+                    const male = gradeGenderMap[lvl]?.male;
+                    const female = gradeGenderMap[lvl]?.female;
+                    return total > 0 && male !== undefined && male !== "" && female !== undefined && female !== "";
+                });
             });
 
             if (!hasValidCombos) return false;
@@ -1060,11 +1100,9 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             <label className={`block text-xs font-black uppercase tracking-widest mb-4 ml-2 ${isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Total Kinder Learners</label>
                                             <input 
                                                 type="number" 
-                                                value={kinderEnrollment}
+                                                value={kinderEnrollment === "0" ? "" : (kinderEnrollment || "")}
                                                 disabled={!isAvailable}
-                                                onChange={(e) => {
-                                                    setKinderEnrollment(sanitizeNumeric(e.target.value));
-                                                }}
+                                                onChange={(e) => handleKinderChange(e.target.value)}
                                                 placeholder="0"
                                                 autoFocus={isAvailable}
                                                 className={chunkyInput + " !text-5xl text-center border-indigo-100 hover:border-indigo-400 focus:border-indigo-600 mb-8"}
@@ -1073,20 +1111,20 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                             {isAvailable && (
                                                 <div className="w-full mt-8 pt-8 border-t-2 border-slate-50 grid grid-cols-2 gap-6">
                                                     <div>
-                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">👦 Male</label>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Male</label>
                                                         <input 
                                                             type="number"
-                                                            value={gradeGenderMap['kinder']?.male || ""}
+                                                            value={gradeGenderMap['kinder']?.male === "0" ? "" : (gradeGenderMap['kinder']?.male || "")}
                                                             onChange={(e) => handleGradeGenderChange('kinder', kinderEnrollment, e.target.value)}
                                                             placeholder="0"
                                                             className={chunkyInput + " !text-3xl text-center border-blue-100 focus:border-blue-500"}
                                                         />
                                                     </div>
                                                     <div>
-                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">👧 Female</label>
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Female</label>
                                                         <input 
                                                             type="number"
-                                                            value={gradeGenderMap['kinder']?.female || ""}
+                                                            value={gradeGenderMap['kinder']?.female === "0" ? "" : (gradeGenderMap['kinder']?.female || "")}
                                                             onChange={(e) => handleFemaleGenderChange('kinder', kinderEnrollment, e.target.value)}
                                                             placeholder="0"
                                                             className={chunkyInput + " !text-3xl text-center border-rose-100 focus:border-rose-500"}
@@ -1217,44 +1255,45 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                         <div className="space-y-6">
                                                             {c.grades.map(lvl => {
                                                                 const gName = ALL_GRADES.find(x => x.id === lvl)?.label || lvl;
-                                                                const grTotal = (parseInt(gradeGenderMap[lvl]?.male) || 0) + (parseInt(gradeGenderMap[lvl]?.female) || 0);
+                                                                const grTotal = parseInt(gradeTotals[lvl]) || 0;
                                                                 
                                                                 return (
                                                                     <div key={`mg-gender-${lvl}`} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
                                                                         <div className="flex justify-between items-center mb-4">
                                                                             <label className="text-xs font-black uppercase text-indigo-600 tracking-widest">{gName}</label>
-                                                                            <span className="bg-indigo-50 px-3 py-1 rounded-lg text-[10px] font-black text-indigo-600 uppercase">Total: {grTotal}</span>
+                                                                            <span className="bg-indigo-50 px-3 py-1 rounded-lg text-[10px] font-black text-indigo-600 uppercase italic">Entry Required</span>
                                                                         </div>
+                                                                        
+                                                                        {/* Total Enrollment for this grade */}
+                                                                        <div className="mb-6">
+                                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 block mb-2 text-center">Total Enrollment</label>
+                                                                            <input 
+                                                                                type="number"
+                                                                                placeholder="0"
+                                                                                value={gradeTotals[lvl] === "0" ? "" : (gradeTotals[lvl] || "")}
+                                                                                onChange={(e) => handleGradeChange(lvl, e.target.value)}
+                                                                                className={chunkyInput + " !h-16 !text-3xl border-indigo-100 focus:border-indigo-500 bg-indigo-50/30"}
+                                                                            />
+                                                                        </div>
+
                                                                         <div className="grid grid-cols-2 gap-4">
                                                                             <div>
-                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Boys</label>
+                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Male</label>
                                                                                 <input 
                                                                                     type="number"
                                                                                     placeholder="0"
-                                                                                    value={gradeGenderMap[lvl]?.male || ""}
-                                                                                    onChange={(e) => {
-                                                                                        const val = sanitizeNumeric(e.target.value, 6);
-                                                                                        setGradeGenderMap(prev => ({
-                                                                                            ...prev,
-                                                                                            [lvl]: { ...prev[lvl], male: val }
-                                                                                        }));
-                                                                                    }}
+                                                                                    value={gradeGenderMap[lvl]?.male === "0" ? "" : (gradeGenderMap[lvl]?.male || "")}
+                                                                                    onChange={(e) => handleGradeGenderChange(lvl, gradeTotals[lvl], e.target.value)}
                                                                                     className={chunkyInput + " !h-14 !text-2xl border-blue-50 focus:border-blue-500"}
                                                                                 />
                                                                             </div>
                                                                             <div>
-                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Girls</label>
+                                                                                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Female</label>
                                                                                 <input 
                                                                                     type="number"
                                                                                     placeholder="0"
-                                                                                    value={gradeGenderMap[lvl]?.female || ""}
-                                                                                    onChange={(e) => {
-                                                                                        const val = sanitizeNumeric(e.target.value, 6);
-                                                                                        setGradeGenderMap(prev => ({
-                                                                                            ...prev,
-                                                                                            [lvl]: { ...prev[lvl], female: val }
-                                                                                        }));
-                                                                                    }}
+                                                                                    value={gradeGenderMap[lvl]?.female === "0" ? "" : (gradeGenderMap[lvl]?.female || "")}
+                                                                                    onChange={(e) => handleFemaleGenderChange(lvl, gradeTotals[lvl], e.target.value)}
                                                                                     className={chunkyInput + " !h-14 !text-2xl border-rose-50 focus:border-rose-500"}
                                                                                 />
                                                                             </div>
@@ -1359,6 +1398,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             </div>
                         </motion.div>
                     )}
+
                     {/* STEP 4: Grade-by-Grade Enrollment */}
                     {currentStep === 4 && activeMonogrades[currentGradeIndex] && (
                         <motion.div key={`grade-${activeMonogrades[currentGradeIndex].id}`} variants={pageVariants} initial="initial" animate="in" exit="out" transition={{ duration: 0.3 }}>
@@ -1408,7 +1448,7 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                 min="0"
                                                                 placeholder="0"
                                                                 disabled={!isAvailable}
-                                                                value={gradeTotals[g.id] || ""}
+                                                                value={gradeTotals[g.id] === "0" ? "" : (gradeTotals[g.id] || "")}
                                                                 onChange={(e) => handleGradeChange(g.id, e.target.value)}
                                                                 className={`w-64 h-32 text-7xl font-black text-center rounded-[2rem] transition-all duration-300 ${isAvailable ? 'bg-indigo-50 border-4 border-indigo-200 text-indigo-700 focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/50' : 'bg-slate-50 border-2 border-slate-100 text-slate-300'}`}
                                                             />
@@ -1419,20 +1459,20 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 {isAvailable && (
                                                     <div className="w-full mt-8 pt-8 border-t-2 border-slate-50 grid grid-cols-2 gap-6">
                                                         <div>
-                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">👦 Male</label>
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Male</label>
                                                             <input 
                                                                 type="number"
-                                                                value={gradeGenderMap[g.id]?.male || ""}
+                                                                value={gradeGenderMap[g.id]?.male === "0" ? "" : (gradeGenderMap[g.id]?.male || "")}
                                                                 onChange={(e) => handleGradeGenderChange(g.id, gradeTotals[g.id], e.target.value)}
                                                                 placeholder="0"
                                                                 className={chunkyInput + " !text-3xl text-center border-blue-100 focus:border-blue-500"}
                                                             />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">👧 Female</label>
+                                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Female</label>
                                                             <input 
                                                                 type="number"
-                                                                value={gradeGenderMap[g.id]?.female || ""}
+                                                                value={gradeGenderMap[g.id]?.female === "0" ? "" : (gradeGenderMap[g.id]?.female || "")}
                                                                 onChange={(e) => handleFemaleGenderChange(g.id, gradeTotals[g.id], e.target.value)}
                                                                 placeholder="0"
                                                                 className={chunkyInput + " !text-3xl text-center border-rose-100 focus:border-rose-500"}
@@ -1528,35 +1568,28 @@ const Unit2Learners = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <input 
                                                     type="number" 
                                                     placeholder="0" 
-                                                    value={snedTotalCount} 
-                                                    onChange={(e) => {
-                                                        const val = sanitizeNumeric(e.target.value, 3);
-                                                        setSnedTotalCount(val);
-                                                        if (val === "") {
-                                                            setSnedProgramType(null);
-                                                            setSnedOrganizedClassCount("");
-                                                        }
-                                                    }} 
+                                                    value={snedTotalCount === "0" ? "" : (snedTotalCount || "")} 
+                                                    onChange={(e) => handleSnedTotalChange(e.target.value)}
                                                     className={`w-48 h-24 text-5xl font-black text-center rounded-3xl transition-all duration-300 bg-indigo-50 border-4 border-indigo-200 text-indigo-700 focus:bg-white focus:border-indigo-500 shadow-xl shadow-indigo-100/50`}
                                                 />
                                             </div>
 
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">👦 SNED Male</label>
+                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 block mb-2 text-center">Male</label>
                                                     <input 
                                                         type="number"
-                                                        value={gradeGenderMap['sned']?.male || ""}
+                                                        value={gradeGenderMap['sned']?.male === "0" ? "" : (gradeGenderMap['sned']?.male || "")}
                                                         onChange={(e) => handleGradeGenderChange('sned', snedTotalCount, e.target.value)}
                                                         placeholder="0"
                                                         className={chunkyInput + " !text-2xl text-center border-blue-100 focus:border-blue-500"}
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">👧 SNED Female</label>
+                                                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-400 block mb-2 text-center">Female</label>
                                                     <input 
                                                         type="number"
-                                                        value={gradeGenderMap['sned']?.female || ""}
+                                                        value={gradeGenderMap['sned']?.female === "0" ? "" : (gradeGenderMap['sned']?.female || "")}
                                                         onChange={(e) => handleFemaleGenderChange('sned', snedTotalCount, e.target.value)}
                                                         placeholder="0"
                                                         className={chunkyInput + " !text-2xl text-center border-rose-100 focus:border-rose-500"}

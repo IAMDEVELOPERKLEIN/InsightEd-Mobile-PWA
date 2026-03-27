@@ -602,6 +602,130 @@ const runAutoMigrations = async () => {
     await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', pool);
     if (poolNew) await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', poolNew);
 
+    // --- IERN MIGRATION PHASE ---
+    console.log("   [Auto-Migrate] Running IERN Migration...");
+    
+    // 1. Ensure ph_schools has iern and it's UNIQUE
+    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS iern TEXT');
+    await pool.query('ALTER TABLE ph_schools ADD CONSTRAINT ph_schools_iern_unique UNIQUE (iern)').catch(() => {});
+    
+    // 2. Backfill ph_schools.iern from "schools_IERN"
+    await pool.query(`
+      UPDATE ph_schools p
+      SET iern = s.iern
+      FROM "schools_IERN" s
+      WHERE s."SchoolID" = p.school_id AND p.iern IS NULL
+    `).catch(e => console.warn("Backfill ph_schools failed:", e.message));
+
+    // 3. Add iern column to all child tables and backfill
+    const childTables = [
+      'ph_school_buildable_spaces',
+      'school_location_profiles',
+      'ownership_documents',
+      'ph_buildings_repairs',
+      'ph_buildings_inventory',
+      'ph_buildings_demolition',
+      'ph_ecart_batches',
+      'users'
+    ];
+
+    for (const table of childTables) {
+      // Add column if not exists
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS iern TEXT`).catch(() => {});
+      
+      // Backfill from ph_schools (now that ph_schools has iern)
+      await pool.query(`
+        UPDATE ${table} t
+        SET iern = p.iern
+        FROM ph_schools p
+        WHERE t.school_id = p.school_id AND t.iern IS NULL AND p.iern IS NOT NULL
+      `).catch(e => console.warn(`Backfill ${table} failed:`, e.message));
+
+      // 3c. Add INDEX on iern for performance (Fixes "delay" reported by user)
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_${table}_iern ON ${table} (iern)`).catch(() => {});
+    }
+    
+    // 3b. Add UNIQUE constraints for IERN-based UPSERTs (Hardening)
+    console.log("   [Auto-Migrate] Hardening UNIQUE constraints for IERN UPSERTs...");
+    
+    // -- school_location_profiles --
+    // Deduplicate: Keep latest record per IERN
+    await pool.query(`
+      DELETE FROM school_location_profiles WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY iern ORDER BY updated_at DESC) as rn
+          FROM school_location_profiles WHERE iern IS NOT NULL
+        ) s WHERE s.rn = 1
+      )
+    `).catch(() => {});
+    await pool.query('ALTER TABLE school_location_profiles ADD CONSTRAINT school_location_profiles_iern_unique UNIQUE (iern)').catch(() => {});
+
+    // -- ph_school_buildable_spaces --
+    // Deduplicate: Keep latest record per (IERN, space_name)
+    await pool.query(`
+      DELETE FROM ph_school_buildable_spaces WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY iern, space_name ORDER BY created_at DESC) as rn
+          FROM ph_school_buildable_spaces WHERE iern IS NOT NULL AND space_name IS NOT NULL
+        ) s WHERE s.rn = 1
+      )
+    `).catch(() => {});
+    await pool.query('ALTER TABLE ph_school_buildable_spaces ADD CONSTRAINT ph_school_buildable_spaces_iern_name_unique UNIQUE (iern, space_name)').catch(() => {});
+
+    // -- ownership_documents --
+    // Deduplicate: Keep latest record per IERN
+    await pool.query(`
+      DELETE FROM ownership_documents WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY iern ORDER BY updated_at DESC) as rn
+          FROM ownership_documents WHERE iern IS NOT NULL
+        ) s WHERE s.rn = 1
+      )
+    `).catch(() => {});
+    await pool.query('ALTER TABLE ownership_documents ADD CONSTRAINT ownership_documents_iern_unique UNIQUE (iern)').catch(() => {});
+
+
+    // 4. Drop problematic Foreign Key constraints that rely on school_id
+    console.log("   [Auto-Migrate] Dropping school_id Foreign Key constraints...");
+    const fkQuery = `
+      SELECT
+          tc.table_name, 
+          tc.constraint_name
+      FROM 
+          information_schema.table_constraints AS tc 
+          JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name
+            AND tc.table_schema = kcu.table_schema
+          JOIN information_schema.constraint_column_usage AS ccu
+            ON ccu.constraint_name = tc.constraint_name
+            AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY' 
+        AND ccu.table_name = 'ph_schools' 
+        AND ccu.column_name = 'school_id';
+    `;
+    
+    try {
+      const fkRes = await pool.query(fkQuery);
+      for (const row of fkRes.rows) {
+        console.log(`     - Dropping FK: ${row.constraint_name} on ${row.table_name}`);
+        await pool.query(`ALTER TABLE ${row.table_name} DROP CONSTRAINT IF EXISTS ${row.constraint_name}`).catch(err => {
+          console.warn(`       ! Failed to drop ${row.constraint_name}:`, err.message);
+        });
+      }
+
+      if (poolNew) {
+          const fkResNew = await poolNew.query(fkQuery);
+          for (const row of fkResNew.rows) {
+            console.log(`     - [Secondary] Dropping FK: ${row.constraint_name} on ${row.table_name}`);
+            await poolNew.query(`ALTER TABLE ${row.table_name} DROP CONSTRAINT IF EXISTS ${row.constraint_name}`).catch(() => {});
+          }
+      }
+    } catch (fkErr) {
+      console.warn("   [Auto-Migrate] FK Drop process failed:", fkErr.message);
+    }
+
+    console.log("   [Auto-Migrate] IERN Migration finished.");
+
     console.log("   [Auto-Migrate] Finished.");
   } catch (e) {
     console.error("❌ Auto-Migrate Fail:", e.message);
@@ -10515,10 +10639,16 @@ app.delete('/api/delete-teacher-personnel/:schoolId/:controlNum', async (req, re
 app.get('/api/ecart-batches/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT * FROM ecart_batches WHERE school_id = $1 ORDER BY id ASC',
-      [schoolId]
-    );
+    // Attempt to find IERN first
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const iern = sRes.rows[0]?.iern;
+
+    let result;
+    if (iern) {
+      result = await pool.query('SELECT * FROM ecart_batches WHERE iern = $1 OR school_id = $2 ORDER BY id ASC', [iern, schoolId]);
+    } else {
+      result = await pool.query('SELECT * FROM ecart_batches WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+    }
     res.json(result.rows);
   } catch (err) {
     console.error('Fetch e-Cart Batches Error:', err);
@@ -10530,6 +10660,14 @@ app.get('/api/ecart-batches/:schoolId', async (req, res) => {
 app.post('/api/save-school-resources', async (req, res) => {
   const data = req.body;
   try {
+    // Handle IERN identity anchoring
+    let anchorClause = 'school_id = $1';
+    let anchorVal = data.schoolId;
+    if (data.iern) {
+        anchorClause = 'iern = $1';
+        anchorVal = data.iern;
+    }
+
     const query = `
             UPDATE school_profiles SET 
                 res_water_source=$2, res_tvl_workshops=$3, res_electricity_source=$4, 
@@ -10549,21 +10687,21 @@ app.post('/api/save-school-resources', async (req, res) => {
                 seats_grade_4=$27, seats_grade_5=$28, seats_grade_6=$29,
                 seats_grade_7=$30, seats_grade_8=$31, seats_grade_9=$32, seats_grade_10=$33,
                 seats_grade_11=$34, seats_grade_12=$35,
-
+ 
                 has_buildable_space=$36::BOOLEAN,
-
+ 
                 female_bowls_func=$37, female_bowls_nonfunc=$38,
                 male_bowls_func=$39, male_bowls_nonfunc=$40,
                 male_urinals_func=$41, male_urinals_nonfunc=$42,
                 pwd_bowls_func=$43, pwd_bowls_nonfunc=$44,
                 toilet_common_functional=$45, toilet_common_nonfunctional=$46,
-
+ 
                 updated_at=CURRENT_TIMESTAMP
-            WHERE school_id=$1
+            WHERE ${anchorClause}
         `;
 
     const values = [
-      data.schoolId,
+      anchorVal,
       data.res_water_source, data.res_tvl_workshops, data.res_electricity_source,
       data.res_buildable_space, data.sha_category,
 
@@ -10638,13 +10776,14 @@ app.post('/api/save-school-resources', async (req, res) => {
         for (const b of data.ecartBatches) {
           await ecClient.query(`
             INSERT INTO ecart_batches (
-              school_id, batch_no, year_received, source_fund,
+              school_id, iern, batch_no, year_received, source_fund,
               ecart_qty_laptops, ecart_condition_laptops,
               ecart_has_smart_tv, ecart_tv_size, ecart_condition_tv,
               ecart_condition_charging, ecart_condition_cabinet
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
           `, [
             data.schoolId,
+            data.iern || null,
             b.batch_no || null,
             b.year_received ? parseInt(b.year_received) : null,
             b.source_fund || null,
@@ -10889,6 +11028,13 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     // await ensureUnit10Tables(client);
 
     // 1. Update Main Profile
+    let anchorClause = 'school_id = $1';
+    let anchorVal = sId;
+    if (data.iern) {
+        anchorClause = 'iern = $1';
+        anchorVal = data.iern;
+    }
+
     const queryProfile = `
             UPDATE school_profiles SET
                 build_classrooms_total=$2,
@@ -10897,11 +11043,11 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                 build_classrooms_repair=$5,
                 build_classrooms_demolition=$6,
                 updated_at=CURRENT_TIMESTAMP
-            WHERE school_id=$1
+            WHERE ${anchorClause}
         `;
 
     await client.query(queryProfile, [
-      sId,
+      anchorVal,
       sanitize(data.build_classrooms_total),
       sanitize(data.build_classrooms_new),
       sanitize(data.build_classrooms_good),
@@ -10911,7 +11057,11 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 
     // 2. Handle Repairs (ph_buildings_repairs)
     if (data.repairEntries && Array.isArray(data.repairEntries)) {
-      await client.query('DELETE FROM ph_buildings_repairs WHERE school_id = $1', [sId]);
+      if (data.iern) {
+        await client.query('DELETE FROM ph_buildings_repairs WHERE iern = $1', [data.iern]);
+      } else {
+        await client.query('DELETE FROM ph_buildings_repairs WHERE school_id = $1', [sId]);
+      }
 
       for (const r of data.repairEntries) {
         await client.query(`
@@ -10930,7 +11080,11 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 
     // 3. Handle Demolitions (ph_buildings_demolition) - One row per room
     if (data.demolitionEntries && Array.isArray(data.demolitionEntries)) {
-      await client.query('DELETE FROM ph_buildings_demolition WHERE school_id = $1', [sId]);
+      if (data.iern) {
+        await client.query('DELETE FROM ph_buildings_demolition WHERE iern = $1', [data.iern]);
+      } else {
+        await client.query('DELETE FROM ph_buildings_demolition WHERE school_id = $1', [sId]);
+      }
 
       for (const d of data.demolitionEntries) {
         const counts = [
@@ -10965,7 +11119,11 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 
     // 4. Handle Building Inventory (ph_buildings_inventory) - One row per room
     if (data.inventoryEntries && Array.isArray(data.inventoryEntries)) {
-      await client.query('DELETE FROM ph_buildings_inventory WHERE school_id = $1', [sId]);
+      if (data.iern) {
+        await client.query('DELETE FROM ph_buildings_inventory WHERE iern = $1', [data.iern]);
+      } else {
+        await client.query('DELETE FROM ph_buildings_inventory WHERE school_id = $1', [sId]);
+      }
 
       const allRooms = data.rooms || [];
       const buildings = data.inventoryEntries;
@@ -11003,7 +11161,12 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_completed BOOLEAN DEFAULT FALSE;`);
     await client.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit8_updated_at TIMESTAMP;`);
-    await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
+    
+    if (data.iern) {
+        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE iern = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, data.iern]);
+    } else {
+        await client.query(`UPDATE ph_schools SET unit8_completed = $1, unit8 = $2, unit8_updated_at = CASE WHEN $1 = TRUE THEN CURRENT_TIMESTAMP ELSE unit8_updated_at END, updated_at = CURRENT_TIMESTAMP WHERE school_id = $3`, [isUnit8Completed, isUnit8Completed ? 1 : 0, sId]);
+    }
 
     await client.query('COMMIT');
     res.json({ success: true, message: "Facilities and details saved!" });
@@ -14848,9 +15011,12 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
       await pool.query(sql).catch(() => { }); // silently skip if already exists
     }
 
-    // ── 2. Safe fetch — only columns we know exist ──────────────────────────
-    const result = await pool.query(
-      `SELECT 
+    // ── 2. Fetch Progress ───────────────────────────────────────────────────
+    // Attempt to find IERN first
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const iernValue = sRes.rows[0]?.iern;
+
+    const querySelect = `SELECT 
         unit1_completed, unit2_completed, unit3_completed, unit4_completed,
         unit5_completed, unit6_completed, unit7_completed, unit8_completed,
         unit9_completed, unit10_completed, curricular_offering,
@@ -14859,9 +15025,14 @@ app.get('/api/ph_schools/progress/:schoolId', async (req, res) => {
         unit5_updated_at, unit6_updated_at, unit7_updated_at, unit8_updated_at,
         unit9_updated_at, unit10_updated_at,
         school_name, total_enrollment
-       FROM ph_schools WHERE school_id = $1`,
-      [schoolId]
-    );
+       FROM ph_schools`;
+
+    let result;
+    if (iernValue) {
+      result = await pool.query(`${querySelect} WHERE iern = $1 OR school_id = $2`, [iernValue, schoolId]);
+    } else {
+      result = await pool.query(`${querySelect} WHERE school_id = $1`, [schoolId]);
+    }
 
     let completedUnits = [];
     let incompleteUnits = [];
@@ -15219,7 +15390,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         const docQuery = `
           INSERT INTO ownership_documents (school_id, iern, google_drive_file_id, google_drive_link, google_drive_file_name, google_drive_thumbnail_url, ownership_type, ownership_document_type)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (school_id) DO UPDATE SET
+          ON CONFLICT (iern) DO UPDATE SET
+            school_id = EXCLUDED.school_id,
             google_drive_file_id = EXCLUDED.google_drive_file_id,
             google_drive_link = EXCLUDED.google_drive_link,
             google_drive_file_name = EXCLUDED.google_drive_file_name,
@@ -15262,8 +15434,8 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
         head_date_of_birth, head_date_hired, google_drive_link, google_drive_file_id,
         google_drive_file_name, google_drive_thumbnail_url, unit1_updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, CURRENT_TIMESTAMP)
-      ON CONFLICT (school_id) DO UPDATE SET
-        iern = EXCLUDED.iern,
+      ON CONFLICT (iern) DO UPDATE SET
+        school_id = EXCLUDED.school_id,
         school_name = EXCLUDED.school_name,
         region = EXCLUDED.region,
         province = EXCLUDED.province,
@@ -15321,9 +15493,34 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
       data.google_drive_file_name || null, data.google_drive_thumbnail_url || null
     ];
 
-    // Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
+    // 1. Attempt an UPDATE first based on permanent IERN to safely allow school_id changes
     let updatedByIern = false;
     if (data.iern) {
+      // PK Conflict Hardening: If we are changing school_id ($1), 
+      // check if it's already taken by an un-anchored (skeleton) record.
+      try {
+        const conflictCheck = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [data.school_id]);
+        if (conflictCheck.rows.length > 0) {
+          const otherIern = conflictCheck.rows[0].iern;
+          // If the other record's IERN is diff or null, it's a conflict
+          if (otherIern !== data.iern) {
+            if (!otherIern) {
+              // Target is a skeleton/un-linked record. Safely remove it to allow takeover.
+              console.log(`🧹 Safe-Swap: Removing unlinked skeleton record for ${data.school_id} to allow IERN-anchored takeover.`);
+              await pool.query('DELETE FROM ph_schools WHERE school_id = $1 AND iern IS NULL', [data.school_id]);
+            } else {
+              // Actually both have different IERNs - this is a real collision!
+              console.warn(`🛑 IERN Collision: Target school_id ${data.school_id} is already anchored to IERN ${otherIern}. Rejecting update.`);
+              return res.status(409).json({ 
+                error: `Identity Conflict: School ID ${data.school_id} is already permanently assigned to another identity (${otherIern}). Please contact support.` 
+              });
+            }
+          }
+        }
+      } catch (checkErr) {
+        console.error("Safe-Swap Pre-check Error:", checkErr.message);
+      }
+
       const updateRes = await pool.query(`
         UPDATE ph_schools SET
           school_id = $1, school_name = $3, region = $4, province = $5,
@@ -15351,6 +15548,29 @@ app.post('/api/ph_schools/unit1', async (req, res) => {
     // Fallback to INSERT ON CONFLICT school_id if no unique IERN record matched
     if (!updatedByIern) {
       await pool.query(query, values);
+    }
+
+    // Cascading School ID Sync: If school_id changed, propagate to all child tables via IERN
+    if (data.iern) {
+      const childTablesToSync = [
+        'ph_school_buildable_spaces',
+        'school_location_profiles',
+        'ownership_documents',
+        'ph_buildings_repairs',
+        'ph_building_inventory',
+        'ph_ecart_batches',
+        'users' // Sync auth table too
+      ];
+      for (const table of childTablesToSync) {
+        // For users table, also update last_name (which stores school_id by convention)
+        const updateQuery = (table === 'users') 
+          ? `UPDATE ${table} SET school_id = $1, last_name = $1 WHERE iern = $2`
+          : `UPDATE ${table} SET school_id = $1 WHERE iern = $2`;
+          
+        await pool.query(updateQuery, [data.school_id, data.iern]).catch(e => {
+          console.warn(`⚠️  Cascading Sync failed for ${table}:`, e.message);
+        });
+      }
     }
 
     // --- SYNC TO schools_IERN (Mapping Update) ---
@@ -15488,7 +15708,7 @@ app.put('/api/ph_schools/unit2/:schoolId', async (req, res) => {
     const query = `UPDATE ph_schools SET ${fields.join(', ')} WHERE school_id = $19`;
 
     // Ensure row exists before update
-    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
     await pool.query(query, values);
 
     // Auto-update school_summary instantly
@@ -15610,7 +15830,7 @@ app.put('/api/ph_schools/unit3/:schoolId', async (req, res) => {
     ];
 
     // Ensure the row exists before updating, in case the user jumped straight to this unit
-    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
 
     await pool.query(query, values);
 
@@ -15719,7 +15939,7 @@ app.put('/api/ph_schools/unit4/:schoolId', async (req, res) => {
     console.log(`[Unit4 Save] Saving ${setClauses.length} fields for school ${schoolId}`);
 
     // Ensure the row exists before updating, in case the user jumped straight to this unit
-    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
 
     await pool.query(query, values);
 
@@ -15802,7 +16022,7 @@ app.put('/api/ph_schools/unit5/:schoolId', async (req, res) => {
     dynamicFields.push(`verified_as_of = CURRENT_TIMESTAMP`);
     dynamicFields.push(`updated_at = CURRENT_TIMESTAMP`);
     // Ensure the row exists before updating, in case the user jumped straight to this unit
-    await pool.query('INSERT INTO ph_schools (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING', [schoolId]);
+    await pool.query('INSERT INTO ph_schools (iern, school_id) VALUES ($1, $2) ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id', [data.iern, schoolId]);
 
     // --- START BASELINE CALCULATION ---
     // Calculate teacher headcount from master list (teachers_list)
@@ -15850,8 +16070,24 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
   const data = req.body;
 
   try {
-    const keys = Object.keys(data);
-    if (keys.length === 0) return res.json({ success: true, message: 'No data provided' });
+    const keys = Object.keys(data).filter(k => k !== 'iern'); // Don't update iern itself
+    if (keys.length === 0 && !data.iern) return res.json({ success: true, message: 'No data provided' });
+
+    // Handle IERN identity anchoring
+    let anchorClause = 'school_id = $' + (keys.length + 1);
+    let anchorValue = schoolId;
+
+    if (data.iern) {
+      // Upsert to ensure mapping exists
+      await pool.query(`
+        INSERT INTO ph_schools (iern, school_id) 
+        VALUES ($1, $2) 
+        ON CONFLICT (iern) DO UPDATE SET school_id = EXCLUDED.school_id
+      `, [data.iern, schoolId]);
+      
+      anchorClause = 'iern = $' + (keys.length + 1);
+      anchorValue = data.iern;
+    }
 
     const setClauses = [];
     const values = [];
@@ -15863,12 +16099,12 @@ app.put('/api/ph_schools/:schoolId', async (req, res) => {
     }
 
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(schoolId);
+    values.push(anchorValue);
 
     const query = `
       UPDATE ph_schools 
       SET ${setClauses.join(', ')}
-      WHERE school_id = $${idx}
+      WHERE ${anchorClause}
       RETURNING *;
     `;
     const result = await pool.query(query, values);
@@ -15896,7 +16132,11 @@ app.post('/api/ph_schools/unit9/:schoolId/ecarts', async (req, res) => {
     const iern = sRes.rows.length > 0 ? sRes.rows[0].iern : null;
 
     // 2. Clear old batches (Full Replacement logic)
-    await pool.query('DELETE FROM ph_ecart_batches WHERE school_id = $1', [schoolId]);
+    if (iern) {
+      await pool.query('DELETE FROM ph_ecart_batches WHERE iern = $1', [iern]);
+    } else {
+      await pool.query('DELETE FROM ph_ecart_batches WHERE school_id = $1', [schoolId]);
+    }
 
     // 3. Insert new batches
     if (ecarts && ecarts.length > 0) {
@@ -16105,10 +16345,17 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
     console.log(`[Unit 10 Master Submit] Fetched IERN: ${iern}`);
 
     // 1. Clear old records
-    const resInvDel = await client.query('DELETE FROM ph_buildings_inventory WHERE school_id = $1', [schoolId]);
-    const resDemDel = await client.query('DELETE FROM ph_buildings_demolition WHERE school_id = $1', [schoolId]);
-    const resRepDel = await client.query('DELETE FROM ph_buildings_repairs WHERE school_id = $1', [schoolId]);
-    console.log(`[Unit 10 Master Submit] Step 1: Clear old records - Deleted [Inv: ${resInvDel.rowCount}, Dem: ${resDemDel.rowCount}, Rep: ${resRepDel.rowCount}]`);
+    if (iern) {
+      const resInvDel = await client.query('DELETE FROM ph_buildings_inventory WHERE iern = $1', [iern]);
+      const resDemDel = await client.query('DELETE FROM ph_buildings_demolition WHERE iern = $1', [iern]);
+      const resRepDel = await client.query('DELETE FROM ph_buildings_repairs WHERE iern = $1', [iern]);
+      console.log(`[Unit 10 Master Submit] Step 1: Clear old records (by IERN) - Deleted [Inv: ${resInvDel.rowCount}, Dem: ${resDemDel.rowCount}, Rep: ${resRepDel.rowCount}]`);
+    } else {
+      const resInvDel = await client.query('DELETE FROM ph_buildings_inventory WHERE school_id = $1', [schoolId]);
+      const resDemDel = await client.query('DELETE FROM ph_buildings_demolition WHERE school_id = $1', [schoolId]);
+      const resRepDel = await client.query('DELETE FROM ph_buildings_repairs WHERE school_id = $1', [schoolId]);
+      console.log(`[Unit 10 Master Submit] Step 1: Clear old records (by school_id fallback) - Deleted [Inv: ${resInvDel.rowCount}, Dem: ${resDemDel.rowCount}, Rep: ${resRepDel.rowCount}]`);
+    }
 
     // 2. Insert Inventory (Newly Built & Good Condition)
     if (inventory && Array.isArray(inventory)) {
@@ -16174,7 +16421,11 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
 
     // 5. Finalize Completion
     await client.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE;');
-    await client.query('UPDATE ph_schools SET unit10_completed = TRUE WHERE school_id = $1', [schoolId]);
+    if (iern) {
+      await client.query('UPDATE ph_schools SET unit10_completed = TRUE WHERE iern = $1', [iern]);
+    } else {
+      await client.query('UPDATE ph_schools SET unit10_completed = TRUE WHERE school_id = $1', [schoolId]);
+    }
     console.log(`[Unit 10 Master Submit] Step 5: Updated unit10_completed = TRUE`);
 
     await client.query('COMMIT');
@@ -16196,9 +16447,20 @@ app.post('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
 app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const invRes = await pool.query('SELECT * FROM ph_buildings_inventory WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
-    const repRes = await pool.query('SELECT * FROM ph_buildings_repairs WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
-    const demRes = await pool.query('SELECT * FROM ph_buildings_demolition WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+    // Attempt to find IERN first
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const iern = sRes.rows[0]?.iern;
+
+    let invRes, repRes, demRes;
+    if (iern) {
+      invRes = await pool.query('SELECT * FROM ph_buildings_inventory WHERE iern = $1 OR school_id = $2 ORDER BY id ASC', [iern, schoolId]);
+      repRes = await pool.query('SELECT * FROM ph_buildings_repairs WHERE iern = $1 OR school_id = $2 ORDER BY id ASC', [iern, schoolId]);
+      demRes = await pool.query('SELECT * FROM ph_buildings_demolition WHERE iern = $1 OR school_id = $2 ORDER BY id ASC', [iern, schoolId]);
+    } else {
+      invRes = await pool.query('SELECT * FROM ph_buildings_inventory WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+      repRes = await pool.query('SELECT * FROM ph_buildings_repairs WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+      demRes = await pool.query('SELECT * FROM ph_buildings_demolition WHERE school_id = $1 ORDER BY id ASC', [schoolId]);
+    }
 
     // Grouping rooms into buildings by building_name for the frontend
     const buildingsMap = {};
@@ -16263,7 +16525,16 @@ app.get('/api/ph_schools/unit10/:schoolId/master', async (req, res) => {
 app.get('/api/ph_schools/unit10/:schoolId/spaces', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM ph_school_buildable_spaces WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
+    // Attempt to find IERN first for stable lookup
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [schoolId]);
+    const iern = sRes.rows[0]?.iern;
+
+    let result;
+    if (iern) {
+      result = await pool.query('SELECT * FROM ph_school_buildable_spaces WHERE iern = $1 OR school_id = $2 ORDER BY created_at DESC', [iern, schoolId]);
+    } else {
+      result = await pool.query('SELECT * FROM ph_school_buildable_spaces WHERE school_id = $1 ORDER BY created_at DESC', [schoolId]);
+    }
     res.json({ success: true, spaces: result.rows });
   } catch (err) {
     console.error("GET Unit 10 Spaces Error:", err);
@@ -16280,6 +16551,13 @@ app.post('/api/ph_schools/unit10/:schoolId/spaces', async (req, res) => {
       INSERT INTO ph_school_buildable_spaces 
       (school_id, iern, space_name, center_lat, center_lng, length_m, width_m, total_area_sqm) 
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+      ON CONFLICT (iern, space_name) DO UPDATE SET
+        school_id = EXCLUDED.school_id,
+        center_lat = EXCLUDED.center_lat,
+        center_lng = EXCLUDED.center_lng,
+        length_m = EXCLUDED.length_m,
+        width_m = EXCLUDED.width_m,
+        total_area_sqm = EXCLUDED.total_area_sqm
       RETURNING *;
     `;
     const values = [schoolId, iern || null, space_name || 'New Space', center_lat, center_lng, length_m, width_m, total_area_sqm];
@@ -16313,6 +16591,7 @@ app.delete('/api/ph_schools/unit10/spaces/:spaceId', async (req, res) => {
 
 const schoolLocationSchema = z.object({
   school_id: z.string(),
+  iern: z.string().optional(),
   transportation_modes: z.array(z.string()).optional(),
   road_paved_pct: z.coerce.number().min(0).max(100),
   road_unpaved_pct: z.coerce.number().min(0).max(100),
@@ -16358,7 +16637,16 @@ const schoolLocationSchema = z.object({
 app.get('/api/school-location/:school_id', async (req, res) => {
   const { school_id } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_location_profiles WHERE school_id = $1', [school_id]);
+    // Attempt to find IERN first
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [school_id]);
+    const iern = sRes.rows[0]?.iern;
+
+    let result;
+    if (iern) {
+      result = await pool.query('SELECT * FROM school_location_profiles WHERE iern = $1 OR school_id = $2', [iern, school_id]);
+    } else {
+      result = await pool.query('SELECT * FROM school_location_profiles WHERE school_id = $1', [school_id]);
+    }
     res.json({ success: true, data: result.rows[0] || null });
   } catch (err) {
     console.error("GET School Location Error:", err);
@@ -16386,7 +16674,7 @@ app.post('/api/school-location', async (req, res) => {
 
     const query = `
       INSERT INTO school_location_profiles (
-        school_id, transportation_modes, road_paved_pct, road_unpaved_pct, road_lighting_pct,
+        school_id, iern, transportation_modes, road_paved_pct, road_unpaved_pct, road_lighting_pct,
         public_transpo_availability, water_proximity, near_cliff_ravine, road_cliff_pct,
         near_water, natural_calamities, hazards_experienced, has_insurgency_threats, 
         insurgency_threats_6mo, road_passable_public_transpo_pct, river_crossing_on_foot, 
@@ -16397,9 +16685,10 @@ app.post('/api/school-location', async (req, res) => {
         proximity_terminal_km, proximity_highway_mins, proximity_highway_km,
         cellular_coverage, weather_isolation, anthropogenic_threats, risk_index, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, CURRENT_TIMESTAMP
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, CURRENT_TIMESTAMP
       )
-      ON CONFLICT (school_id) DO UPDATE SET
+      ON CONFLICT (iern) DO UPDATE SET
+        school_id = EXCLUDED.school_id,
         transportation_modes = EXCLUDED.transportation_modes,
         road_paved_pct = EXCLUDED.road_paved_pct,
         road_unpaved_pct = EXCLUDED.road_unpaved_pct,
@@ -16440,6 +16729,7 @@ app.post('/api/school-location', async (req, res) => {
 
     const values = [
       validatedData.school_id,
+      req.body.iern || null,
       validatedData.transportation_modes,
       validatedData.road_paved_pct,
       validatedData.road_unpaved_pct,
@@ -17307,18 +17597,17 @@ app.get('/api/esf7/all-schools', async (req, res) => {
 app.post('/api/esf7/return', async (req, res) => {
   const { school_id } = req.body;
   try {
-    await pool.query(
-      "UPDATE ESF7_Database SET status = 'REJECTED' WHERE school_id = $1",
-      [school_id]
-    );
+    // Attempt to find IERN first
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [school_id]);
+    const iern = sRes.rows[0]?.iern;
 
-    // Sync with Monitoring Dashboard (f7_resources = 0)
-    await pool.query(`
-      UPDATE school_profiles 
-      SET f7_resources = 0,
-          updated_at = CURRENT_TIMESTAMP 
-      WHERE school_id = $1
-    `, [school_id]);
+    if (iern) {
+      await pool.query("UPDATE ESF7_Database SET status = 'REJECTED' WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await pool.query("UPDATE school_profiles SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+    } else {
+      await pool.query("UPDATE ESF7_Database SET status = 'REJECTED' WHERE school_id = $1", [school_id]);
+      await pool.query("UPDATE school_profiles SET f7_resources = 0, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+    }
 
     res.json({ success: true, message: "ESF7 submission returned for correction." });
   } catch (err) {
@@ -17331,21 +17620,17 @@ app.post('/api/esf7/return', async (req, res) => {
 app.post('/api/esf7/approve', async (req, res) => {
   const { school_id } = req.body;
   try {
-    await pool.query(
-      "UPDATE ESF7_Database SET status = 'VERIFIED' WHERE school_id = $1",
-      [school_id]
-    );
+    // Attempt to find IERN first
+    const sRes = await pool.query('SELECT iern FROM ph_schools WHERE school_id = $1', [school_id]);
+    const iern = sRes.rows[0]?.iern;
 
-    // Sync with Monitoring Dashboard (f7_resources)
-    await pool.query(`
-      UPDATE school_profiles 
-      SET f7_resources = 1,
-          updated_at = CURRENT_TIMESTAMP 
-      WHERE school_id = $1
-    `, [school_id]);
-
-    // Optional: Recalculate completion percentage if a trigger/function exists, 
-    // but usually setting the f-column is enough for the dashboard to pick up.
+    if (iern) {
+      await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+      await pool.query("UPDATE school_profiles SET f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE iern = $1 OR school_id = $2", [iern, school_id]);
+    } else {
+      await pool.query("UPDATE ESF7_Database SET status = 'VERIFIED' WHERE school_id = $1", [school_id]);
+      await pool.query("UPDATE school_profiles SET f7_resources = 1, updated_at = CURRENT_TIMESTAMP WHERE school_id = $1", [school_id]);
+    }
 
     res.json({ success: true, message: "ESF7 submission verified and committed." });
   } catch (err) {

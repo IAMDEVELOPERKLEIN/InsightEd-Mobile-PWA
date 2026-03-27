@@ -70,6 +70,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [isCertified, setIsCertified] = useState(false);
     const [isReviewMode, setIsReviewMode] = useState(false);
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [iern, setIern] = useState("");
 
     // Core Workflow State
     const [currentPhase, setCurrentPhase] = useState(1); 
@@ -166,6 +167,9 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 
                 if (res.ok) {
                     const saved = await res.json();
+                    if (saved.exists && saved.data && saved.data.iern) {
+                        setIern(saved.data.iern);
+                    }
                     let d = (saved.exists && saved.data) ? saved.data : {};
 
                     // MASTER PRECEDENCE: Draft > Database
@@ -733,7 +737,8 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                 u7_confirm_no_grid: (utilitiesData.confirm_no_grid_text || "").toLowerCase() === "confirm",
                 u7_confirm_no_piped: (washData.confirm_no_piped_text || "").toLowerCase() === "confirm",
                 u7_confirm_no_wired: (utilitiesData.confirm_no_wired_text || "").toLowerCase() === "confirm",
-                u7_utility_internet_type: utilitiesData.utility_internet_type
+                u7_utility_internet_type: utilitiesData.utility_internet_type,
+                iern: iern
             };
 
             const res = await fetch(`/api/ph_schools/${storedId}`, {
