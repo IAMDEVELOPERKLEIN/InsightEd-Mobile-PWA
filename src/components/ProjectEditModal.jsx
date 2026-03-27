@@ -72,7 +72,7 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             setDetailsStep(1);
             setDocumentFiles({ POW: null, DUPA: null, CONTRACT: null });
             setFormData({
-                status: project.status || 'Not Yet Started',
+                status: project.status || '',
                 accomplishmentPercentage: Number(project.accomplishmentPercentage || 0),
                 statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0],
                 actualCompletionDate: project.actualCompletionDate || '',
@@ -268,7 +268,10 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                         <button key={opt.value}
                                             onClick={() => {
                                                 const updates = { status: opt.value };
-                                                if (['Not Yet Started', 'Under Procurement'].includes(opt.value)) updates.accomplishmentPercentage = 0;
+                                                if (['Not Yet Started', 'Under Procurement'].includes(opt.value)) {
+                                                    // Remove automatic status reset to 'Not Yet Started' to allow placeholder
+                                                    // updates.accomplishmentPercentage = 0;
+                                                }
                                                 else if (['For Final Inspection', 'Completed'].includes(opt.value)) updates.accomplishmentPercentage = 100;
                                                 setFormData(p => ({ ...p, ...updates }));
                                             }}

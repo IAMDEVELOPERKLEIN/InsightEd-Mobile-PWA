@@ -8192,6 +8192,20 @@ app.post('/api/save-project', async (req, res) => {
     const engineerName = await getUserFullName(data.uid);
     const resolvedEngineerName = engineerName || data.modifiedBy || 'Engineer';
 
+    // Normalization Mapping
+    const statusMapping = {
+      'ongoing': 'Ongoing',
+      'completed': 'Completed',
+      'terminated': 'Terminated',
+      'suspended': 'Suspended',
+      'final inspection': 'Final Inspection',
+      'under procurement': 'Under Procurement',
+      'not yet started': 'Not Yet Started'
+    };
+
+    const normalizedConstructionStatus = statusMapping[data.statusOfConstructionPhase?.toLowerCase()] || data.statusOfConstructionPhase || '';
+    const normalizedDesignStatus = statusMapping[data.statusDesignPhase?.toLowerCase()] || data.statusDesignPhase || '';
+
     // Extract Documents
     const docs = data.documents || [];
     const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
@@ -8201,7 +8215,7 @@ app.post('/api/save-project', async (req, res) => {
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId, // $1, $2, $3
       valueOrNull(data.region), valueOrNull(data.division), // $4, $5
-      data.statusOfConstructionPhase || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage), // $6, $7
+      normalizedConstructionStatus, parseIntOrNull(data.accomplishmentPercentage), // $6, $7
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate), // $8, $9
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed), // $10, $11
       valueOrNull(data.contractorName), parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation), // $12, $13
@@ -8221,7 +8235,7 @@ app.post('/api/save-project', async (req, res) => {
       parseNumberOrNull(data.fundsUtilized), // $28
       'Newly Created', // $29
       parseNumberOrNull(data.approved_budget_for_contract || data.projectAllocation) - parseNumberOrNull(data.contract_amount), // $30
-      valueOrNull(data.statusDesignPhase), // $31
+      normalizedDesignStatus, // $31
       valueOrNull(data.contractId), // $32
       valueOrNull(data.dateNoticeOfAward), // $33
       valueOrNull(data.issuanceOfInvitationToBid), // $34
@@ -8483,12 +8497,26 @@ app.put('/api/update-project/:id', upload.fields([
     let finalUserName = await getUserFullName(data.uid);
     if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
 
-    const newStatus = data.statusOfConstructionPhase || data.status || oldData.status_of_construction_phase;
+    const statusMapping = {
+      'ongoing': 'Ongoing',
+      'completed': 'Completed',
+      'terminated': 'Terminated',
+      'suspended': 'Suspended',
+      'final inspection': 'Final Inspection',
+      'under procurement': 'Under Procurement',
+      'not yet started': 'Not Yet Started'
+    };
+
+    const rawStatus = data.statusOfConstructionPhase || data.status || oldData.status_of_construction_phase;
+    const newStatus = statusMapping[rawStatus?.toLowerCase()] || rawStatus || 'Ongoing';
+
+    const rawProc = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status || oldData.status_design_phase;
+    const newProcurementStatus = statusMapping[rawProc?.toLowerCase()] || rawProc || 'Ongoing';
+
+    const newStatusDesignPhase = newProcurementStatus;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
-    const newProcurementStatus = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status || oldData.status_design_phase;
-    const newStatusDesignPhase = valueOrNull(data.statusDesignPhase || data.procurement_status) || oldData.status_design_phase || oldData.procurement_status;
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
     const newLat = valueOrNull(data.latitude) || oldData.latitude;
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
@@ -8735,7 +8763,8 @@ app.put('/api/update-project/:id', upload.fields([
 
     // 3. Track Changes (History)
     const changes = [];
-    if (oldData.status_of_construction_phase !== newData.status_of_construction_phase) changes.push(`Status: '${oldData.status_of_construction_phase}' -> '${newData.status_of_construction_phase}'`);
+    if (oldData.status_of_construction_phase !== newData.status_of_construction_phase) changes.push(`Construction Status: '${oldData.status_of_construction_phase || 'None'}' -> '${newData.status_of_construction_phase}'`);
+    if (oldData.procurement_status !== newProcurementStatus) changes.push(`Procurement Status: '${oldData.procurement_status || 'None'}' -> '${newProcurementStatus}'`);
     if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
     if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
 
@@ -8746,6 +8775,7 @@ app.put('/api/update-project/:id', upload.fields([
       changes: changes, // List of human-readable changes
       snapshot: { // Save key metrics
         status_of_construction_phase: newData.status_of_construction_phase,
+        procurement_status: newProcurementStatus,
         accomplishment: newData.accomplishment_percentage,
         date: new Date().toISOString()
       }
@@ -8753,13 +8783,13 @@ app.put('/api/update-project/:id', upload.fields([
 
     // 4. Log Activity
     // Note: finalUserName is already computed above logic
-
+    const primaryAction = changes.length > 0 ? changes[0].split(':')[0] + ' Update' : (data.update_type || 'Project Update');
 
     await logActivity(
       data.uid,
       finalUserName,
       'Engineer',
-      newData.status_of_construction_phase || 'UPDATE', // Dynamic Action Label
+      primaryAction, // Dynamic Action Label
       `Project: ${newData.project_name} (${newData.ipc || 'No IPC'})`,
       JSON.stringify(historyLog) // Storing structured history
     );
@@ -9242,19 +9272,40 @@ app.get('/api/projects', async (req, res) => {
       FROM LatestProjects p
     `;
 
-    // 1. ADD FILTER: Only show projects belonging to this engineer or their agency
-    if (req.query.beff === 'true') {
-      whereClauses.push(`p.implementing_agency IS NOT NULL`);
-    } else if (engineer_id && implementing_agency) {
-      queryParams.push(engineer_id);
-      queryParams.push(implementing_agency);
-      whereClauses.push(`(p.engineer_id = $${queryParams.length - 1} OR p.implementing_agency = $${queryParams.length})`);
-    } else if (engineer_id) {
-      queryParams.push(engineer_id);
-      whereClauses.push(`p.engineer_id = $${queryParams.length}`);
+    // 1. ADD FILTER: Robust Jurisdiction Filtering for Division Engineers
+    if (engineer_id) {
+      const userResult = await pool.query('SELECT role, region, division FROM users WHERE uid = $1', [engineer_id]);
+      const userProfile = userResult.rows[0];
+
+      if (userProfile) {
+        const isDivEng = ['Division Engineer', 'SDO', 'RO'].some(r => 
+          userProfile.role?.toLowerCase() === r.toLowerCase()
+        );
+
+        if (isDivEng) {
+          if (userProfile.region) {
+            queryParams.push(userProfile.region.trim());
+            whereClauses.push(`p.region ILIKE $${queryParams.length}`);
+          }
+          if (userProfile.division) {
+            queryParams.push(userProfile.division.trim());
+            whereClauses.push(`p.division ILIKE $${queryParams.length}`);
+          }
+        } else {
+          queryParams.push(engineer_id);
+          whereClauses.push(`p.engineer_id = $${queryParams.length}`);
+        }
+      } else {
+        queryParams.push(engineer_id);
+        whereClauses.push(`p.engineer_id = $${queryParams.length}`);
+      }
     } else if (implementing_agency) {
       queryParams.push(implementing_agency);
       whereClauses.push(`p.implementing_agency = $${queryParams.length}`);
+    }
+
+    if (req.query.beff === 'true') {
+      whereClauses.push(`p.implementing_agency IS NOT NULL`);
     }
 
     // 2. Add your existing filters
@@ -9751,7 +9802,7 @@ app.get('/api/project-history/:ipc', async (req, res) => {
         created_at
       FROM ${tableName}
       WHERE ${fallbackWhere}
-      ORDER BY project_id DESC
+      ORDER BY project_id ASC
     `;
 
     const queryParams = Array.isArray(resolvedIpc) ? resolvedIpc : [resolvedIpc];
@@ -13794,7 +13845,7 @@ app.post('/api/lgu/save-project', async (req, res) => {
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId,
       valueOrNull(data.region), valueOrNull(data.division),
-      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+      data.status || '', parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
@@ -16934,7 +16985,7 @@ app.post('/api/lgu/save-project', async (req, res) => {
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId,
       valueOrNull(data.region), valueOrNull(data.division),
-      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+      data.status || '', parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),

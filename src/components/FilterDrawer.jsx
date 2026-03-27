@@ -1,35 +1,48 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { FiX, FiCheck, FiChevronDown } from 'react-icons/fi';
 import { createPortal } from 'react-dom';
 
 const FilterDrawer = ({ 
     isOpen, 
     onClose, 
-    projects,
-    regions, 
-    categories, 
-    selectedRegions, 
-    setSelectedRegions, 
-    selectedCategories, 
-    setSelectedCategories,
-    selectedDivision,
-    setSelectedDivision,
-    selectedProvince,
-    setSelectedProvince,
-    selectedMunicipality,
-    setSelectedMunicipality,
-    selectedDistrict,
-    setSelectedDistrict,
-    locations = [] // New prop for database-driven locations
+    onApply,
+    projects = [],
+    locations = [], // New prop for database-driven locations
+    initialRegions = [],
+    initialDivisions = [],
+    initialCategories = [],
+    initialYears = [],
+    hideRegions = false,
+    hideDivisions = false
 }) => {
-    if (!isOpen) return null;
+    // Internal state for the drawer
+    const [selectedRegions, setSelectedRegions] = useState(initialRegions);
+    const [selectedCategories, setSelectedCategories] = useState(initialCategories);
+    const [selectedDivision, setSelectedDivision] = useState(initialDivisions[0] || '');
+    const [selectedProvince, setSelectedProvince] = useState('');
+    const [selectedMunicipality, setSelectedMunicipality] = useState('');
+    const [selectedDistrict, setSelectedDistrict] = useState('');
+    const [selectedYears, setSelectedYears] = useState(initialYears);
+
+    // Sync with initial values when drawer opens
+    useEffect(() => {
+        if (isOpen) {
+            setSelectedRegions(initialRegions || []);
+            setSelectedCategories(initialCategories || []);
+            setSelectedDivision(initialDivisions[0] || '');
+            setSelectedYears(initialYears || []);
+        }
+    }, [isOpen, initialRegions, initialDivisions, initialCategories, initialYears]);
+
+    const [selectedBatchFunds, setSelectedBatchFunds] = useState([]);
 
     const normalize = (val) => val?.toString().trim().toUpperCase() || '';
 
     // Derived options based on selected parent layers
     const options = useMemo(() => {
         // Use database locations if available, otherwise fallback to projects
-        const sourceData = locations.length > 0 ? locations : projects;
+        // Ensure sourceData is ALWAYS an array to avoid .filter crash
+        const sourceData = Array.isArray(locations) && locations.length > 0 ? locations : (Array.isArray(projects) ? projects : []);
         
         const filtered = sourceData.filter(loc => 
             selectedRegions.length === 0 || selectedRegions.some(reg => normalize(reg) === normalize(loc.region))
@@ -52,24 +65,37 @@ const FilterDrawer = ({
             .filter(l => !selectedMunicipality || normalize(l.municipality) === normalize(selectedMunicipality))
             .map(l => l.legislative_district).filter(Boolean))].map(s => s.trim().toUpperCase());
 
+        const years = [...new Set(sourceData.map(p => p.funding_year || p.fundingYear).filter(Boolean))].map(y => y.toString());
+
+        const batches = [...new Set(sourceData.map(p => p.batch_of_funds || p.batchOfFunds).filter(Boolean))].map(s => s.trim());
+
         return {
             divisions: [...new Set(divisions)].sort(),
             provinces: [...new Set(provinces)].sort(),
             municipalities: [...new Set(municipalities)].sort(),
-            districts: [...new Set(districts)].sort()
+            districts: [...new Set(districts)].sort(),
+            years: Array.from(new Set(years)).sort((a,b) => b.localeCompare(a)),
+            categories: [...new Set(sourceData.map(p => p.project_category || p.projectCategory).filter(Boolean))].map(s => s.trim()),
+            batches: Array.from(new Set(batches)).sort()
         };
     }, [projects, locations, selectedRegions, selectedDivision, selectedProvince, selectedMunicipality]);
 
-    const handleRegionChange = (region) => {
-        const next = region ? [region] : [];
-        setSelectedRegions(next);
-        
-        if (next.length === 0) {
-            setSelectedDivision('');
-            setSelectedProvince('');
-            setSelectedMunicipality('');
-            setSelectedDistrict('');
+    if (!isOpen) return null;
+
+    const handleApply = () => {
+        if (onApply) {
+            onApply({
+                regions: selectedRegions,
+                divisions: selectedDivision ? [selectedDivision] : [],
+                categories: selectedCategories,
+                years: selectedYears,
+                province: selectedProvince,
+                municipality: selectedMunicipality,
+                district: selectedDistrict,
+                batches: selectedBatchFunds
+            });
         }
+        onClose();
     };
 
     const clearFilters = () => {
@@ -79,6 +105,8 @@ const FilterDrawer = ({
         setSelectedProvince('');
         setSelectedMunicipality('');
         setSelectedDistrict('');
+        setSelectedYears([]);
+        setSelectedBatchFunds([]);
     };
 
     const DropdownField = ({ label, value, onChange, options, placeholder }) => (
@@ -88,10 +116,10 @@ const FilterDrawer = ({
                 <select 
                     value={value} 
                     onChange={(e) => onChange(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-[11px] font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 appearance-none transition-all"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3.5 text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 appearance-none transition-all"
                 >
                     <option value="">{placeholder}</option>
-                    {options.map(opt => (
+                    {(options || []).map(opt => (
                         <option key={opt} value={opt}>{opt}</option>
                     ))}
                 </select>
@@ -100,109 +128,137 @@ const FilterDrawer = ({
         </div>
     );
 
-    return createPortal(
-        <div className="fixed inset-0 z-[3000] flex justify-end">
-            <div 
-                className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
-                onClick={onClose}
-            ></div>
+    const MultiSelectField = ({ label, options, selected, onChange }) => (
+        <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+            <div className="flex flex-wrap gap-2">
+                {(options || []).map(opt => {
+                    const isSel = selected.includes(opt);
+                    return (
+                        <button
+                            key={opt}
+                            onClick={() => {
+                                if (isSel) onChange(selected.filter(s => s !== opt));
+                                else onChange([...selected, opt]);
+                            }}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${
+                                isSel 
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/20' 
+                                : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-500 hover:border-blue-200'
+                            }`}
+                        >
+                            {opt}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+
+    const drawer = (
+        <div className="fixed inset-0 z-[10000] overflow-hidden">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={onClose} />
             
-            <div className="relative w-full max-w-sm bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
-                {/* Header */}
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                    <div>
-                        <h2 className="text-xl font-black text-slate-800 tracking-tight">Filters</h2>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Refine project list</p>
-                    </div>
-                    <button 
-                        onClick={onClose}
-                        className="p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
-                    >
-                        <FiX size={20} />
-                    </button>
-                </div>
-
-                {/* Body */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                    {/* Primary Dropdowns */}
-                    <div className="space-y-4">
-                        <DropdownField 
-                            label="Region" 
-                            value={selectedRegions[0] || ''} 
-                            onChange={(reg) => handleRegionChange(reg)} 
-                            options={locations.length > 0 ? [...new Set(locations.map(l => l.region).filter(Boolean))].sort() : regions} 
-                            placeholder="All Regions" 
-                        />
-
-                        <DropdownField 
-                            label="Project Category" 
-                            value={selectedCategories[0] || ''} 
-                            onChange={(cat) => setSelectedCategories(cat ? [cat] : [])} 
-                            options={categories} 
-                            placeholder="All Categories" 
-                        />
-                    </div>
-
-                    {/* Sub Filters (Hierarchical) */}
-                    <div className={`space-y-4 border-t border-slate-50 pt-6 transition-all ${selectedRegions.length === 0 ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                            <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Location Details</h3>
+            <div className="absolute inset-y-0 right-0 max-w-full flex">
+                <div className="w-screen max-w-md bg-white dark:bg-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+                    {/* Header */}
+                    <div className="px-6 py-8 border-b border-slate-100 dark:border-slate-700">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-2xl font-black text-slate-800 dark:text-white leading-tight underline decoration-blue-500 decoration-4 underline-offset-4 tracking-tighter">Filter Projects</h2>
+                            <button onClick={onClose} className="p-3 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-2xl text-slate-400 transition-all active:scale-90">
+                                <FiX size={20} />
+                            </button>
                         </div>
-                        
-                        <DropdownField 
-                            label="Division" 
-                            value={selectedDivision} 
-                            onChange={setSelectedDivision} 
-                            options={options.divisions} 
-                            placeholder="All Divisions" 
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Criteria</span>
+                            <button 
+                                onClick={clearFilters}
+                                className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest hover:underline"
+                            >
+                                Reset All
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                        {/* Regions */}
+                        {!hideRegions && (
+                            <MultiSelectField 
+                                label="Regions" 
+                                options={['NCR', 'CAR', 'REGION I', 'REGION II', 'REGION III', 'REGION IV-A', 'MIMAROPA', 'REGION V', 'REGION VI', 'REGION VII', 'REGION VIII', 'REGION IX', 'REGION X', 'REGION XI', 'REGION XII', 'CARAGA', 'BARMM']}
+                                selected={selectedRegions}
+                                onChange={setSelectedRegions}
+                            />
+                        )}
+
+                        {/* Category */}
+                        <MultiSelectField 
+                            label="Project Category"
+                            options={options.categories}
+                            selected={selectedCategories}
+                            onChange={setSelectedCategories}
                         />
-                        
-                        <DropdownField 
-                            label="Province" 
-                            value={selectedProvince} 
-                            onChange={setSelectedProvince} 
-                            options={options.provinces} 
-                            placeholder="All Provinces" 
+
+                        {/* Location Hierarchy */}
+                        <div className="space-y-4">
+                            {!hideDivisions && (
+                                <DropdownField 
+                                    label="Division" 
+                                    value={selectedDivision} 
+                                    onChange={setSelectedDivision}
+                                    options={options.divisions}
+                                    placeholder="All Divisions"
+                                />
+                            )}
+                            <DropdownField 
+                                label="Province" 
+                                value={selectedProvince} 
+                                onChange={setSelectedProvince}
+                                options={options.provinces}
+                                placeholder="All Provinces"
+                            />
+                            <DropdownField 
+                                label="Municipality / City" 
+                                value={selectedMunicipality} 
+                                onChange={setSelectedMunicipality}
+                                options={options.municipalities}
+                                placeholder="All Municipalities"
+                            />
+                        </div>
+
+                        {/* Years */}
+                        <MultiSelectField 
+                            label="Funding Year"
+                            options={options.years}
+                            selected={selectedYears}
+                            onChange={setSelectedYears}
                         />
-                        
-                        <DropdownField 
-                            label="Municipality" 
-                            value={selectedMunicipality} 
-                            onChange={setSelectedMunicipality} 
-                            options={options.municipalities} 
-                            placeholder="All Municipalities" 
-                        />
-                        
-                        <DropdownField 
-                            label="Legislative District" 
-                            value={selectedDistrict} 
-                            onChange={setSelectedDistrict} 
-                            options={options.districts} 
-                            placeholder="All Districts" 
+
+                        {/* Batch of Funds */}
+                        <MultiSelectField 
+                            label="Batch of Funds"
+                            options={options.batches}
+                            selected={selectedBatchFunds}
+                            onChange={setSelectedBatchFunds}
                         />
                     </div>
-                </div>
 
-                {/* Footer */}
-                <div className="p-6 border-t border-slate-100 bg-slate-50/50 space-y-3">
-                    <button 
-                        onClick={onClose}
-                        className="w-full py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-200 active:scale-[0.98] transition-all"
-                    >
-                        Apply Filters
-                    </button>
-                    <button 
-                        onClick={clearFilters}
-                        className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 text-center block"
-                    >
-                        Reset All
-                    </button>
+                    {/* Footer */}
+                    <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
+                        <button 
+                            onClick={handleApply}
+                            className="w-full py-4 bg-blue-600 dark:bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                        >
+                            <FiCheck size={16} /> Apply Filters
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>,
-        document.body
+        </div>
     );
+
+    return createPortal(drawer, document.body);
 };
 
 export default FilterDrawer;

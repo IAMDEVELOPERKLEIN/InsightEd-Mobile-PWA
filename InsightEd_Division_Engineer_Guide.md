@@ -7,42 +7,33 @@
 ---
 
 ## Module 1: Pre-requisite - App Installation
-**Objective:** Since InsightEd is a Progressive Web App (PWA) it operates directly from your mobile browser rather than App Store/Play Market. This ensures offline-readiness on all modern smartphones, which is critical for remote site visits.
+**Objective:** Since InsightEd is a Progressive Web App (PWA) it operates directly from your mobile browser rather than App Store/Play Market. This ensures high performance on all modern smartphones.
 
-1. **Open your Browser:** Open Google Chrome (Android) or Safari (iOS/iPhone).
-2. **Navigate to the App Link:** Type the exact web address into your URL bar: `tinyurl.com/InsightEdV2`
-3. **Wait for Load:** Allow the login screen to fully render.
-4. **Initiate Installation:**
-   - **For Android (Chrome):** Tap the **[Install App]** button on the bottom of the screen (or the three vertical dots menu at the top right, then select "Install App" or "Add to Home screen").
-   - **For iOS (Safari):** Tap the **[Share]** icon (the square with an arrow pointing up at the bottom of the screen), scroll down, and tap **[Add to Home Screen]**.
-5. **Confirm and Launch:** Confirm the installation prompt. Return to your phone's home screen and launch the app via the new **InsightEd** icon.
+1. **Open your Browser:** Use Google Chrome (Android) or Safari (iOS).
+2. **Navigate to the Access Link:** `tinyurl.com/InsightEdV2`
+3. **Installation Procedure:**
+   - **For Android:** Tap the **Three Dots** menu → **[Install App]**.
+   - **For iOS:** Tap the **[Share]** icon → **[Add to Home Screen]**.
+4. **SOP Rule:** Never clear browser cache. Doing so will permanently delete unsynced site logs.
 
 ---
 
 ## Module 2: Registration & Account Creation
 **Objective:** Establish your secure, official Division Engineer account securely tied to your designated Division.
 
-1. **Access Registration:** From the login screen, tap the **[Create Account]** link at the bottom.
-2. **Select Role:** Under "Registering As", tap the dropdown and select **[Division Engineer]**.
-3. **Establish Division Linkage:**
-   - Select your **Region**.
-   - Select your specific **Division**.
-4. **Enter Division Details:** Provide your Authorization Code: **`E5T8-B2W3`**.
-5. **Enter Contact & Security Details:**
-   - **Official DepEd Email:** Enter your official username prefix. The system forces the domain to be `@deped.gov.ph` for rigid compliance.
-   - **Mobile Number:** Enter an active 11-digit mobile number starting with `09` (e.g., `09123456789`).
-   - **Password:** Enter a strong password and repeat it in the **Confirm Password** field.
-6. **Submit:** Tap the **[Register Account]** button. The system will create your dedicated Engineer profile.
+1. **Path Selection:** Select **[InsightED]** → **[For Infrastructure]** → **[Engineers Portal]**.
+2. **Create Identity:** Tap **[Create Account]** and select role **[Division Engineer]**.
+3. **Authorization:** Input the Master Key: **`E5T8-B2W3`**.
+4. **Domain Compliance:** Use your official **@deped.gov.ph** email prefix.
+5. **Data Anchoring:** Carefully select your **Region** and **Division** (cannot be changed after registration).
 
 ---
 
 ## Module 3: Administrative Sign-In
 **Objective:** Securely access your personal engineering dashboard.
 
-1. **Launch the App:** Open the **InsightEd** app from your home screen.
-2. **Access the Login Screen:** Enter your registered `@deped.gov.ph` email.
-3. **Sign In:** Type your **Password** and tap the **[Sign In]** button.
-4. **Grant App Permissions:** Upon first login, the app will prompt for device access. You must tap **[ALLOW]** for **Camera**, **Location**, and **Storage**.
+1. **Credentials:** Use your registered @deped.gov.ph email and password.
+2. **Mandatory Permissions:** You MUST select **[ALLOW]** for **Camera** (for site photos) and **Location** (for geotagged audit logs).
 > **Warning:** These permissions are absolutely non-negotiable. Location and Camera access are strictly required to attach verifiable geo-tagged photographic evidence to your infrastructure projects.
 
 ---
@@ -84,14 +75,6 @@
 
 ---
 
-## Module 6: Offline Protocol for Remote Field Sites
-**Objective:** Defend against data loss when inspecting schools or infrastructure sites with zero or limited network connectivity.
-
-1. **Work Offline Seamlessly:** InsightEd automatically caches your Division's project roster. If you arrive at a mountain or island site with no signal, you can still view details and submit structural updates.
-2. **Perform Your Inspection:** Tap the **[UPDATE]** button, change the progress percentages, and take your verification photos just as you normally would.
-3. **Local Caching:** When you hit **[Save]**, the app will notify you: *"⚠️ Offline: Changes cached to Sync Center"*. Your updates, including heavy image payloads, are safely encrypted on your phone.
-4. **Execute Data Sync:** Once you arrive at the Division Office or an area with a stable mobile network, tap the **[Sync]** icon on the bottom navigation.
-5. **Transmit Updates:** Review the pending outbox items and tap **[Sync All]**. The app will automatically upload your data and compress your photos for swift transmission. Keep the app open until the success message appears.
 
 ---
 

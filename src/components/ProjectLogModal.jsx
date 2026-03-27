@@ -46,9 +46,8 @@ const ProjectLogModal = ({ isOpen, onClose, project }) => {
     const generateSentences = (rows) => {
         if (!rows.length) return [];
         
-        // Rows come from API DESC (newest first). 
-        // We need them oldest first to compare prev vs curr correctly.
-        const chronologicalRows = [...rows].reverse();
+        // Rows come from API ASC (oldest first).
+        const chronologicalRows = [...rows]; 
         const logs = [];
 
         // First row = project creation
@@ -66,55 +65,41 @@ const ProjectLogModal = ({ isOpen, onClose, project }) => {
             const curr = chronologicalRows[i];
             const engr = curr.engineerName ? `Engr. ${curr.engineerName}` : 'Someone';
             const date = curr.statusAsOfDate || curr.created_at;
+            const remark = (curr.remarks && curr.remarks !== prev.remarks) ? curr.remarks : null;
 
-            // Percentage change
+            // Helper to get accomplishment percentage
             const getPct = (row) => {
                 const val = row.accomplishmentPercentage ?? row.accomplishment_percentage ?? 0;
                 return parseInt(val) || 0;
             };
+
             const prevPct = getPct(prev);
             const currPct = getPct(curr);
+            const prevProc = prev.procurement_status || 'Unset';
+            const currProc = curr.procurement_status || 'Unset';
+            const prevStat = prev.status || 'Unset';
+            const currStat = curr.status || 'Unset';
 
-            if (currPct !== prevPct) {
+            // Check if multiple things changed
+            if (currPct !== prevPct || currProc.toLowerCase() !== prevProc.toLowerCase() || currStat !== prevStat) {
                 logs.push({
-                    text: `${engr} updated the percentage of completion from ${prevPct}% to ${currPct}%.`,
-                    date,
                     user: curr.engineerName,
+                    date,
                     type: 'update',
+                    changes: [
+                        currPct !== prevPct && { label: 'Completion', from: `${prevPct}%`, to: `${currPct}%` },
+                        currProc.toLowerCase() !== prevProc.toLowerCase() && { label: 'Procurement', from: prevProc, to: currProc },
+                        currStat !== prevStat && { label: 'Construction', from: prevStat, to: currStat }
+                    ].filter(Boolean),
+                    remark
                 });
-            }
-
-            // Procurement Status change
-            const prevProc = prev.procurement_status || 'Not Yet Procured';
-            const currProc = curr.procurement_status || 'Not Yet Procured';
-            if (currProc !== prevProc) {
+            } else if (remark) {
                 logs.push({
-                    text: `${engr} updated the procurement status from "${prevProc}" to "${currProc}".`,
-                    date,
                     user: curr.engineerName,
-                    type: 'update',
-                });
-            }
-
-            // Construction Status change
-            const prevStat = prev.status || 'Not Yet Started';
-            const currStat = curr.status || 'Not Yet Started';
-            if (currStat !== prevStat) {
-                logs.push({
-                    text: `${engr} updated the construction status from "${prevStat}" to "${currStat}".`,
                     date,
-                    user: curr.engineerName,
-                    type: 'update',
-                });
-            }
-
-            // Remarks change
-            if (curr.remarks && curr.remarks !== prev.remarks) {
-                logs.push({
-                    text: `${engr} updated remarks: "${curr.remarks}"`,
-                    date,
-                    user: curr.engineerName,
                     type: 'remark',
+                    text: `Updated remarks: "${remark}"`,
+                    remark
                 });
             }
         }
@@ -186,13 +171,11 @@ const ProjectLogModal = ({ isOpen, onClose, project }) => {
                         <div className="relative pl-6 space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
                             {logs.map((log, idx) => (
                                 <div key={idx} className="relative group">
-                                    {/* Timeline Node */}
                                     <div className={`absolute -left-[30px] w-[22px] h-[22px] rounded-full border-4 border-white shadow-md z-10 flex items-center justify-center ${colorForType(log.type)}`}>
                                         {iconForType(log.type)}
                                     </div>
-                                    {/* Log Entry */}
                                     <div className="bg-slate-50/50 p-4 rounded-[1.5rem] border border-slate-100 group-hover:border-blue-100 group-hover:bg-white transition-all">
-                                        <div className="flex justify-between items-center mb-2">
+                                        <div className="flex justify-between items-center mb-3">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-5 h-5 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
                                                     <LuUser size={10} />
@@ -206,9 +189,33 @@ const ProjectLogModal = ({ isOpen, onClose, project }) => {
                                                 </div>
                                             )}
                                         </div>
-                                        <p className="text-[11px] font-bold text-slate-700 leading-relaxed">
-                                            {log.text}
-                                        </p>
+                                        
+                                        {log.type === 'create' ? (
+                                            <p className="text-[11px] font-bold text-slate-700 leading-relaxed">{log.text}</p>
+                                        ) : log.type === 'update' ? (
+                                            <div className="space-y-3">
+                                                {log.changes.map((change, cIdx) => (
+                                                    <div key={cIdx} className="flex flex-col gap-1">
+                                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{change.label}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-medium text-slate-400 line-through decoration-slate-200">{change.from}</span>
+                                                            <div className="w-3 h-px bg-slate-200" />
+                                                            <span className="text-[11px] font-black text-blue-600">{change.to}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {log.remark && (
+                                                    <div className="mt-3 p-3 bg-amber-50/50 rounded-xl border border-amber-100/50">
+                                                        <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest mb-1">Update Reason</p>
+                                                        <p className="text-[10px] font-bold text-amber-700 italic leading-relaxed">"{log.remark}"</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="p-3 bg-slate-100/50 rounded-xl">
+                                                <p className="text-[11px] font-bold text-slate-600 italic leading-relaxed">"{log.remark}"</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}

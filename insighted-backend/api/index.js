@@ -454,14 +454,14 @@ const initOtpTable = async () => {
                 school_id TEXT,
                 region TEXT,
                 division TEXT,
-                status TEXT,
+                status_of_construction_phase TEXT,
                 accomplishment_percentage INTEGER,
                 status_as_of TIMESTAMP,
                 target_completion_date TIMESTAMP,
                 actual_completion_date TIMESTAMP,
                 notice_to_proceed TIMESTAMP,
                 contractor_name TEXT,
-                project_allocation NUMERIC,
+                approved_budget_for_contract NUMERIC,
                 batch_of_funds TEXT,
                 other_remarks TEXT,
                 engineer_id TEXT,
@@ -636,20 +636,45 @@ const initOtpTable = async () => {
               id SERIAL PRIMARY KEY,
               project_id INTEGER NOT NULL,
               ipc TEXT,
-              vo_number TEXT,
-              requested_date DATE,
-              requested_by TEXT,
-              original_contract_amount NUMERIC,
-              vo_amount NUMERIC,
-              revised_contract_amount NUMERIC,
-              original_target_completion_date DATE,
-              revised_target_completion_date DATE,
-              justification TEXT,
-              status TEXT DEFAULT 'Pending',
-              document_url TEXT,
+              variation_name TEXT,
+              variation_type TEXT, -- Change Order, Extra Work Order, Combined
+              original_amount NUMERIC(20, 2),
+              additive NUMERIC(20, 2),
+              deductive NUMERIC(20, 2),
+              reused_amount NUMERIC(20, 2),
+              modified_amount NUMERIC(20, 2),
+              status TEXT DEFAULT 'Approved',
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               created_by TEXT
           );
+        `);
+
+        // Migration: Add/Fix columns
+        await client.query(`
+          DO $$ 
+          BEGIN 
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='variation_name') THEN
+              ALTER TABLE variation_orders ADD COLUMN variation_name TEXT;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='variation_type') THEN
+              ALTER TABLE variation_orders ADD COLUMN variation_type TEXT;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='original_amount') THEN
+              ALTER TABLE variation_orders ADD COLUMN original_amount NUMERIC(20, 2);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='reused_amount') THEN
+              ALTER TABLE variation_orders ADD COLUMN reused_amount NUMERIC(20, 2);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='additive') THEN
+              ALTER TABLE variation_orders ADD COLUMN additive NUMERIC(20, 2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='deductive') THEN
+              ALTER TABLE variation_orders ADD COLUMN deductive NUMERIC(20, 2) DEFAULT 0;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='variation_orders' AND column_name='modified_amount') THEN
+              ALTER TABLE variation_orders ADD COLUMN modified_amount NUMERIC(20, 2);
+            END IF;
+          END $$;
         `);
         console.log('✅ Checked/Created variation_orders table');
 
@@ -671,6 +696,14 @@ const initOtpTable = async () => {
           );
         `);
         console.log('✅ Checked/Created realignments table');
+        // Migration: Clean up 'Not Yet Started' defaults to NULL to allow placeholder
+        await client.query(`
+          UPDATE engineer_form 
+          SET status = NULL 
+          WHERE status = 'Not Yet Started' 
+          AND (accomplishment_percentage = 0 OR accomplishment_percentage IS NULL);
+        `);
+        console.log('✅ Cleaned up Not Yet Started defaults to NULL');
       } catch (migErr) {
         console.error('❌ Failed to migrate VO and Realignment tables:', migErr.message);
       }
@@ -1818,31 +1851,63 @@ app.post('/api/save-project', async (req, res) => {
 
     // 2. Prepare Project Data
     // 2. Prepare Project Data
-    // Fix: Fetch engineer name for storage
     const engineerName = await getUserFullName(data.uid);
     const resolvedEngineerName = engineerName || data.modifiedBy || 'Engineer';
+
+    // Normalize Statuses
+    let constructionStatus = data.status;
+    if (constructionStatus) {
+      const l = constructionStatus.toLowerCase();
+      if (l === 'ongoing') constructionStatus = 'Ongoing';
+      else if (l === 'suspended') constructionStatus = 'Suspended';
+      else if (l === 'terminated') constructionStatus = 'Terminated';
+      else if (l === 'for final inspection') constructionStatus = 'For Final Inspection';
+      else if (l === 'completed') constructionStatus = 'Completed';
+      else if (l === 'not yet started') constructionStatus = 'Not Yet Started';
+    }
+
+    let procStatus = data.procurement_status || data.statusDesignPhase;
+    if (procStatus) {
+      const l = procStatus.toLowerCase();
+      if (l === 'not yet procured') procStatus = 'Not yet procured';
+      else if (l === 'under procurement') procStatus = 'Under procurement';
+      else if (l === 'completed') procStatus = 'Completed';
+    }
 
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId,
       valueOrNull(data.region), valueOrNull(data.division),
-      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+      constructionStatus || null, parseIntOrNull(data.accomplishmentPercentage),
       valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
       valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
       data.uid,
       newIpc, // $17
-      resolvedEngineerName // $18
+      resolvedEngineerName, // $18
+      valueOrNull(data.province), valueOrNull(data.city), valueOrNull(data.municipality), // $19, $20, $21
+      valueOrNull(data.projectCategory), valueOrNull(data.fundingYear), // $22, $23
+      valueOrNull(data.scopeOfWork), parseIntOrNull(data.numberOfClassrooms), // $24, $25
+      parseIntOrNull(data.numberOfStoreys), parseIntOrNull(data.numberOfSites), // $26, $27
+      parseNumberOrNull(data.fundsUtilized), valueOrNull(data.constructionStartDate), // $28, $29
+      valueOrNull(data.latitude), valueOrNull(data.longitude), // $30, $31
+      valueOrNull(procStatus) // $32
     ];
 
     const projectQuery = `
       INSERT INTO "engineer_form" (
         project_name, school_name, school_id, region, division,
-        status, accomplishment_percentage, status_as_of,
+        status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
-        contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        contractor_name, approved_budget_for_contract, batch_of_funds, other_remarks,
+        engineer_id, ipc, engineer_name,
+        province, city, municipality,
+        project_category, funding_year,
+        scope_of_work, number_of_classrooms,
+        number_of_storeys, number_of_sites,
+        funds_utilized, construction_start_date,
+        latitude, longitude, procurement_status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -1941,32 +2006,77 @@ app.put('/api/update-project/:id', async (req, res) => {
     if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
 
     // Merge new data with old data (Snapshot concept)
-    const newStatus = data.status || oldData.status;
-    const newProcurementStatus = data.procurement_status || oldData.procurement_status;
+    const newStatus = data.status ?? oldData.status_of_construction_phase;
+    let newProcurementStatus = data.procurement_status ?? data.statusDesignPhase ?? oldData.procurement_status;
+    
+    // Normalize casing for specific procurement statuses to match frontend options
+    if (newProcurementStatus) {
+      const lowerProc = newProcurementStatus.toLowerCase();
+      if (lowerProc === 'not yet procured') newProcurementStatus = 'Not yet procured';
+      else if (lowerProc === 'under procurement') newProcurementStatus = 'Under procurement';
+      else if (lowerProc === 'completed') newProcurementStatus = 'Completed';
+    }
+
+    // Normalize casing for Construction Status
+    if (newStatus) {
+      const lowerStat = newStatus.toLowerCase();
+      if (lowerStat === 'ongoing') newStatus = 'Ongoing';
+      else if (lowerStat === 'suspended') newStatus = 'Suspended';
+      else if (lowerStat === 'terminated') newStatus = 'Terminated';
+      else if (lowerStat === 'for final inspection') newStatus = 'For Final Inspection';
+      else if (lowerStat === 'completed') newStatus = 'Completed';
+      else if (lowerStat === 'not yet started') newStatus = 'Not Yet Started';
+    }
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
+    const newBatch = valueOrNull(data.batchOfFunds) || oldData.batch_of_funds;
+    const newAllocation = parseNumberOrNull(data.projectAllocation) || oldData.approved_budget_for_contract;
+    const newContractAmount = parseNumberOrNull(data.contractAmount) || oldData.contract_amount;
+    const newCategory = valueOrNull(data.projectCategory) || oldData.project_category;
+    const newYear = valueOrNull(data.fundingYear) || oldData.funding_year;
+    const newScope = valueOrNull(data.scopeOfWork) || oldData.scope_of_work;
+    const newClassrooms = parseIntOrNull(data.numberOfClassrooms) || oldData.number_of_classrooms;
+    const newStoreys = parseIntOrNull(data.numberOfStoreys) || oldData.number_of_storeys;
+    const newSites = parseIntOrNull(data.numberOfSites) || oldData.number_of_sites;
+    const newFundsUtilized = parseNumberOrNull(data.fundsUtilized) || oldData.funds_utilized;
+    const newConstStart = valueOrNull(data.constructionStartDate) || oldData.construction_start_date;
+    const newLat = valueOrNull(data.latitude) || oldData.latitude;
+    const newLong = valueOrNull(data.longitude) || oldData.longitude;
+    const newUpdateType = valueOrNull(data.update_type) || oldData.update_type;
 
     const insertValues = [
       oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
       newStatus, newAccomplishment, newStatusAsOf,
       oldData.target_completion_date, newActualDate, oldData.notice_to_proceed,
-      oldData.contractor_name, oldData.project_allocation, oldData.batch_of_funds, newRemarks,
-      oldData.engineer_id, // Preserve original engineer ID
-      oldData.ipc,         // Preserve IPC to link history
-      finalUserName,        // Update Name string
-      newProcurementStatus
+      oldData.contractor_name, newAllocation, newBatch, newRemarks,
+      oldData.engineer_id, oldData.ipc, finalUserName, newProcurementStatus,
+      oldData.province, oldData.city, oldData.municipality,
+      newCategory, newYear, newScope, newClassrooms, newStoreys, newSites,
+      newFundsUtilized, newConstStart, newLat, newLong, newContractAmount, newUpdateType,
+      oldData.has_pow, oldData.has_dupa, oldData.has_contract, oldData.has_moa, oldData.has_rta,
+      oldData.has_variation_order, oldData.variation_order_pdf,
+      oldData.is_realigned, oldData.savings, oldData.is_donated, oldData.program_type, oldData.funding_year_justification,
+      oldData.sangguniang_resolution_id, oldData.mother_moa_id, oldData.supplamental_moa_id
     ];
 
     const insertQuery = `
       INSERT INTO "engineer_form" (
         project_name, school_name, school_id, region, division,
-        status, accomplishment_percentage, status_as_of,
+        status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
-        contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name, procurement_status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        contractor_name, approved_budget_for_contract, batch_of_funds, other_remarks,
+        engineer_id, ipc, engineer_name, procurement_status,
+        province, city, municipality,
+        project_category, funding_year, scope_of_work, number_of_classrooms,
+        number_of_storeys, number_of_sites, funds_utilized, construction_start_date,
+        latitude, longitude, contract_amount, update_type,
+        has_pow, has_dupa, has_contract, has_moa, has_rta,
+        has_variation_order, variation_order_pdf,
+        is_realigned, savings, is_donated, program_type, funding_year_justification,
+        sangguniang_resolution_id, mother_moa_id, supplamental_moa_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48)
       RETURNING *;
     `;
 
@@ -1996,7 +2106,9 @@ app.put('/api/update-project/:id', async (req, res) => {
 
     // 4. Log Activity — build a descriptive action_type based on what changed
     let actionLabel = 'Project Updated';
-    if (oldData.status !== newData.status) {
+    if (oldData.procurement_status !== newData.procurement_status) {
+      actionLabel = `Procurement → ${newData.procurement_status}`;
+    } else if (oldData.status !== newData.status) {
       actionLabel = `Status → ${newData.status}`;
     } else if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) {
       actionLabel = `Progress → ${newData.accomplishment_percentage}%`;
@@ -2023,6 +2135,78 @@ app.put('/api/update-project/:id', async (req, res) => {
   }
 });
 
+// --- 9b. POST: Save Variation Order ---
+app.post('/api/variation-orders', async (req, res) => {
+  const { 
+    projectId, variationName, variationType, 
+    originalAmount, additive, deductive, reusedAmount,
+    uid, userName 
+  } = req.body;
+
+  if (!projectId || !variationName || !variationType) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const original = parseFloat(originalAmount) || 0;
+    const add = parseFloat(additive) || 0;
+    const ded = parseFloat(deductive) || 0;
+    const reused = parseFloat(reusedAmount) || 0;
+    
+    // Calculate total modified amount (Logical sum)
+    const modified = original + add - ded;
+
+    const query = `
+      INSERT INTO variation_orders (
+        project_id, variation_name, variation_type, 
+        original_amount, additive, deductive, reused_amount, modified_amount, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *;
+    `;
+    const values = [projectId, variationName, variationType, original, add, ded, reused, modified, uid];
+    const result = await pool.query(query, values);
+
+    // Get project info for logging
+    const projectRes = await pool.query('SELECT project_name, ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+    const project = projectRes.rows[0];
+
+    await logActivity(
+      uid, userName || 'Engineer', 'Engineer', 'VARIATION',
+      `VO: ${variationName} (${project?.project_name || projectId})`,
+      JSON.stringify({
+        variation_name: variationName,
+        type: variationType,
+        original: original,
+        additive: add,
+        deductive: ded,
+        reused: reused,
+        total: modified
+      })
+    );
+
+    res.status(201).json({ success: true, variation: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Variation Order Error:", err.message);
+    res.status(500).json({ error: "Failed to save variation order" });
+  }
+});
+
+// --- 9c. GET: Fetch Variation Orders ---
+app.get('/api/variation-orders/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM variation_orders WHERE project_id = $1 ORDER BY created_at DESC',
+      [projectId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Fetch VO Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch variation orders" });
+  }
+});
+
+
 // --- 10a. GET: Project History by IPC ---
 app.get('/api/project-history/:ipc', async (req, res) => {
   try {
@@ -2033,7 +2217,7 @@ app.get('/api/project-history/:ipc', async (req, res) => {
         project_name AS "projectName",
         school_name AS "schoolName",
         engineer_name AS "engineerName",
-        status,
+        status_of_construction_phase AS status,
         procurement_status,
         accomplishment_percentage AS "accomplishmentPercentage",
         other_remarks AS remarks,
@@ -2054,7 +2238,6 @@ app.get('/api/project-history/:ipc', async (req, res) => {
 // --- 10. GET: Get Projects (Filtered by Engineer) ---
 app.get('/api/projects', async (req, res) => {
   try {
-    // We catch the engineer_id sent from EngineerDashboard.jsx
     const { status, region, division, search, engineer_id } = req.query;
     let queryParams = [];
     let whereClauses = [];
@@ -2072,12 +2255,26 @@ app.get('/api/projects', async (req, res) => {
       )
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status, ipc, engineer_name AS "engineerName",
+        school_id AS "schoolId", division, region, status_of_construction_phase AS status, ipc, engineer_name AS "engineerName",
         procurement_status AS "procurement_status",
         accomplishment_percentage AS "accomplishmentPercentage",
         prev_perc AS "previousPercentage",
-        project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
+        approved_budget_for_contract AS "projectAllocation", batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
+        province, city, municipality,
+        project_category AS "projectCategory", funding_year AS "fundingYear",
+        scope_of_work AS "scopeOfWork", number_of_classrooms AS "numberOfClassrooms",
+        number_of_storeys AS "numberOfStoreys", number_of_sites AS "numberOfSites",
+        funds_utilized AS "fundsUtilized",
+        latitude, longitude,
+        has_pow AS "hasPow", has_dupa AS "hasDupa", has_contract AS "hasContract",
+        has_moa AS "hasMoa", has_rta AS "hasRta",
+        has_variation_order AS "hasVariationOrder", variation_order_pdf AS "variationOrderPdf",
+        contract_amount AS "contractAmount",
+        is_realigned AS "isRealigned", update_type AS "updateType",
+        savings, is_donated AS "isDonated", program_type AS "programType",
+        funding_year_justification AS "fundingYearJustification",
+        sangguniang_resolution_id, mother_moa_id, supplamental_moa_id,
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
@@ -2085,24 +2282,53 @@ app.get('/api/projects', async (req, res) => {
       FROM LatestProjects
     `;
 
-    // 1. ADD FILTER: Only show projects belonging to this engineer
+    // 1. Identification & Jurisdictional filtering
     if (engineer_id) {
-      queryParams.push(engineer_id);
-      whereClauses.push(`engineer_id = $${queryParams.length}`);
+      // DEBUG LOG:
+      process.stdout.write(`\n🔍 [DEBUG] Fetching projects for UID: ${engineer_id}\n`);
+      const userResult = await pool.query('SELECT role, region, division FROM users WHERE uid = $1', [engineer_id]);
+      const userProfile = userResult.rows[0];
+      
+      if (userProfile) {
+        process.stdout.write(`✅ [DEBUG] Profile Found: ${JSON.stringify(userProfile)}\n`);
+        
+        const isDivEng = ['Division Engineer', 'SDO', 'RO'].some(r => 
+          userProfile.role?.toLowerCase() === r.toLowerCase()
+        );
+
+        if (isDivEng) {
+          process.stdout.write(`📍 [DEBUG] Division Engineer Mode activated for: ${userProfile.region} - ${userProfile.division}\n`);
+          if (userProfile.region) {
+            queryParams.push(userProfile.region.trim());
+            whereClauses.push(`region ILIKE $${queryParams.length}`);
+          }
+          if (userProfile.division) {
+            queryParams.push(userProfile.division.trim());
+            whereClauses.push(`division ILIKE $${queryParams.length}`);
+          }
+        } else {
+          process.stdout.write(`👤 [DEBUG] Regular User Mode. Filtering by engineer_id.\n`);
+          queryParams.push(engineer_id);
+          whereClauses.push(`engineer_id = $${queryParams.length}`);
+        }
+      } else {
+        process.stdout.write(`⚠️ [DEBUG] No profile found for UID: ${engineer_id}. Defaulting to UID filter.\n`);
+        queryParams.push(engineer_id);
+        whereClauses.push(`engineer_id = $${queryParams.length}`);
+      }
     }
 
-    // 2. Add your existing filters
     if (status) {
       queryParams.push(status);
       whereClauses.push(`status = $${queryParams.length}`);
     }
     if (region) {
       queryParams.push(region);
-      whereClauses.push(`region = $${queryParams.length}`);
+      whereClauses.push(`region ILIKE $${queryParams.length}`);
     }
     if (division) {
       queryParams.push(division);
-      whereClauses.push(`division = $${queryParams.length}`);
+      whereClauses.push(`division ILIKE $${queryParams.length}`);
     }
     if (search) {
       queryParams.push(`%${search}%`);
@@ -2116,7 +2342,30 @@ app.get('/api/projects', async (req, res) => {
     sql += ` ORDER BY project_id DESC`;
 
     const result = await pool.query(sql, queryParams);
-    res.json(result.rows);
+    
+    // Normalize casing for the frontend
+    const rows = result.rows.map(item => {
+      let s = item.status;
+      if (s) {
+        const l = s.toLowerCase();
+        if (l === 'ongoing') s = 'Ongoing';
+        else if (l === 'suspended') s = 'Suspended';
+        else if (l === 'terminated') s = 'Terminated';
+        else if (l === 'for final inspection') s = 'For Final Inspection';
+        else if (l === 'completed') s = 'Completed';
+        else if (l === 'not yet started') s = 'Not Yet Started';
+      }
+      let ps = item.procurement_status;
+      if (ps) {
+        const l = ps.toLowerCase();
+        if (l === 'not yet procured') ps = 'Not yet procured';
+        else if (l === 'under procurement') ps = 'Under procurement';
+        else if (l === 'completed') ps = 'Completed';
+      }
+      return { ...item, status: s, procurement_status: ps };
+    });
+
+    res.json(rows);
   } catch (err) {
     console.error("❌ Error fetching projects:", err.message);
     res.status(500).json({ message: "Server error" });
@@ -2129,10 +2378,12 @@ app.get('/api/projects/:id', async (req, res) => {
     const query = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status, ipc,
+        school_id AS "schoolId", division, region, status_of_construction_phase AS status, ipc,
+        procurement_status AS "procurement_status",
         accomplishment_percentage AS "accomplishmentPercentage",
-        project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
+        approved_budget_for_contract AS "projectAllocation", batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
+        province, city, municipality,
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
@@ -2153,10 +2404,10 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
     const query = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status, validation_status, ipc,
+        school_id AS "schoolId", division, region, status_of_construction_phase AS status, validation_status, ipc,
         validation_remarks AS "validationRemarks", validated_by AS "validatedBy",
         accomplishment_percentage AS "accomplishmentPercentage",
-        project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
+        approved_budget_for_contract AS "projectAllocation", batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",

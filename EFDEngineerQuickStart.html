@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InsightEd: SOP Complete Operational Guide for EFD Engineers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            950: '#0A192F',
+                            900: '#112240',
+                            800: '#1d2d50',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f8fafc;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .gif-placeholder {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 2px dashed #fbbf24;
+            min-height: 200px;
+            width: 100%;
+            margin: 1.5rem auto;
+            border-radius: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            color: #fbbf24;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+        }
+
+        .phone-mockup {
+            max-width: 280px;
+            margin: 0 auto;
+            border: 8px solid #1e293b;
+            border-radius: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            background: #000;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .phone-mockup::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 20px;
+            background: #1e293b;
+            border-bottom-left-radius: 1rem;
+            border-bottom-right-radius: 1rem;
+            z-index: 10;
+        }
+
+        .step-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: white;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-right: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .unit-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            padding: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .unit-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .accent-heading {
+            background: linear-gradient(135deg, #1e293b 0%, #fbbf24 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900 scroll-smooth">
+
+    <!-- Top Navigation -->
+    <nav class="sticky top-0 z-50 bg-[#112240] text-white border-b border-navy-800 backdrop-blur-md bg-opacity-95">
+        <div class="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-8 h-8 bg-amber-500 rounded flex items-center justify-center font-black text-white italic text-xs tracking-tighter shadow-lg shadow-amber-500/20">
+                    IE</div>
+                <span class="font-bold tracking-tight text-sm uppercase italic text-amber-500">EFD <span
+                        class="text-white font-normal not-italic">EFD ENGINEER PORTAL</span></span>
+            </div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Education Facilities Division
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-6 py-12">
+        <main class="w-full">
+
+            <!-- Global Header -->
+            <header class="mb-24 text-center">
+                <div
+                    class="inline-block px-4 py-1.5 bg-amber-500/10 text-amber-600 text-[10px] font-black rounded-lg uppercase tracking-[0.2em] mb-6 border border-amber-500/20">
+                    Official EFD Protocol</div>
+                <h1
+                    class="text-5xl md:text-6xl font-black text-[#0A192F] mb-6 tracking-tight leading-tight italic uppercase">
+                    Complete Operational Guide <br /> <span class="accent-heading normal-case">for EFD Engineers</span>
+                </h1>
+                <p
+                    class="text-xl md:text-2xl text-slate-500 leading-relaxed mx-auto font-medium max-w-2xl italic tracking-tight underline decoration-amber-500 decoration-4 underline-offset-8">
+                    Centralized Monitoring & Infrastructure Planning Governance
+                </p>
+            </header>
+
+            <!-- 1. App Installation (PWA) -->
+            <section class="mb-24">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">01</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">App Installation
+                        (PWA)</h2>
+                </div>
+                <div class="unit-card">
+                    <p
+                        class="mb-8 text-lg font-medium text-slate-600 leading-relaxed border-b pb-6 border-slate-100 italic">
+                        InsightEd is a <span
+                            class="text-amber-600 font-black italic underline decoration-amber-200 decoration-4 underline-offset-4">Progressive
+                            Web App (PWA)</span>. Access the full engineering suite directly from your mobile browser
+                        without app store limitations.</p>
+
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-8">
+                            <div>
+                                <h3
+                                    class="font-black text-navy-950 uppercase tracking-widest text-sm mb-4 flex items-center gap-2 italic">
+                                    <span class="w-1.5 h-1.5 bg-amber-600 rounded-full"></span> 1.1 iOS ACCESS (SAFARI)
+                                </h3>
+                                <ol class="text-slate-600 space-y-3 pl-4 border-l-2 border-amber-100 italic text-sm">
+                                    <li>1. Visit <code
+                                            class="bg-slate-100 px-2 py-0.5 rounded text-amber-600 font-bold">tinyurl.com/InsightEdV2</code>
+                                    </li>
+                                    <li>2. Tap the <strong class="text-navy-950">"Share"</strong> icon</li>
+                                    <li>3. Select <strong class="text-navy-950 underline decoration-amber-200">"Add to
+                                            Home Screen"</strong></li>
+                                </ol>
+                            </div>
+                            <div>
+                                <h3
+                                    class="font-black text-navy-950 uppercase tracking-widest text-sm mb-4 flex items-center gap-2 italic">
+                                    <span class="w-1.5 h-1.5 bg-amber-600 rounded-full"></span> 1.2 ANDROID ACCESS
+                                    (CHROME)
+                                </h3>
+                                <ol class="text-slate-600 space-y-3 pl-4 border-l-2 border-amber-100 italic text-sm">
+                                    <li>1. Visit <code
+                                            class="bg-slate-100 px-2 py-0.5 rounded text-amber-600 font-bold">tinyurl.com/InsightEdV2</code>
+                                    </li>
+                                    <li>2. Tap the <strong class="text-navy-950">"Three Dots"</strong> menu</li>
+                                    <li>3. Select <strong class="text-navy-950 underline decoration-amber-200">"Install
+                                            App"</strong></li>
+                                </ol>
+                            </div>
+                        </div>
+                        <div class="space-y-6">
+                            <div class="p-6 bg-amber-50 border-l-4 border-amber-500 rounded-r-2xl">
+                                <h4 class="text-amber-600 font-black text-xs uppercase mb-2 tracking-widest italic">EFD
+                                    MANDATORY RULE</h4>
+                                <p class="text-amber-900 text-xs font-bold leading-relaxed italic">ALWAYS allow
+                                    permissions for Camera and Location. All EFD monitoring data requires geotagged
+                                    validation for audit compliance.</p>
+                            </div>
+                            <div class="phone-mockup">
+                                <div class="bg-navy-950 h-full w-full flex items-center justify-center">
+                                    <span class="text-amber-500 font-black italic">INTALLATION FLOW</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Nexus Portal Selection -->
+            <section class="mb-24" id="nexus">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">02</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">InsightED Nexus Access</h2>
+                </div>
+                <div class="unit-card">
+                    <p class="mb-8 font-medium text-slate-600 italic">The Launch Pad (Nexus) is your gateway to the specialized engineering environment.</p>
+                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                        <div class="phone-mockup">
+                            <div class="bg-navy-950 h-full w-full p-6 flex flex-col justify-center gap-4">
+                                <div class="space-y-1">
+                                    <p class="text-[8px] font-black text-amber-500 uppercase tracking-widest">Step 1</p>
+                                    <div class="h-12 bg-white rounded-2xl flex items-center px-4 justify-between border-2 border-amber-500">
+                                        <span class="text-[10px] font-black text-slate-800 italic uppercase">For Infrastructure</span>
+                                        <div class="w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[8px] text-white">→</div>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <p class="text-[8px] font-black text-amber-500 uppercase tracking-widest">Step 2</p>
+                                    <div class="h-12 bg-blue-600 rounded-2xl flex items-center px-4 justify-between shadow-lg shadow-blue-500/20">
+                                        <span class="text-[10px] font-black text-white italic uppercase">EFD Portal</span>
+                                        <div class="w-4 h-4 bg-white rounded-full flex items-center justify-center text-[8px] text-blue-600">→</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="space-y-6">
+                            <div class="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm border-l-8 border-l-slate-800">
+                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-1 tracking-widest italic">Phase 1: Category Selection</h4>
+                                <p class="text-slate-800 font-black italic text-sm">On the Nexus home, tap the <span class="text-slate-800 font-black underline italic">"InsightED - For Infrastructure"</span> card.</p>
+                            </div>
+                            <div class="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm border-l-8 border-l-blue-600">
+                                <h4 class="font-black text-slate-400 text-[10px] uppercase mb-1 tracking-widest italic">Phase 2: Specialized Entry</h4>
+                                <p class="text-slate-800 font-black italic text-sm">Select the <span class="text-blue-600 font-black underline italic">"EFD Portal"</span> from the Infrastructure options.</p>
+                            </div>
+                            <div class="p-5 bg-amber-50 border border-amber-100 rounded-2xl">
+                                <p class="text-[10px] text-amber-900 italic font-bold leading-relaxed">Selecting the correct path ensures you are redirected to the EFD-specific login and registration modules.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. EFD Registration & Auth -->
+            <section class="mb-24" id="registration">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">03</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">EFD Registration (3-Step Flow)</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-8">
+                            <div>
+                                <h3 class="font-black text-navy-950 uppercase tracking-widest text-sm mb-4 flex items-center gap-2 italic">
+                                    <span class="w-1.5 h-1.5 bg-amber-600 rounded-full"></span> OFFICIAL REGISTRATION STEPS
+                                </h3>
+                                <div class="space-y-4">
+                                    <div class="flex gap-4">
+                                        <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-black text-xs shrink-0">1</div>
+                                        <p class="text-xs text-slate-600 italic leading-relaxed"><strong class="text-navy-950">Identity:</strong> Select <span class="text-amber-600 font-black italic">"EFD Engineer"</span> as your role and provide your basic details.</p>
+                                    </div>
+                                    <div class="flex gap-4">
+                                        <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-black text-xs shrink-0">2</div>
+                                        <p class="text-xs text-slate-600 italic leading-relaxed"><strong class="text-navy-950">Contact:</strong> Verify your <span class="text-blue-600 font-black italic">@deped.gov.ph</span> email and 11-digit mobile number.</p>
+                                    </div>
+                                    <div class="flex gap-4">
+                                        <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center font-black text-xs shrink-0">3</div>
+                                        <p class="text-xs text-slate-600 italic leading-relaxed"><strong class="text-navy-950">Assignment:</strong> Select your Region, Division, and Position Level.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-8 bg-navy-950 text-white rounded-[2rem] border-l-[12px] border-amber-500 shadow-xl">
+                                <h3 class="text-xs font-black text-amber-400 uppercase tracking-[0.2em] mb-4 italic">FINAL STEP: AUTHORIZATION KEY</h3>
+                                <p class="text-sm leading-relaxed mb-4 italic font-bold">Registration requires the Central EFD Governance Key:</p>
+                                <div class="bg-amber-500 px-4 py-3 rounded-2xl text-white font-black text-2xl italic tracking-[0.2em] text-center shadow-inner select-all">
+                                    EFD8-C1D9
+                                </div>
+                                <p class="text-[10px] text-amber-300 italic opacity-80 uppercase tracking-widest font-black mt-4">Required for Central Office Access.</p>
+                            </div>
+                        </div>
+                        <div class="space-y-6">
+                            <div class="gif-placeholder">
+                                <div class="text-3xl mb-2">🔐</div>
+                                Login Flow: Password or Passcode
+                            </div>
+                            <div class="p-6 bg-blue-50 border border-blue-100 rounded-[2rem]">
+                                <h4 class="font-black text-blue-900 text-[10px] uppercase mb-2 tracking-widest italic">SECURITY NOTE</h4>
+                                <p class="text-[10px] text-blue-800 italic leading-relaxed">The login screen supports both your <strong class="uppercase text-blue-900">Password</strong> and a <strong class="uppercase text-blue-900">6-Digit Passcode</strong>. You will be prompted to set up a Passcode upon your first successful password login for faster access.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. HRODI Dashboard Monitoring -->
+            <section class="mb-24" id="dashboard">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">04</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">HRODI Dashboard Analytics</h2>
+                </div>
+                <div class="unit-card">
+                    <p class="mb-8 font-medium text-slate-600 border-b pb-6 border-slate-100 italic font-bold">The HRODI Dashboard provides aggregated oversight across six analytical dimensions:</p>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                        <div class="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Tab 1</p>
+                            <p class="text-xs font-black text-navy-950 uppercase italic">Summary</p>
+                        </div>
+                        <div class="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Tab 2</p>
+                            <p class="text-xs font-black text-navy-950 uppercase italic">Region</p>
+                        </div>
+                        <div class="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Tab 3</p>
+                            <p class="text-xs font-black text-navy-950 uppercase italic">Division</p>
+                        </div>
+                        <div class="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Tab 4</p>
+                            <p class="text-xs font-black text-navy-950 uppercase italic">Category</p>
+                        </div>
+                        <div class="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Tab 5</p>
+                            <p class="text-xs font-black text-navy-950 uppercase italic">Year</p>
+                        </div>
+                        <div class="p-4 bg-amber-500 rounded-2xl text-center shadow-lg shadow-amber-500/20">
+                            <p class="text-[9px] font-black text-amber-100 uppercase tracking-widest mb-1 italic">Tab 6</p>
+                            <p class="text-xs font-black text-white uppercase italic">Projects</p>
+                        </div>
+                    </div>
+                    <div class="grid md:grid-cols-3 gap-6">
+                        <div class="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm border-t-8 border-t-amber-500 text-center">
+                            <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Inventory</h4>
+                            <p class="text-2xl font-black text-navy-950 italic tracking-tighter">Total Projects</p>
+                            <p class="text-[10px] text-slate-500 italic mt-2 font-bold uppercase tracking-tight">Active Infrastructure Count</p>
+                        </div>
+                        <div class="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm border-t-8 border-t-emerald-500 text-center">
+                            <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Financial</h4>
+                            <p class="text-2xl font-black text-emerald-600 italic tracking-tighter">Total ABC</p>
+                            <p class="text-[10px] text-slate-500 italic mt-2 font-bold uppercase tracking-tight">Aggregated Allocation</p>
+                        </div>
+                        <div class="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm border-t-8 border-t-blue-500 text-center">
+                            <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Physical Progress</h4>
+                            <p class="text-2xl font-black text-blue-600 italic tracking-tighter">Average %</p>
+                            <p class="text-[10px] text-slate-500 italic mt-2 font-bold uppercase tracking-tight">Real-time weighted stats</p>
+                        </div>
+                    </div>
+                    <div class="mt-8 p-6 bg-navy-950 text-white rounded-[2rem] border-l-8 border-amber-500">
+                        <h4 class="text-amber-400 font-black text-xs uppercase mb-2 italic tracking-widest">ADVANCED FILTERING</h4>
+                        <p class="text-[11px] italic opacity-90 leading-relaxed mb-3">All Metrics (Total ABC, Average Progress) can be filtered by: <br/><strong class="text-white italic">Region • Division • Province • Municipality • Year • Fund Source • Category</strong></p>
+                        <ul class="text-[10px] space-y-1 italic opacity-70">
+                            <li>• Use the multi-select dropdowns to isolate specific geographic clusters.</li>
+                            <li>• Use the "Source" filter to distinguish between DepEd and LGU-funded projects.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. EFD Project Monitoring suite -->
+            <section class="mb-24" id="monitoring">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">05</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">EFD Project Monitoring Suite</h2>
+                </div>
+                <div class="unit-card">
+                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                        <div class="space-y-6">
+                            <div class="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm">
+                                <h4 class="font-black text-navy-950 uppercase text-[10px] mb-3 italic tracking-widest">5.1 Hybrid Monitoring Views</h4>
+                                <p class="text-[11px] text-slate-600 italic">Centralized view of all department infrastructure. Toggle between <strong class="text-amber-600">Cards</strong> (Visual site photos) and <strong class="text-blue-600">Table</strong> (Bulk accomplishment stats).</p>
+                            </div>
+                            <div class="p-6 bg-[#112240] text-white rounded-[2rem] shadow-xl border-l-[12px] border-amber-500">
+                                <h4 class="text-amber-400 font-black text-xs mb-3 italic tracking-widest">5.2 Engineer Assignment</h4>
+                                <p class="text-[11px] italic opacity-90 leading-relaxed font-bold">EFD Engineers act as administrators for the field engineering staff.
+                                    <br /><br />
+                                    <strong class="text-white uppercase underline">Action:</strong> Tap the [Assign] button on any project card to open the Division Engineer directory. Select the staff responsible for field monitoring of that site.
+                                </p>
+                            </div>
+                            <div class="p-6 bg-slate-50 border border-slate-200 rounded-[2rem]">
+                                <h4 class="text-slate-900 font-black text-xs mb-2 italic tracking-widest">5.3 PROJECT LOGS</h4>
+                                <p class="text-[10px] text-slate-500 italic leading-relaxed">Tap the [Logs] icon to view a chronological history of status changes, including reasons for suspension or termination provided by field engineers.</p>
+                            </div>
+                        </div>
+                        <div class="phone-mockup">
+                            <div class="bg-navy-950 h-full w-full p-4 flex flex-col gap-4">
+                                <div class="bg-slate-800 h-24 rounded-2xl p-3">
+                                    <div class="flex justify-between">
+                                        <div class="h-2 w-1/2 bg-slate-600 rounded"></div>
+                                        <div class="h-4 w-4 bg-emerald-500 rounded-full"></div>
+                                    </div>
+                                    <p class="text-[8px] text-slate-400 mt-2 font-black italic">CONSTRUCTION: 75%</p>
+                                    <div class="mt-1 h-2 w-full bg-slate-700 rounded overflow-hidden">
+                                        <div class="bg-emerald-500 h-full w-[75%]"></div>
+                                    </div>
+                                    <div class="mt-4 h-8 bg-blue-600 rounded-xl flex items-center justify-center font-black text-[8px] text-white italic shadow-lg shadow-blue-500/20">
+                                        MANAGE PROJECT</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. Mother MOA & Resolutions Archive -->
+            <section class="mb-24" id="moa">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">06</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Mother MOA & Resolutions Archive</h2>
+                </div>
+                <div class="unit-card">
+                    <p class="mb-10 text-lg font-medium text-slate-600 italic font-bold">The EFD Engineer's primary planning task is managing the national archive of LGU Memorandums.</p>
+
+                    <div class="grid md:grid-cols-2 gap-12">
+                        <div class="space-y-6">
+                            <div class="p-6 bg-slate-50 border border-slate-200 rounded-[2.5rem]">
+                                <h4 class="font-black text-navy-950 uppercase text-[10px] mb-4 italic tracking-widest flex items-center gap-2">
+                                    <span class="w-2 h-2 bg-amber-500 rounded-full"></span> 6.1 UPLOAD PROTOCOLS
+                                </h4>
+                                <ul class="text-[11px] text-slate-600 space-y-4 italic">
+                                    <li>• <strong class="text-navy-950 italic font-black uppercase">LGU Type:</strong> PGO (Province), CGO (City), or MGO (Municipality). <span class="text-red-600 font-bold">*PGO not applicable for NCR regions.</span></li>
+                                    <li>• <strong class="text-navy-950 italic font-black uppercase">Document Pair:</strong> Official Archiving requires uploading both the **Mother MOA** and the **Sangguniang Resolution**.</li>
+                                </ul>
+                            </div>
+                            <div class="p-6 bg-emerald-50 border border-emerald-200 rounded-[2.5rem]">
+                                <h4 class="font-black text-emerald-800 uppercase text-[10px] mb-3 italic tracking-widest">6.2 SUPPLEMENTAL MOA</h4>
+                                <p class="text-[11px] text-emerald-900 italic font-medium leading-relaxed font-bold">
+                                    For projects requiring contract extensions or variations, add **Supplemental MOAs** to the established archive. You must link these to a valid **IPC ID** for project-wide visibility.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="space-y-6">
+                            <div class="p-8 bg-navy-950 text-white rounded-[2.5rem] border shadow-2xl">
+                                <h4 class="text-blue-400 font-black text-xs uppercase mb-4 italic tracking-widest underline decoration-blue-500/20 underline-offset-4">Archive Explorer</h4>
+                                <p class="text-[11px] italic opacity-80 leading-relaxed mb-4 font-bold">All Mother MOA records are searchable by LGU Name or Region. Documents are viewable via the built-in PDF explorer with zero external downloads required.</p>
+                                <div class="bg-blue-600 h-10 rounded-xl flex items-center justify-center font-black text-xs italic tracking-tighter shadow-lg shadow-blue-500/30">
+                                    EXPLORE ARCHIVE</div>
+                            </div>
+                            <div class="gif-placeholder">
+                                <div class="text-3xl mb-2">📄</div>
+                                Integrated PDF Viewer
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 7. Newcon Priorities & Planning -->
+            <section class="mb-24" id="newcon">
+                <div class="flex items-center mb-8">
+                    <span class="step-pill">07</span>
+                    <h2 class="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Newcon Priorities & Infrastructure Planning</h2>
+                </div>
+                <div class="unit-card">
+                    <p class="mb-8 font-medium text-slate-600 border-b pb-6 border-slate-100 italic font-bold tracking-tight">Access via the "Newcon" tab for Congressional Initiatives & Legislative Infrastructure Planning.</p>
+                    <div class="grid md:grid-cols-2 gap-12 items-center">
+                        <div class="space-y-4">
+                            <div class="p-6 bg-white border border-slate-100 rounded-[2.5rem] shadow-sm border-l-8 border-l-amber-500">
+                                <h4 class="font-black text-slate-900 uppercase text-xs mb-3 italic tracking-widest">7.1 DATASET TOGGLE</h4>
+                                <p class="text-[11px] text-slate-500 italic leading-relaxed font-medium">Toggle between the **MASTERLIST** (Current Priority Pool) and the **2026** (Infrastructure Planning Pool) to oversee deployment targets.</p>
+                            </div>
+                            <div class="p-6 bg-white border border-slate-100 rounded-[2.5rem] shadow-sm border-l-8 border-l-blue-600">
+                                <h4 class="font-black text-slate-900 uppercase text-xs mb-3 italic tracking-widest">7.2 AGENCY GOVERNANCE</h4>
+                                <p class="text-[11px] text-slate-500 italic leading-relaxed font-medium uppercase tracking-tighter font-black">
+                                    Assign Implementing Responsibility to centralized agencies or local offices:
+                                    <br /><span class="text-blue-600">DPWH • DEPED • PGO • CGO • MGO • CSO</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="p-8 bg-amber-50 border border-amber-200 rounded-[3rem] text-center shadow-inner group">
+                            <div class="text-[10px] uppercase font-black text-amber-600 mb-4 tracking-[0.3em] italic">Planning Metrics</div>
+                            <div class="text-3xl font-black text-navy-950 mb-4 italic uppercase tracking-tighter">Newcon Accomplishment</div>
+                            <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden mb-4 shadow-inner">
+                                <div class="bg-amber-500 h-full w-[65%] shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
+                            </div>
+                            <p class="text-[10px] text-slate-400 font-bold italic uppercase tracking-widest">Track % Completion for Congressional Projects</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Support Footer -->
+            <footer class="mt-40 pt-24 border-t-8 border-navy-950 text-center relative overflow-hidden">
+                <div class="max-w-md mx-auto relative z-10 text-center">
+                    <div
+                        class="w-20 h-20 bg-amber-500 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-amber-500/40 border-4 border-white rotate-3">
+                        <div class="text-2xl font-black italic tracking-tighter">EFD</div>
+                    </div>
+                    <h2 class="text-2xl font-black text-[#0A192F] uppercase mb-4 tracking-[0.3em] italic underline decoration-amber-500/10 decoration-8 underline-offset-[-2px]">
+                        EFD Support Group</h2>
+                    <p class="text-sm text-slate-400 mb-10 font-black uppercase tracking-[0.1em] leading-relaxed px-6 italic">
+                        Strategic Planning Division Coordination Channel</p>
+                    <div class="bg-[#112240] p-8 rounded-[2.5rem] text-white font-mono text-base shadow-2xl border border-amber-500/10 shadow-amber-500/10 select-all group">
+                        <div class="text-amber-500 text-[8px] font-black uppercase tracking-[0.6em] mb-4 opacity-70 italic underline decoration-amber-500/30 group-hover:tracking-[0.8em] transition-all duration-500">
+                            Official EFD Correspondence</div>
+                        efd.monitoring@deped.gov.ph
+                    </div>
+                </div>
+                <div class="mt-32 pb-20">
+                    <div class="inline-flex items-center gap-4 mb-6 px-6 py-2 bg-slate-100/50 rounded-full border border-slate-200">
+                        <span class="text-[9px] font-black uppercase tracking-[0.5em] text-slate-400 italic">Centralized Governance Framework v1.1 • AUDITED PARITY</span>
+                    </div>
+                    <p class="text-[10px] text-slate-300 uppercase tracking-[1em] font-black italic">EFD SOP MANUAL • 2026</p>
+                </div>
+            </footer>
+        </main>
+    </div>
+</body>
+
+</html>
