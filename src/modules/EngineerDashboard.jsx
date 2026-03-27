@@ -288,7 +288,7 @@ const EngineerDashboard = () => {
           }
 
           try {
-            const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${uid}`);
+            const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${currentUid}`);
             if (actResponse.ok) {
               const actData = await actResponse.json();
               setActivities(actData);

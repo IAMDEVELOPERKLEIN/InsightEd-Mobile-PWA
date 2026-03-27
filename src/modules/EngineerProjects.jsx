@@ -13,6 +13,8 @@ import { uploadFileInChunks } from '../utils/chunkedUploader'; // NEW CHUNK UPLO
 
 import LocationPickerMap from '../components/LocationPickerMap';
 import UpdateProjectWizard from "../components/UpdateProjectWizard";
+import FilterDrawer from "../components/FilterDrawer";
+import ProjectLogModal from "../components/ProjectLogModal";
 
 // --- CONSTANTS ---
 const ProjectStatus = {
@@ -81,7 +83,7 @@ const formatDateShort = (dateString) => {
 
 // --- SUB-COMPONENTS ---
 
-const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading, searchQuery, readOnly, handleStatusChange }) => {
+const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariation, isLoading, searchQuery, readOnly, handleStatusChange }) => {
 
   if (isLoading) {
     return (
@@ -145,8 +147,16 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
                     IPC {p.ipc}
                   </div>
                 )}
+                {/* Updated By Info - Premium Design */}
+                {p.engineerName && (
+                  <div className="flex items-center gap-1.5 mt-1 bg-white/50 dark:bg-slate-900/40 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Updated By</span>
+                    <span className="text-[9px] font-black text-[#004A99] dark:text-blue-400 leading-none">{p.engineerName}</span>
+                  </div>
+                )}
                 {/* Accomplishment Percentage Badge */}
-                <div className="relative">
+                <div className="relative mt-2">
                   <div className="px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 rounded-xl border-2 border-emerald-100 dark:border-emerald-800 shadow-sm flex flex-col items-center leading-tight">
                     <div className="flex items-center gap-1.5">
                       {(p.previousPercentage !== undefined && p.previousPercentage !== null && Number(p.previousPercentage) !== Number(p.accomplishmentPercentage)) || (p.previousPercentage === null && Number(p.accomplishmentPercentage) !== 0) ? (
@@ -214,7 +224,7 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
                     )}
                   </div>
                   <select
-                    value={p.statusDesignPhase || ""}
+                    value={p.procurement_status || ""}
                     onChange={(e) => handleStatusChange(p, 'procurement', e.target.value)}
                     disabled={constructionStarted}
                     className={`w-full border rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
@@ -279,6 +289,12 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, isLoading
               >
                 <LuClipboardList size={14} /> LOGS
               </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onVariation(p); }}
+                className="flex-1 py-2.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 text-[10px] font-black rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all active:scale-95 flex items-center justify-center gap-2 border border-emerald-100 dark:border-emerald-800"
+              >
+                <LuDollarSign size={14} /> VO
+              </button>
             </div>
             <button
                onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
@@ -310,15 +326,28 @@ const EngineerProjects = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [modalMode, setModalMode] = useState('quick');
-  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [modalMode, setModalMode] = useState('quick');
+
+  // --- FILTER STATES ---
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [selectedRegions, setSelectedRegions] = useState([]);
+  const [selectedDivisions, setSelectedDivisions] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedYears, setSelectedYears] = useState([]);
+  const [selectedBatchFunds, setSelectedBatchFunds] = useState([]);
+
+  // --- LOG MODAL STATE ---
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [logProject, setLogProject] = useState(null);
 
   // Categorized State
   const [internalFiles, setInternalFiles] = useState([]);
   const [internalPreviews, setInternalPreviews] = useState([]);
   const [externalFiles, setExternalFiles] = useState([]);
   const [externalPreviews, setExternalPreviews] = useState([]);
+
   const [activeCategory, setActiveCategory] = useState('Internal');
 
   // PDF Upload Progress State
@@ -335,8 +364,6 @@ const EngineerProjects = () => {
   const cameraInputRef = useRef(null);
 
   // --- Project Log State ---
-  const [logModalOpen, setLogModalOpen] = useState(false);
-  const [logProject, setLogProject] = useState(null);
   const [projectHistory, setProjectHistory] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
@@ -345,6 +372,21 @@ const EngineerProjects = () => {
     open: false, type: null, project: null, newValue: null, options: [], title: '' 
   });
   const [selectedReasons, setSelectedReasons] = useState([]);
+
+  // --- Variation Order Modal State ---
+  const [variationModalOpen, setVariationModalOpen] = useState(false);
+  const [variationProject, setVariationProject] = useState(null);
+  const [variationData, setVariationData] = useState({
+    variationName: '',
+    variationType: 'Change Order',
+    originalAmount: '',
+    additive: '',
+    deductive: '',
+    reusedAmount: ''
+  });
+  const [recentVariations, setRecentVariations] = useState([]);
+  const [isSavingVO, setIsSavingVO] = useState(false);
+  const [isLoadingVO, setIsLoadingVO] = useState(false);
 
   const REASON_OPTIONS = {
     // Procurement Status Reasons
@@ -390,139 +432,162 @@ const EngineerProjects = () => {
   const API_BASE = "";
 
   // Fetch User & Projects
-  useEffect(() => {
-    const fetchUserDataAndProjects = async () => {
-      const currentUid = user?.uid || localStorage.getItem('uid');
-      let currentRole = user?.account_category || user?.role || localStorage.getItem('userRole');
-      
-      if (currentUid) {
-        // Sync Basic Info from User Object if available
-        if (user) {
-            setUserName(`${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim() || 'Engineer');
-            setAccountCategory(user.account_category);
-        }
-
-        try {
-          setIsLoading(true);
-          // Normalize role for BottomNav and logic
-          if (currentRole === 'deped_engineer' || currentRole === 'DepEd Engineer') currentRole = 'Division Engineer';
-          if (currentRole === 'hrodi_engineer' || currentRole === 'HRODI Engineer' || currentRole === 'EFD' || currentRole === 'HRODI') currentRole = 'EFD Engineer';
-          if (currentRole === 'non_deped_engineer') currentRole = 'Non-DepEd Engineer';
-          if (currentRole === 'engineer') currentRole = 'Engineer';
-          
-          setUserRole(currentRole);
-          let currentProjects = [];
-
-          // 1. Immediate Cache Load (Fast Render)
-          try {
-            const cachedData = await getCachedProjects();
-            if (cachedData && cachedData.length > 0) {
-              setProjects(cachedData);
-              currentProjects = cachedData;
-              setIsLoading(false);
-            }
-          } catch (err) {
-            console.warn("Cache read failed", err);
-          }
-
-          // 2. Network Request
-          try {
-            let url = `${API_BASE}/api/projects?engineer_id=${currentUid}`;
-
-            if (currentRole === 'Super User') {
-              const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
-              if (impersonatedDivision) {
-                url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
-              } else {
-                url = `${API_BASE}/api/projects`;
-              }
-            } else if (currentRole === 'Super Admin') {
-                url = `${API_BASE}/api/projects`;
-            }
-
-            const response = await fetch(url);
-            if (!response.ok) throw new Error("Failed to fetch projects");
-            const data = await response.json();
-
-            currentProjects = data.map(item => ({
-              id: item.id,
-              projectName: item.projectName,
-              schoolName: item.schoolName,
-              schoolId: item.schoolId,
-              status: item.status,
-              accomplishmentPercentage: item.accomplishmentPercentage,
-              projectAllocation: item.projectAllocation,
-              targetCompletionDate: item.targetCompletionDate,
-              statusAsOf: item.statusAsOf,
-              otherRemarks: item.otherRemarks,
-              contractorName: item.contractorName,
-              ipc: item.ipc,
-              latitude: item.latitude,
-              longitude: item.longitude,
-              projectCategory: item.projectCategory,
-              scopeOfWork: item.scopeOfWork,
-              numberOfClassrooms: item.numberOfClassrooms,
-              numberOfStoreys: item.numberOfStoreys,
-              numberOfSites: item.numberOfSites,
-              fundsUtilized: item.fundsUtilized,
-              constructionStartDate: item.constructionStartDate,
-              noticeToProceed: item.noticeToProceed,
-              batchOfFunds: item.batchOfFunds,
-              hasPow: item.hasPow,
-              hasDupa: item.hasDupa,
-              hasContract: item.hasContract,
-              hasMoa: item.hasMoa,
-              hasRta: item.hasRta,
-              hasVariationOrder: item.hasVariationOrder,
-              variationOrderPdf: item.variationOrderPdf,
-              contractAmount: item.contractAmount,
-              statusDesignPhase: item.statusDesignPhase,
-              fundingYear: item.fundingYear,
-              province: item.province,
-              region: item.region,
-              division: item.division,
-              municipality: item.municipality,
-              city: item.city,
-              previousPercentage: item.previousPercentage,
-              isRealigned: item.isRealigned,
-              updateType: item.updateType,
-              savings: item.savings,
-              isDonated: item.isDonated,
-              programType: item.programType,
-              fundingYearJustification: item.fundingYearJustification,
-              sangguniang_resolution_id: item.sangguniang_resolution_id,
-              mother_moa_id: item.mother_moa_id,
-              supplamental_moa_id: item.supplamental_moa_id
-            }));
-
-            // Update Cache on success
-            await cacheProjects(currentProjects);
-
-            // Update state with fresh data
-            setProjects(currentProjects);
-
-          } catch (networkError) {
-            console.warn("Network request failed:", networkError);
-          }
-
-        } catch (err) {
-          console.error("Error loading projects:", err);
-        } finally {
-          setIsLoading(false);
-        }
+  const fetchProjects = async () => {
+    const currentUid = user?.uid || localStorage.getItem('uid');
+    let currentRole = user?.account_category || user?.role || localStorage.getItem('userRole');
+    
+    if (currentUid) {
+      // Sync Basic Info from User Object if available
+      if (user) {
+          setUserName(`${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim() || 'Engineer');
+          setAccountCategory(user.account_category);
       }
-    };
-    fetchUserDataAndProjects();
+
+      try {
+        setIsLoading(true);
+        // Normalize role for BottomNav and logic
+        if (currentRole === 'deped_engineer' || currentRole === 'DepEd Engineer') currentRole = 'Division Engineer';
+        if (currentRole === 'hrodi_engineer' || currentRole === 'HRODI Engineer' || currentRole === 'EFD' || currentRole === 'HRODI') currentRole = 'EFD Engineer';
+        if (currentRole === 'non_deped_engineer') currentRole = 'Non-DepEd Engineer';
+        if (currentRole === 'engineer') currentRole = 'Engineer';
+        
+        setUserRole(currentRole);
+        let currentProjects = [];
+
+        // 1. Immediate Cache Load (Fast Render)
+        try {
+          const cachedData = await getCachedProjects();
+          if (cachedData && cachedData.length > 0) {
+            setProjects(cachedData);
+            currentProjects = cachedData;
+            setIsLoading(false);
+          }
+        } catch (err) {
+          console.warn("Cache read failed", err);
+        }
+
+        // 2. Network Request
+        try {
+          let url = `${API_BASE}/api/projects?engineer_id=${currentUid}`;
+
+          if (currentRole === 'Super User') {
+            const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
+            if (impersonatedDivision) {
+              url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
+            } else {
+              url = `${API_BASE}/api/projects`;
+            }
+          } else if (currentRole === 'Super Admin') {
+              url = `${API_BASE}/api/projects`;
+          }
+
+          const response = await fetch(url);
+          if (!response.ok) throw new Error("Failed to fetch projects");
+          const data = await response.json();
+
+          currentProjects = data.map(item => ({
+            id: item.id,
+            projectName: item.projectName,
+            schoolName: item.schoolName,
+            schoolId: item.schoolId,
+            status: item.status,
+            engineerName: item.engineerName,
+            accomplishmentPercentage: item.accomplishmentPercentage,
+            projectAllocation: item.projectAllocation,
+            targetCompletionDate: item.targetCompletionDate,
+            statusAsOf: item.statusAsOf,
+            otherRemarks: item.otherRemarks,
+            contractorName: item.contractorName,
+            ipc: item.ipc,
+            latitude: item.latitude,
+            longitude: item.longitude,
+            projectCategory: item.projectCategory,
+            scopeOfWork: item.scopeOfWork,
+            numberOfClassrooms: item.numberOfClassrooms,
+            numberOfStoreys: item.numberOfStoreys,
+            numberOfSites: item.numberOfSites,
+            fundsUtilized: item.fundsUtilized,
+            constructionStartDate: item.constructionStartDate,
+            noticeToProceed: item.noticeToProceed,
+            batchOfFunds: item.batchOfFunds,
+            hasPow: item.hasPow,
+            hasDupa: item.hasDupa,
+            hasContract: item.hasContract,
+            hasMoa: item.hasMoa,
+            hasRta: item.hasRta,
+            hasVariationOrder: item.hasVariationOrder,
+            variationOrderPdf: item.variationOrderPdf,
+            contractAmount: item.contractAmount,
+            statusDesignPhase: item.procurement_status, // Mapping for compatibility
+            procurement_status: item.procurement_status,
+            fundingYear: item.fundingYear,
+            province: item.province,
+            region: item.region,
+            division: item.division,
+            municipality: item.municipality,
+            city: item.city,
+            previousPercentage: item.previousPercentage,
+            isRealigned: item.isRealigned,
+            updateType: item.updateType,
+            savings: item.savings,
+            isDonated: item.isDonated,
+            programType: item.programType,
+            fundingYearJustification: item.fundingYearJustification,
+            sangguniang_resolution_id: item.sangguniang_resolution_id,
+            mother_moa_id: item.mother_moa_id,
+            supplamental_moa_id: item.supplamental_moa_id
+          }));
+
+          // Update Cache on success
+          await cacheProjects(currentProjects);
+
+          // Update state with fresh data
+          setProjects(currentProjects);
+
+        } catch (networkError) {
+          console.warn("Network request failed:", networkError);
+        }
+
+      } catch (err) {
+        console.error("Error loading projects:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
   }, [user, user?.uid]);
 
   // Filtered list
-  const filteredProjects = projects.filter(p =>
-    p.schoolName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    String(p.schoolId).includes(searchQuery)
-  );
+  const filteredProjects = React.useMemo(() => {
+    return projects.filter((p) => {
+      const searchTerm = searchQuery.toLowerCase();
+      const matchesSearch =
+        p.schoolName?.toLowerCase().includes(searchTerm) ||
+        p.projectName?.toLowerCase().includes(searchTerm) ||
+        p.schoolId?.toString().includes(searchTerm) ||
+        p.ipc?.toLowerCase().includes(searchTerm);
 
-  // Handlers
+      const matchesRegion = selectedRegions.length === 0 || selectedRegions.includes(p.region);
+      const matchesDivision = selectedDivisions.length === 0 || selectedDivisions.includes(p.division);
+      const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(p.projectCategory);
+      const matchesYear = selectedYears.length === 0 || selectedYears.includes(p.fundingYear?.toString());
+      const matchesBatch = selectedBatchFunds.length === 0 || selectedBatchFunds.includes(p.batch_of_funds || p.batchOfFunds);
+
+      return matchesSearch && matchesRegion && matchesDivision && matchesCategory && matchesYear && matchesBatch;
+    });
+  }, [projects, searchQuery, selectedRegions, selectedDivisions, selectedCategories, selectedYears, selectedBatchFunds]);
+
+  const stats = React.useMemo(() => {
+    return {
+      total: filteredProjects.length,
+      ongoing: filteredProjects.filter(p => p.status === 'Ongoing').length,
+      completed: filteredProjects.filter(p => p.status === 'Completed').length,
+    };
+  }, [filteredProjects]);
+
   const handleViewProject = (project) => navigate(`/project-details/${project.id}`);
 
   const handleDeleteProject = async (projectId) => {
@@ -574,7 +639,11 @@ const EngineerProjects = () => {
     try {
       const payload = { ...project };
       if (type === 'procurement') {
-        payload.statusDesignPhase = newValue;
+        payload.procurement_status = newValue;
+        payload.statusDesignPhase = newValue; // For consistency
+        if (newValue === 'Completed') {
+          payload.status = null; // Clear construction status to show placeholder
+        }
       } else {
         payload.status = newValue;
         // Bug 3: Auto-set percentage for specific statuses
@@ -605,7 +674,21 @@ const EngineerProjects = () => {
       });
 
       if (!response.ok) throw new Error("Failed to update status");
+      
+      const resData = await response.json();
+      const updatedProject = resData.project;
+      
       console.log(`Status (${type}) updated to: ${newValue}`);
+      
+      // Update local state with the actual data from server
+      setProjects(prev => prev.map(p => (p.ipc === project.ipc || p.id === project.id) ? { 
+        ...p, 
+        ...updatedProject, 
+        id: updatedProject.project_id, // Correctly access nested project_id
+        previousPercentage: project.accomplishmentPercentage 
+      } : p));
+
+      alert(`✅ ${type === 'procurement' ? 'Procurement' : 'Construction'} status updated successfully!`);
     } catch (err) {
       console.error("Status Update Error:", err);
       alert("Failed to update project status. Please try again.");
@@ -647,7 +730,7 @@ const EngineerProjects = () => {
 
   const handleViewLog = async (project) => {
     setLogProject(project);
-    setLogModalOpen(true);
+    setIsLogModalOpen(true);
     setIsHistoryLoading(true);
     setProjectHistory([]); // Clear previous
     try {
@@ -672,7 +755,7 @@ const EngineerProjects = () => {
     setInternalPreviews([]);
     setExternalFiles([]);
     setExternalPreviews([]); // Clear old previews
-    setEditModalOpen(true);
+    setIsUpdateModalOpen(true);
 
     // BACKGROUND SYNC: Fetch full project details (including PDFs) while modal is open
     try {
@@ -684,6 +767,66 @@ const EngineerProjects = () => {
       }
     } catch (err) {
       console.warn("Background project fetch failed:", err);
+    }
+  };
+
+  const handleOpenVariationModal = (project) => {
+    setVariationProject(project);
+    setVariationData({
+      variationName: '',
+      variationType: 'Change Order',
+      originalAmount: project.projectAllocation || '',
+      additive: '',
+      deductive: '',
+      reusedAmount: ''
+    });
+    setVariationModalOpen(true);
+    fetchRecentVariations(project.id);
+  };
+
+  const fetchRecentVariations = async (projectId) => {
+    setIsLoadingVO(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/variation-orders/${projectId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setRecentVariations(data);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch variations:", err);
+    } finally {
+      setIsLoadingVO(false);
+    }
+  };
+
+  const handleVariationConfirm = async () => {
+    if (!variationData.variationName || !variationData.variationType) {
+      alert("Please fill in Variation Name and Type.");
+      return;
+    }
+
+    setIsSavingVO(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/variation-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: variationProject.id,
+          ...variationData,
+          uid: user?.uid,
+          userName: userName
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to save variation order");
+
+      alert("Variation Order saved successfully!");
+      setVariationModalOpen(false);
+    } catch (err) {
+      console.error("VO Save Error:", err);
+      alert("Error saving variation order. Please try again.");
+    } finally {
+      setIsSavingVO(false);
     }
   };
 
@@ -809,7 +952,7 @@ const EngineerProjects = () => {
         }
         alert("⚠️ Offline: Changes cached to Sync Center.");
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-        setEditModalOpen(false);
+        setIsUpdateModalOpen(false);
         return;
       }
 
@@ -859,7 +1002,7 @@ const EngineerProjects = () => {
       alert("Success: Changes synced to database!");
       setInternalFiles([]);
       setExternalFiles([]);
-      setEditModalOpen(false);
+      setIsUpdateModalOpen(false);
     } catch (err) {
       console.error("Save Error:", err);
       alert("Sync error. Try again later.");
@@ -944,7 +1087,9 @@ const EngineerProjects = () => {
               />
               <div className="absolute inset-y-0 right-4 flex items-center">
                 <div className="h-6 w-[1px] bg-white/10 mx-2"></div>
-                <FiFilter className="text-white/40 hover:text-white cursor-pointer transition-colors" />
+                <button onClick={() => setIsFilterOpen(true)} className="p-2 -mr-2">
+                  <FiFilter className={`transition-colors ${isFilterOpen || selectedDivisions.length > 0 || selectedCategories.length > 0 || selectedYears.length > 0 ? 'text-white' : 'text-white/40 hover:text-white'}`} />
+                </button>
               </div>
             </div>
           </div>
@@ -958,6 +1103,7 @@ const EngineerProjects = () => {
             onDelete={handleDeleteProject}
             onView={handleViewProject}
             onViewLog={handleViewLog}
+            onVariation={handleOpenVariationModal}
             isLoading={isLoading}
             searchQuery={searchQuery}
             readOnly={userRole === 'Super User'}
@@ -982,94 +1128,16 @@ const EngineerProjects = () => {
         <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
 
         {/* --- PROJECT LOG MODAL --- */}
-        {logModalOpen && createPortal(
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-              {/* Header */}
-              <div className="px-8 pt-8 pb-6 border-b border-slate-100 dark:border-slate-700">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-black text-slate-800 dark:text-white leading-tight">Project History</h2>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 truncate max-w-[280px]">
-                      {logProject?.projectName}
-                    </p>
-                  </div>
-                  <button onClick={() => setLogModalOpen(false)} className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-2xl text-slate-400 transition-colors">
-                    <FiX size={20} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Scrollable Timeline */}
-              <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-                {isHistoryLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                    <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fetching logs...</p>
-                  </div>
-                ) : projectHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4 text-slate-300">
-                      <LuClipboardList size={32} />
-                    </div>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">No Transaction Records</p>
-                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest">Original data entry only</p>
-                  </div>
-                ) : (
-                  <div className="relative space-y-8">
-                    {/* Vertical Line */}
-                    <div className="absolute left-[15px] top-4 bottom-4 w-[2px] bg-slate-100 dark:bg-slate-700"></div>
-                    
-                    {projectHistory.map((item, i) => (
-                      <div key={i} className="relative flex gap-6 animate-in slide-in-from-left-4 duration-500" style={{ animationDelay: `${i * 100}ms` }}>
-                        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center z-10 shadow-sm border-4 border-white dark:border-slate-800 transition-all ${i === 0 ? 'bg-blue-600 text-white scale-110' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
-                          {i === 0 ? <LuActivity size={14} /> : <div className="w-1.5 h-1.5 bg-current rounded-full"></div>}
-                        </div>
-                        <div className="flex-1 pt-0.5">
-                          <div className="flex justify-between items-start mb-2">
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                {formatDateShort(item.created_at || item.timestamp || item.status_as_of)}
-                             </p>
-                             {item.update_type && (
-                               <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-[8px] font-black text-blue-600 dark:text-blue-300 rounded-full border border-blue-100 dark:border-blue-800 uppercase tracking-tighter">
-                                 {item.update_type}
-                               </span>
-                             )}
-                          </div>
-                          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-700/50">
-                            <div className="flex justify-between items-center mb-2">
-                              <p className="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">{item.engineerName || item.engineer_name}</p>
-                              <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">{item.accomplishmentPercentage || item.accomplishment_percentage || 0}%</p>
-                            </div>
-                            <p className={`text-[10px] font-bold px-2 py-1 rounded-lg w-fit mb-3 border ${getStatusColor(item.status || item.status_design_phase || item.status_of_construction_phase)}`}>
-                              {item.status || item.status_design_phase || item.status_of_construction_phase}
-                            </p>
-                            {item.remarks && (
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed italic font-medium">"{item.remarks}"</p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="p-8 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30">
-                <button onClick={() => setLogModalOpen(false)} className="w-full py-4 bg-slate-800 dark:bg-slate-700 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-xl hover:bg-slate-900 transition-all active:scale-95">
-                  Close Log
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+        <ProjectLogModal 
+            isOpen={isLogModalOpen}
+            onClose={() => setIsLogModalOpen(false)}
+            project={logProject}
+        />
 
         <UpdateProjectWizard
           project={selectedProject}
-          isOpen={editModalOpen}
-          onClose={() => setEditModalOpen(false)}
+          isOpen={isUpdateModalOpen}
+          onClose={() => setIsUpdateModalOpen(false)}
           isUploading={isUploading}
           onSave={async (updatedProject, wizardInternalFiles, wizardExternalFiles) => {
             // Use files provided by the wizard instead of the parent state
@@ -1081,6 +1149,26 @@ const EngineerProjects = () => {
             setInternalFiles(prevInternal);
             setExternalFiles(prevExternal);
           }}
+        />
+
+        <FilterDrawer 
+          isOpen={isFilterOpen}
+          onClose={() => setIsFilterOpen(false)}
+          projects={projects}
+          onApply={(f) => {
+            setSelectedRegions(f.regions);
+            setSelectedDivisions(f.divisions);
+            setSelectedCategories(f.categories);
+            setSelectedYears(f.years);
+            setSelectedBatchFunds(f.batches || []);
+          }}
+          initialRegions={selectedRegions}
+          initialDivisions={selectedDivisions}
+          initialCategories={selectedCategories}
+          initialYears={selectedYears}
+          initialBatches={selectedBatchFunds}
+          hideRegions={userRole !== 'EFD' && userRole !== 'EFD Engineer' && userRole !== 'HRODI'}
+          hideDivisions={false}
         />
 
         {/* --- CHECKBOX REASON MODAL (Bugs 4 & 5) --- */}
@@ -1135,6 +1223,172 @@ const EngineerProjects = () => {
              </div>
            </div>,
            document.body
+        )}
+
+        {/* --- VARIATION ORDER MODAL --- */}
+        {variationModalOpen && createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-6 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20">
+              {/* Header */}
+              <div className="px-8 pt-8 pb-4 border-b border-slate-100 dark:border-slate-700">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-white leading-tight underline decoration-blue-500 decoration-4 underline-offset-4">Variation Order</h2>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-3">
+                      {variationProject?.projectName}
+                    </p>
+                  </div>
+                  <button onClick={() => setVariationModalOpen(false)} className="p-3 bg-slate-50 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-2xl text-slate-400 transition-all active:scale-90">
+                    <FiX size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Form Content */}
+              <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                {/* Variation Name */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Variation Name</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g. Change Order No. 1"
+                    value={variationData.variationName}
+                    onChange={(e) => setVariationData({...variationData, variationName: e.target.value})}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500 p-4 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 transition-all outline-none"
+                  />
+                </div>
+
+                {/* Variation Type */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Variation Type</label>
+                  <select 
+                    value={variationData.variationType}
+                    onChange={(e) => setVariationData({...variationData, variationType: e.target.value})}
+                    className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500 p-4 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 transition-all outline-none"
+                  >
+                    <option value="Change Order">Change Order</option>
+                    <option value="Extra Work Order">Extra Work Order</option>
+                    <option value="Combined">Combined</option>
+                  </select>
+                </div>
+
+                {/* Numbers Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Original Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-4 inset-y-0 flex items-center text-slate-400 font-black text-xs">₱</span>
+                      <input 
+                        type="number"
+                        placeholder="0.00"
+                        value={variationData.originalAmount}
+                        onChange={(e) => setVariationData({...variationData, originalAmount: e.target.value})}
+                        className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-blue-500 p-4 pl-8 rounded-2xl text-sm font-bold text-slate-700 dark:text-slate-200 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-emerald-500">Additive (+)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 inset-y-0 flex items-center text-emerald-400 font-black text-xs">₱</span>
+                      <input 
+                        type="number"
+                        placeholder="0.00"
+                        value={variationData.additive}
+                        onChange={(e) => setVariationData({...variationData, additive: e.target.value})}
+                        className="w-full bg-emerald-50/30 dark:bg-emerald-900/10 border-2 border-transparent focus:border-emerald-500 p-4 pl-8 rounded-2xl text-sm font-bold text-emerald-600 dark:text-emerald-400 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-red-500">Deductive (-)</label>
+                    <div className="relative">
+                      <span className="absolute left-4 inset-y-0 flex items-center text-red-400 font-black text-xs">₱</span>
+                      <input 
+                        type="number"
+                        placeholder="0.00"
+                        value={variationData.deductive}
+                        onChange={(e) => setVariationData({...variationData, deductive: e.target.value})}
+                        className="w-full bg-red-50/30 dark:bg-red-900/10 border-2 border-transparent focus:border-red-500 p-4 pl-8 rounded-2xl text-sm font-bold text-red-600 dark:text-red-400 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-blue-500">Reused Amount</label>
+                    <div className="relative">
+                      <span className="absolute left-4 inset-y-0 flex items-center text-blue-400 font-black text-xs">₱</span>
+                      <input 
+                        type="number"
+                        placeholder="0.00"
+                        value={variationData.reusedAmount}
+                        onChange={(e) => setVariationData({...variationData, reusedAmount: e.target.value})}
+                        className="w-full bg-blue-50/30 dark:bg-blue-900/10 border-2 border-transparent focus:border-blue-500 p-4 pl-8 rounded-2xl text-sm font-bold text-blue-600 dark:text-blue-400 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary Box */}
+                <div className="bg-[#004A99] p-5 rounded-3xl text-white shadow-xl shadow-blue-500/20">
+                   <div className="flex justify-between items-center opacity-60 mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest">Modified Total Amount</span>
+                      <LuDollarSign size={16} />
+                   </div>
+                   <div className="text-2xl font-black">
+                      {formatAllocation((parseFloat(variationData.originalAmount) || 0) + (parseFloat(variationData.additive) || 0) - (parseFloat(variationData.deductive) || 0))}
+                   </div>
+                </div>
+
+                {/* Recent Variations List */}
+                <div className="pt-4 space-y-4">
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recent Variations</label>
+                    <span className="text-[9px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full">{recentVariations.length} total</span>
+                  </div>
+                  
+                  {isLoadingVO ? (
+                    <div className="flex justify-center py-4">
+                      <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
+                    </div>
+                  ) : recentVariations.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 dark:bg-slate-900/40 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No previous variations</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentVariations.map((vo, i) => (
+                        <div key={vo.id} className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1 animate-in fade-in slide-in-from-bottom-2" style={{ animationDelay: `${i * 50}ms` }}>
+                          <div className="flex justify-between items-start">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-200">{vo.variation_name}</span>
+                            <span className="text-[8px] font-black px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg text-slate-500 uppercase">{vo.variation_type}</span>
+                          </div>
+                          <div className="flex justify-between items-end">
+                            <span className="text-[10px] font-bold text-slate-400">{formatDateShort(vo.created_at)}</span>
+                            <span className="text-[11px] font-black text-[#004A99] dark:text-blue-400">{formatAllocation(vo.modified_amount)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-8 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30">
+                <button 
+                  onClick={handleVariationConfirm}
+                  disabled={isSavingVO}
+                  className="w-full py-4 bg-blue-600 dark:bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSavingVO ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                  ) : <LuClipboardList size={14} />}
+                  Save Variation Order
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
         )}
 
         <BottomNav userRole={userRole} />

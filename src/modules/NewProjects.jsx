@@ -143,7 +143,7 @@ const NewProjects = () => {
         schoolId: '',
 
         // Status & Progress
-        status: 'Not Yet Started',
+        status: '',
         statusDesignPhase: '',
         accomplishmentPercentage: 0,
         statusAsOfDate: '',
@@ -570,9 +570,13 @@ const NewProjects = () => {
                     newData.status = 'For Final Inspection';
                 } else if (percent > 0 && percent < 100 && ['Not Yet Started', 'Under Procurement', 'Completed'].includes(prev.status)) {
                     newData.status = 'Ongoing';
-                } else if (percent === 0) {
+                }
+                // REMOVED: Automatic 'Not Yet Started' assignment to allow placeholder
+                /*
+                else if (percent === 0) {
                     newData.status = 'Not Yet Started';
                 }
+                */
             }
 
             return newData;
@@ -604,7 +608,7 @@ const NewProjects = () => {
         */
 
         // CONDITIONAL PHOTO VALIDATION
-        if (!['Not Yet Started', 'Under Procurement'].includes(formData.status)) {
+        if (!['', 'Not Yet Started', 'Under Procurement', 'Under procurement'].includes(formData.status)) {
             if (internalFiles.length === 0 && externalFiles.length === 0) {
                 alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
                 return;
@@ -630,7 +634,7 @@ const NewProjects = () => {
         ];
 
         for (const field of requiredFields) {
-            const isEarlyStage = ['Not Yet Started', 'Under Procurement'].includes(formData.status);
+            const isEarlyStage = ['', 'Not Yet Started', 'Under Procurement', 'Under procurement'].includes(formData.status);
             const isTimelineField = ['targetCompletionDate', 'statusAsOfDate'].includes(field.key);
             
             if (isEarlyStage && isTimelineField) continue; // Skip these for early stages

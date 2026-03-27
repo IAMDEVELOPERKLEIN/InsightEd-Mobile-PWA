@@ -153,7 +153,7 @@ const EditProjectModal = ({
                         openingOfQuotation: project.opening_of_quotation || project.openingOfQuotation || '',
                         statusAsOfDate: project.statusAsOfDate || new Date().toISOString().split('T')[0],
                         accomplishmentPercentage: project.accomplishmentPercentage || 0,
-                        status: project.status_of_construction_phase || project.status || ProjectStatus.NotYetStarted,
+                        status: project.status_of_construction_phase || project.status || '',
                         otherRemarks: project.otherRemarks || '',
                         hasVariationOrder: project.hasVariationOrder || project.has_variation_order || false,
                         isRealignment: false,
@@ -311,7 +311,10 @@ const EditProjectModal = ({
                         prev.status === ProjectStatus.ForFinalInspection
                     )
                         newData.status = ProjectStatus.Ongoing;
-                } else if (percent === 0) newData.status = ProjectStatus.NotYetStarted;
+                } else if (percent === 0) {
+                    // Remove automatic status reset to 'Not Yet Started' to allow placeholder
+                    // newData.status = ProjectStatus.NotYetStarted;
+                }
             }
             if (name === "status") {
                 if (
