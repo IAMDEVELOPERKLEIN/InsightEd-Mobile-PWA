@@ -970,7 +970,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 <div key={b.id} className={`bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm relative overflow-hidden group ${b.status === 'Condemned' || b.status === 'For Condemnation' ? 'border-rose-100 shadow-rose-50/50' : ''}`}>
                                     <div className="flex justify-between items-start mb-4">
                                         <div>
-                                            <h4 className="font-black text-slate-800 text-lg tracking-tight uppercase">{b.building_name}</h4>
+                                            <h4 className="font-black text-slate-800 text-lg tracking-tight uppercase">{b.building_name || b.building_no || 'Building N/A'}</h4>
                                             <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.15em]">{b.category}</p>
                                         </div>
                                         <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${b.status === 'Newly Built' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
@@ -1647,7 +1647,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                             <FiAlertTriangle /> Duplicate Room Name
                                                         </p>
                                                     )}
-                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || 'N/A'}</p>
+                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || building?.building_no || 'N/A'}</p>
                                                 </div>
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
@@ -1766,7 +1766,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             </div>
 
                                             <div>
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats</label>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats Capacity</label>
                                                 <input
                                                     type="text"
                                                     inputMode="numeric"
@@ -1831,20 +1831,22 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 <div className="space-y-4">
                                     {roomsData.filter(r => r.condition === 'Repair').map(room => {
                                         const building = allBuildings.find(b => b.id === room.building_local_id);
-                                        const isAssessed = repairAssessments.some(a => a.building_name === building?.building_name && a.room_name === room.room_name);
+                                        const bName = building?.building_name || building?.building_no || "";
+                                        const isAssessed = repairAssessments.some(a => a.building_name === bName && a.room_name === room.room_name);
 
                                         return (
                                             <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
                                                 <div className="flex justify-between items-center">
                                                     <div>
                                                         <h4 className="font-black text-xl text-gray-800">{room.room_name}</h4>
-                                                        <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{building?.building_name || 'N/A'}</p>
+                                                        <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest">{bName || 'N/A'}</p>
                                                         {isAssessed && <p className="text-xs font-black text-emerald-500 mt-2 uppercase flex items-center gap-1"><FiCheckCircle /> Assessment Recorded</p>}
                                                     </div>
                                                     <button
                                                         onClick={() => {
+                                                            const bName = building?.building_name || building?.building_no || "";
                                                             setRepairRoomFormData({
-                                                                building_name: building?.building_name || "",
+                                                                building_name: bName,
                                                                 room_name: room.room_name,
                                                                 room_length: room.room_length || 9,
                                                                 room_width: room.room_width || 7
@@ -1852,7 +1854,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                                             // Populate previous assessments
                                                             const existingItems = repairAssessments.filter(a =>
-                                                                a.building_name === building?.building_name &&
+                                                                a.building_name === bName &&
                                                                 a.room_name === room.room_name
                                                             );
 
@@ -1869,7 +1871,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                             });
                                                             setRepairItemsState(initialState);
 
-                                                            setEditingRepairRoomId(building?.building_name + "-" + room.room_name);
+                                                            setEditingRepairRoomId(bName + "-" + room.room_name);
                                                             setShowRepairModal(true);
                                                         }}
                                                         className={`p-4 rounded-2xl shadow-lg transition-all active:scale-95 ${isAssessed ? 'bg-indigo-50 text-indigo-500 shadow-indigo-100' : 'bg-amber-500 text-white shadow-amber-100'}`}
