@@ -99,6 +99,8 @@ import NSPPDraft from './forms/NSPPDraft';
 import ESF7Review from './modules/ESF7Review';
 import LaunchPad from './components/LaunchPad';
 import SchoolHeadQuickStart from './guides/SchoolHeadQuickStart';
+import DivisionEngineerQuickStart from './guides/DivisionEngineerQuickStart';
+import EFDEngineerQuickStart from './guides/EFDEngineerQuickStart';
 
 
 
@@ -202,6 +204,8 @@ const AnimatedRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/guide/school-head" element={<SchoolHeadQuickStart />} />
+      <Route path="/guide/division-engineer" element={<DivisionEngineerQuickStart />} />
+      <Route path="/guide/efd-engineer" element={<EFDEngineerQuickStart />} />
 
 
 

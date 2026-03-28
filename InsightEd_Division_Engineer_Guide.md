@@ -1,6 +1,6 @@
 # Guide: InsightEd Guide for Division Engineers
 
-**Objective:** To equip Division Engineers with the strict technical protocols required for efficient infrastructure project tracking, secure account management, real-time monitoring, and reliable offline data synchronization during on-site field inspections.
+**Objective:** To equip Division Engineers with the strict technical protocols required for efficient infrastructure project tracking, secure account management, and real-time monitoring during on-site field inspections.
 
 > **Note:** This guide is strictly intended for the **Phase II of the InsightED Pilot Test**.
 
@@ -21,11 +21,10 @@
 ## Module 2: Registration & Account Creation
 **Objective:** Establish your secure, official Division Engineer account securely tied to your designated Division.
 
-1. **Path Selection:** Select **[InsightED]** → **[For Infrastructure]** → **[Engineers Portal]**.
-2. **Create Identity:** Tap **[Create Account]** and select role **[Division Engineer]**.
+1. **Path Selection:** Select **[insightEd for infrastructure]** → **[Engineers portal]**.
+2. **Create Identity:** Tap the **[create new account]** button. Fill up the necessary fields, make sure to select role **[Division Engineer]**, and use your official **@deped.gov.ph** email.
 3. **Authorization:** Input the Master Key: **`E5T8-B2W3`**.
-4. **Domain Compliance:** Use your official **@deped.gov.ph** email prefix.
-5. **Data Anchoring:** Carefully select your **Region** and **Division** (cannot be changed after registration).
+4. **Data Anchoring:** Carefully select your **Region** and **Division** (cannot be changed after registration).
 
 ---
 
@@ -43,8 +42,8 @@
 
 ### Utilizing the Engineer Dashboard:
 1. **Overview Analytics:** Upon login, your active dashboard will display cards with high-level statistics:
-   - **Total Allocation:** The aggregate budget (₱) of all your tracked projects.
-   - **Projects:** The total count of active projects.
+   - **Approved Budget for Contract (ABC):** The aggregate financial allocation of all your tracked projects as archived in the master database.
+   - **Projects:** The total count of active infrastructure projects.
    - **Delayed Indicator (⚠️):** Instantly highlights any projects that have passed their target completion date but have not reached 100% accomplishment.
 2. **Project Status Mix:** Evaluate your division's portfolio via the interactive Pie Chart detailing the split of *Completed*, *Ongoing*, *Under Procurement*, and *Delayed* assignments.
 3. **Latest Remarks:** Check the scrolling timeline for recent updates or contractor notes from active sites.
@@ -78,9 +77,9 @@
 
 ---
 
-## Module 7: Maintenance & Troubleshooting
-**Objective:** Resolve technical hiccups and keep the platform optimized.
+## Module 6: Maintenance & Troubleshooting
+**Objective:** Resolve technical discrepancies and keep the platform optimized.
 
-1. **App Updates:** Look for the pulsing green **"Update Available"** prompt on your dashboard. When prompted, tap **[Reload Now]** to install vital security patches or new feature deployments over-the-air.
-2. **Clear Cache:** If project lists appear duplicated or fail to load correctly, navigate to your **[Profile]** menu and execute the **[Clear Cache]** function to refresh your memory without deleting pending outbox drafts.
-3. **Data Parity:** Ensure you launch the application at least once while connected to a strong Wi-fi network before heading out to remote sites to ensure your local cache is populated with the most recent contractor updates.
+1. **Data Synchronization Hub:** Look for the **"Updates Available"** card on your dashboard. This notifies you if regional headquarters has added new projects or realignment requests to your queue.
+2. **App Updates:** When prompted by the system, tap **[Reload Now]** to install vital security patches or new feature deployments over-the-air.
+3. **Help Center:** Access the FAQ/Help section within the **[Profile]** menu for immediate solutions to registration queries and data parity issues.

@@ -13,7 +13,9 @@ const FilterDrawer = ({
     initialCategories = [],
     initialYears = [],
     hideRegions = false,
-    hideDivisions = false
+    hideDivisions = false,
+    hideProvinces = false,
+    hideMunicipalities = false
 }) => {
     // Internal state for the drawer
     const [selectedRegions, setSelectedRegions] = useState(initialRegions);
@@ -211,20 +213,24 @@ const FilterDrawer = ({
                                     placeholder="All Divisions"
                                 />
                             )}
-                            <DropdownField 
-                                label="Province" 
-                                value={selectedProvince} 
-                                onChange={setSelectedProvince}
-                                options={options.provinces}
-                                placeholder="All Provinces"
-                            />
-                            <DropdownField 
-                                label="Municipality / City" 
-                                value={selectedMunicipality} 
-                                onChange={setSelectedMunicipality}
-                                options={options.municipalities}
-                                placeholder="All Municipalities"
-                            />
+                            {!hideProvinces && (
+                                <DropdownField 
+                                    label="Province" 
+                                    value={selectedProvince} 
+                                    onChange={setSelectedProvince}
+                                    options={options.provinces}
+                                    placeholder="All Provinces"
+                                />
+                            )}
+                            {!hideMunicipalities && (
+                                <DropdownField 
+                                    label="Municipality / City" 
+                                    value={selectedMunicipality} 
+                                    onChange={setSelectedMunicipality}
+                                    options={options.municipalities}
+                                    placeholder="All Municipalities"
+                                />
+                            )}
                         </div>
 
                         {/* Years */}

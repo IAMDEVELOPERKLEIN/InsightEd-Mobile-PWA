@@ -1,406 +1,355 @@
 import React from 'react';
-import { FiTool, FiShield, FiSmartphone, FiArrowRight, FiArrowLeft, FiInfo, FiActivity, FiRefreshCw, FiDatabase, FiLock, FiCheckCircle } from 'react-icons/fi';
+import { FiTool, FiShield, FiSmartphone, FiArrowRight, FiActivity, FiLock, FiCheckCircle, FiHome, FiList, FiMessageSquare, FiSettings, FiPlay } from 'react-icons/fi';
 import PageTransition from '../components/PageTransition';
 
 const DivisionEngineerQuickStart = () => {
     return (
         <PageTransition>
-            <div className="min-h-screen bg-slate-50 text-slate-900 scroll-smooth pb-32 font-sans">
+            <div className="min-h-screen bg-[#020617] text-slate-100 scroll-smooth pb-32 font-sans selection:bg-blue-500/30">
+                {/* Hero Glow */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[500px] bg-blue-600/10 blur-[120px] pointer-events-none"></div>
+
                 {/* Top Navigation */}
-                <nav className="sticky top-0 z-50 bg-[#0A192F] text-white border-b border-slate-800 backdrop-blur-md bg-opacity-95">
-                    <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-black text-white italic text-xs tracking-tighter shadow-lg shadow-blue-500/20">IE</div>
-                            <span className="font-bold tracking-tight text-sm uppercase italic">InsightED <span className="text-blue-400 font-normal not-italic">SOP MASTER GUIDE</span></span>
+                <nav className="sticky top-0 z-50 bg-[#020617]/80 backdrop-blur-xl border-b border-white/5">
+                    <div className="max-w-4xl mx-auto px-6 h-20 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-white italic text-base shadow-lg shadow-blue-500/30">IE</div>
+                            <div>
+                                <span className="font-bold text-lg tracking-tight block leading-none text-white">InsightED</span>
+                                <span className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">Engineer Operations</span>
+                            </div>
                         </div>
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 py-1.5 bg-white/5 rounded-full border border-white/10 italic">Official Pilot Phase II</div>
+                        <div className="px-4 py-1.5 bg-blue-600/10 rounded-full border border-blue-500/20">
+                            <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest italic">Pilot Phase II</span>
+                        </div>
                     </div>
                 </nav>
 
-                <div className="max-w-4xl mx-auto px-6 py-12">
+                <div className="max-w-4xl mx-auto px-6 py-20 relative">
                     <main className="w-full">
                         
-                        {/* Global Header */}
-                        <header className="mb-20 text-center">
-                            <div className="inline-block px-4 py-1.5 bg-[#0A192F] text-white text-[10px] font-black rounded-full uppercase tracking-[0.2em] mb-6 shadow-xl shadow-blue-900/10 border border-blue-500/20">Official Pilot Phase II</div>
-                            <h1 className="text-4xl md:text-5xl font-black text-[#0A192F] mb-6 tracking-tight leading-tight italic uppercase">Complete Operational Guide <br/> <span className="text-blue-600 normal-case not-italic underline decoration-blue-100 decoration-8 underline-offset-[-2px]">for Division Engineers</span></h1>
-                            <p className="text-lg text-slate-600 leading-relaxed mx-auto underline decoration-blue-500 decoration-4 underline-offset-8 font-medium max-w-2xl italic tracking-tight">
-                                Achieving 100% Infrastructure Data Health compliance within the Stride Ecosystem
+                        {/* Header Section */}
+                        <header className="mb-32 text-center">
+                            <div className="inline-flex items-center gap-2 mb-8 px-4 py-2 bg-blue-500/5 rounded-full border border-blue-500/10">
+                                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Official SOP Manual</span>
+                            </div>
+                            <h1 className="text-5xl md:text-7xl font-black mb-8 leading-[1.1] tracking-tight text-white italic uppercase">
+                                Master Guide <br/>
+                                <span className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent not-italic normal-case">for Division Engineers</span>
+                            </h1>
+                            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-medium italic">
+                                Definitive guide to the Efd Engineer Dashboard. Empowering site oversight with real-time data and AI-driven insights.
                             </p>
                         </header>
 
-                        {/* Module 1: Installation */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">1</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiSmartphone className="text-blue-500" />
-                                    App Installation (PWA)
-                                </h2>
+                        {/* 1. Installation */}
+                        <section id="installation" className="mb-40 group">
+                            <div className="flex items-start gap-6 mb-12">
+                                <div className="w-12 h-12 bg-navy-900 border border-white/10 rounded-2xl flex items-center justify-center text-blue-500 font-black text-xl shadow-lg shrink-0 group-hover:border-blue-500/50 transition-colors italic">01</div>
+                                <div>
+                                    <h2 className="text-4xl font-black mb-4 tracking-tight uppercase italic text-white flex items-center gap-4">
+                                        <FiSmartphone className="text-blue-500" />
+                                        Installation of PWA
+                                    </h2>
+                                    <p className="text-slate-400 font-medium italic">InsightEd is a <span className="text-white font-bold italic underline decoration-blue-500/30">Progressive Web App</span>. No app store needed—just direct access.</p>
+                                </div>
                             </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <p className="text-lg font-medium italic">InsightEd is a <span className="text-blue-600 font-black italic underline decoration-blue-200 decoration-4 underline-offset-4">Progressive Web App (PWA)</span>. It operates directly from your mobile browser for maximum performance and offline-readiness during on-site inspections.</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <div className="flex items-start gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-blue-200 transition-all">
-                                            <div className="w-8 h-8 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0 text-blue-600 font-black italic">1.1</div>
-                                            <p className="text-sm font-bold italic">Open <span className="text-navy-950 underline underline-offset-2 decoration-2 decoration-slate-200">Chrome (Android)</span> or <span className="text-navy-950 underline underline-offset-2 decoration-2 decoration-slate-200">Safari (iOS)</span>.</p>
-                                        </div>
-                                        <div className="flex items-start gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-blue-200 transition-all">
-                                            <div className="w-8 h-8 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0 text-blue-600 font-black italic">1.2</div>
-                                            <p className="text-sm font-bold italic whitespace-nowrap">Navigate to: <code className="bg-blue-600 text-white px-3 py-1 rounded-lg font-mono text-xs select-all shadow-md italic">tinyurl.com/InsightEdV2</code></p>
-                                        </div>
-                                        <div className="flex items-start gap-4 p-5 bg-red-50 rounded-2xl border-l-4 border-red-500 shadow-xl shadow-red-900/5">
-                                            <div className="w-8 h-8 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0 text-red-600 font-black italic">1.3</div>
-                                            <p className="text-sm font-black italic text-red-950 leading-snug uppercase tracking-tighter">Protocol: Avoid logging out during field work to prevent volatile cache deletion.</p>
-                                        </div>
+
+                            <div className="grid md:grid-cols-2 gap-8 mb-12">
+                                <div className="bg-navy-900/50 backdrop-blur-xl border border-white/5 p-8 rounded-[2rem] hover:border-blue-500/30 transition-all">
+                                    <h3 className="text-xl font-bold italic text-white mb-6 uppercase flex items-center gap-3">
+                                        <div className="p-2 bg-blue-500/10 rounded-lg"><FiSmartphone className="text-blue-400" /></div>
+                                        iOS Access (Safari)
+                                    </h3>
+                                    <ul className="space-y-4 text-slate-400 font-medium italic text-sm">
+                                        <li>1. Open <code className="bg-white/5 px-2 py-0.5 rounded border border-white/10 text-blue-400">tinyurl.com/InsightEdV2</code></li>
+                                        <li>2. Tap the <strong className="text-white">"Share"</strong> icon (square with arrow up)</li>
+                                        <li>3. Scroll down and select <strong className="text-white">"Add to Home Screen"</strong></li>
+                                        <li>4. Tap <strong className="text-blue-500 uppercase">Add</strong> in the top right</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-navy-900/50 backdrop-blur-xl border border-white/5 p-8 rounded-[2rem] hover:border-emerald-500/30 transition-all">
+                                    <h3 className="text-xl font-bold italic text-white mb-6 uppercase flex items-center gap-3">
+                                        <div className="p-2 bg-emerald-500/10 rounded-lg"><FiSmartphone className="text-emerald-400" /></div>
+                                        Android Access (Chrome)
+                                    </h3>
+                                    <ul className="space-y-4 text-slate-400 font-medium italic text-sm">
+                                        <li>1. Open <code className="bg-white/5 px-2 py-0.5 rounded border border-white/10 text-emerald-400">tinyurl.com/InsightEdV2</code></li>
+                                        <li>2. Tap the <strong className="text-white">"Three Dots"</strong> menu button</li>
+                                        <li>3. Select <strong className="text-white">"Install App"</strong> or "Add to Home Screen"</li>
+                                        <li>4. Confirm by tapping <strong className="text-emerald-500 uppercase">INSTALL</strong></li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div className="aspect-video bg-navy-950 rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl relative group">
+                                <img src="/pwa_installation_flow.gif" alt="PWA Installation" className="w-full h-full object-cover" />
+                                <div className="absolute bottom-6 left-6 px-4 py-2 bg-black/60 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-blue-400">Demonstration GIF</div>
+                            </div>
+                        </section>
+
+                        {/* 2. Nexus Dashboard */}
+                        <section id="nexus" className="mb-40 group">
+                            <div className="flex items-start gap-6 mb-12">
+                                <div className="w-12 h-12 bg-navy-900 border border-white/10 rounded-2xl flex items-center justify-center text-emerald-500 font-black text-xl shadow-lg shrink-0 group-hover:border-emerald-500/50 transition-colors italic">02</div>
+                                <div>
+                                    <h2 className="text-4xl font-black mb-4 tracking-tight uppercase italic text-white flex items-center gap-4">
+                                        <FiActivity className="text-emerald-500" />
+                                        Navigating the Nexus
+                                    </h2>
+                                    <p className="text-slate-400 font-medium italic">The Launchpad to your jurisdiction's engineering metrics.</p>
+                                </div>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-12 items-center">
+                                <div className="space-y-6">
+                                    <div className="bg-navy-900/50 border border-white/5 p-8 rounded-[2rem] border-l-8 border-l-blue-500 hover:bg-blue-500/5 transition-all">
+                                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 block">Phase 1</span>
+                                        <h4 className="text-2xl font-black mb-3 italic text-white uppercase">Select InsightEd for infrastructure</h4>
+                                        <p className="text-slate-400 font-medium text-sm italic">Filter the ecosystem views to focus exclusively on public school building facilities.</p>
                                     </div>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-blue-500/20">
-                                        <div className="absolute inset-0 bg-blue-500/5 transition-opacity opacity-0 group-hover/gif:opacity-100"></div>
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-blue-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400 mb-2 italic">Visual Guide</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90">pwa_installation_flow.gif</h4>
+                                    <div className="bg-navy-900/50 border border-white/5 p-8 rounded-[2rem] border-l-8 border-l-emerald-500 hover:bg-emerald-500/5 transition-all">
+                                        <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 block">Phase 2</span>
+                                        <h4 className="text-2xl font-black mb-3 italic text-white uppercase">Select Engineers Portal</h4>
+                                        <p className="text-slate-400 font-medium text-sm italic">Enter the specialized dashboard tailored for Division-level operations.</p>
+                                    </div>
+                                </div>
+                                <div className="aspect-video bg-navy-950 rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl group">
+                                    <img src="/nexus_portal_selection.gif" alt="Nexus Navigation" className="w-full h-full object-cover" />
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* 3. Registration & Identity */}
+                        <section id="registration" className="mb-40 group">
+                            <div className="flex items-start gap-6 mb-12">
+                                <div className="w-12 h-12 bg-navy-900 border border-white/10 rounded-2xl flex items-center justify-center text-amber-500 font-black text-xl shadow-lg shrink-0 group-hover:border-amber-500/50 transition-colors italic">03</div>
+                                <div>
+                                    <h2 className="text-4xl font-black mb-4 tracking-tight uppercase italic text-white flex items-center gap-4">
+                                        <FiShield className="text-amber-500" />
+                                        Identity & Access
+                                    </h2>
+                                    <p className="text-slate-400 font-medium italic">Registering your account for the pilot phase.</p>
+                                </div>
+                            </div>
+
+                            <div className="bg-navy-900/50 border border-white/5 p-12 rounded-[2.5rem] mb-12 relative overflow-hidden">
+                                <div className="absolute -top-10 -right-10 opacity-5">
+                                    <FiShield size={240} className="text-white" />
+                                </div>
+                                <div className="grid md:grid-cols-2 gap-12">
+                                    <div>
+                                        <h3 className="text-2xl font-black mb-8 italic flex items-center gap-3 text-white uppercase">
+                                            <span className="w-2 h-8 bg-amber-500 rounded-full"></span>
+                                            Registration Flow
+                                        </h3>
+                                        <ul className="space-y-6 text-slate-400 font-medium italic">
+                                            <li className="flex gap-4">
+                                                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-xs">1</div>
+                                                <p>Tap <strong className="text-white underline decoration-amber-500/30">Create New Account</strong> button.</p>
+                                            </li>
+                                            <li className="flex gap-4">
+                                                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-xs">2</div>
+                                                <p>Select <strong className="text-amber-500 uppercase italic">Division Engineer</strong> role.</p>
+                                            </li>
+                                            <li className="flex gap-4">
+                                                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-xs">3</div>
+                                                <p>Use your <strong className="text-white italic underline">DepEd Email Account</strong>.</p>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div className="flex flex-col justify-center text-center">
+                                        <div className="bg-navy-950 p-8 rounded-3xl border border-amber-500/20 shadow-2xl">
+                                            <p className="text-[11px] uppercase font-black tracking-[0.4em] text-amber-500 mb-6 italic font-bold">MASTER AUTHORIZATION KEY</p>
+                                            <div className="text-4xl font-mono font-black tracking-[0.2em] text-white mb-6 select-all italic">E5T8-B2W3</div>
+                                            <p className="text-[11px] italic text-slate-500 font-bold uppercase tracking-widest">Mandatory for Division-level Auth.</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </section>
 
-                        {/* Module 2: Nexus Navigation */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">2</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiDatabase className="text-indigo-500" />
-                                    Navigating the Nexus Dashboard
-                                </h2>
+                        {/* 4. Dashboard Breakdown */}
+                        <section id="tabs" className="mb-40 group">
+                            <div className="flex items-start gap-6 mb-16">
+                                <div className="w-12 h-12 bg-navy-900 border border-white/10 rounded-2xl flex items-center justify-center text-rose-500 font-black text-xl shadow-lg shrink-0 group-hover:border-rose-500/50 transition-colors italic">04</div>
+                                <div>
+                                    <h2 className="text-4xl font-black mb-4 tracking-tight uppercase italic text-white flex items-center gap-4">
+                                        <FiList className="text-rose-500" />
+                                        The Dashboard Hub
+                                    </h2>
+                                    <p className="text-slate-400 font-medium italic">Comprehensive view of your engineering toolkit.</p>
+                                </div>
                             </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <p className="text-lg font-medium italic">Select the specialized infrastructure entry point to access the <span className="text-indigo-600 font-black italic underline decoration-indigo-200 decoration-4 underline-offset-4">Engineering Data Layer</span> within the Stride Ecosystem.</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-                                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
-                                        <div className="p-4 bg-white rounded-2xl border border-slate-200 group hover:border-blue-500 transition-colors shadow-sm">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 italic">Step Alpha</span>
-                                            <p className="text-sm font-bold italic">Select the <span className="bg-slate-900 text-white px-2 py-0.5 rounded italic">"InsightED (For Infrastructure)"</span> path.</p>
-                                        </div>
-                                        <div className="p-4 bg-white rounded-2xl border border-slate-200 group hover:border-blue-500 transition-colors shadow-sm">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 italic">Step Beta</span>
-                                            <p className="text-sm font-bold italic">Locate and select the <span className="text-blue-600 underline underline-offset-2 decoration-2 decoration-blue-100 font-black">"Engineers Portal"</span>.</p>
+
+                            {/* Home Tab */}
+                            <div className="mb-24">
+                                <div className="flex items-center gap-6 mb-10">
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-blue-400 flex items-center gap-4 shrink-0">
+                                        <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center"><FiHome className="text-blue-500" /></div>
+                                        Home: Oversight
+                                    </h3>
+                                    <div className="h-px bg-white/5 flex-grow"></div>
+                                </div>
+                                <div className="grid md:grid-cols-2 gap-8 mb-8">
+                                    <div className="bg-navy-900/50 border border-white/5 p-8 rounded-[2rem] border-t-4 border-t-blue-500">
+                                        <h4 className="font-black text-xs uppercase tracking-widest text-blue-400 mb-6 italic">Financial Data</h4>
+                                        <ul className="space-y-4 text-sm text-slate-400 font-medium italic">
+                                            <li className="flex justify-between"><span>Total ABC</span> <span className="text-white font-black italic">Regional Budget</span></li>
+                                            <li className="flex justify-between"><span>Total Contract</span> <span className="text-white font-black italic">Awarded Amount</span></li>
+                                        </ul>
+                                    </div>
+                                    <div className="bg-navy-900/50 border border-white/5 p-8 rounded-[2rem] border-t-4 border-t-emerald-500">
+                                        <h4 className="font-black text-xs uppercase tracking-widest text-emerald-400 mb-6 italic">Physical Health</h4>
+                                        <ul className="space-y-4 text-sm text-slate-400 font-medium italic">
+                                            <li className="flex justify-between"><span>Total Projects</span> <span className="text-white font-black italic">Active Inventory</span></li>
+                                            <li className="flex justify-between"><span>Delayed</span> <span className="text-rose-500 font-black animate-pulse">Critical Alerts</span></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div className="bg-navy-900/50 border border-white/5 p-8 rounded-[2rem] flex flex-col md:flex-row gap-8 items-center border-l-4 border-l-blue-500">
+                                    <div className="flex-grow">
+                                        <h4 className="text-xl font-black mb-4 italic text-white uppercase tracking-tight">Status Matrix & Calendar</h4>
+                                        <p className="text-sm text-slate-400 font-medium italic mb-4 leading-relaxed">Visual distribution of project states. Use the <strong className="text-blue-400 font-bold italic underline">Calendar View</strong> to track upcoming deadlines and inspection windows.</p>
+                                        <div className="flex gap-3">
+                                            <span className="px-3 py-1 bg-blue-500/10 text-[10px] font-black uppercase text-blue-400 rounded-lg italic">Ongoing</span>
+                                            <span className="px-3 py-1 bg-emerald-500/10 text-[10px] font-black uppercase text-emerald-400 rounded-lg italic">Completed</span>
+                                            <span className="px-3 py-1 bg-rose-500/10 text-[10px] font-black uppercase text-rose-500 rounded-lg italic">Suspended</span>
                                         </div>
                                     </div>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-indigo-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-indigo-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-indigo-400 mb-2 italic">Visual Guide</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90 italic">nexus_portal_selection.gif</h4>
+                                    <div className="w-full md:w-48 aspect-square bg-navy-950 rounded-2xl flex items-center justify-center border border-white/5 group overflow-hidden">
+                                        <FiActivity className="text-blue-500/10 w-24 h-24 group-hover:scale-110 transition-transform rotate-12" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Projects Tab */}
+                            <div className="mb-24">
+                                <div className="flex items-center gap-6 mb-10">
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-emerald-400 flex items-center gap-4 shrink-0">
+                                        <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center"><FiList className="text-emerald-500" /></div>
+                                        Projects: Execution
+                                    </h3>
+                                    <div className="h-px bg-white/5 flex-grow"></div>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-10">
+                                    <div className="bg-navy-900/50 border border-white/5 p-6 rounded-3xl text-center group hover:border-emerald-500/30 transition-all">
+                                        <div className="text-3xl mb-3">🔍</div>
+                                        <h5 className="text-[10px] font-black text-white uppercase italic tracking-widest mb-1">Smart Filter</h5>
+                                        <p className="text-[9px] text-slate-500 font-bold italic">Isolate by Status/Year</p>
+                                    </div>
+                                    <div className="bg-navy-900/50 border border-white/5 p-6 rounded-3xl text-center group hover:border-emerald-500/30 transition-all">
+                                        <div className="text-3xl mb-3">📇</div>
+                                        <h5 className="text-[10px] font-black text-white uppercase italic tracking-widest mb-1">Project Cards</h5>
+                                        <p className="text-[9px] text-slate-500 font-bold italic">Real-time status view</p>
+                                    </div>
+                                    <div className="bg-navy-900/50 border border-white/5 p-6 rounded-3xl text-center group hover:border-emerald-500/30 transition-all">
+                                        <div className="text-3xl mb-3">⚡</div>
+                                        <h5 className="text-[10px] font-black text-white uppercase italic tracking-widest mb-1">Detailed View</h5>
+                                        <p className="text-[9px] text-slate-500 font-bold italic">360-degree analytics</p>
+                                    </div>
+                                </div>
+                                <div className="aspect-video bg-navy-950 rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl relative group cursor-pointer hover:border-blue-500/30 transition-all">
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 z-10">
+                                        <div className="w-16 h-16 bg-blue-600/20 border-2 border-blue-500 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-all shadow-[0_0_20px_rgba(59,130,246,0.5)]">
+                                            <FiPlay size={24} className="text-blue-500 translate-x-1" fill="currentColor" />
+                                        </div>
+                                        <span className="text-xs font-black uppercase tracking-[0.4em] text-blue-400 italic">Project Update Tutorial</span>
+                                    </div>
+                                    <img src="/pwa-512x512.png" alt="Overlay" className="w-full h-full object-cover grayscale opacity-10" />
+                                </div>
+                            </div>
+
+                            {/* Logs Tab */}
+                            <div className="mb-24">
+                                <div className="flex items-center gap-6 mb-10">
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-amber-500 flex items-center gap-4 shrink-0">
+                                        <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center"><FiMessageSquare className="text-amber-500" /></div>
+                                        Logs: Intelligence
+                                    </h3>
+                                    <div className="h-px bg-white/5 flex-grow"></div>
+                                </div>
+                                <div className="bg-gradient-to-br from-navy-900 to-[#020617] border border-amber-500/20 p-12 rounded-[2.5rem] flex flex-col md:flex-row gap-12 items-center relative overflow-hidden group">
+                                    <div className="flex-grow relative z-10">
+                                        <h4 className="text-2xl font-black mb-6 italic text-white uppercase tracking-tight">Synergy AI <span className="text-amber-500">&</span> Collaboration</h4>
+                                        <p className="text-slate-400 font-medium italic leading-relaxed mb-10">Need technical guidance? Interact with our integrated AI to query engineering standards or coordinate feedback directly with the development team.</p>
+                                        <div className="flex flex-wrap gap-4">
+                                            <span className="px-4 py-2 bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase text-amber-400 rounded-xl italic">AI Chat Support</span>
+                                            <span className="px-4 py-2 bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase text-amber-400 rounded-xl italic">Bug Reporting</span>
+                                            <span className="px-4 py-2 bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase text-amber-400 rounded-xl italic">Feature Requests</span>
                                         </div>
                                     </div>
+                                    <div className="shrink-0 relative group-hover:scale-110 transition-transform duration-700">
+                                        <div className="absolute inset-0 bg-amber-500/20 blur-[60px] rounded-full"></div>
+                                        <img src="/assistant-mascot.png" alt="Synergy mascot" className="w-40 relative z-10" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Settings Tab */}
+                            <div>
+                                <div className="flex items-center gap-6 mb-10">
+                                    <h3 className="text-2xl font-black italic uppercase tracking-tighter text-slate-400 flex items-center gap-4 shrink-0">
+                                        <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center"><FiSettings className="text-slate-400" /></div>
+                                        Settings: Control
+                                    </h3>
+                                    <div className="h-px bg-white/5 flex-grow"></div>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-center">
+                                    {[
+                                        { icon: '👤', label: 'Profile', sub: 'Edit Credentials' },
+                                        { icon: '🔒', label: 'Security', sub: 'Change Passcode' },
+                                        { icon: '🎨', label: 'Themes', sub: 'UI Customization' },
+                                        { icon: '🛠️', label: 'Support', sub: 'Troubleshoot' },
+                                        { icon: '🚀', label: 'Updates', sub: 'Version Control' },
+                                        { icon: '💬', label: 'Feedback', sub: 'Direct Response' },
+                                    ].map((item, idx) => (
+                                        <div key={idx} className="bg-navy-900/50 border border-white/5 p-8 rounded-[2rem] group hover:border-blue-500/40 transition-all cursor-pointer">
+                                            <div className="text-4xl mb-4 group-hover:scale-110 transition-transform">{item.icon}</div>
+                                            <h5 className="text-[10px] font-black uppercase tracking-[0.3em] text-white mb-1 italic group-hover:text-blue-400 transition-colors uppercase">{item.label}</h5>
+                                            <p className="text-[9px] font-bold text-slate-600 italic uppercase tracking-tighter">{item.sub}</p>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </section>
 
-                        {/* Module 3: Registration */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">3</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiShield className="text-emerald-500" />
-                                    Registration & Identity
-                                </h2>
+                        {/* Final Support Footer */}
+                        <footer className="mt-60 pt-20 border-t border-white/5 text-center relative">
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-600/10 blur-[120px] pointer-events-none"></div>
+                            
+                            <div className="w-24 h-24 bg-navy-900 border border-white/10 rounded-[2rem] mx-auto flex items-center justify-center mb-10 shadow-2xl group hover:border-blue-500/40 transition-all overflow-hidden">
+                                <img src="/mascot-thumbsup.png" alt="Thumbsup" className="w-16 animate-pulse group-hover:scale-110 transition-transform" />
                             </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <p className="text-lg font-medium italic">Select <strong className="text-emerald-600 underline underline-offset-4 decoration-emerald-200 decoration-4 uppercase tracking-widest italic">Division Engineer</strong> role. Mandatory fields must align with official HR records for PILOT validation.</p>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-6">
-                                        <div className="p-8 bg-navy-950 text-white rounded-[2.5rem] border-l-[12px] border-emerald-500/50 shadow-2xl relative overflow-hidden group">
-                                            <div className="relative z-10">
-                                                <h4 className="text-[10px] uppercase font-black text-emerald-400 mb-3 tracking-[0.4em] italic underline decoration-emerald-500/20 underline-offset-4">3.2 Secure Authorization Key</h4>
-                                                <p className="text-xl font-black mb-3 uppercase tracking-widest italic"><code className="bg-blue-600 px-4 py-1 rounded-xl shadow-lg border border-blue-400/20">E5T8-B2W3</code></p>
-                                                <p className="text-[10px] font-black italic opacity-70 uppercase tracking-widest text-emerald-100">Mandatory for Division-level authentication.</p>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-4">
-                                            <div className="flex items-start gap-4 p-5 bg-slate-50 rounded-2xl group hover:border-emerald-200 border border-transparent transition-all">
-                                                <FiCheckCircle className="text-emerald-500 shrink-0 mt-1" />
-                                                <p className="text-sm font-bold italic text-slate-600 leading-tight">Enter prefix only. System mandates <strong className="text-navy-950 underline decoration-emerald-200">@deped.gov.ph</strong> domain.</p>
-                                            </div>
-                                            <div className="flex items-start gap-4 p-5 bg-slate-50 rounded-2xl group hover:border-emerald-200 border border-transparent transition-all">
-                                                <FiCheckCircle className="text-emerald-500 shrink-0 mt-1" />
-                                                <p className="text-sm font-bold italic text-slate-600 leading-tight">Identify correct <strong className="text-navy-950">Region & Division</strong> hierarchy nodes.</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="bg-[#0A192F] rounded-[2.5rem] flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-emerald-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-emerald-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-400 mb-2 italic">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90 italic">engineer_identity_flow</h4>
-                                        </div>
-                                    </div>
-                                </div>
+                            <h2 className="text-3xl font-black italic uppercase tracking-tight text-white mb-6">Engineering Support Desk</h2>
+                            <p className="text-slate-400 max-w-sm mx-auto font-medium italic mb-12 leading-relaxed">For anomalies or SOP inquiries, coordinate via the official Stratcom Google Space or reach us below.</p>
+                            
+                            <div className="inline-block bg-navy-900 border border-white/10 p-10 rounded-[3rem] group hover:border-blue-500/40 transition-all cursor-pointer mb-20 shadow-2xl">
+                                <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-500 block mb-4 italic">Official Correspondence Node</span>
+                                <span className="text-2xl font-mono font-black text-white italic tracking-tighter">support.stride@deped.gov.ph</span>
                             </div>
-                        </section>
 
-                        {/* Module 4: Sign-In */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">4</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiLock className="text-amber-500" />
-                                    Administrative Sign-In
-                                </h2>
+                            <div className="flex justify-center gap-10 grayscale opacity-40 mb-16">
+                                <img src="/deped_logo.png" alt="Deped" className="h-10 w-auto" />
+                                <img src="/pwa-512x512.png" alt="Insighted" className="h-10 w-auto" />
                             </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-amber-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400 mb-2 italic">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90 italic">login_permissions_flow</h4>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <div className="p-6 bg-[#0A192F] text-white rounded-[2rem] border-l-4 border-amber-500 shadow-xl group">
-                                            <h4 className="text-[10px] uppercase font-black text-amber-400 mb-3 tracking-[0.4em] italic underline decoration-amber-500/20 underline-offset-4">Protocol Requirement</h4>
-                                            <p className="text-sm italic opacity-90 leading-relaxed mb-4 font-bold">You MUST tap **[ALLOW]** for all device permissions to ensure 100% data health compliance:</p>
-                                            <ul className="text-[9px] font-black uppercase tracking-[0.2em] space-y-2 text-amber-200 italic">
-                                                <li className="flex items-center gap-2"><div className="w-1 h-1 bg-amber-400 rounded-full"></div> CAMERA (Photographic Evidence)</li>
-                                                <li className="flex items-center gap-2"><div className="w-1 h-1 bg-amber-400 rounded-full"></div> LOCATION (Geotagged Verification)</li>
-                                                <li className="flex items-center gap-2"><div className="w-1 h-1 bg-amber-400 rounded-full"></div> STORAGE (Offline Data Caching)</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
 
-                        {/* Module 5: Nexus Dashboard Monitoring */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">5</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiActivity className="text-blue-500" />
-                                    Nexus Dashboard Monitoring
-                                </h2>
-                            </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <p className="text-lg font-medium italic">The Dashboard serves as the command center for regional and division-level oversight. Monitor these three core metrics to maintain data health.</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                                    <div className="grid grid-cols-1 gap-4">
-                                        <div className="p-5 bg-white border border-slate-100 rounded-[2rem] shadow-sm hover:border-blue-400 transition-all border-l-8 border-l-blue-600">
-                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1 italic">Budget Alpha (ABC)</h4>
-                                            <p className="text-xs font-bold text-slate-800 leading-snug italic">Approved Budget for Contract. The maximum financial ceiling for procurement.</p>
-                                        </div>
-                                        <div className="p-5 bg-white border border-slate-100 rounded-[2rem] shadow-sm hover:border-emerald-400 transition-all border-l-8 border-l-emerald-500">
-                                            <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 italic">Fiscal Result (Contract)</h4>
-                                            <p className="text-xs font-bold text-slate-800 leading-snug italic">The actual bid price awarded to the winning contractor.</p>
-                                        </div>
-                                        <div className="p-5 bg-red-950 text-white rounded-2xl border border-red-500/20 group hover:bg-red-900 transition-all shadow-xl border-l-[12px] border-l-red-600">
-                                            <h4 className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em] mb-1 italic underline decoration-red-500/30">Delayed Projects (⚠️)</h4>
-                                            <p className="text-xs font-bold text-red-100 leading-snug italic">Auto-flags projects where Actual % is less than Target Accomplishment.</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-blue-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-blue-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400 mb-2 italic">Visual Guide</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90 italic text-center uppercase tracking-tighter leading-tight italic">Nexus Analytics Drilldown</h4>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Module 6: Construction Protocol */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">6</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiCheckCircle className="text-emerald-500" />
-                                    Construction Update Protocol
-                                </h2>
-                            </div>
-                            <div className="space-y-12 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <div className="p-8 bg-[#0A192F] text-white rounded-[2rem] border-l-[12px] border-emerald-500 shadow-2xl relative overflow-hidden group">
-                                    <h4 className="text-emerald-400 font-black text-xs uppercase mb-3 italic tracking-[0.3em]">SOP Mandatory Protocol</h4>
-                                    <p className="text-lg font-medium italic opacity-90 leading-relaxed">Division Engineers must follow the 3-Step Wizard for all site progress reporting. Accomplishment reports WITHOUT categorized photographic evidence are non-compliant.</p>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-4">
-                                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-2xl shadow-sm hover:border-blue-400 transition-all border-l-4 border-l-blue-500 group">
-                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 italic underline decoration-blue-100">Media Classification</h4>
-                                            <ul className="text-xs text-slate-500 space-y-3 font-bold italic">
-                                                <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div> Internal: Classroom lighting, outlets, flooring.</li>
-                                                <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div> External: Façade, structural civil, painting.</li>
-                                                <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5"></div> Cardinal Angles: Front, Left, Right, Rear.</li>
-                                            </ul>
-                                        </div>
-                                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-2xl shadow-sm hover:border-emerald-400 transition-all border-l-4 border-l-emerald-500 group">
-                                            <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-3 italic underline decoration-emerald-100">Accomplishment Slider</h4>
-                                            <p className="text-xs font-bold text-slate-800 italic leading-relaxed">Percentage is auto-locked to 100% when "For Final Inspection" or "Completed" is selected.</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-emerald-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-emerald-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-400 mb-2 italic">Visual Guide</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90 italic text-center uppercase tracking-tighter leading-tight italic">Accomplishment Update Wizard</h4>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Module 7: Offline support */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">7</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiRefreshCw className="text-blue-500" />
-                                    Offline Sync Protocol
-                                </h2>
-                            </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <p className="text-lg font-medium italic">InsightEd saves inputs locally during Zero-Signal field work. Navigate to the Synergy Center once technical signal is restored.</p>
-                                
-                                <div className="p-10 bg-navy-950 text-white rounded-[3rem] border-l-[12px] border-blue-500 shadow-2xl relative overflow-hidden text-center group">
-                                    <div className="relative z-10">
-                                        <p className="text-[10px] uppercase font-black text-blue-400 mb-4 tracking-[0.5em] italic underline decoration-blue-500/20 underline-offset-8">Data Transmission Protocol</p>
-                                        <h4 className="text-xl font-black mb-6 uppercase tracking-tight italic leading-snug">Navigate to the SYNC CENTER (Clipboard Icon) & tap [SYNC ALL] to transmit payloads.</h4>
-                                        <div className="inline-flex items-center gap-3 bg-blue-600 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-500/30 group-hover:scale-105 transition-transform italic">
-                                            <FiRefreshCw className="animate-spin" /> Transmitting
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="p-8 bg-red-950 text-white rounded-[2rem] border-4 border-red-500/20 shadow-2xl text-center group">
-                                    <h4 className="text-[11px] uppercase font-black text-red-500 mb-3 tracking-[0.4em] italic flex items-center justify-center gap-2">
-                                        <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div> Mandatory SOP Security
-                                    </h4>
-                                    <p className="text-lg font-black italic uppercase tracking-tighter mb-2">DO NOT LOG OUT</p>
-                                    <p className="text-xs font-medium italic opacity-70 decoration-red-500/50 decoration-wavy underline underline-offset-4">Logging out will result in permanent loss of cached records.</p>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Module 8: Procurement Wizard */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">8</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiDatabase className="text-indigo-500" />
-                                    Procurement Lifecycle Wizard
-                                </h2>
-                            </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 text-center md:text-left">
-                                <p className="text-lg font-medium italic">For projects in the "Under Procurement" phase, document the bidding timeline to ensure compliance with <span className="text-indigo-600 font-bold underline decoration-indigo-100 underline-offset-4">RA 9184</span>.</p>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                                    <div className="space-y-4">
-                                        <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm border-l-4 border-l-indigo-500">
-                                            <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-3 italic">Bidding Milestones</h4>
-                                            <p className="text-xs font-bold text-slate-600 italic">Toggle Pre-bid, Opening, and Post-Qual switches as they occur.</p>
-                                        </div>
-                                        <div className="p-6 bg-[#0A192F] text-white rounded-2xl shadow-xl border-l-[12px] border-l-emerald-500">
-                                            <h4 className="text-emerald-400 font-black text-xs uppercase mb-3 italic tracking-widest">Contract Award</h4>
-                                            <p className="text-xs font-bold text-indigo-100 italic">Notice of Award triggers mandatory Contractor Name and Award Amount fields.</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-indigo-500/20">
-                                        <div className="text-3xl mb-2">📜</div>
-                                        <h4 className="text-sm font-bold font-mono text-white/90 italic uppercase tracking-tighter">Procurement Data Node</h4>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Module 9: Variation Orders */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">9</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiActivity className="text-amber-500" />
-                                    Variation Orders (VO) Management
-                                </h2>
-                            </div>
-                            <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
-                                <div className="p-8 bg-amber-50 border border-amber-200 rounded-[2rem] shadow-sm text-center">
-                                    <h4 className="text-amber-800 font-black text-sm uppercase mb-3 italic tracking-[0.2em]">Budget & Timeline Realignment</h4>
-                                    <p className="text-lg font-medium italic text-amber-900">Tap the <span className="bg-amber-100 px-3 py-1 rounded-xl border border-amber-300 font-black">⚖️ VO</span> button on the project card to register legal changes to the contract or schedule.</p>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="p-5 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
-                                        <div className="text-2xl mb-2">💵</div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Financial VO</h4>
-                                        <p className="text-xs font-bold text-slate-600 italic">Register Additive or Deductive amounts.</p>
-                                    </div>
-                                    <div className="p-5 bg-white border border-slate-100 rounded-2xl shadow-sm text-center">
-                                        <div className="text-2xl mb-2">⏳</div>
-                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 italic">Time Extension</h4>
-                                        <p className="text-xs font-bold text-slate-600 italic">Log calendar days added to the expiry.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Module 10: Settings */}
-                        <section className="mb-32 group">
-                            <div className="flex items-center mb-10">
-                                <span className="w-10 h-10 bg-[#0A192F] text-white rounded-2xl flex items-center justify-center font-black text-lg mr-4 shadow-xl shadow-blue-900/10 group-hover:scale-110 transition-transform italic">10</span>
-                                <h2 className="text-3xl font-black text-[#0A192F] uppercase tracking-tight flex items-center gap-3 italic">
-                                    <FiSmartphone className="text-blue-500" />
-                                    Settings & Profile Management
-                                </h2>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm hover:border-blue-400 transition-all text-center group">
-                                    <FiLock className="mx-auto mb-4 text-blue-500 group-hover:scale-110 transition-transform" size={32} />
-                                    <h4 className="font-black text-navy-950 uppercase text-xs mb-2 italic">Passcode PIN</h4>
-                                    <p className="text-[10px] text-slate-500 font-medium italic underline decoration-slate-100">Secure field devices.</p>
-                                </div>
-                                <div className="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm hover:border-blue-400 transition-all text-center group">
-                                    <FiActivity className="mx-auto mb-4 text-blue-500 group-hover:scale-110 transition-transform" size={32} />
-                                    <h4 className="font-black text-navy-950 uppercase text-xs mb-2 italic">Dark Mode</h4>
-                                    <p className="text-[10px] text-slate-500 font-medium italic underline decoration-slate-100">High-contrast reporting.</p>
-                                </div>
-                                <div className="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm hover:border-blue-400 transition-all text-center group">
-                                    <FiInfo className="mx-auto mb-4 text-blue-500 group-hover:scale-110 transition-transform" size={32} />
-                                    <h4 className="font-black text-navy-950 uppercase text-xs mb-2 italic">Help Center</h4>
-                                    <p className="text-[10px] text-slate-500 font-medium italic underline decoration-slate-100">FAQ & Sync Solutions.</p>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Final Support */}
-                        <footer className="mt-40 pt-24 border-t-8 border-navy-950 text-center relative overflow-hidden">
-                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-blue-500/5 rounded-full blur-[80px]"></div>
-                            <div className="max-w-md mx-auto relative z-10">
-                                <div className="w-20 h-20 bg-[#0A192F] text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-900/40 border border-blue-500/20">
-                                    <FiTool size={40} className="text-blue-400 rotate-12" />
-                                </div>
-                                <h2 className="text-2xl font-black text-[#0A192F] uppercase mb-4 tracking-[0.3em] italic">Engineering Support Desk</h2>
-                                <p className="text-sm text-slate-400 mb-10 font-bold uppercase tracking-widest italic leading-relaxed px-6">For technical anomalies or SOP inquiries, coordinate via the official Stratcom Google Space.</p>
-                                <div className="bg-[#0A192F] p-10 rounded-[2.5rem] text-white font-mono text-base shadow-2xl shadow-blue-900/40 border border-blue-500/20 group hover:scale-105 transition-all">
-                                    <div className="text-blue-400 text-[9px] font-black uppercase tracking-[0.6em] mb-4 opacity-70 italic underline decoration-blue-500/20">Official SOP Inquiry Channel</div>
-                                    support.stride@deped.gov.ph
-                                </div>
-                            </div>
-                            <div className="mt-32 pb-20">
-                                <p className="text-[10px] text-slate-300 uppercase tracking-[1em] font-black italic">SOP COMPLIANCE MANUAL • 2026</p>
-                            </div>
+                            <p className="text-[10px] font-black uppercase tracking-[1em] text-slate-700 italic">SOP COMPLIANCE MANUAL • 2026</p>
                         </footer>
 
                     </main>
+                </div>
+
+                {/* Sidebar Navigation */}
+                <div className="hidden xl:block fixed top-48 right-[8%] w-48 font-black">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-8 border-b border-blue-500/20 pb-2 italic text-left">Quick Access</p>
+                    <nav className="space-y-6 text-[10px] text-slate-500 uppercase italic text-left">
+                        <a href="#installation" className="block hover:text-white transition-colors border-l-2 border-transparent hover:border-blue-500 pl-4">01 Installation</a>
+                        <a href="#nexus" className="block hover:text-white transition-colors border-l-2 border-transparent hover:border-emerald-500 pl-4">02 Nexus Portal</a>
+                        <a href="#registration" className="block hover:text-white transition-colors border-l-2 border-transparent hover:border-amber-500 pl-4">03 Auth & Identity</a>
+                        <a href="#tabs" className="block hover:text-white transition-colors border-l-2 border-transparent hover:border-rose-500 pl-4">04 Dashboards</a>
+                    </nav>
                 </div>
             </div>
         </PageTransition>

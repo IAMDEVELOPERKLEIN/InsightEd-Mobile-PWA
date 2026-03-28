@@ -1168,7 +1168,9 @@ const EngineerProjects = () => {
           initialYears={selectedYears}
           initialBatches={selectedBatchFunds}
           hideRegions={userRole !== 'EFD' && userRole !== 'EFD Engineer' && userRole !== 'HRODI'}
-          hideDivisions={false}
+          hideDivisions={true}
+          hideProvinces={true}
+          hideMunicipalities={true}
         />
 
         {/* --- CHECKBOX REASON MODAL (Bugs 4 & 5) --- */}
