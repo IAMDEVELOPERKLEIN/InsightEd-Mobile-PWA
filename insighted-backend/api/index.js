@@ -2081,7 +2081,7 @@ app.put('/api/update-project/:id', async (req, res) => {
         has_variation_order, variation_order_pdf,
         is_realigned, savings, is_donated, program_type, funding_year_justification,
         sangguniang_resolution_id, mother_moa_id, supplamental_moa_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
       RETURNING *;
     `;
 
@@ -2535,14 +2535,30 @@ app.post('/api/save-project-documents', async (req, res) => {
 
 // --- 20. POST: Upload Project Image (Base64) ---
 app.post('/api/upload-image', async (req, res) => {
-  const { projectId, imageData, uploadedBy } = req.body;
+  const { projectId, imageData, uploadedBy, category, ipc: providedIpc } = req.body;
   if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
 
   try {
-    const query = `INSERT INTO engineer_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
-    const result = await pool.query(query, [projectId, imageData, uploadedBy]);
+    let finalIpc = providedIpc;
 
-    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image`);
+    // If IPC is not provided, look it up from engineer_form
+    if (!finalIpc) {
+      const ipcResult = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+      if (ipcResult.rows.length > 0) {
+        finalIpc = ipcResult.rows[0].ipc;
+      }
+    }
+
+    const query = `
+      INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc) 
+      VALUES ($1, $2, $3, $4, $5) 
+      RETURNING id;
+    `;
+    const result = await pool.query(query, [projectId, imageData, uploadedBy, category || 'Internal', finalIpc]);
+
+    console.log(`📸 Image Saved: ID ${result.rows[0].id} for Project ${projectId} (IPC: ${finalIpc || 'N/A'}, Category: ${category || 'Internal'})`);
+
+    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image (${category || 'Internal'})`);
     res.status(201).json({ success: true, imageId: result.rows[0].id });
   } catch (err) {
     console.error("❌ Image Upload Error:", err.message);
@@ -2550,12 +2566,38 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
-// --- 21. GET: Fetch All Images for a Project ---
+// --- 21. GET: Fetch All Images for a Project (IPC-aware) ---
 app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {
-    const query = `SELECT id, image_data, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
-    const result = await pool.query(query, [projectId]);
+    // 1. Get the IPC for this specific project snapshot
+    const ipcResult = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+    const ipc = ipcResult.rows.length > 0 ? ipcResult.rows[0].ipc : null;
+
+    let query;
+    let params;
+
+    if (ipc) {
+      // 2. Fetch all images linked to this IPC (full project history)
+      query = `
+        SELECT id, image_data, uploaded_by, created_at, category, ipc 
+        FROM engineer_image 
+        WHERE ipc = $1 OR project_id = $2
+        ORDER BY created_at DESC;
+      `;
+      params = [ipc, projectId];
+    } else {
+      // Fallback to just project_id if IPC is missing
+      query = `
+        SELECT id, image_data, uploaded_by, created_at, category, ipc 
+        FROM engineer_image 
+        WHERE project_id = $1 
+        ORDER BY created_at DESC;
+      `;
+      params = [projectId];
+    }
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error("❌ Error fetching project images:", err.message);

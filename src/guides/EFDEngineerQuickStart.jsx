@@ -237,7 +237,7 @@ const EFDEngineerQuickStart = () => {
                                             <strong>Deep Dive:</strong> Click any project card to reveal the 6-step update wizard history, PDF archives, and variation orders.
                                         </p>
                                     </div>
-v>
+
                                 </div>
                             </div>
 

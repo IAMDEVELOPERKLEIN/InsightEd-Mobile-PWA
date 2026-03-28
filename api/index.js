@@ -8709,15 +8709,20 @@ app.put('/api/update-project/:id', upload.fields([
 
         const voQuery = `
           INSERT INTO variation_orders (
-            project_id, ipc, vo_number, vo_sequence_no, vo_type, 
-            requested_date, requested_by, original_contract_amount, 
-            additive_amount, deductive_amount, net_vo_amount, revised_contract_amount,
+            project_id, ipc, variation_name, vo_sequence_no, variation_type, 
+            requested_date, requested_by, original_amount, 
+            additive, deductive, modified_amount, revised_contract_amount,
             original_target_completion_date, revised_target_completion_date,
             time_extension_days, revised_expiry_date, justification, caf_reference, 
-            status_of_construction_phase, revised_pow_pdf, revised_dupa_pdf, revised_contract_pdf, created_by,
-            justification_category, justification_details, previous_vo_total, original_expiry_date
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+            status, revised_pow_pdf, revised_dupa_pdf, revised_contract_pdf, created_by,
+            justification_category, justification_details, previous_vo_total, original_expiry_date,
+            reused_amount
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
         `;
+
+        // Add reused_amount (default 0 for this flow)
+        voValues.push(0);
+
 
         await client.query(voQuery, voValues);
         if (clientNew) {
@@ -8818,6 +8823,79 @@ app.get('/api/projects/variation-orders/:ipc', async (req, res) => {
   } catch (err) {
     console.error("❌ Error fetching VO history:", err.message);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// --- 9.6 POST: Save Variation Order (Simplified Flow) ---
+app.post('/api/variation-orders', async (req, res) => {
+  const { 
+    projectId, ipc, variationName, variationType, 
+    originalAmount, additive, deductive, reusedAmount,
+    uid, userName 
+  } = req.body;
+
+  if (!projectId || !variationName || !variationType) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const original = parseFloat(originalAmount) || 0;
+    const add = parseFloat(additive) || 0;
+    const ded = parseFloat(deductive) || 0;
+    const reused = parseFloat(reusedAmount) || 0;
+    
+    // Calculate total modified amount
+    const modified = original + add - ded;
+
+    // Fetch latest IPC and record info for history consistency
+    const projectRes = await pool.query('SELECT ipc, project_name FROM engineer_form WHERE project_id = $1', [projectId]);
+    const project = projectRes.rows[0];
+    const resolvedIpc = ipc || project?.ipc;
+
+    const query = `
+      INSERT INTO variation_orders (
+        project_id, ipc, variation_name, variation_type, 
+        original_amount, additive, deductive, reused_amount, modified_amount, created_by,
+        requested_date, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), 'Approved')
+      RETURNING *;
+    `;
+    const values = [projectId, resolvedIpc, variationName, variationType, original, add, ded, reused, modified, uid];
+    const result = await pool.query(query, values);
+
+    await logActivity(
+      uid, userName || 'Engineer', 'Engineer', 'VARIATION',
+      `VO: ${variationName} (${project?.project_name || resolvedIpc})`,
+      JSON.stringify({
+        variation_name: variationName,
+        type: variationType,
+        original: original,
+        additive: add,
+        deductive: ded,
+        reused: reused,
+        total: modified
+      })
+    );
+
+    res.status(201).json({ success: true, variation: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Variation Order Error:", err.message);
+    res.status(500).json({ error: "Failed to save variation order" });
+  }
+});
+
+// --- 9.7 GET: Variation Orders by Project ID ---
+app.get('/api/variation-orders/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM variation_orders WHERE project_id = $1 OR ipc IN (SELECT ipc FROM engineer_form WHERE project_id = $1) ORDER BY created_at DESC',
+      [projectId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Fetch VO Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch variation orders" });
   }
 });
 

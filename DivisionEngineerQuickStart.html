@@ -13,22 +13,22 @@
             theme: {
                 extend: {
                     colors: {
-                        navy: {
-                            950: '#020617',
-                            900: '#0f172a',
-                            800: '#1e293b',
-                            700: '#334155',
+                        industrial: {
+                            950: '#0a0a0a',
+                            900: '#171717',
+                            800: '#262626',
+                            700: '#404040',
                         },
-                        accent: {
-                            blue: '#3b82f6',
-                            emerald: '#10b981',
-                            amber: '#f59e0b',
-                            rose: '#f43f5e',
+                        safety: {
+                            yellow: '#f9d71c',
+                            orange: '#f59e0b',
+                            red: '#ef4444',
                         }
                     },
                     fontFamily: {
                         sans: ['Plus Jakarta Sans', 'sans-serif'],
                         mono: ['JetBrains Mono', 'monospace'],
+                        industrial: ['Outfit', 'sans-serif'],
                     },
                 }
             }
@@ -36,82 +36,177 @@
     </script>
     <style>
         :root {
-            --glass-bg: rgba(15, 23, 42, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.1);
+            --safety-yellow: #f9d71c;
+            --caution-orange: #f59e0b;
+            --industrial-dark: #0a0a0a;
+            --glass-bg: rgba(23, 23, 23, 0.8);
+            --glass-border: rgba(249, 215, 28, 0.2);
+            --blueprint-line: rgba(249, 215, 28, 0.05);
         }
+        /* Cement Texture Background */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background: 
+                linear-gradient(rgba(10, 10, 10, 0.4), rgba(10, 10, 10, 0.4)),
+                url('https://www.transparenttextures.com/patterns/pavement.png'), /* Fallback texture */
+                #3a3a3a;
+            background-blend-mode: multiply;
+            z-index: -2;
+        }
+
+        /* Simulated concrete look with CSS if image fails */
+        .concrete-texture {
+            background-color: #4a4a4a;
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0%, transparent 80%),
+                url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            background-blend-mode: overlay;
+        }
+
         body { 
             font-family: 'Plus Jakarta Sans', sans-serif; 
-            background: #020617; 
+            background-color: #333;
             color: #f8fafc;
             overflow-x: hidden;
             scroll-behavior: smooth;
         }
+
+        /* Override Blueprint Background to be subtle on top of cement */
+        .blueprint-overlay {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(var(--blueprint-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--blueprint-line) 1px, transparent 1px);
+            background-size: 80px 80px;
+            pointer-events: none;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
         .glass-card {
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            border-radius: 2rem;
+            background: rgba(23, 23, 23, 0.9);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(249, 215, 28, 0.3);
+            border-radius: 1.25rem;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+        }
+        .glass-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--safety-yellow), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
         .glass-card:hover {
-            transform: translateY(-8px) scale(1.01);
-            border-color: rgba(59, 130, 246, 0.5);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transform: translateY(-8px);
+            border-color: var(--safety-yellow);
+            box-shadow: 0 25px 50px -12px rgba(249, 215, 28, 0.15);
+        }
+        .glass-card:hover::before {
+            opacity: 1;
+        }
+        .hazard-stripe {
+            background: repeating-linear-gradient(
+                -45deg,
+                var(--safety-yellow),
+                var(--safety-yellow) 10px,
+                #000 10px,
+                #000 20px
+            );
         }
         .gradient-text {
-            background: linear-gradient(135deg, #60a5fa 0%, #34d399 100%);
+            background: linear-gradient(135deg, var(--safety-yellow) 0%, var(--caution-orange) 100%);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
         .video-container {
             position: relative;
-            border-radius: 1.5rem;
+            border-radius: 1rem;
             overflow: hidden;
             background: #000;
             aspect-ratio: 16/9;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 2px solid var(--glass-border);
         }
-        .video-placeholder {
+        /* New Construction Animations */
+        @keyframes jackhammer {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            10% { transform: translate(-1px, 2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 1px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        @keyframes hammer-impact {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); filter: brightness(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .jackhammer-active {
+            animation: jackhammer 0.1s infinite;
+        }
+
+        .hammer-pop {
+            animation: hammer-impact 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .reveal-cracked {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .reveal-cracked::before {
+            content: "";
             position: absolute;
             inset: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(2, 6, 23, 0.9) 100%);
-            cursor: pointer;
-            transition: all 0.3s ease;
+            background: #222;
+            z-index: 10;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 50% 50%);
         }
-        .video-placeholder:hover {
-            opacity: 0.9;
+
+        .reveal-cracked.revealed::before {
+            transform: scale(0);
+            opacity: 0;
         }
-        .play-button {
-            width: 80px;
-            height: 80px;
-            background: rgba(59, 130, 246, 0.2);
-            border: 2px solid #3b82f6;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 1rem;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+
+        .drill-reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s ease-out;
         }
-        .video-placeholder:hover .play-button {
-            transform: scale(1.1);
-            background: rgba(59, 130, 246, 0.4);
-            box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
+
+        .drill-reveal.revealed {
+            opacity: 1;
+            transform: translateY(0);
         }
         .step-number {
             font-size: 0.75rem;
             font-weight: 800;
             letter-spacing: 0.2em;
-            color: #3b82f6;
+            color: var(--safety-yellow);
             margin-bottom: 0.5rem;
             display: block;
+            text-transform: uppercase;
         }
         .scroll-reveal {
             opacity: 0;
@@ -129,19 +224,19 @@
             transform: translateX(-50%);
             width: 80%;
             height: 40%;
-            background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(249, 215, 28, 0.1) 0%, transparent 70%);
             filter: blur(80px);
             pointer-events: none;
             z-index: -1;
         }
         .badge {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            color: #60a5fa;
+            background: rgba(249, 215, 28, 0.1);
+            border: 1px solid rgba(249, 215, 28, 0.2);
+            color: var(--safety-yellow);
             padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
+            border-radius: 0.5rem;
             font-size: 0.7rem;
-            font-weight: 700;
+            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.1em;
         }
@@ -159,8 +254,8 @@
             padding-left: 0.5rem;
         }
         .toc-link:hover {
-            color: #3b82f6;
-            border-left: 2px solid #3b82f6;
+            color: var(--safety-yellow);
+            border-left: 2px solid var(--safety-yellow);
             padding-left: 1rem;
         }
         .floating-assistant {
@@ -169,12 +264,12 @@
             right: 2rem;
             width: 64px;
             height: 64px;
-            background: #3b82f6;
+            background: var(--safety-yellow);
             border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5);
+            box-shadow: 0 10px 25px -5px rgba(249, 215, 28, 0.5);
             cursor: pointer;
             z-index: 100;
             transition: all 0.3s ease;
@@ -182,326 +277,410 @@
         .floating-assistant:hover {
             transform: scale(1.1) rotate(5deg);
         }
+        /* Phone Mockup */
+        .phone-mockup {
+            max-width: 260px;
+            margin: 0 auto;
+            border: 8px solid #1e293b;
+            border-radius: 2.5rem;
+            box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.5);
+            background: #000;
+            overflow: hidden;
+            position: relative;
+        }
+        .phone-mockup img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
     </style>
 </head>
-<body class="selection:bg-blue-500/30">
+<body class="selection:bg-safety-yellow/30">
 
+    <div class="blueprint-overlay"></div>
     <div class="hero-glow"></div>
 
+    <!-- Hazard Stripe Divider -->
+    <div class="fixed top-0 w-full h-1 z-[60] hazard-stripe opacity-50"></div>
+
     <!-- Navigation -->
-    <nav class="fixed top-0 w-full z-50 border-b border-white/5 bg-navy-950/80 backdrop-blur-xl">
+    <nav class="fixed top-0 w-full z-50 border-b border-white/5 bg-industrial-950/80 backdrop-blur-xl">
         <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
             <div class="flex items-center gap-4">
-                <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-white italic text-base shadow-lg shadow-blue-500/30">IE</div>
+                <div class="w-10 h-10 bg-safety-yellow rounded-xl flex items-center justify-center font-black text-black italic text-base shadow-lg shadow-safety-yellow/20">IE</div>
                 <div>
                     <span class="font-bold text-lg tracking-tight block leading-none text-white">InsightED</span>
-                    <span class="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em]">Engineer Operations</span>
+                    <span class="text-[10px] text-safety-yellow font-bold uppercase tracking-[0.2em]">Engineer Operations</span>
                 </div>
             </div>
+            
+            <!-- Desktop Nav -->
             <div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
-                <a href="#installation" class="hover:text-white transition-colors">Installation</a>
-                <a href="#nexus" class="hover:text-white transition-colors">Nexus</a>
-                <a href="#registration" class="hover:text-white transition-colors">Registration</a>
-                <a href="#tabs" class="hover:text-white transition-colors">Dashboard</a>
+                <a href="#introduction" class="hover:text-white transition-colors">Start</a>
+                <a href="#portals" class="hover:text-white transition-colors">Portals</a>
+                <a href="#registration" class="hover:text-white transition-colors">Access</a>
+                <a href="#projects" class="hover:text-white transition-colors">Projects</a>
             </div>
-            <div class="badge">Pilot Phase II</div>
+
+            <!-- Mobile Menu Button -->
+            <button id="mobile-menu-btn" class="md:hidden p-2 text-slate-400 hover:text-white transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path id="menu-icon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    <path id="close-icon" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+
+            <div class="badge hidden sm:block">Pilot Phase II</div>
+        </div>
+
+        <!-- Mobile Nav Menu -->
+        <div id="mobile-menu" class="hidden md:hidden bg-industrial-900 border-b border-white/10 px-6 py-8 space-y-6">
+            <a href="#introduction" class="mobile-link block text-lg font-bold text-slate-300 hover:text-safety-yellow">QuickStart</a>
+            <a href="#portals" class="mobile-link block text-lg font-bold text-slate-300 hover:text-safety-yellow">Portal Access</a>
+            <a href="#registration" class="mobile-link block text-lg font-bold text-slate-300 hover:text-safety-yellow">Identity & Access</a>
+            <a href="#projects" class="mobile-link block text-lg font-bold text-slate-300 hover:text-safety-yellow">Site Operations (SOP)</a>
         </div>
     </nav>
+
+    <script>
+        const menuBtn = document.getElementById('mobile-menu-btn');
+        const mobileMenu = document.getElementById('mobile-menu');
+        const menuIcon = document.getElementById('menu-icon');
+        const closeIcon = document.getElementById('close-icon');
+
+        menuBtn.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+            menuIcon.classList.toggle('hidden');
+            closeIcon.classList.toggle('hidden');
+        });
+
+        document.querySelectorAll('.mobile-link').forEach(link => {
+            link.addEventListener('click', () => {
+                mobileMenu.classList.add('hidden');
+                menuIcon.classList.remove('hidden');
+                closeIcon.classList.add('hidden');
+            });
+        });
+    </script>
 
     <main class="max-w-4xl mx-auto px-6 pt-40 pb-32 relative">
         
         <!-- Header Section -->
-        <header class="text-center mb-32 scroll-reveal">
-            <div class="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-blue-500/5 rounded-full border border-blue-500/10">
-                <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                <span class="text-xs font-bold text-blue-400 uppercase tracking-widest">Official SOP Manual</span>
+        <header class="text-center mb-24 md:mb-32 scroll-reveal text-white">
+            <!-- Compatibility Tip -->
+            <div class="mb-8 p-4 bg-safety-orange/10 border border-safety-orange/20 rounded-2xl text-[10px] md:text-xs font-bold text-safety-orange italic max-w-lg mx-auto">
+                TIP: If media does not display, ensure you are viewing this file via a local server (e.g., Live Server) or check file permissions.
             </div>
-            <h1 class="text-6xl md:text-7xl font-black mb-8 leading-[1.1] tracking-tight text-white">
+            <div class="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-safety-yellow/5 rounded-full border border-safety-yellow/10">
+                <span class="w-2 h-2 bg-safety-yellow rounded-full animate-pulse"></span>
+                <span class="text-xs font-bold text-safety-yellow uppercase tracking-widest text-shadow">Official SOP Manual</span>
+            </div>
+            <h1 class="text-4xl md:text-7xl font-black mb-8 leading-[1.1] tracking-tight text-white uppercase italic">
                 Mastering the <br/>
                 <span class="gradient-text">Division Engineer</span> <br/>
                 Dashboard
             </h1>
-            <p class="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-medium">
-                The definitive guide to the Efd Engineer portal. Empowering site oversight with real-time data and AI-driven insights.
+            <p class="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-medium px-4">
+                The definitive guide to the Engineer portal. Empowering site oversight with real-time data and AI-driven insights.
             </p>
         </header>
 
-        <!-- 1. Installation -->
-        <section id="installation" class="mb-40 scroll-reveal">
-            <div class="flex items-start gap-6 mb-12">
-                <div class="w-12 h-12 glass-card flex items-center justify-center text-blue-500 font-black text-xl shadow-lg border-blue-500/20 shrink-0">01</div>
+        <!-- 1. Introduction & Setup -->
+        <section id="introduction" class="mb-32 md:mb-40 drill-reveal">
+            <div class="flex items-start gap-4 md:gap-6 mb-12">
+                <div class="w-10 h-10 md:w-12 md:h-12 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">01</div>
                 <div>
-                    <h2 class="text-4xl font-black mb-4 tracking-tight uppercase italic text-white">Installation of PWA</h2>
-                    <p class="text-slate-400 font-medium">InsightEd is a <span class="text-white font-bold">Progressive Web App</span>. No app store needed—just direct, high-performance access.</p>
+                    <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">Installation of PWA</h2>
+                    <p class="text-slate-400 font-medium text-sm md:text-base">InsightEd is a <span class="text-white font-bold text-shadow-sm">Progressive Web App</span>. No app store needed—just direct access.</p>
                 </div>
             </div>
 
-            <div class="grid md:grid-cols-2 gap-8 mb-12">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
                 <!-- iOS -->
-                <div class="glass-card p-8 group">
+                <div class="glass-card p-6 md:p-8 group shadow-xl hover:shadow-safety-yellow/5">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="p-2 bg-white/5 rounded-lg text-blue-400">
+                        <div class="p-2 bg-white/5 rounded-lg text-safety-yellow">
                             <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.1 2.45-1.34 0-1.83-.8-3.35-.8-1.55 0-2.04.8-3.35.8-1.36 0-2.33-1.34-3.16-2.55-1.7-2.45-2.93-6-1.2-9a4.46 4.46 0 0 1 3.8-2.3c1.2 0 2.2.82 2.94.82.75 0 1.95-.98 3.33-.84a4.2 4.2 0 0 1 3.32 1.8 4.1 4.1 0 0 0-1.92 3.45 4.1 4.1 0 0 0 2.65 3.82c-.17.43-.37.86-.55 1.15zM12 7.16c.06-1.6.8-3.12 1.9-4.16.94-.88 2.24-1.4 3.56-1.4.06 1.7-.65 3.3-1.83 4.3-.96.88-2.3 1.4-3.63 1.26z"/></svg>
                         </div>
-                        <h3 class="text-xl font-bold italic text-white">iOS ACCESS (SAFARI)</h3>
+                        <h3 class="text-xl font-bold italic text-white uppercase tracking-tight">iOS ACCESS (SAFARI)</h3>
                     </div>
-                    <ul class="space-y-4 text-slate-400 font-medium">
+                    <ul class="space-y-4 text-slate-400 font-medium text-sm md:text-base">
                         <li class="flex items-start gap-3">
-                            <span class="text-blue-500 font-black text-sm">1.</span>
+                            <span class="text-safety-yellow font-black text-sm">1.</span>
                             <span>Open <code>tinyurl.com/InsightEdV2</code></span>
                         </li>
                         <li class="flex items-start gap-3">
-                            <span class="text-blue-500 font-black text-sm">2.</span>
-                            <span>Tap the <strong class="text-white font-bold">"Share"</strong> icon (square with arrow up)</span>
+                            <span class="text-safety-yellow font-black text-sm">2.</span>
+                            <span>Tap <strong class="text-white font-bold">"Share"</strong> icon (square with arrow up)</span>
                         </li>
                         <li class="flex items-start gap-3">
-                            <span class="text-blue-500 font-black text-sm">3.</span>
-                            <span>Scroll down and select <strong class="text-white font-bold">"Add to Home Screen"</strong></span>
+                            <span class="text-safety-yellow font-black text-sm">3.</span>
+                            <span>Select <strong class="text-white font-bold">"Add to Home Screen"</strong></span>
                         </li>
                         <li class="flex items-start gap-3">
-                            <span class="text-blue-500 font-black text-sm">4.</span>
-                            <span>Tap <strong class="text-blue-500 font-black uppercase">ADD</strong> in the top right</span>
+                            <span class="text-safety-yellow font-black text-sm">4.</span>
+                            <span>Tap <strong class="text-safety-yellow font-black uppercase">ADD</strong> in the top right</span>
                         </li>
                     </ul>
                 </div>
 
                 <!-- Android -->
-                <div class="glass-card p-8 group">
+                <div class="glass-card p-6 md:p-8 group shadow-xl hover:shadow-safety-orange/5">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="p-2 bg-white/5 rounded-lg text-emerald-400">
-                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M17.523 15.3414C16.923 15.3414 16.438 14.8564 16.438 14.2564C16.438 13.6564 16.923 13.1714 17.523 13.1714C18.123 13.1714 18.608 13.6564 18.608 14.2564C18.608 14.8564 18.123 15.3414 17.523 15.3414ZM6.477 15.3414C5.877 15.3414 5.392 14.8564 5.392 14.2564C5.392 13.6564 5.877 13.1714 6.477 13.1714C7.077 13.1714 7.562 13.6564 7.562 14.2564C7.562 14.8564 7.077 15.3414 6.477 15.3414ZM17.844 11.2314L19.349 8.62545C19.467 8.42145 19.397 8.16045 19.193 8.04245C18.989 7.92445 18.728 7.99445 18.61 8.19845L17.07 10.8644C15.655 10.2194 14.072 9.86145 12.404 9.86145C10.736 9.86145 9.153 10.2194 7.738 10.8644L6.198 8.19845C6.08 7.99445 5.819 7.92445 5.615 8.04245C5.411 8.16045 5.341 8.42145 5.459 8.62545L6.964 11.2314C3.899 12.6364 1.808 15.6194 1.442 19.1214H22.558C22.192 15.6194 20.101 12.6364 17.844 11.2314Z"/></svg>
+                        <div class="p-2 bg-white/5 rounded-lg text-safety-orange">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M17.523 15.3414C16.923 15.3414 Capitalize 16.438 14.8564 16.438 14.2564C16.438 13.6564 16.923 13.1714 17.523 13.1714C18.123 13.1714 18.608 13.6564 18.608 14.2564C18.608 14.8564 18.123 15.3414 17.523 15.3414ZM6.477 15.3414C5.877 15.3414 5.392 14.8564 5.392 14.2564C5.392 13.6564 5.877 13.1714 6.477 13.1714C7.077 13.1714 7.562 13.6564 7.562 14.2564C7.562 14.8564 7.077 15.3414 6.477 15.3414ZM17.844 11.2314L19.349 8.62545C19.467 8.42145 19.397 8.16045 19.193 8.04245C18.989 7.92445 18.728 7.99445 18.61 8.19845L17.07 10.8644C15.655 10.2194 14.072 9.86145 12.404 9.86145C10.736 9.86145 9.153 10.2194 7.738 10.8644L6.198 8.19845C6.08 7.99445 5.819 7.92445 5.615 8.04245C5.411 8.16045 5.341 8.42145 5.459 8.62545L6.964 11.2314C3.899 12.6364 1.808 15.6194 1.442 19.1214H22.558C22.192 15.6194 20.101 12.6364 17.844 11.2314Z"/></svg>
                         </div>
-                        <h3 class="text-xl font-bold italic text-white">ANDROID ACCESS (CHROME)</h3>
+                        <h3 class="text-xl font-bold italic text-white uppercase tracking-tight">ANDROID ACCESS (CHROME)</h3>
                     </div>
-                    <ul class="space-y-4 text-slate-400 font-medium">
+                    <ul class="space-y-4 text-slate-400 font-medium text-sm md:text-base">
                         <li class="flex items-start gap-3">
-                            <span class="text-emerald-500 font-black text-sm">1.</span>
+                            <span class="text-safety-orange font-black text-sm">1.</span>
                             <span>Open <code>tinyurl.com/InsightEdV2</code></span>
                         </li>
                         <li class="flex items-start gap-3">
-                            <span class="text-emerald-500 font-black text-sm">2.</span>
-                            <span>Tap the <strong class="text-white font-bold">"Three Dots"</strong> menu button</span>
+                            <span class="text-safety-orange font-black text-sm">2.</span>
+                            <span>Tap <strong class="text-white font-bold">"Three Dots"</strong> menu button</span>
                         </li>
                         <li class="flex items-start gap-3">
-                            <span class="text-emerald-500 font-black text-sm">3.</span>
-                            <span>Select <strong class="text-white font-bold">"Install App"</strong> or "Add to Home Screen"</span>
+                            <span class="text-safety-orange font-black text-sm">3.</span>
+                            <span>Select <strong class="text-white font-bold">"Install App"</strong></span>
                         </li>
                         <li class="flex items-start gap-3">
-                            <span class="text-emerald-500 font-black text-sm">4.</span>
-                            <span>Confirm by tapping <strong class="text-emerald-500 font-black uppercase">INSTALL</strong></span>
+                            <span class="text-safety-orange font-black text-sm">4.</span>
+                            <span>Confirm by tapping <strong class="text-safety-orange font-black uppercase">INSTALL</strong></span>
                         </li>
                     </ul>
                 </div>
             </div>
 
-            <div class="video-container">
-                <img src="public/pwa_installation_flow.gif" alt="PWA Installation" class="w-full h-full object-cover">
-                <div class="absolute bottom-6 left-6 badge bg-black/60 backdrop-blur-md">Demonstration GIF</div>
+            <div class="phone-mockup">
+                <img src="./Installationgif.gif" alt="PWA Installation" class="w-full h-auto">
+                <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Mobile View</div>
             </div>
         </section>
 
-        <!-- 2. Nexus Dashboard -->
-        <section id="nexus" class="mb-40 scroll-reveal">
-            <div class="flex items-start gap-6 mb-12">
-                <div class="w-12 h-12 glass-card flex items-center justify-center text-emerald-500 font-black text-xl shadow-lg border-emerald-500/20 shrink-0">02</div>
+        <!-- 2. Portals & Access -->
+        <section id="portals" class="mb-32 md:mb-40 drill-reveal">
+            <div class="flex items-start gap-4 md:gap-6 mb-12">
                 <div>
-                    <h2 class="text-4xl font-black mb-4 tracking-tight uppercase italic text-white">Navigating the Nexus Dashboard</h2>
-                    <p class="text-slate-400 font-medium">The Launchpad to your jurisdiction's engineering metrics.</p>
+                    <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">Navigating the Nexus Dashboard</h2>
+                    <p class="text-slate-400 font-medium text-sm md:text-base">The Launchpad to your jurisdiction's engineering metrics.</p>
                 </div>
             </div>
 
-            <div class="grid md:grid-cols-2 gap-12 items-center">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
                 <div class="space-y-6">
-                    <div class="glass-card p-8 border-l-8 border-l-blue-500 hover:bg-blue-500/5">
-                        <span class="step-number text-blue-400">PHASE 1</span>
-                        <h4 class="text-2xl font-black mb-3 italic text-white">Select InsightEd for infrastructure</h4>
-                        <p class="text-slate-400 font-medium leading-relaxed">Filter the ecosystem views to focus exclusively on public school building facilities and engineering projects.</p>
+                    <div class="glass-card p-6 md:p-8 border-l-[6px] md:border-l-8 border-l-safety-yellow hover:bg-safety-yellow/5">
+                        <span class="step-number text-safety-yellow">PHASE 1</span>
+                        <h4 class="text-xl md:text-2xl font-black mb-3 italic text-white leading-tight">Select InsightEd for infrastructure</h4>
+                        <p class="text-slate-400 font-medium text-sm md:text-base leading-relaxed">Filter the ecosystem views to focus exclusively on public school building facilities.</p>
                     </div>
-                    <div class="glass-card p-8 border-l-8 border-l-emerald-500 hover:bg-emerald-500/5">
-                        <span class="step-number text-emerald-400">PHASE 2</span>
-                        <h4 class="text-2xl font-black mb-3 italic text-white">Select Engineers Portal</h4>
-                        <p class="text-slate-400 font-medium leading-relaxed">Enter the specialized dashboard tailored for Division Engineers to manage regional site portfolios.</p>
+                    <div class="glass-card p-6 md:p-8 border-l-[6px] md:border-l-8 border-l-safety-orange hover:bg-safety-orange/5">
+                        <span class="step-number text-safety-orange">PHASE 2</span>
+                        <h4 class="text-xl md:text-2xl font-black mb-3 italic text-white leading-tight">Select Engineers Portal</h4>
+                        <p class="text-slate-400 font-medium text-sm md:text-base leading-relaxed">Enter the specialized dashboard tailored for Division Engineers.</p>
                     </div>
                 </div>
-                <!-- Mockup using public gif -->
-                <div class="video-container ring-1 ring-white/10">
-                    <img src="public/nexus_portal_selection.gif" alt="Nexus Navigation" class="w-full h-full object-cover">
-                    <div class="absolute top-4 right-4 badge bg-black/40 backdrop-blur-md">Live Interaction</div>
+                
+                <div class="phone-mockup">
+                    <img src="./nexusgif.gif" alt="Nexus Navigation" class="w-full h-auto">
+                    <div class="absolute top-4 right-4 badge bg-black/40 backdrop-blur-md italic font-bold">Portal Access</div>
                 </div>
             </div>
         </section>
 
         <!-- 3. Registration & Login -->
-        <section id="registration" class="mb-40 scroll-reveal">
-            <div class="flex items-start gap-6 mb-12">
-                <div class="w-12 h-12 glass-card flex items-center justify-center text-amber-500 font-black text-xl shadow-lg border-amber-500/20 shrink-0">03</div>
+        <section id="registration" class="mb-32 md:mb-40 drill-reveal">
+            <div class="flex items-start gap-4 md:gap-6 mb-12">
+                <div class="w-10 h-10 md:w-12 md:h-12 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">
+                    <!-- Wrench Icon -->
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V7a2 2 0 10-4 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V11a2 2 0 11-4 0V7a2 2 0 012-2V4z"/></svg>
+                </div>
                 <div>
-                    <h2 class="text-4xl font-black mb-4 tracking-tight uppercase italic text-white">Identity & Access</h2>
-                    <p class="text-slate-400 font-medium">Registering your account for the pilot phase.</p>
+                    <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">Identity & Access</h2>
+                    <p class="text-slate-400 font-medium text-sm md:text-base">Registering your account for the pilot phase.</p>
                 </div>
             </div>
 
-            <div class="grid md:grid-cols-2 gap-8 mb-12">
-                <div class="glass-card p-10 relative overflow-hidden h-full">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+                <div class="glass-card p-6 md:p-10 relative overflow-hidden h-full">
                     <div class="absolute -top-10 -right-10 opacity-5">
                        <svg class="w-48 h-48 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
                     </div>
-                    <h3 class="text-2xl font-black mb-8 italic flex items-center gap-3 text-white">
-                        <span class="w-2 h-8 bg-amber-500 rounded-full"></span>
+                    <h3 class="text-xl md:text-2xl font-black mb-8 italic flex items-center gap-3 text-white">
+                        <span class="w-2 h-8 bg-safety-yellow rounded-full"></span>
                         Registration Protocol
                     </h3>
-                    <ul class="space-y-6 text-slate-400 font-medium">
+                    <ul class="space-y-6 text-slate-400 font-medium text-sm md:text-base">
                         <li class="flex gap-4">
-                            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-sm">1</div>
-                            <p>Tap <strong class="text-white font-bold italic uppercase">Create New Account</strong> button on the landing screen.</p>
+                            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-xs shadow-sm shadow-safety-yellow/10">1</div>
+                            <p>Tap <strong class="text-white font-bold italic uppercase">Create New Account</strong> on the landing screen.</p>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-sm">2</div>
-                            <p>Select <strong class="text-amber-500 font-black italic uppercase italic underline">Division Engineer</strong> as your primary role.</p>
+                            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-xs shadow-sm shadow-safety-yellow/10">2</div>
+                            <p>Select <strong class="text-safety-yellow font-black italic uppercase underline">Division Engineer</strong> as your role.</p>
                         </li>
                         <li class="flex gap-4">
-                            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-sm">3</div>
-                            <p>Use your <strong class="text-white font-bold italic italic underline">DepEd Email Account</strong> for verification and compliance.</p>
+                            <div class="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center font-black text-white shrink-0 text-xs shadow-sm shadow-safety-yellow/10">3</div>
+                            <p>Use your <strong class="text-white font-bold italic underline">DepEd Email Account</strong> for compliance.</p>
                         </li>
                     </ul>
                 </div>
 
                 <div class="space-y-8">
-                    <div class="glass-card p-8 bg-gradient-to-br from-navy-950 to-blue-900/10 border-blue-500/20 text-center flex flex-col justify-center min-h-[200px]">
-                        <p class="text-[11px] uppercase font-black tracking-[0.4em] text-blue-400 mb-6 font-bold">MASTER AUTHORIZATION KEY</p>
-                        <div class="text-5xl font-mono font-black tracking-[0.2em] text-white mb-6 select-all glow">E5T8-B2W3</div>
-                        <p class="text-[11px] italic text-slate-500 font-bold uppercase tracking-widest px-8">Input this code exactly as shown to unlock Phase II jurisdiction.</p>
+                    <div class="glass-card p-8 bg-gradient-to-br from-industrial-950 to-safety-yellow/5 border-safety-yellow/20 text-center flex flex-col justify-center min-h-[200px]">
+                        <p class="text-[10px] uppercase font-black tracking-[0.4em] text-safety-yellow mb-6">MASTER AUTHORIZATION KEY</p>
+                        <div class="text-4xl md:text-5xl font-mono font-black tracking-[0.2em] text-white mb-6 select-all glow">E5T8-B2W3</div>
+                        <p class="text-[10px] italic text-slate-500 font-bold uppercase tracking-widest px-8 leading-tight">Input this code exactly as shown to unlock Phase II jurisdiction.</p>
                     </div>
-                    <div class="glass-card p-8 border-l-8 border-rose-600 bg-rose-600/5">
-                        <h4 class="text-rose-500 font-black text-xs uppercase mb-3 tracking-widest italic flex items-center gap-2">
+                    <div class="glass-card p-6 md:p-8 border-l-[6px] md:border-l-8 border-safety-orange bg-safety-orange/5">
+                        <h4 class="text-safety-orange font-black text-xs uppercase mb-3 tracking-widest italic flex items-center gap-2">
                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                              SOP MANDATORY NOTE
                         </h4>
-                        <p class="text-sm font-bold text-slate-300 italic leading-relaxed uppercase tracking-tight">Avoid logging out within the system. Logging in is only required via DepEd email/password thereafter.</p>
+                        <p class="text-[11px] md:text-sm font-bold text-slate-300 italic leading-relaxed uppercase tracking-tight">Avoid logging out within the system. Logging in is only required via DepEd email/password thereafter.</p>
                     </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="phone-mockup">
+                    <img src="./registrationp1.gif" alt="Registration Phase 1" class="w-full h-auto">
+                    <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Step Alpha</div>
+                </div>
+                <div class="phone-mockup">
+                    <img src="./registrationp2.gif" alt="Registration Phase 2" class="w-full h-auto">
+                    <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Step Beta</div>
                 </div>
             </div>
         </section>
 
         <!-- 4. Dashboard Breakdown -->
-        <section id="tabs" class="mb-40 scroll-reveal">
-            <div class="flex items-start gap-6 mb-16">
-                <div class="w-12 h-12 glass-card flex items-center justify-center text-rose-500 font-black text-xl shadow-lg border-rose-500/20 shrink-0">04</div>
+        <section id="tabs" class="mb-32 md:mb-40 drill-reveal">
+            <div class="flex items-start gap-4 md:gap-6 mb-16">
+                <div class="w-10 h-10 md:w-12 md:h-12 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">
+                    <!-- Crane Icon -->
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M9 21V5a2 2 0 012-2h2a2 2 0 012 2v16M7 21h10M12 3v2M12 7v2M12 11v2M12 15v2"/></svg>
+                </div>
                 <div>
-                    <h2 class="text-4xl font-black mb-4 tracking-tight uppercase italic text-white">The Nexus Dashboard Hub</h2>
-                    <p class="text-slate-400 font-medium">A deep dive into your four primary management tabs.</p>
+                    <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">The Nexus Dashboard Hub</h2>
+                    <p class="text-slate-400 font-medium text-sm md:text-base">A deep dive into your primary management tabs.</p>
                 </div>
             </div>
 
             <!-- Tab 1: Home -->
             <div class="mb-24">
                 <div class="flex items-center gap-4 mb-10">
-                    <h3 class="text-3xl font-black italic uppercase tracking-tighter text-blue-400 flex items-center gap-4">
-                        <div class="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg></div>
+                    <h3 class="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-safety-yellow flex items-center gap-4 leading-none">
+                        <div class="w-8 h-8 md:w-10 md:h-10 bg-safety-yellow/10 rounded-xl flex items-center justify-center shrink-0"><svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg></div>
                         1. Home Tab: Analytics
                     </h3>
-                    <div class="h-px bg-slate-800 flex-grow"></div>
+                    <div class="h-px bg-industrial-800 flex-grow hidden sm:block"></div>
                 </div>
                 
-                <div class="grid md:grid-cols-2 gap-10">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
                     <div class="space-y-6">
-                        <div class="glass-card p-6 border-b border-b-blue-500/20">
-                            <h4 class="font-black text-sm text-white mb-4 italic uppercase tracking-widest underline decoration-blue-500/30">Financial Visibility</h4>
-                            <p class="text-slate-400 text-sm font-medium leading-relaxed mb-6">Aggregate view of total <strong class="text-blue-400 italic">ABC (Approved Budget for Contract)</strong> vs. actual <strong class="text-emerald-400 italic">Contract Amount</strong> for all projects under your jurisdiction.</p>
+                        <div class="glass-card p-6 border-b border-b-safety-yellow/20">
+                            <h4 class="font-black text-xs text-white mb-4 italic uppercase tracking-widest underline decoration-safety-yellow/30">Financial Visibility</h4>
+                            <p class="text-slate-400 text-sm font-medium leading-relaxed mb-6 italic">View total <strong class="text-safety-yellow font-bold">ABC</strong> vs. actual <strong class="text-safety-orange font-bold">Awarded Amounts</strong> for all projects.</p>
                             <div class="grid grid-cols-2 gap-4">
                                 <div class="p-4 bg-white/5 rounded-2xl text-center">
-                                    <span class="text-[10px] text-slate-500 uppercase font-black block mb-1">Total Projects</span>
-                                    <span class="text-xl font-black text-white italic">COUNT</span>
+                                    <span class="text-[9px] text-slate-500 uppercase font-black block mb-1">Total ABC</span>
+                                    <span class="text-lg font-black text-white italic tracking-tighter">NATIONAL</span>
                                 </div>
                                 <div class="p-4 bg-white/5 rounded-2xl text-center">
-                                    <span class="text-[10px] text-rose-500 uppercase font-black block mb-1">Delayed</span>
-                                    <span class="text-xl font-black text-rose-500 italic">TRACKER</span>
+                                    <span class="text-[9px] text-safety-orange uppercase font-black block mb-1">Drill Down</span>
+                                    <span class="text-lg font-black text-safety-orange italic tracking-tighter">REGIONAL</span>
                                 </div>
                             </div>
                         </div>
                         <div class="glass-card p-6">
-                            <h4 class="font-black text-sm text-white mb-4 italic uppercase tracking-widest underline decoration-emerald-500/30">Strategic Tools</h4>
+                            <h4 class="font-black text-xs text-white mb-4 italic uppercase tracking-widest underline decoration-safety-orange/30">Strategic Tools</h4>
                             <ul class="space-y-3 text-sm text-slate-400 font-medium italic">
-                                <li class="flex items-center gap-3"><svg class="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> Project Status Matrix</li>
-                                <li class="flex items-center gap-3"><svg class="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> Interactive Project Calendar</li>
+                                <li class="flex items-center gap-3"><svg class="w-4 h-4 text-safety-orange" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> Interactive Growth Charts</li>
+                                <li class="flex items-center gap-3"><svg class="w-4 h-4 text-safety-orange" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> Regional Performance Map</li>
                             </ul>
                         </div>
                     </div>
-                    <div class="video-container">
-                        <div class="video-placeholder">
-                            <div class="play-button">
-                                <svg class="w-8 h-8 text-blue-500 translate-x-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                            </div>
-                            <span class="text-[10px] font-black uppercase tracking-[0.4em] text-blue-400">Home Tab Tour</span>
-                        </div>
+                    <div class="phone-mockup">
+                        <img src="./homegif.gif" alt="Home Tab Analytics" class="w-full h-auto">
+                        <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Analytics Node</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Tab 2: Projects -->
+            <!-- Tab 2: Projects (Detailed Management) -->
             <div class="mb-24">
                 <div class="flex items-center gap-4 mb-10">
-                    <h3 class="text-3xl font-black italic uppercase tracking-tighter text-emerald-400 flex items-center gap-4">
-                        <div class="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg></div>
-                        2. Projects Tab: Management
+                    <h3 class="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-safety-orange flex items-center gap-4 leading-none">
+                        <div class="w-8 h-8 md:w-10 md:h-10 bg-safety-orange/10 rounded-xl flex items-center justify-center shrink-0">
+                            <!-- Hammer Icon -->
+                            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4.5l5.5 5.5l-2.5 2.5l-5.5-5.5l2.5-2.5zM14 7.5L7 14.5L5.5 13l7-7l1.5 1.5zM7 14.5L3 21l3-1l4-5.5l-3-3z"/></svg>
+                        </div>
+                        2. Projects: Site Operations Hub
                     </h3>
-                    <div class="h-px bg-slate-800 flex-grow"></div>
+                    <div class="h-px bg-industrial-800 flex-grow hidden sm:block"></div>
                 </div>
                 
-                <div class="glass-card p-10 mb-10">
-                    <p class="text-lg text-slate-300 font-medium italic mb-10 border-b border-white/5 pb-8">Real-time monitoring and lifecycle updates for all active construction sites.</p>
-                    <div class="grid md:grid-cols-3 gap-8">
-                        <div class="space-y-4">
-                            <div class="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer">
-                                <h5 class="text-white font-black text-sm mb-2 italic">Smart Filter</h5>
-                                <p class="text-[11px] text-slate-500 font-bold leading-relaxed">Isolate projects by status, funding year, or category instantly.</p>
-                            </div>
-                            <div class="p-4 bg-white/5 rounded-2xl border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer">
-                                <h5 class="text-white font-black text-sm mb-2 italic">Detailed Info</h5>
-                                <p class="text-[11px] text-slate-500 font-bold leading-relaxed">Tap any card to view site photos, VO history, and geo-data.</p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                    <!-- Left Column: Media & Core Info -->
+                    <div class="space-y-8">
+                        <div class="phone-mockup">
+                            <img src="./projectsgif.gif" alt="Projects Inventory" class="w-full h-auto">
+                            <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Live Feed</div>
+                        </div>
+                        
+                        <!-- Detailed Step-by-Step Guide -->
+                        <div class="glass-card p-8 border-l-8 border-l-safety-yellow reveal-cracked">
+                            <h4 class="text-xl font-black mb-6 italic text-white flex items-center gap-3 relative z-20">
+                                <span class="w-8 h-8 bg-safety-yellow text-black rounded-lg flex items-center justify-center font-black text-sm">01</span>
+                                Operational Workflow
+                            </h4>
+                            <div class="space-y-8">
+                                <!-- 4. Variation Order -->
+                                <div class="relative pl-8 border-l border-white/10 relative z-20">
+                                    <span class="absolute -left-3 top-0 w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center font-black text-xs">D</span>
+                                    <h5 class="text-white font-black uppercase tracking-widest text-sm mb-3">Variation Orders (VO)</h5>
+                                    <p class="text-slate-400 text-sm leading-relaxed">Financial and technical deviations are tracked in the ⚖️ VO History tab. View side-by-side comparisons of <strong class="text-white">Old Specs vs. Revised Specs</strong>, including Contract Amount deltas and Time Extensions.</p>
+                                </div>
+
+                                <!-- 5. Logs & History -->
+                                <div class="relative pl-8 border-l border-white/10 relative z-20">
+                                    <span class="absolute -left-3 top-0 w-6 h-6 bg-slate-500 text-white rounded-full flex items-center justify-center font-black text-xs">E</span>
+                                    <h5 class="text-white font-black uppercase tracking-widest text-sm mb-3">Activity Logbook</h5>
+                                    <p class="text-slate-400 text-sm leading-relaxed">Scroll to the <strong class="text-white">Project Update Log</strong> to see a timeline of every remark, accomplishment bump, and potential delay reasons logged by the site engineer.</p>
+                                </div>
                             </div>
                         </div>
-                        <div class="md:col-span-2 glass-card bg-navy-950 p-8 flex flex-col items-center justify-center relative group min-h-[300px]">
-                            <img src="public/pwa-512x512.png" alt="Card Preview" class="w-24 opacity-10 mb-6 grayscale group-hover:scale-110 transition-transform">
-                            <p class="text-center text-xs text-slate-500 font-bold uppercase tracking-[0.2em] leading-relaxed max-w-sm">Every project is represented by a Dynamic Card. Update status directly from the card view during site visits.</p>
-                            <div class="absolute bottom-6 badge border-emerald-500/40 text-emerald-500">Project Card Interface</div>
+                        
+                        <!-- Activity Logbook -->
+                        <div class="glass-card p-6 border-l-4 border-l-safety-yellow">
+                            <h4 class="text-xs font-black text-safety-yellow uppercase tracking-widest mb-4 flex items-center gap-2 italic">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                Recent Site Logs
+                            </h4>
+                            <div class="space-y-3">
+                                <div class="bg-black/20 p-3 rounded-lg border border-white/5">
+                                    <div class="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                                        <span>MAR 28, 2026</span>
+                                        <span class="text-safety-yellow">UPDATED BY ENG. RUIZ</span>
+                                    </div>
+                                    <p class="text-xs text-slate-300 italic">"Poured slab for 2nd floor. 15% accomplishment recorded. Weather: Clear."</p>
+                                </div>
+                                <div class="bg-black/20 p-3 rounded-lg border border-white/5 opacity-60">
+                                    <div class="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                                        <span>MAR 21, 2026</span>
+                                        <span class="text-slate-400 font-black">LOG ID: #8821</span>
+                                    </div>
+                                    <p class="text-xs text-slate-400 italic">"Site Mobilization completed. Equipment on standby."</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Tab 3: Logs -->
-            <div class="mb-24">
-                <div class="flex items-center gap-4 mb-10">
-                    <h3 class="text-3xl font-black italic uppercase tracking-tighter text-amber-500 flex items-center gap-4">
-                        <div class="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg></div>
-                        3. Logs Tab: Intelligent Support
-                    </h3>
-                    <div class="h-px bg-slate-800 flex-grow"></div>
-                </div>
-
-                <div class="glass-card p-12 bg-gradient-to-br from-navy-950 to-amber-900/10 border-amber-500/20 flex flex-col md:flex-row gap-12 items-center">
-                    <div class="flex-grow">
-                        <div class="badge border-amber-500/20 text-amber-400 mb-6 italic">Interaction Hub</div>
-                        <h4 class="text-3xl font-black mb-6 italic text-white uppercase tracking-tighter">Synergy AI <span class="text-amber-500">&</span> Reporting</h4>
-                        <div class="space-y-4 mb-8">
-                            <div class="flex items-center gap-4 text-slate-300 font-bold italic">
-                                <div class="w-2 h-2 bg-amber-500 rounded-full"></div>
-                                <span>Chat with Synergy AI for technical guidance</span>
-                            </div>
-                            <div class="flex items-center gap-4 text-slate-300 font-bold italic">
-                                <div class="w-2 h-2 bg-amber-500 rounded-full"></div>
-                                <span>Instant Bug Reporting with screenshot capture</span>
-                            </div>
-                            <div class="flex items-center gap-4 text-slate-300 font-bold italic">
-                                <div class="w-2 h-2 bg-amber-500 rounded-full"></div>
-                                <span>Collaborative Feature Suggestions</span>
+                    <!-- Right Column: Operational Nodes -->
                             </div>
                         </div>
-                    </div>
-                    <div class="shrink-0 relative">
-                        <div class="absolute inset-0 bg-amber-500/20 blur-[60px] rounded-full"></div>
-                        <img src="public/assistant-mascot.png" alt="Synergy AI" class="w-40 relative z-10 animate-bounce-slow">
                     </div>
                 </div>
             </div>
@@ -509,70 +688,62 @@
             <!-- Tab 4: Settings -->
             <div>
                 <div class="flex items-center gap-4 mb-10">
-                    <h3 class="text-3xl font-black italic uppercase tracking-tighter text-slate-400 flex items-center gap-4">
-                        <div class="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
-                        4. Settings Tab: Customization
+                    <h3 class="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-slate-400 flex items-center gap-4 leading-none">
+                        <div class="w-8 h-8 md:w-10 md:h-10 bg-white/5 rounded-xl flex items-center justify-center shrink-0"><svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+                        3. Settings Tab: Preference Node
                     </h3>
-                    <div class="h-px bg-slate-800 flex-grow"></div>
+                    <div class="h-px bg-slate-800 flex-grow hidden sm:block"></div>
                 </div>
 
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
-                    <div class="glass-card p-10 flex flex-col items-center gap-4 hover:border-blue-500/50 group transition-all">
-                        <div class="text-4xl group-hover:scale-110 transition-transform">👤</div>
-                        <h5 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-blue-400">Profile</h5>
-                        <p class="text-[9px] text-center text-slate-600 font-bold italic">Edit Credentials</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="glass-card p-6 md:p-10 flex flex-col items-center gap-4 hover:border-safety-yellow/50 group transition-all">
+                            <div class="text-3xl md:text-4xl group-hover:scale-110 transition-transform">👤</div>
+                            <h5 class="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-safety-yellow font-bold">Profile</h5>
+                        </div>
+                        <div class="glass-card p-6 md:p-10 flex flex-col items-center gap-4 hover:border-safety-orange/50 group transition-all">
+                            <div class="text-3xl md:text-4xl group-hover:scale-110 transition-transform">🔒</div>
+                            <h5 class="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-safety-orange font-bold">Security</h5>
+                        </div>
+                        <div class="glass-card p-6 md:p-10 flex flex-col items-center gap-4 hover:border-safety-yellow/50 group transition-all">
+                            <div class="text-3xl md:text-4xl group-hover:scale-110 transition-transform">🌗</div>
+                            <h5 class="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-safety-yellow font-bold">Themes</h5>
+                        </div>
+                        <div class="glass-card p-6 md:p-10 flex flex-col items-center gap-4 hover:border-safety-orange/50 group transition-all">
+                            <div class="text-3xl md:text-4xl group-hover:scale-110 transition-transform">🚀</div>
+                            <h5 class="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-safety-orange font-bold">Core</h5>
+                        </div>
                     </div>
-                    <div class="glass-card p-10 flex flex-col items-center gap-4 hover:border-emerald-500/50 group transition-all">
-                        <div class="text-4xl group-hover:scale-110 transition-transform">🔒</div>
-                        <h5 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-emerald-400">Security</h5>
-                        <p class="text-[9px] text-center text-slate-600 font-bold italic">Change PIN</p>
-                    </div>
-                    <div class="glass-card p-10 flex flex-col items-center gap-4 hover:border-amber-500/50 group transition-all">
-                        <div class="text-4xl group-hover:scale-110 transition-transform">🌗</div>
-                        <h5 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-amber-400">Themes</h5>
-                        <p class="text-[9px] text-center text-slate-600 font-bold italic">Select UI Mode</p>
-                    </div>
-                    <div class="glass-card p-10 flex flex-col items-center gap-4 hover:border-rose-500/50 group transition-all">
-                        <div class="text-4xl group-hover:scale-110 transition-transform">🩹</div>
-                        <h5 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-rose-400">Support</h5>
-                        <p class="text-[9px] text-center text-slate-600 font-bold italic">Troubleshoot</p>
-                    </div>
-                    <div class="glass-card p-10 flex flex-col items-center gap-4 hover:border-blue-500/50 group transition-all">
-                        <div class="text-4xl group-hover:scale-110 transition-transform">🚀</div>
-                        <h5 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-blue-400">Version</h5>
-                        <p class="text-[9px] text-center text-slate-600 font-bold italic">Update Core</p>
-                    </div>
-                    <div class="glass-card p-10 flex flex-col items-center gap-4 hover:border-emerald-500/50 group transition-all">
-                        <div class="text-4xl group-hover:scale-110 transition-transform">✍️</div>
-                        <h5 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 group-hover:text-emerald-400">Direct</h5>
-                        <p class="text-[9px] text-center text-slate-600 font-bold italic">Give Feedback</p>
+                    <div class="phone-mockup">
+                        <img src="./settingsgif.gif" alt="Settings Customization" class="w-full h-auto">
+                        <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Preference Config</div>
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- Final Support -->
-        <footer class="mt-60 pb-32 border-t border-white/5 relative bg-navy-950">
-             <div class="absolute -top-32 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-600/10 rounded-full blur-[100px]"></div>
+        <footer class="mt-32 md:mt-60 pb-32 border-t border-white/5 relative bg-industrial-950">
+             <div class="absolute -top-32 left-1/2 -translate-x-1/2 w-64 h-64 bg-safety-yellow/10 rounded-full blur-[100px]"></div>
              
-             <div class="pt-24 text-center">
-                 <div class="w-24 h-24 glass-card mx-auto flex items-center justify-center mb-10 overflow-hidden group">
-                     <img src="public/mascot-thumbsup.png" alt="Mascot" class="w-16 animate-pulse group-hover:scale-110 transition-transform">
+             <div class="pt-24 text-center px-4">
+                 <div class="w-20 h-20 md:w-24 md:h-24 glass-card mx-auto flex items-center justify-center mb-10 overflow-hidden group">
+                     <img src="public/mascot-thumbsup.png" alt="Mascot" class="w-14 md:w-16 animate-pulse group-hover:scale-110 transition-transform">
                  </div>
-                 <h2 class="text-4xl font-black italic uppercase tracking-tighter text-white mb-6">Engineering Excellence Support</h2>
-                 <p class="text-slate-400 max-w-sm mx-auto font-medium mb-12 italic leading-relaxed">For anomalies or SOP inquiries, coordinate via the official Stratcom Google Space or email below.</p>
+                 <h2 class="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-white mb-6">Engineering Excellence Support</h2>
+                 <p class="text-slate-400 max-w-sm mx-auto font-medium mb-12 italic leading-relaxed text-sm md:text-base">For anomalies or SOP inquiries, coordinate via the official Stratcom Google Space or email below.</p>
                  
-                 <div class="inline-block glass-card p-8 group hover:border-blue-500/40 cursor-pointer mb-20">
-                     <span class="text-[10px] font-black uppercase tracking-[0.5em] text-blue-500 block mb-4">Official Inquiry Node</span>
-                     <span class="text-2xl font-mono font-black text-white italic">support.stride@deped.gov.ph</span>
+                 <div class="inline-block glass-card p-6 md:p-8 group hover:border-safety-yellow/40 cursor-pointer mb-16 md:mb-20 w-full max-w-md">
+                     <span class="text-[9px] md:text-[10px] font-black uppercase tracking-[0.4em] md:tracking-[0.5em] text-safety-yellow block mb-4">Official Inquiry Node</span>
+                     <span class="text-lg md:text-2xl font-mono font-black text-white italic break-all">support.stride@deped.gov.ph</span>
                  </div>
 
-                 <div class="flex justify-center gap-12 grayscale opacity-40 mb-16">
-                     <img src="public/deped_logo.png" alt="DepEd" class="h-10">
-                     <img src="public/pwa-512x512.png" alt="InsightEd" class="h-10">
+                 <div class="flex justify-center gap-8 md:gap-12 grayscale opacity-40 mb-16">
+                     <img src="public/deped_logo.png" alt="DepEd" class="h-8 md:h-10">
+                     <img src="public/pwa-512x512.png" alt="InsightEd" class="h-8 md:h-10">
                  </div>
 
-                 <p class="text-[10px] font-black uppercase tracking-[1em] text-slate-600 italic">SOP COMPLIANCE MANUAL • 2026</p>
+                 <p class="text-[9px] md:text-[10px] font-black uppercase tracking-[0.5em] md:tracking-[1em] text-slate-600 italic">SOP COMPLIANCE MANUAL • 2026</p>
              </div>
         </footer>
 
@@ -580,7 +751,7 @@
 
     <!-- Sidebar T.O.C -->
     <div class="hidden xl:block fixed top-48 right-[8%] w-48 font-black">
-        <p class="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500 mb-8 border-b border-blue-500/20 pb-2 italic">Quick Navigation</p>
+        <p class="text-[10px] font-black uppercase tracking-[0.3em] text-safety-yellow mb-8 border-b border-safety-yellow/20 pb-2 italic">Quick Navigation</p>
         <nav class="space-y-6 text-[10px] text-slate-500 uppercase italic">
             <a href="#installation" class="toc-link block">01 Installation</a>
             <a href="#nexus" class="toc-link block">02 Nexus Portal</a>
@@ -596,7 +767,31 @@
 
     <script>
         const observerOptions = { threshold: 0.1 };
-        const observer = new IntersectionObserver((entries) => {
+        // Construction-themed Scroll Reveal with Jackhammer/Hammer Logic
+        const constructionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const el = entry.target;
+                    
+                    // Add Jackhammering state first
+                    el.classList.add('jackhammer-active');
+                    
+                    setTimeout(() => {
+                        el.classList.remove('jackhammer-active');
+                        el.classList.add('revealed');
+                        el.classList.add('hammer-pop');
+                    }, 800); // 800ms of drilling before reveal
+
+                    constructionObserver.unobserve(el);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.drill-reveal').forEach(el => {
+            constructionObserver.observe(el);
+        });
+
+        const revealObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) { entry.target.classList.add('active'); }
             });

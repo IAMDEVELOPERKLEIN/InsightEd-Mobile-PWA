@@ -16,6 +16,7 @@ const DETAILS_STEPS = [
     { id: 4, label: "Finance", icon: "💰", desc: "Costs & contractor details" },
     { id: 5, label: "Location", icon: "📍", desc: "Coordinates & address" },
     { id: 6, label: "Docs", icon: "📂", desc: "Upload POW, DUPA & Contract PDF" },
+    { id: 7, label: "Photos", icon: "📸", desc: "Attach site progress photos" },
 ];
 
 const STATUS_OPTIONS = [
@@ -64,13 +65,21 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
     const [isFetchingCandidates, setIsFetchingCandidates] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [documentFiles, setDocumentFiles] = useState({ POW: null, DUPA: null, CONTRACT: null });
+    const [internalFiles, setInternalFiles] = useState([]);
+    const [externalFiles, setExternalFiles] = useState([]);
+    const [activePhotoCategory, setActivePhotoCategory] = useState('Internal');
     const bodyRef = useRef(null);
+    const internalInputRef = useRef(null);
+    const externalInputRef = useRef(null);
 
     useEffect(() => {
         if (isOpen && project) {
             setActiveTab('details');
             setDetailsStep(1);
             setDocumentFiles({ POW: null, DUPA: null, CONTRACT: null });
+            setInternalFiles([]);
+            setExternalFiles([]);
+            setActivePhotoCategory('Internal');
             setFormData({
                 status: project.status || '',
                 accomplishmentPercentage: Number(project.accomplishmentPercentage || 0),
@@ -174,7 +183,13 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
             if (documentFiles.DUPA) formDataToSubmit.append('dupa_pdf', documentFiles.DUPA);
             if (documentFiles.CONTRACT) formDataToSubmit.append('contract_pdf', documentFiles.CONTRACT);
 
-            await onSaveDetails(formDataToSubmit);
+            // Pass Site Images separately for orchestration in the callback
+            const siteImages = [
+                ...internalFiles.map(f => ({ file: f, category: 'Internal' })),
+                ...externalFiles.map(f => ({ file: f, category: 'External' }))
+            ];
+
+            await onSaveDetails(formDataToSubmit, siteImages);
         } catch (err) {
             console.error("Save Error:", err);
             alert("Failed to save details. Please try again.");
@@ -465,6 +480,73 @@ const ProjectEditModal = ({ project, isOpen, onClose, onSaveDetails, onSaveVO, o
                                 )}
                             </div>
                         ))}
+                    </div>
+                );
+            }
+
+            // STEP 7: SITE PHOTOS
+            case 7: {
+                const activeFiles = activePhotoCategory === 'Internal' ? internalFiles : externalFiles;
+                return (
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                            <span className="text-2xl">📸</span>
+                            <div>
+                                <p className="text-xs font-black text-slate-700">Progress Photos</p>
+                                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">Attach internal and external site photos to document progress.</p>
+                            </div>
+                        </div>
+
+                        <div className="flex p-1 bg-slate-100 rounded-2xl gap-1">
+                            {['Internal', 'External'].map(cat => {
+                                const count = cat === 'Internal' ? internalFiles.length : externalFiles.length;
+                                return (
+                                    <button key={cat} onClick={() => setActivePhotoCategory(cat)}
+                                        className={`flex-1 py-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${activePhotoCategory === cat ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-white/50'}`}>
+                                        {cat === 'Internal' ? '🏗️' : '🌳'} {cat}
+                                        {count > 0 && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full text-[9px] font-black">{count}</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className={`border-2 rounded-3xl overflow-hidden border-${activePhotoCategory === 'Internal' ? 'blue' : 'emerald'}-100`}>
+                            {activeFiles.length > 0 ? (
+                                <div className="grid grid-cols-3 gap-2 p-3">
+                                    {activeFiles.map((file, i) => (
+                                        <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-slate-100 group">
+                                            <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                                            <button 
+                                                onClick={() => {
+                                                    const setter = activePhotoCategory === 'Internal' ? setInternalFiles : setExternalFiles;
+                                                    setter(p => p.filter((_, idx) => idx !== i));
+                                                }}
+                                                className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="py-8 text-center text-slate-300">
+                                    <p className="text-3xl mb-1">📷</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest">No photos attached</p>
+                                </div>
+                            )}
+
+                            <div className="flex gap-2 p-3 pt-0">
+                                <button onClick={() => (activePhotoCategory === 'Internal' ? internalInputRef : externalInputRef).current.click()}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-black uppercase hover:bg-slate-100 transition-all`}>
+                                    Upload File
+                                </button>
+                            </div>
+                        </div>
+
+                        <input ref={internalInputRef} type="file" accept="image/*" multiple className="hidden" 
+                            onChange={e => setInternalFiles(p => [...p, ...Array.from(e.target.files)])} />
+                        <input ref={externalInputRef} type="file" accept="image/*" multiple className="hidden" 
+                            onChange={e => setExternalFiles(p => [...p, ...Array.from(e.target.files)])} />
                     </div>
                 );
             }
