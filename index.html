@@ -10,6 +10,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>insighted</title>
+  <script>
+    // Fail-safe: Redirect clean URLs to static guide indices if Nginx fallback triggers
+    const guidePaths = ['/School-Head', '/Division-Engineer', '/EFD-Engineer'];
+    const currentPath = window.location.pathname.replace(/\/$/, "");
+    if (guidePaths.includes(currentPath)) {
+      window.location.replace(currentPath + '/index.html');
+    }
+  </script>
 </head>
 
 <body>
