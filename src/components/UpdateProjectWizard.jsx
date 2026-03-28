@@ -236,6 +236,10 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
         const minPct = Number(project?.accomplishmentPercentage || 0);
         const num = Math.min(100, Math.max(minPct, Number(val)));
         setPercentage(num);
+
+        // Skip auto-status logic when in procurement mode
+        if (isProcurementMode) return;
+        
         // Only auto-set status if one is already selected (don't override placeholder)
         // Auto-set status only if moving from 0% and a status is ALREADY selected (not placeholder)
         if (num === 0 && constructionStatus && constructionStatus !== ConstructionStatus.NotYetStarted) {

@@ -2006,7 +2006,12 @@ app.put('/api/update-project/:id', async (req, res) => {
     if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
 
     // Merge new data with old data (Snapshot concept)
-    const newStatus = data.status ?? oldData.status_of_construction_phase;
+    let newStatus = oldData.status_of_construction_phase;
+    if ('status' in data) {
+      // Allow clearing status by sending null or empty string
+      newStatus = (data.status === '' || data.status === null) ? null : data.status;
+    }
+
     let newProcurementStatus = data.procurement_status ?? data.statusDesignPhase ?? oldData.procurement_status;
     
     // Normalize casing for specific procurement statuses to match frontend options
@@ -2087,9 +2092,22 @@ app.put('/api/update-project/:id', async (req, res) => {
 
     // 3. Track Changes (History)
     const changes = [];
-    if (oldData.status !== newData.status) changes.push(`Status: '${oldData.status}' -> '${newData.status}'`);
-    if (oldData.procurement_status !== newData.procurement_status) changes.push(`Procurement Status: '${oldData.procurement_status || 'N/A'}' -> '${newData.procurement_status}'`);
-    if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
+    const oldStatusVal = oldData.status_of_construction_phase || null;
+    const newStatusVal = newData.status_of_construction_phase || null;
+    
+    if (oldStatusVal !== newStatusVal) {
+      changes.push(`Status: '${oldStatusVal || 'Unset'}' -> '${newStatusVal || 'Unset'}'`);
+    }
+    
+    if (oldData.procurement_status !== newData.procurement_status) {
+      changes.push(`Procurement Status: '${oldData.procurement_status || 'N/A'}' -> '${newData.procurement_status}'`);
+    }
+    
+    const oldAccomplishment = oldData.accomplishment_percentage || 0;
+    const newAccomplishmentVal = newData.accomplishment_percentage || 0;
+    if (oldAccomplishment !== newAccomplishmentVal) {
+      changes.push(`Accomplishment: ${oldAccomplishment}% -> ${newAccomplishmentVal}%`);
+    }
     if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
 
     // Create a detailed log object
@@ -2098,7 +2116,7 @@ app.put('/api/update-project/:id', async (req, res) => {
       ipc: newData.ipc,
       changes: changes, // List of human-readable changes
       snapshot: { // Save key metrics
-        status: newData.status,
+        status: newData.status_of_construction_phase,
         accomplishment: newData.accomplishment_percentage,
         date: new Date().toISOString()
       }
@@ -2108,10 +2126,10 @@ app.put('/api/update-project/:id', async (req, res) => {
     let actionLabel = 'Project Updated';
     if (oldData.procurement_status !== newData.procurement_status) {
       actionLabel = `Procurement → ${newData.procurement_status}`;
-    } else if (oldData.status !== newData.status) {
-      actionLabel = `Status → ${newData.status}`;
-    } else if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) {
-      actionLabel = `Progress → ${newData.accomplishment_percentage}%`;
+    } else if (oldStatusVal !== newStatusVal) {
+      actionLabel = `Status → ${newStatusVal || 'Unset'}`;
+    } else if (oldAccomplishment !== newAccomplishmentVal) {
+      actionLabel = `Progress → ${newAccomplishmentVal}%`;
     } else if (oldData.other_remarks !== newData.other_remarks) {
       actionLabel = 'Remarks Updated';
     }
@@ -2299,8 +2317,15 @@ app.get('/api/projects', async (req, res) => {
         if (isDivEng) {
           process.stdout.write(`📍 [DEBUG] Division Engineer Mode activated for: ${userProfile.region} - ${userProfile.division}\n`);
           if (userProfile.region) {
-            queryParams.push(userProfile.region.trim());
-            whereClauses.push(`region ILIKE $${queryParams.length}`);
+            const regionVal = userProfile.region.trim();
+            queryParams.push(regionVal);
+            
+            // Handle CARAGA/Region XIII alias
+            if (regionVal.toUpperCase() === 'CARAGA' || regionVal.toUpperCase() === 'REGION XIII') {
+              whereClauses.push(`(region ILIKE $${queryParams.length} OR region ILIKE '%Region XIII%' OR region ILIKE '%CARAGA%')`);
+            } else {
+              whereClauses.push(`region ILIKE $${queryParams.length}`);
+            }
           }
           if (userProfile.division) {
             queryParams.push(userProfile.division.trim());
