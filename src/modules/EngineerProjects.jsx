@@ -484,8 +484,9 @@ const EngineerProjects = () => {
           const response = await fetch(url);
           if (!response.ok) throw new Error("Failed to fetch projects");
           const data = await response.json();
+          const dataArr = Array.isArray(data) ? data : (data.data || []);
 
-          currentProjects = data.map(item => ({
+          currentProjects = dataArr.map(item => ({
             id: item.id,
             projectName: item.projectName,
             schoolName: item.schoolName,

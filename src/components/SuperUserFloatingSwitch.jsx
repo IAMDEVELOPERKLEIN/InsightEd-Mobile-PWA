@@ -40,7 +40,7 @@ const SuperUserFloatingSwitch = () => {
                 const res = await fetch(url);
                 const projects = await res.json();
 
-                const mappedProjects = projects.map(p => ({
+                const mappedProjects = (Array.isArray(projects) ? projects : (projects.data || [])).map(p => ({
                     projectName: p.projectName || p.project_name || '',
                     schoolName: p.schoolName || p.school_name || '',
                     status: p.status || '',

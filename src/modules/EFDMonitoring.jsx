@@ -14,7 +14,6 @@ import UpdateProjectWizard from '../components/UpdateProjectWizard';
 import ProjectLogModal from '../components/ProjectLogModal';
 import { FiActivity } from 'react-icons/fi';
 import FilterDrawer from '../components/FilterDrawer';
-
 const EFDMonitoring = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -43,6 +42,9 @@ const EFDMonitoring = () => {
     const [message, setMessage] = useState({ text: '', type: '' });
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [efdLocations, setEfdLocations] = useState([]);
+    const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 12, totalPages: 1 });
+    const [summaryData, setSummaryData] = useState(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     
     // Persistent Filter Sync
     useEffect(() => {
@@ -70,67 +72,90 @@ const EFDMonitoring = () => {
         return role;
     }, [user]);
 
+    const fetchSummary = useCallback(async () => {
+        try {
+            const params = new URLSearchParams();
+            if (searchQuery) params.append('search', searchQuery);
+            if (selectedRegions.length > 0) params.append('region', selectedRegions.join(','));
+            if (selectedCategories.length > 0) params.append('category', selectedCategories.join(','));
+            if (selectedDivision) params.append('division', selectedDivision);
+
+            const res = await fetch(`/api/dashboard/efd-summary?${params.toString()}`);
+            if (res.ok) setSummaryData(await res.json());
+        } catch (error) {
+            console.error("Error fetching summary:", error);
+        }
+    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision]);
+
+    const fetchProjectsPaged = useCallback(async (p = 1) => {
+        setIsRefreshing(true);
+        try {
+            const params = new URLSearchParams({
+                page: p,
+                limit: 12
+            });
+            if (searchQuery) params.append('search', searchQuery);
+            if (selectedRegions.length > 0) params.append('region', selectedRegions.join(','));
+            if (selectedCategories.length > 0) params.append('category', selectedCategories.join(','));
+            if (selectedDivision) params.append('division', selectedDivision);
+
+            const res = await fetch(`/api/projects?${params.toString()}`);
+            if (res.ok) {
+                const result = await res.json();
+                setProjects(result.data || []);
+                setPagination(result.pagination || { total: result.data?.length || 0, page: p, limit: 12, totalPages: 1 });
+            }
+        } catch (error) {
+            console.error("Error fetching projects:", error);
+        } finally {
+            setIsRefreshing(false);
+            setLoading(false);
+        }
+    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision]);
+
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
+        const fetchInitial = async () => {
             try {
-                const [pRes, engRes, locRes] = await Promise.all([
-                    fetch('/api/projects'),
+                const [engRes, locRes] = await Promise.all([
                     fetch('/api/engineers'),
                     fetch('/api/reference/efd-locations')
                 ]);
-                if (pRes.ok) setProjects(await pRes.json());
                 if (engRes.ok) setEngineers(await engRes.json());
                 if (locRes.ok) setEfdLocations(await locRes.json());
             } catch (error) {
-                console.error("Error fetching monitoring data:", error);
-            } finally {
-                setLoading(false);
+                console.error("Error fetching initial monitoring references:", error);
             }
         };
-        fetchData();
+        fetchInitial();
         setUserData(user);
     }, [user]);
 
+    useEffect(() => {
+        fetchSummary();
+        fetchProjectsPaged(currentPage);
+    }, [fetchSummary, fetchProjectsPaged, currentPage]);
+
+    // Reset to page 1 on filter change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, selectedRegions, selectedCategories, selectedDivision]);
+
     // Unique filter options
     const regions = useMemo(() => {
-        const unique = [...new Set(projects.map(p => p.region).filter(Boolean))];
+        const pArray = Array.isArray(projects) ? projects : [];
+        const unique = [...new Set(pArray.map(p => p.region).filter(Boolean))];
         return unique.sort();
     }, [projects]);
 
     const categories = useMemo(() => {
-        const unique = [...new Set(projects.map(p => p.projectCategory).filter(Boolean))];
+        const pArray = Array.isArray(projects) ? projects : [];
+        const unique = [...new Set(pArray.map(p => p.projectCategory).filter(Boolean))];
         return unique.sort();
     }, [projects]);
 
-    const filteredProjects = useMemo(() => {
-        return projects.filter(p => {
-            const matchesSearch = !searchQuery || 
-                p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolId?.toString().includes(searchQuery);
-            
-            const matchesRegion = selectedRegions.length === 0 || 
-                selectedRegions.includes(p.region);
-            
-            const matchesCategory = selectedCategories.length === 0 || 
-                selectedCategories.includes(p.projectCategory);
-
-            const normalize = (val) => val?.toString().trim().toUpperCase() || '';
-            const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
-            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
-            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
-            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
-
-            return matchesSearch && matchesRegion && matchesCategory && matchesDivision && matchesProvince && matchesMunicipality && matchesDistrict;
-        });
-    }, [projects, searchQuery, selectedRegions, selectedCategories, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict]);
-
-    const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
-    const paginatedProjects = useMemo(() => {
-        const start = (currentPage - 1) * itemsPerPage;
-        return filteredProjects.slice(start, start + itemsPerPage);
-    }, [filteredProjects, currentPage]);
+    const filteredProjects = projects;
+    const totalPages = pagination.totalPages;
+    const paginatedProjects = projects;
 
     const handleAssign = async () => {
         if (!selectedProject || selectedEngineers.length === 0) return;
@@ -225,8 +250,9 @@ const EFDMonitoring = () => {
         return `₱${Number(val).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
     };
 
-    const allRegions = [...new Set(projects.map(p => p.region).filter(Boolean))].sort();
-    const allCategories = [...new Set(projects.map(p => p.projectCategory).filter(Boolean))].sort();
+    const pArray = Array.isArray(projects) ? projects : [];
+    const allRegions = [...new Set(pArray.map(p => p.region).filter(Boolean))].sort();
+    const allCategories = [...new Set(pArray.map(p => p.projectCategory).filter(Boolean))].sort();
 
     return (
         <PageTransition>
@@ -257,11 +283,11 @@ const EFDMonitoring = () => {
                             <div className="flex flex-wrap gap-4">
                                 <div className="bg-white/10 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 min-w-[140px]">
                                     <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1 opacity-80">Total Inventory</p>
-                                    <h2 className="text-2xl font-black">{projects.length}</h2>
+                                    <h2 className="text-2xl font-black">{summaryData?.totalStats?.totalProjects?.toLocaleString() || pagination.total.toLocaleString()}</h2>
                                 </div>
                                 <div className="bg-white/10 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 min-w-[140px]">
                                     <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1 opacity-80">Filtered</p>
-                                    <h2 className="text-2xl font-black text-blue-300">{filteredProjects.length}</h2>
+                                    <h2 className="text-2xl font-black text-blue-300">{pagination.total.toLocaleString()}</h2>
                                 </div>
                             </div>
                         </div>
@@ -313,7 +339,7 @@ const EFDMonitoring = () => {
 
                     {/* Content Area */}
                     <div className="min-h-[400px]">
-                        {loading ? (
+                        {(loading || isRefreshing) ? (
                             <div className="flex flex-col items-center justify-center py-20 animate-pulse">
                                 <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hydrating data stack...</p>

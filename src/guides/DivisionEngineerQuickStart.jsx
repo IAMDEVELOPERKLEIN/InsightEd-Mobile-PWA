@@ -84,7 +84,7 @@ const DivisionEngineerQuickStart = () => {
                             </div>
 
                             <div className="aspect-video bg-navy-950 rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl relative group">
-                                <img src="/pwa_installation_flow.gif" alt="PWA Installation" className="w-full h-full object-cover" />
+                                <img src={`${import.meta.env.BASE_URL}pwa_installation_flow.gif`.replace('//', '/')} alt="PWA Installation" className="w-full h-full object-cover" />
                                 <div className="absolute bottom-6 left-6 px-4 py-2 bg-black/60 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-blue-400">Demonstration GIF</div>
                             </div>
                         </section>
@@ -116,7 +116,7 @@ const DivisionEngineerQuickStart = () => {
                                     </div>
                                 </div>
                                 <div className="aspect-video bg-navy-950 rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl group">
-                                    <img src="/nexus_portal_selection.gif" alt="Nexus Navigation" className="w-full h-full object-cover" />
+                                    <img src={`${import.meta.env.BASE_URL}nexus_portal_selection.gif`.replace('//', '/')} alt="Nexus Navigation" className="w-full h-full object-cover" />
                                 </div>
                             </div>
                         </section>
@@ -257,7 +257,7 @@ const DivisionEngineerQuickStart = () => {
                                         </div>
                                         <span className="text-xs font-black uppercase tracking-[0.4em] text-blue-400 italic">Project Update Tutorial</span>
                                     </div>
-                                    <img src="/pwa-512x512.png" alt="Overlay" className="w-full h-full object-cover grayscale opacity-10" />
+                                    <img src={`${import.meta.env.BASE_URL}pwa-512x512.png`.replace('//', '/')} alt="Overlay" className="w-full h-full object-cover grayscale opacity-10" />
                                 </div>
                             </div>
 
@@ -282,7 +282,7 @@ const DivisionEngineerQuickStart = () => {
                                     </div>
                                     <div className="shrink-0 relative group-hover:scale-110 transition-transform duration-700">
                                         <div className="absolute inset-0 bg-amber-500/20 blur-[60px] rounded-full"></div>
-                                        <img src="/assistant-mascot.png" alt="Synergy mascot" className="w-40 relative z-10" />
+                                        <img src={`${import.meta.env.BASE_URL}assistant-mascot.png`.replace('//', '/')} alt="Synergy mascot" className="w-40 relative z-10" />
                                     </div>
                                 </div>
                             </div>
@@ -320,7 +320,7 @@ const DivisionEngineerQuickStart = () => {
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-600/10 blur-[120px] pointer-events-none"></div>
                             
                             <div className="w-24 h-24 bg-navy-900 border border-white/10 rounded-[2rem] mx-auto flex items-center justify-center mb-10 shadow-2xl group hover:border-blue-500/40 transition-all overflow-hidden">
-                                <img src="/mascot-thumbsup.png" alt="Thumbsup" className="w-16 animate-pulse group-hover:scale-110 transition-transform" />
+                                <img src={`${import.meta.env.BASE_URL}mascot-thumbsup.png`.replace('//', '/')} alt="Thumbsup" className="w-16 animate-pulse group-hover:scale-110 transition-transform" />
                             </div>
                             <h2 className="text-3xl font-black italic uppercase tracking-tight text-white mb-6">Engineering Support Desk</h2>
                             <p className="text-slate-400 max-w-sm mx-auto font-medium italic mb-12 leading-relaxed">For anomalies or SOP inquiries, coordinate via the official Stratcom Google Space or reach us below.</p>
@@ -331,8 +331,8 @@ const DivisionEngineerQuickStart = () => {
                             </div>
 
                             <div className="flex justify-center gap-10 grayscale opacity-40 mb-16">
-                                <img src="/deped_logo.png" alt="Deped" className="h-10 w-auto" />
-                                <img src="/pwa-512x512.png" alt="Insighted" className="h-10 w-auto" />
+                                <img src={`${import.meta.env.BASE_URL}deped_logo.png`.replace('//', '/')} alt="Deped" className="h-10 w-auto" />
+                                <img src={`${import.meta.env.BASE_URL}pwa-512x512.png`.replace('//', '/')} alt="Insighted" className="h-10 w-auto" />
                             </div>
 
                             <p className="text-[10px] font-black uppercase tracking-[1em] text-slate-700 italic">SOP COMPLIANCE MANUAL • 2026</p>

@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar, TbFileCheck } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign, FiGrid } from "react-icons/fi";
+import { FiSettings, FiCheckSquare, FiLogOut, FiMessageSquare, FiHome, FiUser, FiList, FiPlus, FiDollarSign, FiGrid, FiBookOpen } from "react-icons/fi";
 import { motion } from 'framer-motion';
 import { getRoleGroup, ROLE_GROUPS } from '../config/roleGroups';
 
@@ -63,7 +63,7 @@ const BottomNav = ({ userRole: propRole }) => {
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: FiHome },
             { label: 'Units', path: '/modular-dashboard', icon: LuCompass },
-            { label: 'Chat', path: '/chat', icon: FiMessageSquare },
+            { label: 'Guide', path: '/guide/school-head', icon: FiBookOpen },
             { label: 'Profile', path: '/profile', icon: FiUser },
         ],
 
