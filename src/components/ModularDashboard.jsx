@@ -8,7 +8,7 @@ import BottomNav from "../modules/BottomNav";
 import { DASHBOARD_METADATA } from "../config/dashboardMetadata";
 import { useAuth } from "../context/AuthContext";
 
-const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, isLocked }) => {
+const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, isLocked, isLoading }) => {
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
     const dashoffset = circumference - (progress / 100) * circumference;
@@ -25,7 +25,9 @@ const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, 
                     cx={size / 2}
                     cy={size / 2}
                 />
-                <circle
+                <motion.circle
+                    animate={isLoading ? { opacity: [0.3, 0.8, 0.3] } : {}}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                     className={isLocked ? "text-slate-200" : "text-[#FDB913] transition-all duration-1000 ease-out"}
                     strokeWidth={strokeWidth}
                     strokeDasharray={circumference}
@@ -38,12 +40,20 @@ const CircularProgress = ({ progress = 0, size = 60, strokeWidth = 5, children, 
                     cy={size / 2}
                 />
             </svg>
-            <div className={`absolute inset-0 flex items-center justify-center rounded-full ${isLocked ? 'grayscale opacity-60' : ''}`}>
+            <div className={`absolute inset-0 flex items-center justify-center rounded-full ${isLocked ? 'grayscale opacity-60' : ''} ${isLoading ? 'animate-pulse' : ''}`}>
                 {children}
             </div>
         </div>
     );
 };
+
+const StatusSkeleton = () => (
+    <motion.div 
+        animate={{ opacity: [0.4, 0.7, 0.4] }}
+        transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+        className="h-4 w-14 bg-slate-100 rounded-full"
+    />
+);
 
 const getRank = (xp) => {
     if (xp >= 500) return { title: 'Platinum', badgeClass: 'bg-slate-800 text-slate-100 border-slate-700 shadow-slate-200', icon: <FiAward /> };
@@ -67,9 +77,12 @@ const ModularDashboard = () => {
         // Only use cache if not impersonating
         if (!impersonatedUid) {
             const stored = localStorage.getItem('quest_progress');
-            return stored ? JSON.parse(stored) : { completedUnits: [], xp: 0 };
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return { ...parsed, isFromCache: true };
+            }
         }
-        return { completedUnits: [], xp: 0 };
+        return { completedUnits: [], xp: 0, isFromCache: false };
     });
     const [curricularOffering, setCurricularOffering] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -101,7 +114,7 @@ const ModularDashboard = () => {
                                 setCurricularOffering(data.progress.curricular_offering);
                             }
                             // Sync if server has more/different data
-                            setQuestProgress(data.progress);
+                            setQuestProgress({ ...data.progress, isFromCache: false });
                             if (data.progress.timestamps) {
                                 setUnitTimestamps(data.progress.timestamps);
                             }
@@ -129,18 +142,19 @@ const ModularDashboard = () => {
 
             const drafts = {};
             // Check Units 1-8 (Unit 6 Teaching Personnel has been removed)
-            for (let i = 1; i <= 8; i++) {
+            const unitIds = [1, 2, 3, 4, 5, 7, 8];
+            
+            await Promise.all(unitIds.map(async (i) => {
                 try {
                     const draft = await getUnitDraft(i, schoolId);
                     if (draft) {
-                        // For Unit 1, it has a specific step check in legacy code, 
-                        // but let's be general: if it exists, it's a draft.
                         drafts[i] = true;
                     }
                 } catch (e) {
                     console.warn(`Error checking draft for unit ${i}`, e);
                 }
-            }
+            }));
+            
             setUnitDrafts(drafts);
         };
         checkAllDrafts();
@@ -268,7 +282,13 @@ const ModularDashboard = () => {
                                     `}
                                 >
                                     <div className="flex-shrink-0 -mb-2">
-                                        <CircularProgress progress={ringProgress} size={54} strokeWidth={4} isLocked={isLocked}>
+                                        <CircularProgress 
+                                            progress={ringProgress} 
+                                            size={54} 
+                                            strokeWidth={4} 
+                                            isLocked={isLocked}
+                                            isLoading={isLoading && !questProgress.isFromCache}
+                                        >
                                             <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors
                                                 ${isLocked ? 'bg-slate-200 text-slate-400' :
                                                   isCompleted ? 'bg-[#004A99] text-white shadow-inner' :
@@ -295,6 +315,8 @@ const ModularDashboard = () => {
                                                 <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full uppercase tracking-wider">
                                                     Incomplete
                                                 </span>
+                                            ) : isLoading && !questProgress.isFromCache ? (
+                                                <StatusSkeleton />
                                             ) : null}
                                         </div>
                                         <div className="flex items-center gap-2">
