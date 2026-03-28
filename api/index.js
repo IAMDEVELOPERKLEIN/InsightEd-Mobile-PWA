@@ -36,6 +36,73 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
+// --- ZOD VALIDATION SCHEMAS (Resilience v6.0) ---
+const PasscodeSchema = z.string().length(6).regex(/^\d+$/, "Passcode must be exactly 6 digits.");
+
+const RegisterUserSchema = z.object({
+  email: z.string().email().transform(e => e.trim().toLowerCase()),
+  password: z.string().min(6, "Password must be at least 6 characters."),
+  role: z.string().min(1, "Role is required."),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  region: z.string().optional(),
+  division: z.string().optional(),
+  province: z.string().optional(),
+  city: z.string().optional(),
+  barangay: z.string().optional(),
+  office: z.string().optional(),
+  position: z.string().optional(),
+  contactNumber: z.string().optional(),
+  altEmail: z.string().email().optional().or(z.literal("")),
+  accountCategory: z.string().optional(),
+  passcode: PasscodeSchema.optional()
+});
+
+const RegisterSchoolSchema = z.object({
+  email: z.string().email().transform(e => e.trim().toLowerCase()),
+  password: z.string().min(6),
+  schoolData: z.object({
+    school_id: z.string().min(1),
+    school_name: z.string().min(1),
+    region: z.string().optional(),
+    province: z.string().optional(),
+    division: z.string().optional(),
+    district: z.string().optional(),
+    municipality: z.string().optional(),
+    legislative_district: z.string().optional(),
+    barangay: z.string().optional(),
+    mother_school_id: z.string().optional(),
+    latitude: z.union([z.number(), z.string()]).optional(),
+    longitude: z.union([z.number(), z.string()]).optional(),
+    curricular_offering: z.string().optional()
+  }),
+  contactNumber: z.string().optional(),
+  role: z.string().optional(),
+  passcode: PasscodeSchema
+});
+
+const RegisterBetaSchema = z.object({
+  email: z.string().email().optional().or(z.literal("")),
+  password: z.string().min(6),
+  schoolData: z.object({
+    school_id: z.string().min(1),
+    school_name: z.string().optional(),
+    region: z.string().optional(),
+    division: z.string().optional(),
+    province: z.string().optional(),
+    municipality: z.string().optional(),
+    district: z.string().optional(),
+    legislative_district: z.string().optional(),
+    barangay: z.string().optional(),
+    latitude: z.union([z.number(), z.string()]).optional(),
+    longitude: z.union([z.number(), z.string()]).optional()
+  }),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  contactNumber: z.string().optional(),
+  passcode: PasscodeSchema.optional()
+});
+
 console.log('✅ [Env] DATABASE_URL loaded:', process.env.DATABASE_URL ? 'YES' : 'NO');
 
 // --- FIREBASE ADMIN INIT ---
@@ -475,10 +542,11 @@ console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.
 const pool = new Pool({
   connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false },
-  max: 20, // Keep at 20 for now, but monitor
+  max: 50, // Resilient v6.0: Support 1000+ concurrent users
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // Increased to 10s to handle incidental large transfers
-  statement_timeout: 15000,
+  connectionTimeoutMillis: 10000, 
+  statement_timeout: 30000, // Increased for heavy report generation
+  application_name: 'InsightEd_API_Primary'
 });
 
 pool.on('error', (err) => {
@@ -495,10 +563,11 @@ if (process.env.NEW_DATABASE_URL) {
   poolNew = new Pool({
     connectionString: process.env.NEW_DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 10,
+    max: 20, // Resilient v6.0: Scaled for secondary sync
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
-    statement_timeout: 15000,
+    statement_timeout: 30000,
+    application_name: 'InsightEd_API_Secondary'
   });
 
   poolNew.on('error', (err) => {
@@ -547,67 +616,99 @@ const checkAndDropColumn = async (tableName, columnName) => {
   }
 };
 
+// --- MIGRATION TRACKER ---
+const ensureMigrationTable = async () => {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS ph_migrations (
+            id SERIAL PRIMARY KEY,
+            migration_name TEXT UNIQUE NOT NULL,
+            executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `).catch(e => console.warn('Migration table check failed:', e));
+};
+
+const hasMigrationRun = async (migrationName) => {
+    try {
+        const res = await pool.query('SELECT 1 FROM ph_migrations WHERE migration_name = $1', [migrationName]);
+        return res.rowCount > 0;
+    } catch { return false; }
+};
+
+const markMigrationDone = async (migrationName) => {
+    await pool.query('INSERT INTO ph_migrations (migration_name) VALUES ($1) ON CONFLICT DO NOTHING', [migrationName]).catch(() => {});
+};
+
 // --- DATABASE INIT ---
 const runAutoMigrations = async () => {
   console.log("   [Auto-Migrate] Starting loose migrations...");
   try {
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE');
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;');
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;');
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB');
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0');
-    
-    // New SNED Redesign Columns
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS has_sned BOOLEAN DEFAULT FALSE');
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_total_count INTEGER DEFAULT 0');
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_program_type TEXT');
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_organized_class_count INTEGER DEFAULT 0');
+    await ensureMigrationTable();
+
+    const migrationPromises = [
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE'),
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS school_head TEXT;'),
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS contact_number TEXT;'),
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit2_simplified_enrollment JSONB'),
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_self_contained_count INTEGER DEFAULT 0'),
+      // New SNED Redesign Columns
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS has_sned BOOLEAN DEFAULT FALSE'),
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_total_count INTEGER DEFAULT 0'),
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_program_type TEXT'),
+      pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS sned_organized_class_count INTEGER DEFAULT 0')
+    ];
 
     // Multi-grade columns
     const mgCols = ['multigrade_groupings_1', 'multigrade_groupings_2', 'multigrade_groupings_3'];
     for (const col of mgCols) {
-      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`);
+      migrationPromises.push(pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} TEXT`));
     }
     const mgEnrCols = ['multigrade_enrollment_1', 'multigrade_enrollment_2', 'multigrade_enrollment_3'];
     for (const col of mgEnrCols) {
-      await pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`);
+      migrationPromises.push(pool.query(`ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS ${col} INTEGER DEFAULT 0`));
     }
+
+    await Promise.all(migrationPromises);
 
     // Unit 4
     await unit4MigrateCols();
 
     // Unit 1: Ownership Document Type
-    await checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', pool);
-    if (poolNew) await checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', poolNew);
+    const columnPromises = [
+      checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', pool)
+    ];
+    if (poolNew) columnPromises.push(checkAndAddColumn('ph_schools', 'ownership_document_type', 'TEXT', poolNew));
     
     // Unit Updated At Timestamps
     for (let i = 1; i <= 10; i++) {
       const colName = `unit${i}_updated_at`;
-      await checkAndAddColumn('ph_schools', colName, 'TIMESTAMPTZ', pool);
-      if (poolNew) await checkAndAddColumn('ph_schools', colName, 'TIMESTAMPTZ', poolNew);
+      columnPromises.push(checkAndAddColumn('ph_schools', colName, 'TIMESTAMPTZ', pool));
+      if (poolNew) columnPromises.push(checkAndAddColumn('ph_schools', colName, 'TIMESTAMPTZ', poolNew));
       
       // Convert existing TIMESTAMP columns to TIMESTAMPTZ to fix timezone issues
-      await pool.query(`ALTER TABLE ph_schools ALTER COLUMN "${colName}" TYPE TIMESTAMPTZ USING "${colName}"::TIMESTAMPTZ`).catch(() => {});
-      if (poolNew) await poolNew.query(`ALTER TABLE ph_schools ALTER COLUMN "${colName}" TYPE TIMESTAMPTZ USING "${colName}"::TIMESTAMPTZ`).catch(() => {});
+      columnPromises.push(pool.query(`ALTER TABLE ph_schools ALTER COLUMN "${colName}" TYPE TIMESTAMPTZ USING "${colName}"::TIMESTAMPTZ`).catch(() => {}));
+      if (poolNew) columnPromises.push(poolNew.query(`ALTER TABLE ph_schools ALTER COLUMN "${colName}" TYPE TIMESTAMPTZ USING "${colName}"::TIMESTAMPTZ`).catch(() => {}));
     }
 
     // Unit 1: Year Established
-    await checkAndAddColumn('ph_schools', 'established_month', 'TEXT', pool);
-    await checkAndAddColumn('ph_schools', 'established_year', 'INTEGER', pool);
+    columnPromises.push(checkAndAddColumn('ph_schools', 'established_month', 'TEXT', pool));
+    columnPromises.push(checkAndAddColumn('ph_schools', 'established_year', 'INTEGER', pool));
     if (poolNew) {
-      await checkAndAddColumn('ph_schools', 'established_month', 'TEXT', poolNew);
-      await checkAndAddColumn('ph_schools', 'established_year', 'INTEGER', poolNew);
+      columnPromises.push(checkAndAddColumn('ph_schools', 'established_month', 'TEXT', poolNew));
+      columnPromises.push(checkAndAddColumn('ph_schools', 'established_year', 'INTEGER', poolNew));
     }
 
+    await Promise.all(columnPromises);
+
     await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', pool);
-    if (poolNew) await checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', poolNew);
+    if (poolNew) columnPromises.push(checkAndAddColumn('ownership_documents', 'ownership_document_type', 'TEXT', poolNew));
 
     // --- IERN MIGRATION PHASE ---
-    console.log("   [Auto-Migrate] Running IERN Migration...");
-    
-    // 1. Ensure ph_schools has iern and it's UNIQUE
-    await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS iern TEXT');
-    await pool.query('ALTER TABLE ph_schools ADD CONSTRAINT ph_schools_iern_unique UNIQUE (iern)').catch(() => {});
+    if (!(await hasMigrationRun('iern_migration_v2'))) {
+      console.log("   [Auto-Migrate] Running IERN Migration...");
+      
+      // 1. Ensure ph_schools has iern and it's UNIQUE
+      await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS iern TEXT');
+      await pool.query('ALTER TABLE ph_schools ADD CONSTRAINT ph_schools_iern_unique UNIQUE (iern)').catch(() => {});
     
     // 2. Backfill ph_schools.iern from "schools_IERN"
     await pool.query(`
@@ -724,7 +825,11 @@ const runAutoMigrations = async () => {
       console.warn("   [Auto-Migrate] FK Drop process failed:", fkErr.message);
     }
 
-    console.log("   [Auto-Migrate] IERN Migration finished.");
+      console.log("   [Auto-Migrate] IERN Migration finished.");
+      await markMigrationDone('iern_migration_v2');
+    } else {
+      console.log("   [Auto-Migrate] Skipped IERN Migration (Already Run)");
+    }
 
     console.log("   [Auto-Migrate] Finished.");
   } catch (e) {
@@ -851,66 +956,13 @@ const initDB = async () => {
             CONSTRAINT unique_project_finance_${dbLabel} UNIQUE(project_id)
           );
 
-          ALTER TABLE engineer_form
-          DROP COLUMN IF EXISTS tranche_1,
-          DROP COLUMN IF EXISTS tranche_2,
-          DROP COLUMN IF EXISTS tranche_3,
-          DROP COLUMN IF EXISTS liquidated_tranche_1,
-          DROP COLUMN IF EXISTS liquidated_tranche_2,
-          DROP COLUMN IF EXISTS liquidated_tranche_3,
-          DROP COLUMN IF EXISTS implementing_agencies,
-          DROP COLUMN IF EXISTS rta,
-          DROP COLUMN IF EXISTS moa,
-          DROP COLUMN IF EXISTS pow_pdf,
-          DROP COLUMN IF EXISTS dupa_pdf,
-          DROP COLUMN IF EXISTS contract_pdf,
-          DROP COLUMN IF EXISTS rta_pdf,
-          DROP COLUMN IF EXISTS moa_pdf;
+          -- Legacy migration: columns moved to co_finance are already dropped.
         `).catch(() => {});
 
-        await checkAndAddColumn('engineer_form', 'engineer_id', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'implementing_agency', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'implementing_agency_specific', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'uploader_id_moa_rta', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'assigned_engineer_id', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'assigned_engineer_name', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'date_assigned', 'TIMESTAMP', targetPool);
-        await checkAndAddColumn('engineer_form', 'actions', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'province', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'city', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'municipality', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'mother_moa_id', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'supplamental_moa_id', 'TEXT', targetPool);
-        await checkAndAddColumn('engineer_form', 'sangguniang_resolution_id', 'TEXT', targetPool);
-
-        await targetPool.query(`
-          ALTER TABLE engineer_form DROP CONSTRAINT IF EXISTS engineer_form_mother_moa_id_fkey;
-          ALTER TABLE engineer_form DROP CONSTRAINT IF EXISTS engineer_form_supplamental_moa_id_fkey;
-
-          ALTER TABLE engineer_form ALTER COLUMN mother_moa_id TYPE TEXT USING mother_moa_id::text;
-          ALTER TABLE engineer_form ALTER COLUMN supplamental_moa_id TYPE TEXT USING supplamental_moa_id::text;
-
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS no_of_units INTEGER DEFAULT 0;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS procurement_status TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS status_of_construction_phase TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS status_design_phase TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS assigned_engineer_id TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS assigned_engineer_name TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS uploader_id_moa_rta TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS province TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS city TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS municipality TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS program_type TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS delay_reason TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS revised_target_completion_date TIMESTAMP;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS time_lapsed_days INTEGER;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS time_lapsed_percentage TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS pow_pdf TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS dupa_pdf TEXT;
-          ALTER TABLE engineer_form ADD COLUMN IF NOT EXISTS savings NUMERIC;
-        `);
-
+        // NOTE: 40+ legacy checkAndAddColumn calls for engineer_form were removed here
+        // The engineer_form table was reconstructed on 2026-03-28 to permanently fix the 1600-column PostgreSQL limit.
+        // Future dynamic fields must be stored in JSONB to avoid physical column catalog bloat.
+        
         currentSegment = `${dbLabel} Seg 5: variation_orders table`;
         await targetPool.query(`
           CREATE TABLE IF NOT EXISTS variation_orders (
@@ -1060,16 +1112,17 @@ const initDB = async () => {
 
     // Ensure Unit 5 Shifting & Modality columns exist on ph_schools
     const levels = ['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+    const shiftingPromises = [];
     for (const lvl of levels) {
-      await checkAndAddColumn('ph_schools', `shift_${lvl}`, 'TEXT');
-      await checkAndAddColumn('ph_schools', `mode_${lvl}`, 'TEXT');
+      shiftingPromises.push(checkAndAddColumn('ph_schools', `shift_${lvl}`, 'TEXT'));
+      shiftingPromises.push(checkAndAddColumn('ph_schools', `mode_${lvl}`, 'TEXT'));
     }
+    await Promise.all(shiftingPromises);
 
     // --- New: Integer-based Unit Completion Tracking ---
     const unitCols = ['unit1', 'unit2', 'unit3', 'unit4', 'unit5', 'unit6', 'unit7', 'unit8'];
-    for (const col of unitCols) {
-      await checkAndAddColumn('ph_schools', col, 'SMALLINT DEFAULT 0');
-    }
+    const unitPromises = unitCols.map(col => checkAndAddColumn('ph_schools', col, 'SMALLINT DEFAULT 0'));
+    await Promise.all(unitPromises);
 
     await checkAndAddColumn('ph_teachers_list', 'designations', 'TEXT');
 
@@ -1290,18 +1343,23 @@ const initMasterlistDB = async () => {
     // Optimization: Add index on school_id first if not present
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_school_id ON masterlist_26_30(school_id);`);
 
-    // Only update if there are NULL provinces to avoid long scans on every restart
-    const nullCheck = await pool.query(`SELECT 1 FROM masterlist_26_30 WHERE province IS NULL LIMIT 1`);
-    if (nullCheck.rowCount > 0) {
-      console.log("     -> Backfilling provinces in masterlist_26_30...");
-      await pool.query(`
-        UPDATE masterlist_26_30 m
-        SET province = s.province
-        FROM schools s
-        WHERE m.school_id::text = s.school_id::text
-        AND m.province IS NULL;
-      `);
-      console.log("     -> Province backfill completed.");
+    if (!(await hasMigrationRun('masterlist_province_sync_v1'))) {
+      // Only update if there are NULL provinces to avoid long scans on every restart
+      const nullCheck = await pool.query(`SELECT 1 FROM masterlist_26_30 WHERE province IS NULL LIMIT 1`);
+      if (nullCheck.rowCount > 0) {
+        console.log("     -> Backfilling provinces in masterlist_26_30...");
+        await pool.query(`
+          UPDATE masterlist_26_30 m
+          SET province = s.province
+          FROM schools s
+          WHERE m.school_id::text = s.school_id::text
+          AND m.province IS NULL;
+        `);
+        console.log("     -> Province backfill completed.");
+      }
+      await markMigrationDone('masterlist_province_sync_v1');
+    } else {
+      console.log("     -> Skipped Province backfill (Already Run).");
     }
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
@@ -6492,11 +6550,11 @@ app.post('/api/check-existing-school', async (req, res) => {
 
 // --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
 app.post('/api/register-school', async (req, res) => {
-  const { email, password, schoolData, contactNumber, role, passcode } = req.body;
-
-  if (!email || !password || !schoolData || !schoolData.school_id || !passcode) {
-    return res.status(400).json({ error: "Missing required registration data (email, password, schoolData, passcode)." });
+  const result = RegisterSchoolSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: "Validation Failed", details: result.error.format() });
   }
+  const { email, password, schoolData, contactNumber, role, passcode } = result.data;
 
   // Fallback to School Head if role not provided for backward compatibility
   const userRole = role || 'School Head';
@@ -6518,8 +6576,7 @@ app.post('/api/register-school', async (req, res) => {
       return res.status(400).json({ error: "This school is already registered." });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const emailCheckRes = await client.query("SELECT uid FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
+    const emailCheckRes = await client.query("SELECT uid FROM users WHERE LOWER(email) = $1", [email]);
     if (emailCheckRes.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: "This email is already registered." });
@@ -6704,16 +6761,11 @@ app.post('/api/register-school', async (req, res) => {
 
 // --- 3e. POST: Register School Head (One-Shot matching schools_IERN) ---
 app.post('/api/register-beta', async (req, res) => {
-  const { email, password, schoolData, contactNumber, firstName, lastName, passcode } = req.body;
-
-  // School Heads no longer require an email field in registration as they use school_id for auth.
-  if (!password || !schoolData || !schoolData.school_id) {
-    return res.status(400).json({ error: "Missing required registration data (password, schoolData)." });
+  const result = RegisterBetaSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: "Validation Failed", details: result.error.format() });
   }
-
-  if (passcode && (passcode.length !== 6 || !/^\d+$/.test(passcode))) {
-    return res.status(400).json({ error: "Passcode must be exactly 6 digits if provided." });
-  }
+  const { email, password, schoolData, contactNumber, firstName, lastName, passcode } = result.data;
 
   console.log("✅ SCHOOL HEAD REGISTRATION REQUEST RECEIVED:", {
     schoolId: schoolData?.school_id,
@@ -6876,26 +6928,20 @@ app.post('/api/register-beta', async (req, res) => {
 
 // --- 3f. POST: Register Generic User (Engineer, RO, SDO) ---
 app.post('/api/register-user', async (req, res) => {
-  const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory, passcode } = req.body;
-
-  if (!email || !password || !role) {
-    console.error("❌ Missing required fields for /api/register-user:", { email: !!email, password: !!password, role: !!role });
-    return res.status(400).json({ error: "Missing required fields (email, password, role)" });
+  const result = RegisterUserSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: "Validation Failed", details: result.error.format() });
   }
+  const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory, passcode } = result.data;
 
-  if (passcode && (passcode.length !== 6 || !/^\d+$/.test(passcode))) {
-    return res.status(400).json({ error: "Passcode must be exactly 6 digits if provided." });
-  }
   console.log(`🚀 Registration request received for: ${email} (Role: ${role})`);
 
   try {
-    const normalizedEmail = email.trim().toLowerCase();
-    
     // 1. Duplicate Email Check
-    console.log(`[Reg] Checking duplicate email: ${normalizedEmail}`);
-    const emailCheckRes = await pool.query("SELECT uid FROM users WHERE LOWER(email) = $1", [normalizedEmail]);
+    console.log(`[Reg] Checking duplicate email: ${email}`);
+    const emailCheckRes = await pool.query("SELECT uid FROM users WHERE LOWER(email) = $1", [email]);
     if (emailCheckRes.rows.length > 0) {
-      console.warn(`[Reg] Email already registered: ${normalizedEmail}`);
+      console.warn(`[Reg] Email already registered: ${email}`);
       return res.status(400).json({ error: "This email is already registered." });
     }
 
@@ -17309,6 +17355,7 @@ const startServer = async () => {
       console.log(`🚀 SERVER RUNNING - PID: ${process.pid}`);
       console.log(`🚀 Port: ${PORT}`);
       console.log(`🚀 Time: ${new Date().toLocaleString()}`);
+      console.log(`🔗 APP READY: http://localhost:5173/`);
       console.log(`================================================\n`);
     });
 

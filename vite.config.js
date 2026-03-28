@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/insighted/', // Default for production. Overridden by staging scripts via --base
+  base: './', // Use relative paths to be environment-agnostic
   plugins: [
     react(),
     VitePWA({

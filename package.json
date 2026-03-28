@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node --watch api/index.js",
-    "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
+    "dev:full": "concurrently -n \"SERVER,VITE\" -c \"bgBlue.bold,bgMagenta.bold\" \"npm run server\" \"npm run dev\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
