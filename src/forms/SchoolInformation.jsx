@@ -375,7 +375,7 @@ const SchoolInformation = ({ embedded = false }) => {
             {/* --- PREMIUM BLUE HEADER - Hide if embedded --- */}
             {!embedded && (
                 <div className="bg-[#004A99] min-h-[220px] rounded-b-[2.5rem] relative shadow-lg overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-full bg-[url('/grid-pattern.png')] opacity-10"></div>
+                    <div className="absolute top-0 left-0 w-full h-full opacity-10" style={{ backgroundImage: 'radial-gradient(#fff 2px, transparent 2px)', backgroundSize: '30px 30px' }}></div>
                     <div className="absolute top-10 right-10 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
                     <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-blue-400/20 rounded-full blur-2xl"></div>
 

@@ -119,11 +119,41 @@
         }
 
         /* Navigation Accents */
+        .desktop-toc-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 0.5rem;
+            color: #64748b; /* Slate-500 */
+            font-size: 0.7rem; /* text-[10px] */
+            font-weight: 800;
+            text-transform: uppercase;
+            font-style: italic;
+            letter-spacing: 0.1em;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 0.5rem;
+        }
+
+        .desktop-toc-link:hover {
+            color: #1e293b; /* Slate-900 */
+            background-color: #f8fafc; /* Slate-50 */
+            padding-left: 1rem;
+        }
+
+        .desktop-toc-link .step-id {
+            color: #94a3b8; /* Slate-400 */
+            font-style: normal;
+        }
+        
+        .desktop-toc-link:hover .step-id {
+            color: #3b82f6; /* Blue-500 */
+        }
+
         .toc-link {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .toc-link:hover { padding-left: 1.5rem; color: var(--primary); }
+        .toc-link:hover { padding-left: 1.25rem; color: var(--primary); }
         .toc-link:hover .step-num { background-color: var(--primary); color: white; transform: scale(1.1); }
 
         /* Hide Scrollbar but keep functionality */
@@ -253,59 +283,59 @@
 
     <div class="max-w-7xl mx-auto px-6 py-12 flex flex-col md:flex-row gap-12">
         <!-- Table of Contents Sidebar (Desktop) -->
-        <aside class="md:w-64 flex-shrink-0 hidden md:block">
-            <div class="sticky top-24">
-                <div class="px-4 mb-6">
-                    <h3 class="text-sm font-black text-slate-400 uppercase tracking-[0.3em] mb-2">Guide Content</h3>
-                    <div class="h-1 w-8 bg-blue-600 rounded-full"></div>
+        <aside class="md:w-52 flex-shrink-0 hidden md:block">
+            <div class="sticky top-28 bg-white/50 backdrop-blur-xl p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+                <div class="mb-6">
+                    <h3 class="text-[10px] font-black text-blue-600 uppercase tracking-[0.4em] mb-2 px-1">Quick Navigation</h3>
+                    <div class="h-px w-full bg-slate-100"></div>
                 </div>
-                <nav class="space-y-1">
-                    <a href="#unit-1" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm transition-all">01</span>
+                <nav class="space-y-0.5">
+                    <a href="#unit-1" class="desktop-toc-link">
+                        <span class="step-id">01</span>
                         <span>Quick Start</span>
                     </a>
-                    <a href="#unit-2" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm transition-all">02</span>
+                    <a href="#unit-2" class="desktop-toc-link">
+                        <span class="step-id">02</span>
                         <span>Gateway</span>
                     </a>
-                    <a href="#unit-3" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm transition-all">03</span>
+                    <a href="#unit-3" class="desktop-toc-link">
+                        <span class="step-id">03</span>
                         <span>Registration</span>
                     </a>
-                    <a href="#unit-4" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm transition-all">04</span>
+                    <a href="#unit-4" class="desktop-toc-link">
+                        <span class="step-id">04</span>
                         <span>Dashboard</span>
                     </a>
-                    <a href="#unit-5" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm text-blue-600 font-black">05</span>
+                    <a href="#unit-5" class="desktop-toc-link">
+                        <span class="step-id">05</span>
                         <span>Unit 1: Profile</span>
                     </a>
-                    <a href="#unit-6" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm">06</span>
+                    <a href="#unit-6" class="desktop-toc-link">
+                        <span class="step-id">06</span>
                         <span>Unit 2: Enrollment</span>
                     </a>
-                    <a href="#unit-7" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm">07</span>
+                    <a href="#unit-7" class="desktop-toc-link">
+                        <span class="step-id">07</span>
                         <span>Unit 3: Sectioning</span>
                     </a>
-                    <a href="#unit-8" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm">08</span>
+                    <a href="#unit-8" class="desktop-toc-link">
+                        <span class="step-id">08</span>
                         <span>Unit 4: Profiles</span>
                     </a>
-                    <a href="#unit-9" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm">09</span>
+                    <a href="#unit-9" class="desktop-toc-link">
+                        <span class="step-id">09</span>
                         <span>Unit 5: Modality</span>
                     </a>
-                    <a href="#unit-10" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm">10</span>
+                    <a href="#unit-10" class="desktop-toc-link">
+                        <span class="step-id">10</span>
                         <span>Unit 6: Resources</span>
                     </a>
-                    <a href="#unit-11" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm">11</span>
+                    <a href="#unit-11" class="desktop-toc-link">
+                        <span class="step-id">11</span>
                         <span>Unit 7: Facilities</span>
                     </a>
-                    <a href="#unit-12" class="toc-link flex items-center gap-3 px-4 py-2 text-lg font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-all group">
-                        <span class="step-num w-8 h-8 flex items-center justify-center bg-slate-100 rounded-lg text-sm">12</span>
+                    <a href="#unit-12" class="desktop-toc-link">
+                        <span class="step-id">12</span>
                         <span>Unit 8: Terrain</span>
                     </a>
                 </nav>
@@ -341,9 +371,9 @@
                                Operational Intelligence Matrix
                           </div>
                           
-                          <h1 class="text-6xl md:text-8xl font-black text-slate-950 mb-10 tracking-[-0.04em] leading-[0.85] uppercase">
+                          <h1 class="text-6xl md:text-8xl font-black text-slate-950 mb-10 tracking-[-0.03em] leading-[0.85] uppercase overflow-visible">
                              InsightEd <br>
-                             <span class="text-transparent bg-clip-text bg-gradient-to-br from-blue-600 to-slate-950 italic">Operational Guide</span>
+                             <span class="text-transparent bg-clip-text bg-gradient-to-br from-blue-600 to-slate-950 italic inline-block pr-6">Operational Guide</span>
                           </h1>
                           
                           <div class="flex items-center justify-center gap-4 mb-12">
