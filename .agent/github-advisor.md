@@ -54,3 +54,38 @@
 - `git status` - The diagnostic tool to understand the current branch state.
 - `git pull --rebase` - The golden rule for keeping small team histories linear.
 - `git log --graph --oneline --all` - To visualize the linear history created by the rebase workflow.
+
+---
+
+# Skill: GitHub Pull Request Automation (Fork Workflow)
+
+## Trigger Conditions
+- When the user asks to create a pull request from a forked repository.
+- When the user finishes a feature on their fork and wants to merge it back to the original upstream repository.
+- When the user asks to automate the PR submission process using the command line.
+
+## Step-by-Step Workflows
+
+### 1. Pre-Requisites & Verification
+**Goal:** Ensure the GitHub CLI (`gh`) is installed, authenticated, and the repository is configured correctly.
+- **Verify GitHub CLI:** Run `gh auth status` to ensure the agent/user has the necessary permissions to interface with GitHub.
+- **Verify Remotes:** Run `git remote -v`. Ensure `origin` points to the user's fork and `upstream` points to the original target repository.
+
+### 2. Push to Fork (`origin`)
+**Goal:** Ensure the latest local commits are available on the remote fork before generating the PR.
+- **Execute `git push origin <branch-name>`**: Push the completed feature branch up to the user's fork.
+
+### 3. Automated Pull Request Creation (`gh pr create`)
+**Goal:** Generate and submit the pull request to the upstream repository automatically.
+- **Draft the PR Content:** Formulate a clear, concise title and body summarizing the changes, the problem solved, and any architectural adjustments made.
+- **Execute PR Command:** Run `gh pr create --repo <upstream-owner>/<repo-name> --base main --head <your-github-username>:<branch-name> --title "<Drafted Title>" --body "<Drafted Body>"`
+  *(Note: If the repository is cloned directly from the fork and upstream is set properly, a simpler `gh pr create --base main --title "..." --body "..."` will often suffice. Specifying `--repo` ensures exact targeting if ambiguity exists).*
+
+## Constraints & Rules
+- **Review Before Submission:** The agent should draft the PR Title and Body and present it to the user for a quick visual confirmation before executing the `gh pr create` command.
+- **Target Branch Verification:** Double-check the target `--base` branch (usually `main`, `master`, or `develop`) on the upstream repository before creating the PR to avoid targeting the wrong environment.
+- **Do Not Push to Upstream Directly:** Never attempt to `git push upstream` directly. Forks typically lack write access to the original repository. Always use the PR workflow.
+
+## Supporting Resources
+- `gh pr create --help` - For advanced GitHub CLI PR creation flags and options.
+- `git remote -v` - To confirm the origin (fork) and upstream (original) URLs.

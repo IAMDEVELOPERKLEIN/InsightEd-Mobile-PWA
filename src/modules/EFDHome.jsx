@@ -83,6 +83,7 @@ const EFDHome = () => {
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState(null);
     const [activeTab, setActiveTab] = useState('summary'); 
+    const [viewMode, setViewMode] = useState('card'); 
     const [engineers, setEngineers] = useState([]);
     const [selectedProjectForAssignment, setSelectedProjectForAssignment] = useState(null);
     const [selectedEngineers, setSelectedEngineers] = useState([]);
@@ -199,8 +200,29 @@ const EFDHome = () => {
         "Alternative Learning System - Community Based Learning Centers (ALS-CLC)",
         "Midrise School Building",
         "QRF",
-        "Electrification"
+        "Electrification",
+        "Uncategorized"
     ];
+
+    const normalizeCategory = (cat) => {
+        if (!cat) return "Uncategorized";
+        const upper = cat.trim().toUpperCase();
+        if (upper === 'NEW CONSTRUCTION') return "New Construction";
+        if (upper === 'REPAIR' || upper === 'REPAIR AND REHAB') return "Repair and Rehab";
+        if (upper === 'LMS' || upper === 'LAST MILE SCHOOLS') return "Last Mile Schools";
+        if (upper === 'GABALDON' || upper === 'GABALDON RESTORATION') return "Gabaldon Restoration";
+        if (upper === 'ILRC' || upper === 'SPED INCLUSIVE LEARNING RESOURCE CENTERS (ILRC)') return "SpEd Inclusive Learning Resource Centers (ILRC)";
+        if (upper === 'ALS-CLC' || upper === 'ALTERNATIVE LEARNING SYSTEM - COMMUNITY BASED LEARNING CENTERS (ALS-CLC)') return "Alternative Learning System - Community Based Learning Centers (ALS-CLC)";
+        if (upper === 'LIBRARY HUB') return "Library Hub";
+        if (upper === 'SCHOOL HEALTH FACILITIES' || upper === 'HEALTH FACILITIES') return "Health facilities";
+        if (upper === 'ELECTRIFICATION') return "Electrification";
+        if (upper === 'MIDRISE SCHOOL BUILDING') return "Midrise School Building";
+        if (upper === 'QRF') return "QRF";
+        
+        // Final fallback: Match against allCategories case-insensitively
+        const found = allCategories.find(c => c.toUpperCase() === upper);
+        return found || cat; // Keep original if no match found
+    };
 
     const categoryColors = {
         "New Construction": "#3b82f6",
@@ -360,11 +382,12 @@ const EFDHome = () => {
         const stats = {};
         summaryData.regionalData.forEach(item => {
             const reg = normalize(item.name);
-            const cat = item.category || 'Uncategorized';
+            const cat = normalizeCategory(item.category || 'Uncategorized');
             if (!stats[reg]) stats[reg] = { name: reg, totalValue: 0 };
             const val = chartMetric === 'count' ? parseInt(item.count || 0) : parseFloat(item.total_abc || 0);
             stats[reg][cat] = (stats[reg][cat] || 0) + val;
             stats[reg].totalValue += val;
+            stats[reg].labelAnchor = 0;
         });
         return Object.values(stats).sort((a, b) => b.totalValue - a.totalValue);
     }, [summaryData, chartMetric]);
@@ -428,20 +451,26 @@ const EFDHome = () => {
         const stats = {};
         summaryData.divisionData.forEach(item => {
             const div = normalize(item.name);
-            const cat = item.category || 'Uncategorized';
+            const cat = normalizeCategory(item.category || 'Uncategorized');
             if (!stats[div]) stats[div] = { name: div, totalValue: 0 };
             const val = chartMetric === 'count' ? parseInt(item.count || 0) : parseFloat(item.total_abc || 0);
             stats[div][cat] = (stats[div][cat] || 0) + val;
             stats[div].totalValue += val;
+            stats[div].labelAnchor = 0;
         });
         return Object.values(stats).sort((a, b) => b.totalValue - a.totalValue);
     }, [summaryData, chartMetric]);
 
     const pieChartData = useMemo(() => {
         if (!summaryData?.categoryData) return [];
-        return summaryData.categoryData.map(item => ({
-            name: item.name || 'Uncategorized',
-            value: parseInt(item.value || 0)
+        const aggregated = {};
+        summaryData.categoryData.forEach(item => {
+            const name = normalizeCategory(item.name || 'Uncategorized');
+            aggregated[name] = (aggregated[name] || 0) + parseInt(item.value || 0);
+        });
+        return Object.entries(aggregated).map(([name, value]) => ({
+            name,
+            value
         })).sort((a, b) => b.value - a.value);
     }, [summaryData]);
 
@@ -455,13 +484,35 @@ const EFDHome = () => {
 
 
 
-    const newlyCreatedCount = summaryData?.totalStats?.totalProjects || 0;
-    const totalABCValue = summaryData?.totalStats?.totalABC || 0;
-    const donatedCount = summaryData?.totalStats?.donatedCount || 0;
-    const beffCount = summaryData?.totalStats?.beffCount || 0;
-    const completeDocsCount = summaryData?.totalStats?.completeDocs || 0;
 
-    const paginatedProjects = projects; 
+
+    const filteredProjects = useMemo(() => {
+        if (!Array.isArray(projects)) return [];
+        return projects.filter(p => {
+            const matchesSearch = !searchQuery || 
+                p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.schoolId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.division?.toLowerCase().includes(searchQuery.toLowerCase());
+            
+            const matchesRegion = selectedRegions.length === 0 || 
+                selectedRegions.some(reg => p.region?.toUpperCase() === reg.toUpperCase());
+            
+            const matchesDivision = !selectedDivision || 
+                p.division?.toUpperCase() === selectedDivision.toUpperCase();
+
+            const matchesCategory = selectedCategories.length === 0 ||
+                selectedCategories.includes(p.category || p.project_category);
+
+            return matchesSearch && matchesRegion && matchesDivision && matchesCategory;
+        });
+    }, [projects, searchQuery, selectedRegions, selectedDivision, selectedCategories]);
+
+    const totalABC = useMemo(() => {
+        // Prioritize aggregate budget from summary API, fallback to 0
+        return summaryData?.totalStats?.totalABC || 0;
+    }, [summaryData]);
+
+    const paginatedProjects = filteredProjects; 
     const totalPages = pagination.totalPages;
 
     const handleDeleteProject = async (e, id) => {
@@ -608,7 +659,10 @@ const EFDHome = () => {
             setExternalPreviews([]);
 
             const projRes = await fetch('/api/projects');
-            if (projRes.ok) setProjects(await projRes.json());
+            if (projRes.ok) {
+                const data = await projRes.json();
+                setProjects(Array.isArray(data) ? data : (data.data || []));
+            }
             alert('Project updated successfully!');
 
         } catch (error) {
@@ -674,11 +728,13 @@ const EFDHome = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0">
                                 <p className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-1.5 opacity-80 truncate">Total Projects</p>
-                                <h2 className="text-2xl lg:text-3xl font-black truncate">{projects.length.toLocaleString()}</h2>
+                                <h2 className="text-2xl lg:text-3xl font-black truncate">
+                                    {summaryData?.totalStats?.totalProjects?.toLocaleString() || pagination.total.toLocaleString()}
+                                </h2>
                             </div>
                             <div className="bg-blue-400/20 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-1 min-w-0">
                                 <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80 truncate">Filtered Results</p>
-                                <h2 className="text-2xl lg:text-3xl font-black truncate">{filteredProjects.length.toLocaleString()}</h2>
+                                <h2 className="text-2xl lg:text-3xl font-black truncate">{pagination.total.toLocaleString()}</h2>
                             </div>
                             <div className="bg-white/10 backdrop-blur-sm p-4 rounded-2xl border border-white/10 sm:col-span-2 min-w-0">
                                 <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mb-1.5 opacity-80 truncate">Total ABC Allocation</p>
@@ -893,7 +949,7 @@ const EFDHome = () => {
                                                             dataKey="name"
                                                             type="category"
                                                             tick={{ fontSize: 9, fontWeight: 800, fill: '#64748b' }}
-                                                            width={selectedRegions.length === 1 ? 120 : 80}
+                                                            width={selectedRegions.length === 1 ? 140 : 90}
                                                             axisLine={false}
                                                             tickLine={false}
                                                         />
@@ -913,20 +969,17 @@ const EFDHome = () => {
                                                                 fill={categoryColors[cat] || '#94a3b8'} 
                                                                 barSize={28}
                                                                 className="hover:opacity-80 transition-opacity cursor-pointer"
-                                                            >
-                                                                <LabelList 
-                                                                    dataKey={cat} 
-                                                                    formatter={(val) => val > 0 ? (chartMetric === 'abc' ? formatLargeNumber(val) : val) : ''}
-                                                                    style={{ fontSize: '8px', fontWeight: 'black', fill: '#fff', pointerEvents: 'none' }} 
-                                                                />
-                                                            </Bar>
+                                                            />
                                                         ))}
-                                                        <Bar dataKey="totalValue" stackId="a" hide>
+                                                        
+                                                        {/* Transparent anchor for the total label at the end of stack */}
+                                                        <Bar dataKey="labelAnchor" stackId="a" isAnimationActive={false}>
                                                             <LabelList 
                                                                 dataKey="totalValue" 
-                                                                offset={10}
+                                                                position="right"
+                                                                offset={12}
                                                                 formatter={(val) => chartMetric === 'abc' ? formatLargeCurrency(val) : val}
-                                                                style={{ fontSize: '10px', fontWeight: 'black', fill: '#475569' }} 
+                                                                style={{ fontSize: '10px', fontWeight: '900', fill: '#475569', pointerEvents: 'none' }} 
                                                             />
                                                         </Bar>
                                                     </BarChart>
@@ -1105,7 +1158,7 @@ const EFDHome = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
-                                                {paginatedProjects.map((p) => (
+                                                {(Array.isArray(paginatedProjects) ? paginatedProjects : []).map((p) => (
                                                     <tr 
                                                         key={p.id} 
                                                         onClick={() => navigate(`/project-details/${p.id}`)}
@@ -1216,7 +1269,7 @@ const EFDHome = () => {
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {paginatedProjects.map((p) => {
+                                    {(Array.isArray(paginatedProjects) ? paginatedProjects : []).map((p) => {
                                         const isUnassigned = !p.engineerName && !p.assigned_engineer_name;
                                         const engrName = p.assigned_engineer_name || p.engineerName;
                                         const progress = parseInt(p.accomplishmentPercentage || 0);

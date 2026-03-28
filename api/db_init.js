@@ -45,7 +45,7 @@ const runMigrations = async (client, dbLabel) => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log(`✅ [${dbLabel}] Notifications Table Initialized`);
+        // console.log(`✅ [${dbLabel}] Notifications Table Initialized`);
     } catch (tableErr) {
         console.error(`❌ [${dbLabel}] Failed to init notifications table:`, tableErr.message);
     }
@@ -64,7 +64,7 @@ const runMigrations = async (client, dbLabel) => {
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log(`✅ [${dbLabel}] Activity Logs Table Initialized`);
+        // console.log(`✅ [${dbLabel}] Activity Logs Table Initialized`);
     } catch (tableErr) {
         console.error(`❌ [${dbLabel}] Failed to init activity_logs table:`, tableErr.message);
     }
@@ -91,7 +91,7 @@ const runMigrations = async (client, dbLabel) => {
         ADD COLUMN IF NOT EXISTS res_water_source TEXT,
         ADD COLUMN IF NOT EXISTS res_internet_type TEXT;
     `);
-        console.log(`✅ [${dbLabel}] School Profiles Schema Updated (Basic Extensions)`);
+        // console.log(`✅ [${dbLabel}] School Profiles Schema Updated (Basic Extensions)`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate school_profiles basic:`, migErr.message);
     }
@@ -105,7 +105,7 @@ const runMigrations = async (client, dbLabel) => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log(`✅ [${dbLabel}] User Device Tokens Table Initialized`);
+        // console.log(`✅ [${dbLabel}] User Device Tokens Table Initialized`);
     } catch (tokenErr) {
         console.error(`❌ [${dbLabel}] Failed to init user_device_tokens:`, tokenErr.message);
     }
@@ -170,7 +170,13 @@ const runMigrations = async (client, dbLabel) => {
             WHERE school_id IS NOT NULL;
         `);
 
-        console.log(`✅ [${dbLabel}] Users Table Schema Updated & Indexed`);
+        // Index for rapid login by email (case-insensitive)
+        await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_users_email_lower 
+            ON users(LOWER(email));
+        `);
+
+        // console.log(`✅ [${dbLabel}] Users Table Schema Updated & Indexed`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate users table:`, migErr.message);
     }

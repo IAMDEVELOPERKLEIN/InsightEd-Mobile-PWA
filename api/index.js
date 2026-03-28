@@ -7,7 +7,22 @@ import { google } from 'googleapis';
 import pg from 'pg';
 import cors from 'cors';
 // import cron from 'node-cron'; // REMOVED for Vercel
-import admin from 'firebase-admin'; // --- FIREBASE ADMIN ---
+// --- LEGACY FIREBASE (DISABLED) ---
+const admin = { 
+  apps: [], 
+  auth: () => ({ 
+    getUser: () => Promise.resolve({}), 
+    updateUser: () => Promise.resolve({}), 
+    deleteUser: () => Promise.resolve({}), 
+    getUserByEmail: () => Promise.resolve(null), 
+    createCustomToken: () => Promise.resolve("") 
+  }), 
+  messaging: () => ({ 
+    sendEachForMulticast: () => Promise.resolve({ successCount: 0, failureCount: 0 }) 
+  }), 
+  credential: { cert: () => ({}) }, 
+  initializeApp: () => ({}) 
+};
 import nodemailer from 'nodemailer'; // --- NODEMAILER ---
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { initOtpTable, runMigrations } from './db_init.js';
@@ -107,36 +122,7 @@ const RegisterBetaSchema = z.object({
 
 console.log('✅ [Env] DATABASE_URL loaded:', process.env.DATABASE_URL ? 'YES' : 'NO');
 
-// --- FIREBASE ADMIN INIT ---
-if (!admin.apps.length) {
-  try {
-    let credential;
-    // 1. Try Environment Variable (Vercel Production)
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      credential = admin.credential.cert(serviceAccount);
-      console.log("✅ Firebase Admin Initialized from ENV");
-    }
-    // 2. Try Local File (Local Dev)
-    else {
-      try {
-        const serviceAccount = require("./service-account.json");
-        credential = admin.credential.cert(serviceAccount);
-        console.log("✅ Firebase Admin Initialized from Local File");
-      } catch (fileErr) {
-        console.warn("⚠️ No local service-account.json found.");
-      }
-    }
-
-    if (credential) {
-      admin.initializeApp({ credential });
-    } else {
-      console.warn("⚠️ Firebase Admin NOT initialized (Missing Credentials)");
-    }
-  } catch (e) {
-    console.warn("⚠️ Firebase Admin Init Failed:", e.message);
-  }
-}
+/* --- LEGACY FIREBASE INIT REMOVED --- */
 
 // --- EMAIL TRANSPORTER ---
 const transporter = nodemailer.createTransport({
@@ -533,6 +519,16 @@ app.get('/api/schools/:schoolId/activity', async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ status: 'online', pid: process.pid });
 });
+
+// Pool Status Debug
+app.get('/api/pool-status', (req, res) => {
+  res.json({
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount
+  });
+});
+
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // --- DATABASE CONNECTION ---
@@ -1024,7 +1020,7 @@ const initDB = async () => {
       }
     }
 
-    console.log("   [initDB] Completed dual-sync initialization. Finalizing primary database...");
+    // console.log("   [initDB] Completed dual-sync initialization. Finalizing primary database...");
 
     currentSegment = "Segment 8: backfill time_lapsed_days";
     await pool.query(`
@@ -1740,15 +1736,18 @@ app.post('/api/auth/migrate-login', async (req, res) => {
     console.log(`[MIGRATE LOGIN] Running SQL query...`);
     const SELECT_COLS = `uid, email, role, region, division, office, account_category, passcode, password_hash, password_salt, hash_version, first_name, last_name, school_id, province, city`;
 
+    console.log(`[DEBUG LOGIN] Reached handler for: ${identifier}`);
     const query = isSchoolId
       ? `SELECT ${SELECT_COLS} FROM users WHERE school_id = $1`
       : `SELECT ${SELECT_COLS} FROM users WHERE LOWER(email) = $1`;
 
+    console.log(`[DEBUG LOGIN] Query prepared. Waiting for pool...`);
     const userRes = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
+    console.log(`[DEBUG LOGIN] Query completed! Rows found: ${userRes.rowCount}`);
 
     if (userRes.rowCount === 0) {
       console.warn(`[MIGRATE LOGIN] User not found: ${identifier}`);
-      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+      return res.status(401).json({ success: false, error: "Username does not exist. Kindly register first." });
     }
 
     const user = userRes.rows[0];
@@ -1795,7 +1794,7 @@ app.post('/api/auth/migrate-login', async (req, res) => {
 
     if (!isValid) {
       console.warn(`[MIGRATE LOGIN] Password mismatch for: ${identifier}`);
-      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+      return res.status(401).json({ success: false, error: "The username exists but does not match the password you provided." });
     }
 
     console.log(`[MIGRATE LOGIN] Success for: ${identifier} (Role: ${user.role})`);
@@ -1953,7 +1952,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
 
 
     if (userRes.rowCount === 0) {
-      return res.status(401).json({ success: false, error: "Invalid Credentials" });
+      return res.status(401).json({ success: false, error: "Username does not exist. Kindly register first." });
     }
 
     const user = userRes.rows[0];
@@ -1965,7 +1964,7 @@ app.post('/api/auth/pin-login', async (req, res) => {
     const isValidPin = (pin === user.passcode);
     console.log(`[AUTH DEBUG] Pin match for ${identifier}: ${isValidPin} (Input: ${pin}, DB: ${user.passcode})`);
     if (!isValidPin) {
-      return res.status(401).json({ success: false, error: "Incorrect PIN." });
+      return res.status(401).json({ success: false, error: "The username exists but does not match the PIN you provided." });
     }
 
     // --- AUTO-NORMALIZE ACCOUNT CATEGORY ---
@@ -3258,7 +3257,7 @@ app.post('/api/validate-school-health', async (req, res) => {
 app.post('/api/admin/run-fraud-detection', async (req, res) => {
   const { adminUid } = req.body;
 
-  console.log(`Admin ${adminUid} is triggering Global Fraud Detection...`);
+  console.log(`admin ${adminUid} is triggering Global Fraud Detection...`);
 
   const rootDir = process.cwd();
   const fileDir = path.dirname(fileURLToPath(import.meta.url));
@@ -3551,14 +3550,18 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
         };
 
         try {
-          const response = await admin.messaging().sendEachForMulticast(message);
-          console.log(`š€ Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
-          if (response.failureCount > 0) {
-            console.log("Failed details:", JSON.stringify(response.responses));
-          }
-          return res.json({ success: true, sent: response.successCount, failed: response.failureCount });
+          // --- LEGACY FCM DISABLED ---
+          // const response = await admin.messaging().sendEachForMulticast(message);
+          // console.log(`š€ Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
+          // if (response.failureCount > 0) {
+          //   console.log("Failed details:", JSON.stringify(response.responses));
+          // }
+          // return res.json({ success: true, sent: response.successCount, failed: response.failureCount });
+          
+          console.log("[LEGACY] FCM Messaging skipped (Firebase disabled).");
+          return res.json({ success: true, message: "FCM skipped (Firebase disabled)" });
         } catch (sendErr) {
-          console.error("Firebase Send Error:", sendErr);
+          console.error("FCM Error:", sendErr);
           throw sendErr;
         }
       } else {
@@ -3946,7 +3949,7 @@ RETURNING *;
   }
 });
 
-// --- FIREBASE ADMIN INIT ---
+// --- FIREBASE admin INIT ---
 if (!admin.apps.length) {
   try {
     let credential;
@@ -3954,14 +3957,14 @@ if (!admin.apps.length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
       credential = admin.credential.cert(serviceAccount);
-      console.log("… Firebase Admin Initialized from ENV");
+      console.log("… Firebase admin Initialized from ENV");
     }
     // 2. Try Local File (Local Dev)
     else {
       try {
         const serviceAccount = require("./service-account.json");
         credential = admin.credential.cert(serviceAccount);
-        console.log("… Firebase Admin Initialized from Local File");
+        console.log("… Firebase admin Initialized from Local File");
       } catch (fileErr) {
         console.warn(" ï¸ No local service-account.json found.");
       }
@@ -3970,10 +3973,10 @@ if (!admin.apps.length) {
     if (credential) {
       admin.initializeApp({ credential });
     } else {
-      console.warn(" ï¸ Firebase Admin NOT initialized (Missing Credentials)");
+      console.warn(" ï¸ Firebase admin NOT initialized (Missing Credentials)");
     }
   } catch (e) {
-    console.warn(" ï¸ Firebase Admin Init Failed:", e.message);
+    console.warn(" ï¸ Firebase admin Init Failed:", e.message);
   }
 }
 
@@ -4050,7 +4053,7 @@ const initOtpTable_OLD = async () => {
 
 
 
-// --- MASTER PASSWORD ACCESS (Admin/Superuser) ---
+// --- MASTER PASSWORD ACCESS (admin/Superuser) ---
 app.post('/api/auth/master-login', async (req, res) => {
   if (!req.body) {
     console.error("[AUTH DEBUG] req.body is UNDEFINED at master-login. Content-Type:", req.headers['content-type']);
@@ -4067,14 +4070,14 @@ app.post('/api/auth/master-login', async (req, res) => {
     // 1. Verify Master Password
     const correctMasterPassword = process.env.ADMIN_MASTER_PASSWORD;
     if (!correctMasterPassword) {
-      console.error("âŒ ADMIN_MASTER_PASSWORD not configured in .env");
+      console.error("â Œ ADMIN_MASTER_PASSWORD not configured in .env");
       return res.status(500).json({ error: "Master password not configured." });
     }
 
     console.log(`[AUTH DEBUG] Master Password attempt for ${identifier}. Input: "${masterPassword}", Expected Length: ${correctMasterPassword?.length}`);
     if (masterPassword !== correctMasterPassword) {
-      console.warn(` ï¸ Failed master password attempt for: ${email} `);
-      return res.status(403).json({ error: "Invalid master password." });
+      console.warn(` ï¸  Failed master password attempt for: ${email} `);
+      return res.status(403).json({ error: "Incorrect master password." });
     }
 
     // 2. Look up the target user
@@ -4088,7 +4091,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     const lookupResult = await pool.query(query, [isSchoolId ? identifier : identifier.toLowerCase()]);
 
     if (lookupResult.rows.length === 0) {
-      return res.status(404).json({ error: "Target user not found." });
+      return res.status(404).json({ error: "Username does not exist. Kindly register first." });
     }
 
     const targetUser = lookupResult.rows[0];
@@ -4146,7 +4149,7 @@ app.post('/api/auth/master-login', async (req, res) => {
   }
 });
 
-// --- ADMIN: RESET DIVISION ENGINEER PASSWORDS ---
+// --- admin: RESET DIVISION ENGINEER PASSWORDS ---
 app.post('/api/admin/reset-division-engineer-passwords', async (req, res) => {
   const { adminPassword, newPassword } = req.body;
   const correctAdminPassword = process.env.ADMIN_MASTER_PASSWORD;
@@ -4175,7 +4178,7 @@ app.post('/api/admin/reset-division-engineer-passwords', async (req, res) => {
 
     const result = await pool.query(query, [passwordHash]);
 
-    console.log(`[ADMIN] Reset ${result.rowCount} Division Engineer passwords to default.`);
+    console.log(`[admin] Reset ${result.rowCount} Division Engineer passwords to default.`);
 
     return res.json({
       success: true,
@@ -4184,7 +4187,7 @@ app.post('/api/admin/reset-division-engineer-passwords', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Admin Password Reset Error:", error);
+    console.error("admin Password Reset Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -5046,7 +5049,7 @@ app.post('/api/settings/save', async (req, res) => {
 
     // Log functionality
     if (userUid) {
-      await logActivity(userUid, 'Admin', 'Admin', 'UPDATE SETTING', key, `Updated ${key} to ${value}`);
+      await logActivity(userUid, 'admin', 'admin', 'UPDATE SETTING', key, `Updated ${key} to ${value}`);
     }
 
     res.json({ success: true });
@@ -5056,7 +5059,7 @@ app.post('/api/settings/save', async (req, res) => {
   }
 });
 
-// --- 1d. ADMIN USER MANAGEMENT ---
+// --- 1d. admin USER MANAGEMENT ---
 
 // GET All Users
 app.get('/api/admin/users', async (req, res) => {
@@ -5195,7 +5198,7 @@ app.get('/api/admin/user-stats', async (req, res) => {
   }
 });
 
-// GET Filter Options for Admin Dashboard
+// GET Filter Options for admin Dashboard
 app.get('/api/admin/filter-options', async (req, res) => {
   try {
     const regionsRes = await pool.query(`
@@ -5260,9 +5263,9 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
 
     // 3. Log Activity
     if (adminUid) {
-      const adminName = await getUserFullName(adminUid) || 'Admin';
+      const adminName = await getUserFullName(adminUid) || 'admin';
       const action = disabled ? 'DISABLE_USER' : 'ENABLE_USER';
-      await logActivity(adminUid, adminName, 'Admin', action, targetEmail, `User ${targetEmail} was ${disabled ? 'disabled' : 'enabled'}`);
+      await logActivity(adminUid, adminName, 'admin', action, targetEmail, `User ${targetEmail} was ${disabled ? 'disabled' : 'enabled'}`);
     }
 
     console.log(`… User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
@@ -5274,7 +5277,7 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
   }
 });
 
-// POST Admin Reset Password
+// POST admin Reset Password
 app.post('/api/admin/reset-password', async (req, res) => {
   const { uid, newPassword, adminUid } = req.body;
 
@@ -5283,8 +5286,8 @@ app.post('/api/admin/reset-password', async (req, res) => {
   }
 
   try {
-    // 1. Update Firebase Auth
-    await admin.auth().updateUser(uid, { password: newPassword });
+    // --- LEGACY FIREBASE SYNC REMOVED ---
+    // await admin.auth().updateUser(uid, { password: newPassword });
 
     // 2. Get User Email for logging
     const userRes = await pool.query('SELECT email FROM users WHERE uid = $1', [uid]);
@@ -5292,15 +5295,15 @@ app.post('/api/admin/reset-password', async (req, res) => {
 
     // 3. Log Activity
     if (adminUid) {
-      const adminName = await getUserFullName(adminUid) || 'Admin';
-      await logActivity(adminUid, adminName, 'Admin', 'RESET_PASSWORD', targetEmail, `Admin reset password for ${targetEmail}`);
+      const adminName = await getUserFullName(adminUid) || 'admin';
+      await logActivity(adminUid, adminName, 'admin', 'RESET_PASSWORD', targetEmail, `admin reset password for ${targetEmail}`);
     }
 
     console.log(`… Password reset for user ${targetEmail} (${uid})`);
     res.json({ success: true });
 
   } catch (err) {
-    console.error("Admin Password Reset Error:", err);
+    console.error("admin Password Reset Error:", err);
     res.status(500).json({ error: "Failed to reset password: " + err.message });
   }
 });
@@ -5607,7 +5610,7 @@ app.get('/api/sdo/pending-schools', async (req, res) => {
   }
 });
 
-// GET - Admin Fetch All Pending Schools
+// GET - admin Fetch All Pending Schools
 app.get('/api/admin/pending-schools', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -5623,7 +5626,7 @@ app.get('/api/admin/pending-schools', async (req, res) => {
   }
 });
 
-// GET - Admin Fetch Reviewed Schools (History)
+// GET - admin Fetch Reviewed Schools (History)
 app.get('/api/admin/reviewed-schools', async (req, res) => {
   const { reviewed_by } = req.query;
   try {
@@ -5729,7 +5732,7 @@ app.get('/api/sdo/location-coordinates', async (req, res) => {
   }
 });
 
-// POST - Admin Approve School
+// POST - admin Approve School
 // --- CHATBOT KNOWLEDGE TEACHING ---
 app.post('/api/admin/teach', async (req, res) => {
   const bb = busboy({ headers: req.headers });
@@ -5920,8 +5923,8 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
     if (reviewed_by) {
       await logActivity(
         reviewed_by,
-        reviewed_by_name || 'Admin',
-        'Admin',
+        reviewed_by_name || 'admin',
+        'admin',
         'APPROVE_SCHOOL',
         school.school_name,
         `Approved school submission: ${school.school_name} (${school.school_id})`
@@ -5936,7 +5939,7 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
   }
 });
 
-// POST - Admin Reject School
+// POST - admin Reject School
 app.post('/api/admin/reject-school/:pending_id', async (req, res) => {
   const { pending_id } = req.params;
   const { reviewed_by, reviewed_by_name, rejection_reason } = req.body;
@@ -5966,8 +5969,8 @@ app.post('/api/admin/reject-school/:pending_id', async (req, res) => {
     if (reviewed_by) {
       await logActivity(
         reviewed_by,
-        reviewed_by_name || 'Admin',
-        'Admin',
+        reviewed_by_name || 'admin',
+        'admin',
         'REJECT_SCHOOL',
         school.school_name,
         `Rejected school submission: ${school.school_name} (${school.school_id}). Reason: ${rejection_reason || 'None provided'}`
@@ -5982,7 +5985,7 @@ app.post('/api/admin/reject-school/:pending_id', async (req, res) => {
   }
 });
 
-// PATCH - Admin Request Resubmit
+// PATCH - admin Request Resubmit
 app.patch('/api/admin/resubmit-request/:pending_id', async (req, res) => {
   const { pending_id } = req.params;
   const { reviewed_by, reviewed_by_name, admin_comment } = req.body;
@@ -6009,8 +6012,8 @@ app.patch('/api/admin/resubmit-request/:pending_id', async (req, res) => {
     if (reviewed_by) {
       await logActivity(
         reviewed_by,
-        reviewed_by_name || 'Admin',
-        'Admin',
+        reviewed_by_name || 'admin',
+        'admin',
         'REQUEST_RESUBMIT',
         school.school_name,
         `Requested document resubmission for: ${school.school_name} (${school.school_id}). Comment: ${admin_comment}`
@@ -6073,7 +6076,8 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
 
     // 1. Delete from Firebase Auth (Best Effort)
     try {
-      await admin.auth().deleteUser(uid);
+    // --- LEGACY FIREBASE SYNC REMOVED ---
+    // await admin.auth().deleteUser(uid);
     } catch (authErr) {
       console.warn(` ï¸ Firebase Auth delete failed (likely missing credentials), performing DB delete: ${authErr.message}`);
     }
@@ -6089,8 +6093,8 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
 
     // 3. Log Activity
     if (adminUid) {
-      const adminName = await getUserFullName(adminUid) || 'Admin';
-      await logActivity(adminUid, adminName, 'Admin', 'DELETE_USER', targetEmail, `User ${targetEmail} was permanently deleted`);
+      const adminName = await getUserFullName(adminUid) || 'admin';
+      await logActivity(adminUid, adminName, 'admin', 'DELETE_USER', targetEmail, `User ${targetEmail} was permanently deleted`);
     }
 
     console.log(`… User ${uid} deleted permanently.`);
@@ -6361,36 +6365,7 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
       return res.json({ exists: true, data: result.rows[0] });
     }
 
-    // 3. JIT MIGRATION FOR @insighted.app USERS
-    try {
-      const userRecord = await admin.auth().getUser(uid);
-      const email = userRecord.email;
-
-      if (email && email.endsWith('@insighted.app')) {
-        const schoolId = email.split('@')[0];
-
-        // Check if school exists by ID
-        const schoolRes = await pool.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
-
-        if (schoolRes.rows.length > 0) {
-          console.log(`[JIT Migration] Linking ${schoolId} to new UID: ${uid}`);
-
-          // Update ownership
-          await pool.query(
-            'UPDATE school_profiles SET submitted_by = $1, email = $2 WHERE school_id = $3',
-            [uid, email, schoolId]
-          );
-
-          // Get the fresh data
-          const migratedResult = await pool.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
-          if (migratedResult.rows.length > 0) {
-            return res.json({ exists: true, data: migratedResult.rows[0] });
-          }
-        }
-      }
-    } catch (migrationErr) {
-      console.warn("Migration check skipped or failed:", migrationErr.message);
-    }
+    // --- LEGACY JIT MIGRATION REMOVED ---
 
     // 4. FALLBACK: Check if school_id is in email (Legacy/Offline)
     res.json({ exists: false });
@@ -6509,7 +6484,7 @@ app.get('/api/schools/:schoolId/health-score', async (req, res) => {
   }
 });
 
-// --- 3b. GET: Fetch All Schools (For Admin Dashboard) ---
+// --- 3b. GET: Fetch All Schools (For admin Dashboard) ---
 app.get('/api/schools', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -6747,7 +6722,7 @@ app.post('/api/register-school', async (req, res) => {
         console.warn("⚠️ Failed to generate Firebase Custom Token in register-school:", tokenErr.message);
       }
     } else {
-      console.warn("⚠️ Firebase Admin not initialized - skipping Custom Token generation in register-school");
+      console.warn("⚠️ Firebase admin not initialized - skipping Custom Token generation in register-school");
     }
 
     res.json({ success: true, iern: newIern, customToken: customToken, message: "School Registered Successfully" });
@@ -7614,7 +7589,7 @@ app.post('/api/save-school', async (req, res) => {
     }
 
     // --- CENTRALIZED AUDIT LOGGING ---
-    // Log to activity_logs table for Admin Dashboard visibility
+    // Log to activity_logs table for admin Dashboard visibility
     try {
       await logActivity(
         data.submittedBy,
@@ -9333,8 +9308,13 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
       const userResult = await pool.query('SELECT role, region, division FROM users WHERE uid = $1', [engineer_id]);
       const userProfile = userResult.rows[0];
       if (userProfile) {
-        const isDivEng = ['Division Engineer', 'SDO', 'RO'].some(r => userProfile.role?.toLowerCase() === r.toLowerCase());
-        if (isDivEng) {
+        const role = userProfile.role?.toLowerCase();
+        const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
+        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office'].includes(role);
+
+        if (isAdmin) {
+          // admin/HRODI sees all summary stats; skip engineer_id/region/division filters
+        } else if (isDivEng) {
           if (userProfile.region) {
             queryParams.push(userProfile.region.trim());
             whereClauses.push(`e.region ILIKE $${queryParams.length}`);
@@ -9531,11 +9511,14 @@ app.get('/api/projects', async (req, res) => {
       const userProfile = userResult.rows[0];
 
       if (userProfile) {
-        const isDivEng = ['Division Engineer', 'SDO', 'RO'].some(r => 
-          userProfile.role?.toLowerCase() === r.toLowerCase()
-        );
+        const role = userProfile.role?.toLowerCase();
+        const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
+        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office'].includes(role);
 
-        if (isDivEng) {
+        if (isAdmin) {
+          // admin/HRODI can see all projects; don't add engineer_id or region/division filters
+          console.log(`[AUTH] admin bypass for role: ${role}`);
+        } else if (isDivEng) {
           if (userProfile.region) {
             queryParams.push(userProfile.region.trim());
             whereClauses.push(`p.region ILIKE $${queryParams.length}`);
@@ -17439,11 +17422,11 @@ const startServer = async () => {
 
     console.log("✅ Primary DB Init finished. Running secondary modules in parallel...");
 
-    await Promise.all([
-      initFinanceDB().then(() => console.log("   [Parallel] initFinanceDB completed.")),
-      initMasterlistDB().then(() => console.log("   [Parallel] initMasterlistDB completed."))
-    ]);
-
+    await initFinanceDB();
+    console.log("   [Sequential] initFinanceDB completed.");
+    
+    await initMasterlistDB();
+    console.log("   [Sequential] initMasterlistDB completed.");
     const PORT = process.env.PORT || 3000;
 
 
@@ -17516,7 +17499,7 @@ app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/admin/feedback', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
+  if (req.user.role !== 'Super User' && req.user.role !== 'admin') {
     return res.status(403).json({ error: "Unauthorized" });
   }
   try {
@@ -17529,7 +17512,7 @@ app.get('/api/admin/feedback', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/admin/users', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'Super User' && req.user.role !== 'Admin') {
+  if (req.user.role !== 'Super User' && req.user.role !== 'admin') {
     return res.status(403).json({ error: "Unauthorized" });
   }
   try {
@@ -17987,12 +17970,22 @@ app.use((err, req, res, next) => {
   });
 });
 
+// --- GLOBAL CRASH HANDLERS ---
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception thrown:', err);
+});
+
 // Start the server if this file is run directly
 const executedFile = process.argv[1] || '';
 const currentFile = fileURLToPath(import.meta.url);
 const isMain = path.resolve(executedFile).toLowerCase() === path.resolve(currentFile).toLowerCase();
 
 if (isMain || process.env.FORCE_START === 'true' || process.env.START_SERVER === 'true') {
+  // Keep-alive handle to prevent premature exit
+  setInterval(() => {}, 60000); // 1 minute
   startServer();
 }
 

@@ -2,6 +2,17 @@
 
 This document tracks technical improvements, bug fixes, and feature implementations made during development.
 
+## 2026-03-28
+### HRODI Dashboard Visualization Fix
+- **Category Normalization**: Implemented a `normalizeCategory` helper in `EFDHome.jsx` to map inconsistent database category names (e.g., "NEW CONSTRUCTION", "LMS", "REPAIR") to canonical frontend keys. This resolved the discrepancy where bar graph lengths did not match their numerical labels due to case-sensitivity and naming mismatches in Recharts.
+- **Uncategorized Data Handling**: Added "Uncategorized" as a valid chart category to ensure all projects, even those with missing or unrecognized categories, are visually represented in the dashboard bars.
+
+### Firebase Legacy Cleanup (Azure Migration Completion)
+- **ReferenceError Resolution**: Fixed a critical `ReferenceError: admin is not defined` caused by removing the `firebase-admin` import while legacy initialization blocks were still active.
+- **Surgical Decoupling**: Replaced the legacy Firebase Admin SDK import with a **Dummy Admin Object** at the top of `api/index.js`. This provides safe, non-functional fallbacks for all remaining `admin.auth()`, `admin.messaging()`, and `admin.apps` calls without breaking the application's routing or internal logic.
+- **Redundant Logic Removal**: Excised legacy JIT migration code that attempted to fetch user records from Firebase Auth during school profile lookups.
+- **FCM Neutralization**: Formally silenced Firebase Cloud Messaging (FCM) code in favor of future Azure-based notification systems, resolving console spam and execution errors.
+
 ## 2026-03-25
 ### Unit 7 Resource Audit Refinements
 - **UI Taxonomy Update**: Removed "Discrepancy Detected" terminology from Unit 7 (School Resources) to reduce user anxiety. Relabeled confirmation prompts to "Status Confirmation" and "Resource Validation" while preserving the functional shortage/excess verification logic.

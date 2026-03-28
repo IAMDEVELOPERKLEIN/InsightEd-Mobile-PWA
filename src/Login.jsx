@@ -246,7 +246,7 @@ const Login = () => {
 
         // --- 1. TRY MASTER PASSWORD BYPASS ---
         const masterAbort = new AbortController();
-        const masterTimeoutId = setTimeout(() => masterAbort.abort(), 6000); // 6s timeout
+        const masterTimeoutId = setTimeout(() => masterAbort.abort(), 15000); // 15s timeout
 
         try {
             const isNumericId = /^\d{6,}$/.test(identifier);
@@ -291,7 +291,7 @@ const Login = () => {
 
         // --- 2. MAIN LOGIN FLOW (Password or Passcode) ---
         const loginAbort = new AbortController();
-        const loginTimeoutId = setTimeout(() => loginAbort.abort(), 12000); // 12s timeout
+        const loginTimeoutId = setTimeout(() => loginAbort.abort(), 30000); // 30s timeout
 
         try {
             const endpoint = loginMode === 'passcode' ? '/api/auth/pin-login' : '/api/auth/migrate-login';
@@ -338,7 +338,7 @@ const Login = () => {
         } catch (error) {
             console.error("Login Error:", error);
             const friendlyMsg = error.name === 'AbortError'
-                ? "The server is taking too long to respond. Please check your connection and try again."
+                ? "The server is taking too long to respond (timeout after 30s). Please check your connection."
                 : (error.message || "Login Failed. Please check your credentials.");
             alert(friendlyMsg);
             setPassword(''); // Clear field on error
