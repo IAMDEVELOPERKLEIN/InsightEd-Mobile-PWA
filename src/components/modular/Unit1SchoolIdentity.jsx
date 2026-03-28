@@ -965,7 +965,7 @@ const Unit1SchoolIdentity = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                                 Cancel
                                                             </button>
                                                             <button 
-                                                                disabled={unlockInput !== "Confirm"}
+                                                                disabled={unlockInput.toLowerCase() !== "confirm"}
                                                                 onClick={() => {
                                                                     setIsSchoolIdLocked(false);
                                                                     setShowUnlockDialog(false);
