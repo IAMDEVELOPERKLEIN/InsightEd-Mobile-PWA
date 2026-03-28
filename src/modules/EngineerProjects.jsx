@@ -812,6 +812,7 @@ const EngineerProjects = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: variationProject.id,
+          ipc: variationProject.ipc,
           ...variationData,
           uid: user?.uid,
           userName: userName
@@ -870,33 +871,9 @@ const EngineerProjects = () => {
     }
   };
 
-  const handleSaveProject = async (updatedProject) => {
-    console.log("DEBUG SAVE PROJECT PAYLOAD:", {
-      id: updatedProject.id,
-      pow_len: updatedProject.pow_pdf?.length,
-      dupa_len: updatedProject.dupa_pdf?.length,
-      contract_len: updatedProject.contract_pdf?.length
-    });
-
+  const handleSaveProject = async (updatedProject, overrideInternalFiles = null, overrideExternalFiles = null) => {
     const uid = user?.uid;
     if (!uid) return;
-
-    // OPTIMIZATION: Check if progress changed
-    const originalProject = projects.find(p => p.id === updatedProject.id);
-    const isProgressUpdated = originalProject && (
-      originalProject.status !== updatedProject.status ||
-      Number(originalProject.accomplishmentPercentage) !== Number(updatedProject.accomplishmentPercentage)
-    );
-
-    // CHECK: Mandatory Photo Upload (Exempt Variation Order & Realignment)
-    const progressiveStatuses = [ProjectStatus.Ongoing, ProjectStatus.ForFinalInspection, ProjectStatus.Completed];
-    const isProgressiveUpdate = progressiveStatuses.includes(updatedProject.status);
-    const canSkipPhotos = updatedProject.hasVariationOrder || updatedProject.isRealigned || updatedProject.isProjectDetailsUpdate || updatedProject.update_type === 'Details Update';
-
-    if (modalMode !== 'docs_only' && isProgressiveUpdate && internalFiles.length === 0 && externalFiles.length === 0 && !canSkipPhotos) {
-      alert(`⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for projects in "${updatedProject.status}" status.`);
-      return;
-    }
 
     // CHECK: Completed Projects must have Actual Completion Date
     if (updatedProject.status === 'Completed' && !updatedProject.actualCompletionDate) {
@@ -904,23 +881,20 @@ const EngineerProjects = () => {
       return;
     }
 
-    // CHECK: Mandatory Location REMOVED per user request
-    // if (!updatedProject.latitude || !updatedProject.longitude) {
-    //   alert("⚠️ LOCATION REQUIRED\n\nPlease capture the project coordinates (Latitude/Longitude) before saving.");
-    //   return;
-    // }
-
     setIsUploading(true);
     try {
       // Create payload copy
-      // Determine uploader_type from the logged-in user's role and account category
-      let uploaderType = 'DepEd Engineer'; // Default
+      let uploaderType = 'DepEd Engineer';
       if (userRole === 'EFD' || userRole === 'HRODI Engineer') uploaderType = 'EFD Engineer';
       else if (userRole === 'Non-DepEd Engineer' || (userRole === 'DepEd Engineer' && accountCategory === 'Non-DepEd Engineer')) uploaderType = 'Non-DepEd Engineer';
 
       const payload = { ...updatedProject, uid: uid, modifiedBy: userName, uploader_type: uploaderType };
-
       const body = payload;
+
+      // Use overrides if provided (from Wizard), otherwise fallback to component state
+      const currentInternal = overrideInternalFiles || internalFiles;
+      const currentExternal = overrideExternalFiles || externalFiles;
+
       if (!navigator.onLine) {
         await addEngineerToOutbox({
           url: `${API_BASE}/api/update-project/${updatedProject.id}`,
@@ -931,8 +905,8 @@ const EngineerProjects = () => {
 
         // Save images offline
         const allFiles = [
-          ...internalFiles.map(f => ({ file: f, category: 'Internal' })),
-          ...externalFiles.map(f => ({ file: f, category: 'External' }))
+          ...currentInternal.map(f => ({ file: f, category: 'Internal' })),
+          ...currentExternal.map(f => ({ file: f, category: 'External' }))
         ];
 
         if (allFiles.length > 0) {
@@ -964,48 +938,54 @@ const EngineerProjects = () => {
       });
       if (!response.ok) throw new Error("Update failed");
       const resData = await response.json();
+      
+      // The backend returns the NEW snapshot row in resData.project
       const finalProject = {
         ...updatedProject,
         id: resData.project.project_id,
-        otherRemarks: resData.project.other_remarks // Ensure latest remarks are in state
+        otherRemarks: resData.project.other_remarks
       };
 
       // Online Upload Images
       const allFiles = [
-        ...internalFiles.map(f => ({ file: f, category: 'Internal' })),
-        ...externalFiles.map(f => ({ file: f, category: 'External' }))
+        ...currentInternal.map(f => ({ file: f, category: 'Internal' })),
+        ...currentExternal.map(f => ({ file: f, category: 'External' }))
       ];
 
       if (allFiles.length > 0) {
-        // Small delay to ensure the new project record is fully visible in DB across replicas if any
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Small delay to ensure the new project record is fully visible in DB for image linking
+        await new Promise(resolve => setTimeout(resolve, 800));
         
         for (const item of allFiles) {
           try {
             const base64Image = await compressImage(item.file);
-            await fetch(`${API_BASE}/api/upload-image`, {
+            const uploadRes = await fetch(`${API_BASE}/api/upload-image`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ 
-                projectId: resData.project.project_id, // Use the NEW ID returned from the server
+                projectId: resData.project.project_id, // Link to the NEW snapshot ID
                 imageData: base64Image, 
                 uploadedBy: uid, 
                 category: item.category 
               }),
             });
+            if (!uploadRes.ok) {
+              console.error("Upload failed for file:", item.file.name, await uploadRes.text());
+            }
           } catch (err) {
             console.error("Compression/Upload failed for file:", item.file.name, err);
           }
         }
       }
+      
       setProjects(prev => prev.map(p => p.id === updatedProject.id ? finalProject : p));
-      alert("Success: Changes synced to database!");
+      alert("✅ SUCCESS\n\nProject updates and site photos have been synced.");
       setInternalFiles([]);
       setExternalFiles([]);
       setIsUpdateModalOpen(false);
     } catch (err) {
       console.error("Save Error:", err);
-      alert("Sync error. Try again later.");
+      alert("Error: Failed to save updates. Please check your connection.");
     } finally {
       setIsUploading(false);
     }
@@ -1140,14 +1120,8 @@ const EngineerProjects = () => {
           onClose={() => setIsUpdateModalOpen(false)}
           isUploading={isUploading}
           onSave={async (updatedProject, wizardInternalFiles, wizardExternalFiles) => {
-            // Use files provided by the wizard instead of the parent state
-            const prevInternal = internalFiles;
-            const prevExternal = externalFiles;
-            setInternalFiles(wizardInternalFiles || []);
-            setExternalFiles(wizardExternalFiles || []);
-            await handleSaveProject(updatedProject);
-            setInternalFiles(prevInternal);
-            setExternalFiles(prevExternal);
+            // Pass wizard-captured files directly to avoid state race conditions
+            await handleSaveProject(updatedProject, wizardInternalFiles, wizardExternalFiles);
           }}
         />
 

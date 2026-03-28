@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
 import express from 'express';
+console.log("📌 >>> RUNNING: [ROOT]/api/index.js <<< 📌");
+
 import { google } from 'googleapis';
 // Force restart to pick up .env changes - Robust Login Fix v1
 import pg from 'pg';
@@ -8461,8 +8463,8 @@ app.post('/api/save-project', async (req, res) => {
       );
       console.log("… Activity logged successfully for:", newIpc);
     } catch (logErr) {
-      console.error(" ï¸ Activity Log Error (Non-blocking):", logErr.message);
-      console.error(" ï¸ Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
+      console.error(" ï¸  Activity Log Error (Non-blocking):", logErr.message);
+      console.error(" ï¸  Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
     }
 
     res.status(200).json({ message: "Project and images saved!", project: newProject, ipc: newIpc });
@@ -8470,7 +8472,7 @@ app.post('/api/save-project', async (req, res) => {
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(e => console.error("Dual-Write Rollback Err:", e.message)); // Rollback secondary too
-    console.error("âŒ SQL ERROR:", err.message);
+    console.error("â Œ SQL ERROR:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   } finally {
     if (client) client.release();
@@ -8486,6 +8488,8 @@ app.put('/api/update-project/:id', upload.fields([
 ]), async (req, res) => {
   const { id } = req.params;
   const data = req.body;
+  console.log("🔥 HIT: PUT /api/update-project/" + id);
+
 
   let client;
   let clientNew = null;
@@ -8512,6 +8516,7 @@ app.put('/api/update-project/:id', upload.fields([
       return res.status(404).json({ message: "Project not found" });
     }
     const oldData = oldRes.rows[0];
+
 
     // Fetch existing documents for carry-over
     const oldDocsRes = await client.query('SELECT * FROM engineer_documents WHERE project_id = $1', [id]);
@@ -8552,7 +8557,7 @@ app.put('/api/update-project/:id', upload.fields([
     const newStatus = statusMapping[rawStatus?.toLowerCase()] || rawStatus || 'Ongoing';
 
     const rawProc = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status || oldData.status_design_phase;
-    const newProcurementStatus = statusMapping[rawProc?.toLowerCase()] || rawProc || 'Ongoing';
+    const newProcurementStatus = statusMapping[rawProc?.toLowerCase()] || rawProc || null;
 
     const newStatusDesignPhase = newProcurementStatus;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
@@ -8563,7 +8568,11 @@ app.put('/api/update-project/:id', upload.fields([
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
 
     const insertValues = [
-      oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
+      valueOrNull(data.project_name || data.projectName) || oldData.project_name || 'N/A',
+      valueOrNull(data.school_name || data.schoolName) || oldData.school_name || 'N/A',
+      valueOrNull(data.school_id || data.schoolId) || oldData.school_id || 'N/A',
+      valueOrNull(data.region) || oldData.region || 'N/A',
+      valueOrNull(data.division) || oldData.division || 'N/A',
       newStatus, newAccomplishment, newStatusAsOf,
       valueOrNull(data.targetCompletionDate) || oldData.target_completion_date,
       newActualDate,
@@ -8622,6 +8631,7 @@ app.put('/api/update-project/:id', upload.fields([
 
     const insertQuery = `
       INSERT INTO "engineer_form" (
+
         project_name, school_name, school_id, region, division,
         status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
@@ -8640,24 +8650,27 @@ app.put('/api/update-project/:id', upload.fields([
         province, city, municipality,
         pow_pdf, dupa_pdf, contract_pdf,
         procurement_status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63)
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63)
+
+
       RETURNING *;
     `;
 
+    console.log("🚀 INSERTING MAPPED VALUES:", insertValues.slice(0, 5));
+    fs.appendFileSync('debug.log', `[${new Date().toISOString()}] INSERTING PROJECT_NAME: ${insertValues[0]}\n`);
     const result = await client.query(insertQuery, insertValues);
+
+
     const newData = result.rows[0];
 
-    // --- 2.2a Handle Documents Update (engineer_documents) ---
+    // --- 2.2a Handle Documents Insert for new snapshot (engineer_documents) ---
+    // NOTE: Each update creates a NEW engineer_form row (append-only snapshot), so project_id
+    // is always brand new here. Plain INSERT is correct — no conflict is possible.
     await client.query(`
       INSERT INTO engineer_documents (project_id, ipc, pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf, uploader_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (project_id) DO UPDATE SET
-        pow_pdf = EXCLUDED.pow_pdf,
-        dupa_pdf = EXCLUDED.dupa_pdf,
-        contract_pdf = EXCLUDED.contract_pdf,
-        rta_pdf = EXCLUDED.rta_pdf,
-        moa_pdf = EXCLUDED.moa_pdf,
-        uploader_id = EXCLUDED.uploader_id
     `, [
       newData.project_id, newData.ipc,
       pow_pdf_base64,
@@ -8750,15 +8763,20 @@ app.put('/api/update-project/:id', upload.fields([
 
         const voQuery = `
           INSERT INTO variation_orders (
-            project_id, ipc, vo_number, vo_sequence_no, vo_type, 
-            requested_date, requested_by, original_contract_amount, 
-            additive_amount, deductive_amount, net_vo_amount, revised_contract_amount,
+            project_id, ipc, variation_name, vo_sequence_no, variation_type, 
+            requested_date, requested_by, original_amount, 
+            additive, deductive, modified_amount, revised_contract_amount,
             original_target_completion_date, revised_target_completion_date,
             time_extension_days, revised_expiry_date, justification, caf_reference, 
-            status_of_construction_phase, revised_pow_pdf, revised_dupa_pdf, revised_contract_pdf, created_by,
-            justification_category, justification_details, previous_vo_total, original_expiry_date
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+            status, revised_pow_pdf, revised_dupa_pdf, revised_contract_pdf, created_by,
+            justification_category, justification_details, previous_vo_total, original_expiry_date,
+            reused_amount
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
         `;
+
+        // Add reused_amount (default 0 for this flow)
+        voValues.push(0);
+
 
         await client.query(voQuery, voValues);
         if (clientNew) {
@@ -8840,7 +8858,11 @@ app.put('/api/update-project/:id', upload.fields([
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
     console.error("âŒ Error updating project:", err.message);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message, 
+      detail: err.detail || "No additional detail" 
+    });
   } finally {
     if (client) client.release();
     if (clientNew) clientNew.release();
@@ -8859,6 +8881,79 @@ app.get('/api/projects/variation-orders/:ipc', async (req, res) => {
   } catch (err) {
     console.error("❌ Error fetching VO history:", err.message);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// --- 9.6 POST: Save Variation Order (Simplified Flow) ---
+app.post('/api/variation-orders', async (req, res) => {
+  const { 
+    projectId, ipc, variationName, variationType, 
+    originalAmount, additive, deductive, reusedAmount,
+    uid, userName 
+  } = req.body;
+
+  if (!projectId || !variationName || !variationType) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const original = parseFloat(originalAmount) || 0;
+    const add = parseFloat(additive) || 0;
+    const ded = parseFloat(deductive) || 0;
+    const reused = parseFloat(reusedAmount) || 0;
+    
+    // Calculate total modified amount
+    const modified = original + add - ded;
+
+    // Fetch latest IPC and record info for history consistency
+    const projectRes = await pool.query('SELECT ipc, project_name FROM engineer_form WHERE project_id = $1', [projectId]);
+    const project = projectRes.rows[0];
+    const resolvedIpc = ipc || project?.ipc;
+
+    const query = `
+      INSERT INTO variation_orders (
+        project_id, ipc, variation_name, variation_type, 
+        original_amount, additive, deductive, reused_amount, modified_amount, created_by,
+        requested_date, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), 'Approved')
+      RETURNING *;
+    `;
+    const values = [projectId, resolvedIpc, variationName, variationType, original, add, ded, reused, modified, uid];
+    const result = await pool.query(query, values);
+
+    await logActivity(
+      uid, userName || 'Engineer', 'Engineer', 'VARIATION',
+      `VO: ${variationName} (${project?.project_name || resolvedIpc})`,
+      JSON.stringify({
+        variation_name: variationName,
+        type: variationType,
+        original: original,
+        additive: add,
+        deductive: ded,
+        reused: reused,
+        total: modified
+      })
+    );
+
+    res.status(201).json({ success: true, variation: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Variation Order Error:", err.message);
+    res.status(500).json({ error: "Failed to save variation order" });
+  }
+});
+
+// --- 9.7 GET: Variation Orders by Project ID ---
+app.get('/api/variation-orders/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM variation_orders WHERE project_id = $1 OR ipc IN (SELECT ipc FROM engineer_form WHERE project_id = $1) ORDER BY created_at DESC',
+      [projectId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Fetch VO Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch variation orders" });
   }
 });
 
@@ -17350,6 +17445,9 @@ const startServer = async () => {
     ]);
 
     const PORT = process.env.PORT || 3000;
+
+
+
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n================================================`);
       console.log(`🚀 SERVER RUNNING - PID: ${process.pid}`);
