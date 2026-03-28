@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import BottomNav from "../../modules/BottomNav";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
-import { MapContainer, TileLayer, Marker, Popup, Rectangle, useMapEvents, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Rectangle, Polygon, useMapEvents, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 // Fix for default marker icon in react-leaflet using unpkg to bypass rollup bundle errors
@@ -83,7 +83,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         center_lat: null,
         center_lng: null,
         length_m: 10,
-        width_m: 10
+        width_m: 10,
+        rotation_deg: 0
     });
 
     const totalAreaSqm = (newSpace.length_m || 0) * (newSpace.width_m || 0);
@@ -343,6 +344,35 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
     };
 
     // ── Calculation Utilities ──────────────────────────────────────────────
+    const calculateRotatedPolygon = (lat, lng, lengthM, widthM, rotationDeg = 0) => {
+        if (!lat || !lng || !lengthM || !widthM) return null;
+
+        const rotationRad = (rotationDeg * Math.PI) / 180;
+        
+        // Meters per degree approximations
+        const metersPerLat = 111320;
+        const metersPerLng = 111320 * Math.cos(lat * Math.PI / 180);
+
+        // Relative corners in meters (Before rotation)
+        const corners = [
+            { y: lengthM / 2, x: -widthM / 2 }, // Top-Left
+            { y: lengthM / 2, x: widthM / 2 },  // Top-Right
+            { y: -lengthM / 2, x: widthM / 2 }, // Bottom-Right
+            { y: -lengthM / 2, x: -widthM / 2 } // Bottom-Left
+        ];
+
+        // Rotate and convert to Lat/Lng
+        return corners.map(c => {
+            const rotatedY = c.y * Math.cos(rotationRad) - c.x * Math.sin(rotationRad);
+            const rotatedX = c.y * Math.sin(rotationRad) + c.x * Math.cos(rotationRad);
+
+            return [
+                lat + (rotatedY / metersPerLat),
+                lng + (rotatedX / metersPerLng)
+            ];
+        });
+    };
+
     const calculateBounds = (lat, lng, lengthM, widthM) => {
         if (!lat || !lng || !lengthM || !widthM) return null;
 
@@ -359,6 +389,14 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
     // ── Saving / Deleting ──────────────────────────────────────────────────
     const handleSaveSpace = async () => {
+        const isDuplicateSpace = spaces.some(
+            s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase()
+        );
+        if (isDuplicateSpace) {
+            alert("A space with this name already exists. Please use a unique name.");
+            return;
+        }
+
         if (!newSpace.center_lat || !newSpace.center_lng) {
             alert("Please tap on the map to place the center pin.");
             return;
@@ -396,7 +434,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
             setNewSpace({
                 space_name: "New Building Area",
                 center_lat: null, center_lng: null,
-                length_m: 10, width_m: 10
+                length_m: 10, width_m: 10,
+                rotation_deg: 0
             });
         } catch (err) {
             console.error("Submission failed", err);
@@ -420,6 +459,15 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
     // ── Phase 2 Handlers ──────────────────────────────────────────────────
     const handleSaveBuilding = () => {
+        const isDuplicateBuilding = buildings.some(
+            b => b.id !== editingBuildingId &&
+                 (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()
+        );
+        if (isDuplicateBuilding) {
+            alert("A building with this name already exists. Please use a unique name.");
+            return;
+        }
+
         if (!buildingFormData.building_name) {
             alert("Please enter a building name.");
             return;
@@ -884,9 +932,9 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                                         <RecenterMap center={centerMap} />
                                         {spaces.map((s, idx) => {
-                                            const bounds = calculateBounds(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m) || 0, parseFloat(s.width_m) || 0);
-                                            return bounds ? (
-                                                <Rectangle key={'ro-' + idx} bounds={bounds} pathOptions={{ color: '#4f46e5', weight: 3, fillOpacity: 0.2 }} />
+                                            const poly = calculateRotatedPolygon(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m) || 0, parseFloat(s.width_m) || 0, parseFloat(s.rotation_deg) || 0);
+                                            return poly ? (
+                                                <Polygon key={'ro-' + idx} positions={poly} pathOptions={{ color: '#4f46e5', weight: 3, fillOpacity: 0.2 }} />
                                             ) : null;
                                         })}
                                     </MapContainer>
@@ -1167,7 +1215,12 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         <div>
                                             <label className="text-sm font-bold text-gray-500 ml-2">Space Name / ID</label>
                                             <input type="text" value={newSpace.space_name} onChange={(e) => setNewSpace({ ...newSpace, space_name: e.target.value })}
-                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-emerald-500 transition-all" />
+                                                className={`w-full bg-gray-50 border-2 ${spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-emerald-500'} mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none transition-all`} />
+                                            {spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase()) && (
+                                                <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
+                                                    <FiAlertTriangle /> This space name is already in use
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="flex gap-4">
@@ -1183,13 +1236,30 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             </div>
                                         </div>
 
-                                        <div className="bg-emerald-50 p-4 rounded-2xl border-2 border-emerald-100 flex justify-between items-center mt-4">
-                                            <span className="font-bold text-emerald-800">Computed Area:</span>
-                                            <span className="text-3xl font-black text-emerald-600">{totalAreaSqm.toFixed(2)} m&sup2;</span>
+                                        <div className="bg-emerald-50 p-4 rounded-2xl border-2 border-emerald-100 mt-4">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <span className="font-bold text-emerald-800">Computed Area:</span>
+                                                <span className="text-3xl font-black text-emerald-600">{totalAreaSqm.toFixed(2)} m&sup2;</span>
+                                            </div>
+                                            
+                                            <div className="pt-4 border-t border-emerald-200/50">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <label className="text-xs font-black text-emerald-700 uppercase tracking-widest">Rotation Angle</label>
+                                                    <span className="text-xs font-black text-emerald-600">{newSpace.rotation_deg}°</span>
+                                                </div>
+                                                <input 
+                                                    type="range" 
+                                                    min="0" 
+                                                    max="360" 
+                                                    value={newSpace.rotation_deg} 
+                                                    onChange={(e) => setNewSpace({ ...newSpace, rotation_deg: parseInt(e.target.value) })}
+                                                    className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <button onClick={handleSaveSpace} disabled={loading || !newSpace.center_lat}
+                                    <button onClick={handleSaveSpace} disabled={loading || !newSpace.center_lat || spaces.some(s => (s.space_name || "").trim().toLowerCase() === (newSpace.space_name || "").trim().toLowerCase())}
                                         className="w-full mt-6 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400 shadow-xl shadow-indigo-200/50">
                                         {loading ? "Saving..." : "Save space configuration ✓"}
                                     </button>
@@ -1212,11 +1282,11 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                         {/* Render existing spaces */}
                                         {spaces.map((s, idx) => {
-                                            const b = calculateBounds(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m), parseFloat(s.width_m));
-                                            if (!b) return null;
+                                            const poly = calculateRotatedPolygon(parseFloat(s.center_lat), parseFloat(s.center_lng), parseFloat(s.length_m), parseFloat(s.width_m), parseFloat(s.rotation_deg) || 0);
+                                            if (!poly) return null;
                                             return (
                                                 <React.Fragment key={idx}>
-                                                    <Rectangle bounds={b} pathOptions={{ color: 'blue', weight: 2, fillOpacity: 0.2 }} />
+                                                    <Polygon positions={poly} pathOptions={{ color: 'blue', weight: 2, fillOpacity: 0.2 }} />
                                                     <Marker position={[s.center_lat, s.center_lng]}>
                                                         <Popup>{s.space_name} ({s.total_area_sqm} sqm)</Popup>
                                                     </Marker>
@@ -1226,12 +1296,12 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                         {/* Render new drawing space */}
                                         {newSpace.center_lat && newSpace.center_lng && isFormVisible && (() => {
-                                            const b = calculateBounds(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0);
-                                            if (!b) return null;
+                                            const poly = calculateRotatedPolygon(newSpace.center_lat, newSpace.center_lng, newSpace.length_m || 0, newSpace.width_m || 0, newSpace.rotation_deg || 0);
+                                            if (!poly) return null;
                                             return (
                                                 <>
-                                                    <Rectangle
-                                                        bounds={b}
+                                                    <Polygon
+                                                        positions={poly}
                                                         pathOptions={{ color: 'emerald', weight: 4, fillOpacity: 0.4 }}
                                                     />
                                                     <Marker position={[newSpace.center_lat, newSpace.center_lng]}>
@@ -1337,9 +1407,14 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                 type="text"
                                                 value={buildingFormData.building_name}
                                                 onChange={(e) => setBuildingFormData({ ...buildingFormData, building_name: e.target.value })}
-                                                className="w-full bg-gray-50 border-2 border-gray-200 mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none focus:border-indigo-500 transition-all placeholder-gray-300"
+                                                className={`w-full bg-gray-50 border-2 ${buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-200 focus:border-indigo-500'} mt-1 rounded-2xl px-4 py-3 text-lg font-bold text-gray-700 outline-none transition-all placeholder-gray-300`}
                                                 placeholder="e.g. Marcos Type Bldg"
                                             />
+                                            {buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase()) && (
+                                                <p className="text-rose-500 text-[10px] font-black uppercase mt-1 ml-2 flex items-center gap-1">
+                                                    <FiAlertTriangle /> This building name is already in use
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className={`relative ${isBuildingDropdownOpen ? 'z-50' : 'z-0'}`}>
@@ -1513,7 +1588,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
                                         <button
                                             onClick={handleSaveBuilding}
-                                            className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50"
+                                            disabled={buildings.some(b => b.id !== editingBuildingId && (b.building_name || "").trim().toLowerCase() === (buildingFormData.building_name || "").trim().toLowerCase())}
+                                            className="w-full mt-4 py-4 rounded-2xl text-white font-black text-lg bg-indigo-500 border-b-[6px] border-indigo-700 active:border-b-0 active:translate-y-[6px] transition-all shadow-xl shadow-indigo-200/50 disabled:opacity-50 disabled:bg-gray-300 disabled:border-gray-400"
                                         >
                                             Save Building
                                         </button>
@@ -1542,20 +1618,37 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 </div>
                             )}
 
-                            {roomsData.slice((roomsPage - 1) * roomsPerPage, roomsPage * roomsPerPage).map((room) => {
-                                const building = allBuildings.find(b => b.id === room.building_local_id);
-                                return (
-                                    <div key={room.id} className="bg-white p-6 rounded-3xl shadow-sm border-2 border-gray-100">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="flex-1 mr-4">
-                                                <input
-                                                    type="text"
-                                                    value={room.room_name}
-                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
-                                                    className="font-black text-xl text-gray-800 bg-transparent border-b-2 border-dashed border-gray-200 focus:border-indigo-500 outline-none w-full"
-                                                />
-                                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || 'N/A'}</p>
-                                            </div>
+                            {(() => {
+                                const nameCounts = {};
+                                roomsData.forEach(r => {
+                                    const key = (r.room_name || "").trim().toLowerCase();
+                                    if (key) nameCounts[key] = (nameCounts[key] || 0) + 1;
+                                });
+                                const duplicateNames = new Set(
+                                    Object.keys(nameCounts).filter(k => nameCounts[k] > 1)
+                                );
+
+                                return roomsData.slice((roomsPage - 1) * roomsPerPage, roomsPage * roomsPerPage).map((room) => {
+                                    const building = allBuildings.find(b => b.id === room.building_local_id);
+                                    const isDuplicate = duplicateNames.has((room.room_name || "").trim().toLowerCase());
+
+                                    return (
+                                        <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : 'border-gray-100'}`}>
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex-1 mr-4">
+                                                    <input
+                                                        type="text"
+                                                        value={room.room_name}
+                                                        onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, room_name: e.target.value } : r))}
+                                                        className={`font-black text-xl ${isDuplicate ? 'text-rose-600' : 'text-gray-800'} bg-transparent border-b-2 border-dashed ${isDuplicate ? 'border-rose-300' : 'border-gray-200'} focus:border-indigo-500 outline-none w-full`}
+                                                    />
+                                                    {isDuplicate && (
+                                                        <p className="text-rose-500 text-[10px] font-black uppercase mt-1 flex items-center gap-1">
+                                                            <FiAlertTriangle /> Duplicate Room Name
+                                                        </p>
+                                                    )}
+                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || 'N/A'}</p>
+                                                </div>
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
                                                     {room.condition}
@@ -1688,8 +1781,9 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                             </div>
                                         </div>
                                     </div>
-                                );
-                            })}
+                                    );
+                                });
+                            })()}
 
                             {/* Pagination Controls */}
                             {roomsData.length > roomsPerPage && (
@@ -1915,6 +2009,17 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         const missingGradeLevel = roomsData.some(r => !r.grade_level);
                                         if (missingGradeLevel) {
                                             alert("Please select a Granular Grade Level for all classrooms before proceeding.");
+                                            return;
+                                        }
+
+                                        const nameCounts = {};
+                                        roomsData.forEach(r => {
+                                            const key = (r.room_name || "").trim().toLowerCase();
+                                            if (key) nameCounts[key] = (nameCounts[key] || 0) + 1;
+                                        });
+                                        const hasDuplicates = Object.values(nameCounts).some(count => count > 1);
+                                        if (hasDuplicates) {
+                                            alert("Please resolve duplicate room names before proceeding.");
                                             return;
                                         }
                                     }

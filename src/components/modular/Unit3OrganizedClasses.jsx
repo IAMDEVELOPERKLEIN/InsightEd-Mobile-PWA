@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft } from "react-icons/fi";
+import { FiX, FiCheckCircle, FiCheck, FiChevronRight, FiChevronLeft, FiLayers, FiUsers, FiUnlock, FiSave, FiArrowLeft, FiAlertTriangle } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import SuccessModal from "../SuccessModal";
 import { saveUnitDraft, getUnitDraft, clearUnitDraft } from "../../db";
@@ -42,6 +42,43 @@ const getClassSizeOptions = (className) => {
     }
     // Default for Grades 4-10
     return ["< 40 learners", "40-45 learners", "> 45 learners"];
+};
+
+const getCapacityBounds = (gradeName, col_below, col_within, col_above) => {
+    const name = (gradeName || "").toLowerCase().trim();
+    let minPerSec, maxPerSec, inMin, inMax, overMin;
+
+    if (name.includes("&") || name.includes("joined") || name.includes("multigrade")) {
+        // ["< 25", "25", "> 25"]
+        minPerSec = 1; maxPerSec = 24;
+        inMin = 25; inMax = 25;
+        overMin = 26;
+    } else if (name.includes("kinder")) {
+        // ["< 25", "25-30", "> 30"]
+        minPerSec = 1; maxPerSec = 24;
+        inMin = 25; inMax = 30;
+        overMin = 31;
+    } else if (name === "grade 1" || name === "grade 2" || name === "grade 3") {
+        // ["< 30", "30-35", "> 35"]
+        minPerSec = 1; maxPerSec = 29;
+        inMin = 30; inMax = 35;
+        overMin = 36;
+    } else if (name === "grade 11" || name === "grade 12") {
+        // ["< 45", "45", "> 45"]
+        minPerSec = 1; maxPerSec = 44;
+        inMin = 45; inMax = 45;
+        overMin = 46;
+    } else {
+        // Default for Grades 4-10: ["< 40", "40-45", "> 45"]
+        minPerSec = 1; maxPerSec = 39;
+        inMin = 40; inMax = 45;
+        overMin = 46;
+    }
+
+    const minTotal = (col_below * minPerSec) + (col_within * inMin) + (col_above * overMin);
+    const maxTotal = (col_below * maxPerSec) + (col_within * inMax) + (col_above * 999); // No hard max for 'above'
+
+    return { minTotal, maxTotal };
 };
 
 const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
@@ -114,7 +151,8 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
 
             if (groupName) {
                 const id = `mg_${i}`;
-                activeClasses.push({ label: groupName, id });
+                const u2Total = parseInt(d[`multigrade_enrollment_${i}`]) || 0;
+                activeClasses.push({ label: groupName, id, u2_total: u2Total });
                 parsedData[id] = { 
                     selectedSize: groupSize || null, 
                     total_sections: groupSections || 0,
@@ -128,19 +166,19 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
         
         // 2. Check Single Grades
         const singleGradeMappings = [
-            { key: 'grade_kinder_size', label: 'Kindergarten', id: 'kinder' },
-            { key: 'grade_1_size', label: 'Grade 1', id: 'g1' },
-            { key: 'grade_2_size', label: 'Grade 2', id: 'g2' },
-            { key: 'grade_3_size', label: 'Grade 3', id: 'g3' },
-            { key: 'grade_4_size', label: 'Grade 4', id: 'g4' },
-            { key: 'grade_5_size', label: 'Grade 5', id: 'g5' },
-            { key: 'grade_6_size', label: 'Grade 6', id: 'g6' },
-            { key: 'grade_7_size', label: 'Grade 7', id: 'g7' },
-            { key: 'grade_8_size', label: 'Grade 8', id: 'g8' },
-            { key: 'grade_9_size', label: 'Grade 9', id: 'g9' },
-            { key: 'grade_10_size', label: 'Grade 10', id: 'g10' },
-            { key: 'grade_11_size', label: 'Grade 11', id: 'g11' },
-            { key: 'grade_12_size', label: 'Grade 12', id: 'g12' }
+            { key: 'grade_kinder_size', label: 'Kindergarten', id: 'kinder', u2Key: 'kinder' },
+            { key: 'grade_1_size', label: 'Grade 1', id: 'g1', u2Key: 'g1' },
+            { key: 'grade_2_size', label: 'Grade 2', id: 'g2', u2Key: 'g2' },
+            { key: 'grade_3_size', label: 'Grade 3', id: 'g3', u2Key: 'g3' },
+            { key: 'grade_4_size', label: 'Grade 4', id: 'g4', u2Key: 'g4' },
+            { key: 'grade_5_size', label: 'Grade 5', id: 'g5', u2Key: 'g5' },
+            { key: 'grade_6_size', label: 'Grade 6', id: 'g6', u2Key: 'g6' },
+            { key: 'grade_7_size', label: 'Grade 7', id: 'g7', u2Key: 'g7' },
+            { key: 'grade_8_size', label: 'Grade 8', id: 'g8', u2Key: 'g8' },
+            { key: 'grade_9_size', label: 'Grade 9', id: 'g9', u2Key: 'g9' },
+            { key: 'grade_10_size', label: 'Grade 10', id: 'g10', u2Key: 'g10' },
+            { key: 'grade_11_size', label: 'Grade 11', id: 'g11', u2Key: 'g11' },
+            { key: 'grade_12_size', label: 'Grade 12', id: 'g12', u2Key: 'g12' }
         ];
 
         // Track multigrade labels to hide joined single grades
@@ -215,7 +253,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             });
 
             if (!isJoined) {
-                activeClasses.push({ label: mapping.label, id: mapping.id });
+                activeClasses.push({ label: mapping.label, id: mapping.id, u2_total: u2Data?.total || 0 });
                 parsedData[mapping.id] = { 
                     selectedSize: size || null, 
                     total_sections: 0,
@@ -359,7 +397,13 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
             if (total === 0) return false; // MUST ENTER TOTAL SECTION
             
             const sum = (parseInt(data.col_below) || 0) + (parseInt(data.col_within) || 0) + (parseInt(data.col_above) || 0);
-            return sum === total;
+            if (sum !== total) return false;
+
+            // Math Cross-Validation with Unit 2 Enrollment
+            const u2Total = currentGrade.u2_total || 0;
+            const { minTotal, maxTotal } = getCapacityBounds(currentGrade.label, data.col_below || 0, data.col_within || 0, data.col_above || 0);
+            
+            return u2Total >= minTotal && u2Total <= maxTotal;
         }
         return true;
     }, [currentStep, isEditingGrade, currentGrade, sectionData]);
@@ -802,12 +846,52 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                                                     value={data[col.field] === 0 ? "" : data[col.field]}
                                                                     onChange={(e) => handleChange(g.id, col.field, e.target.value)}
                                                                     placeholder="0"
-                                                                    className={`w-full p-4 bg-${col.color}-50 border-2 border-${col.color}-100 text-${col.color}-700 rounded-2xl text-2xl font-black text-center focus:bg-white focus:border-${col.color}-400 outline-none transition-all`}
+                                                                    className={`w-full p-4 bg-slate-50 border-2 rounded-2xl text-2xl font-black text-slate-700 text-center focus:outline-none transition-all ${!isCurrentStepValid && total > 0 ? `border-${col.color}-200 focus:border-${col.color}-500 focus:bg-${col.color}-50` : 'border-slate-100 focus:border-indigo-500 focus:bg-indigo-50'}`}
                                                                 />
                                                             </div>
                                                         ))}
                                                     </div>
 
+                                                    {/* Conflict Alert */}
+                                                    {total > 0 && (
+                                                        <AnimatePresence>
+                                                            {(() => {
+                                                                const sum = (parseInt(data.col_below) || 0) + (parseInt(data.col_within) || 0) + (parseInt(data.col_above) || 0);
+                                                                const u2Total = currentGrade.u2_total || 0;
+                                                                const { minTotal, maxTotal } = getCapacityBounds(currentGrade.label, data.col_below || 0, data.col_within || 0, data.col_above || 0);
+                                                                
+                                                                if (sum === total) {
+                                                                    if (u2Total < minTotal) {
+                                                                        return (
+                                                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6 p-4 bg-rose-50 border-2 border-rose-100 rounded-2xl flex items-center gap-3">
+                                                                                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                                                                                    <FiAlertTriangle className="w-5 h-5 text-rose-600" />
+                                                                                </div>
+                                                                                <p className="text-xs font-bold text-rose-700 leading-snug">
+                                                                                    <span className="block uppercase tracking-widest text-[10px] mb-1">Capacity Conflict</span>
+                                                                                    Your distribution requires at least <span className="underline decoration-2">{minTotal}</span> learners, but you only reported <span className="underline decoration-2">{u2Total}</span> in Unit 2.
+                                                                                </p>
+                                                                            </motion.div>
+                                                                        );
+                                                                    }
+                                                                    if (u2Total > maxTotal) {
+                                                                        return (
+                                                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mt-6 p-4 bg-rose-50 border-2 border-rose-100 rounded-2xl flex items-center gap-3">
+                                                                                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                                                                                    <FiAlertTriangle className="w-5 h-5 text-rose-600" />
+                                                                                </div>
+                                                                                <p className="text-xs font-bold text-rose-700 leading-snug">
+                                                                                    <span className="block uppercase tracking-widest text-[10px] mb-1">Capacity Overload</span>
+                                                                                    These rooms can only hold <span className="underline decoration-2">{maxTotal}</span> learners. You reported <span className="underline decoration-2">{u2Total}</span> in Unit 2. Add more sections or adjust the size.
+                                                                                </p>
+                                                                            </motion.div>
+                                                                        );
+                                                                    }
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </AnimatePresence>
+                                                    )}
                                                     {/* Error Message if Sum Mismatch */}
                                                     {total > 0 && !isCurrentStepValid && (
                                                         <p className="text-center text-red-500 font-bold text-xs mt-6 animate-pulse">

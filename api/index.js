@@ -16596,22 +16596,26 @@ app.get('/api/ph_schools/unit10/:schoolId/spaces', async (req, res) => {
 // POST a new space
 app.post('/api/ph_schools/unit10/:schoolId/spaces', async (req, res) => {
   const { schoolId } = req.params;
-  const { iern, space_name, center_lat, center_lng, length_m, width_m, total_area_sqm } = req.body;
+  const { iern, space_name, center_lat, center_lng, length_m, width_m, total_area_sqm, rotation_deg } = req.body;
   try {
+    // Idempotent migration: Add rotation_deg column if it doesn't exist
+    await pool.query('ALTER TABLE ph_school_buildable_spaces ADD COLUMN IF NOT EXISTS rotation_deg NUMERIC DEFAULT 0;').catch(() => {});
+
     const query = `
       INSERT INTO ph_school_buildable_spaces 
-      (school_id, iern, space_name, center_lat, center_lng, length_m, width_m, total_area_sqm) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+      (school_id, iern, space_name, center_lat, center_lng, length_m, width_m, total_area_sqm, rotation_deg) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
       ON CONFLICT (iern, space_name) DO UPDATE SET
         school_id = EXCLUDED.school_id,
         center_lat = EXCLUDED.center_lat,
         center_lng = EXCLUDED.center_lng,
         length_m = EXCLUDED.length_m,
         width_m = EXCLUDED.width_m,
-        total_area_sqm = EXCLUDED.total_area_sqm
+        total_area_sqm = EXCLUDED.total_area_sqm,
+        rotation_deg = EXCLUDED.rotation_deg
       RETURNING *;
     `;
-    const values = [schoolId, iern || null, space_name || 'New Space', center_lat, center_lng, length_m, width_m, total_area_sqm];
+    const values = [schoolId, iern || null, space_name || 'New Space', center_lat, center_lng, length_m, width_m, total_area_sqm, rotation_deg || 0];
     const result = await pool.query(query, values);
 
     await pool.query('ALTER TABLE ph_schools ADD COLUMN IF NOT EXISTS unit10_completed BOOLEAN DEFAULT FALSE;');
