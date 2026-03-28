@@ -8152,41 +8152,35 @@ app.post('/api/save-project', async (req, res) => {
     // --- MIGRATION: ADD PDF COLUMNS IF NOT EXIST ---
     // MOVED TO initDB() AT STARTUP TO ENSURE COLUMNS EXIST IMMEDATELY
 
-    // 1. Generate IPC (INF-YYYY-XXXXX or INF-IMPORT-YYYY-XXXXX)
-    const year = new Date().getFullYear();
-    let newIpc;
+    // 1. Resolve Project Category ID and Generate IPC (INF-CATID-YYYY-XXXXX)
+    const year = data.fundingYear || new Date().getFullYear();
+    const categoryMapping = {
+      "New Construction": "01",
+      "Repair and Rehab": "02",
+      "Last Mile Schools": "03",
+      "Health facilities": "04",
+      "Gabaldon Restoration": "05",
+      "Library Hub": "06",
+      "SpEd Inclusive Learning Resource Centers (ILRC)": "07",
+      "Alternative Learning System - Community Based Learning Centers (ALS-CLC)": "08",
+      "Midrise School Building": "09"
+    };
+    const catId = categoryMapping[data.projectCategory] || "10";
+    
+    const ipcResult = await client.query(
+      "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+      [`INF-${catId}-${year}-%`]
+    );
 
-    if (data.isImported) {
-      const ipcResult = await client.query(
-        "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
-        [`INF-IMPORT-${year}-%`]
-      );
-
-      let nextSeq = 1;
-      if (ipcResult.rows.length > 0) {
-        const lastIpc = ipcResult.rows[0].ipc;
-        const parts = lastIpc.split('-');
-        if (parts.length === 4 && !isNaN(parts[3])) {
-          nextSeq = parseInt(parts[3]) + 1;
-        }
+    let nextSeq = 1;
+    if (ipcResult.rows.length > 0) {
+      const lastIpc = ipcResult.rows[0].ipc;
+      const parts = lastIpc.split('-');
+      if (parts.length === 4 && !isNaN(parts[3])) {
+        nextSeq = parseInt(parts[3]) + 1;
       }
-      newIpc = `INF-IMPORT-${year}-${String(nextSeq).padStart(5, '0')}`;
-    } else {
-      const ipcResult = await client.query(
-        "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
-        [`INF-${year}-%`]
-      );
-
-      let nextSeq = 1;
-      if (ipcResult.rows.length > 0) {
-        const lastIpc = ipcResult.rows[0].ipc;
-        const parts = lastIpc.split('-');
-        if (parts.length === 3 && !isNaN(parts[2])) {
-          nextSeq = parseInt(parts[2]) + 1;
-        }
-      }
-      newIpc = `INF-${year}-${String(nextSeq).padStart(5, '0')}`;
     }
+    const newIpc = `INF-${catId}-${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 2. Prepare Project Data
     const engineerName = await getUserFullName(data.uid);
@@ -8260,7 +8254,8 @@ app.post('/api/save-project', async (req, res) => {
       data.program_type || (data.is_donated ? 'Donated' : 'BEFF'), // $53
       valueOrNull(data.province), // $54
       valueOrNull(data.city), // $55
-      valueOrNull(data.municipality) // $56
+      valueOrNull(data.municipality), // $56
+      catId // $57
     ];
 
     const projectQuery = `
@@ -8279,8 +8274,8 @@ app.post('/api/save-project', async (req, res) => {
         funding_year, funding_year_justification,
         delay_reason, revised_target_completion_date, time_lapsed_days, time_lapsed_percentage, is_donated, uploader_type,
         mode_of_project, implementing_agency, implementing_agency_specific, no_of_units, program_type,
-        province, city, municipality
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56)
+        province, city, municipality, project_category_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -9259,11 +9254,128 @@ app.patch('/api/agency-dashboard/projects/:id/liquidation', async (req, res) => 
   }
 });
 
+// ==================================================================
+//         HRODI / EFD DASHBOARD PERFORMANCE ENDPOINTS
+// ==================================================================
+
+// 1. GET: EFD Dashboard Summary (Aggregated Chart Data)
+app.get('/api/dashboard/efd-summary', async (req, res) => {
+  try {
+    const { engineer_id, is_donated, region, division, search, category, year } = req.query;
+    let queryParams = [];
+    let whereClauses = [];
+
+    // Shared Filtering Logic (MUST match /api/projects)
+    if (engineer_id) {
+      const userResult = await pool.query('SELECT role, region, division FROM users WHERE uid = $1', [engineer_id]);
+      const userProfile = userResult.rows[0];
+      if (userProfile) {
+        const isDivEng = ['Division Engineer', 'SDO', 'RO'].some(r => userProfile.role?.toLowerCase() === r.toLowerCase());
+        if (isDivEng) {
+          if (userProfile.region) {
+            queryParams.push(userProfile.region.trim());
+            whereClauses.push(`e.region ILIKE $${queryParams.length}`);
+          }
+          if (userProfile.division) {
+            queryParams.push(userProfile.division.trim());
+            whereClauses.push(`e.division ILIKE $${queryParams.length}`);
+          }
+        } else {
+          queryParams.push(engineer_id);
+          whereClauses.push(`e.engineer_id = $${queryParams.length}`);
+        }
+      }
+    }
+
+    if (is_donated === 'Donated') {
+      queryParams.push('Donated');
+      whereClauses.push(`e.program_type = $${queryParams.length}`);
+    } else if (is_donated === 'BEFF' || is_donated === 'Non-Donated') {
+      queryParams.push('BEFF');
+      whereClauses.push(`e.program_type = $${queryParams.length}`);
+    }
+
+    if (region) { queryParams.push(region); whereClauses.push(`e.region = $${queryParams.length}`); }
+    if (division) { queryParams.push(division); whereClauses.push(`e.division = $${queryParams.length}`); }
+    if (category) { queryParams.push(category); whereClauses.push(`e.project_category = $${queryParams.length}`); }
+    if (year) { queryParams.push(year); whereClauses.push(`e.funding_year = $${queryParams.length}`); }
+
+    if (search) {
+      queryParams.push(`%${search}%`);
+      whereClauses.push(`(e.school_name ILIKE $${queryParams.length} OR e.project_name ILIKE $${queryParams.length})`);
+    }
+
+    const whereStr = whereClauses.length > 0 ? `WHERE ` + whereClauses.join(' AND ') : '';
+
+    // We use DISTINCT ON to get the latest entry per project, then aggregate
+    const sql = `
+      WITH LatestProjects AS (
+        SELECT DISTINCT ON (COALESCE(e.ipc, e.school_id || '-' || e.project_name))
+          e.region, e.division, e.project_category, e.funding_year, e.approved_budget_for_contract, e.program_type,
+          (NULLIF(d.moa_pdf, '') IS NOT NULL) AS has_moa,
+          (NULLIF(d.rta_pdf, '') IS NOT NULL) AS has_rta
+        FROM engineer_form e
+        LEFT JOIN engineer_documents d ON e.project_id = d.project_id
+        ${whereStr}
+        ORDER BY COALESCE(e.ipc, e.school_id || '-' || e.project_name), e.project_id DESC
+      )
+      SELECT 
+        jsonb_build_object(
+          'regionalData', (
+            SELECT jsonb_agg(r) FROM (
+              SELECT region as name, project_category as category, COUNT(*) as count, SUM(approved_budget_for_contract) as total_abc
+              FROM LatestProjects 
+              GROUP BY region, project_category
+            ) r
+          ),
+          'divisionData', (
+            SELECT jsonb_agg(d) FROM (
+              SELECT division as name, project_category as category, COUNT(*) as count, SUM(approved_budget_for_contract) as total_abc
+              FROM LatestProjects 
+              GROUP BY division, project_category
+            ) d
+          ),
+          'categoryData', (
+            SELECT jsonb_agg(c) FROM (
+              SELECT project_category as name, COUNT(*) as value
+              FROM LatestProjects 
+              GROUP BY project_category
+            ) c
+          ),
+          'yearData', (
+            SELECT jsonb_agg(y) FROM (
+              SELECT funding_year as name, COUNT(*) as count
+              FROM LatestProjects 
+              GROUP BY funding_year
+            ) y
+          ),
+          'totalStats', (
+            SELECT jsonb_build_object(
+              'totalProjects', COUNT(*),
+              'totalABC', SUM(approved_budget_for_contract),
+              'donatedCount', COUNT(*) FILTER (WHERE program_type = 'Donated'),
+              'beffCount', COUNT(*) FILTER (WHERE program_type = 'BEFF'),
+              'completeDocs', COUNT(*) FILTER (WHERE has_moa AND has_rta)
+            ) FROM LatestProjects
+          )
+        ) as summary;
+    `;
+
+    const result = await pool.query(sql, queryParams);
+    res.json(result.rows[0].summary || {});
+    
+  } catch (err) {
+    console.error("❌ Error fetching EFD summary:", err.message);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 // --- 11. GET: Get Projects (Filtered by Engineer) ---
 app.get('/api/projects', async (req, res) => {
   try {
     // We catch the engineer_id sent from EngineerDashboard.jsx
-    const { status, region, division, search, engineer_id, is_donated, implementing_agency, sty, cl } = req.query;
+    const { status, region, division, search, engineer_id, is_donated, implementing_agency, sty, cl, page = 1, limit = 50 } = req.query;
+    const offset = (page - 1) * limit;
     let queryParams = [];
     let whereClauses = [];
 
@@ -9434,10 +9546,24 @@ app.get('/api/projects', async (req, res) => {
       sql += ` WHERE ` + whereClauses.join(' AND ');
     }
 
-    sql += ` ORDER BY p.project_id DESC`;
+    // Get Total Count for Pagination
+    const countSql = `SELECT COUNT(*) FROM (${sql}) AS total`;
+    const countResult = await pool.query(countSql, queryParams);
+    const totalCount = parseInt(countResult.rows[0].count);
+
+    sql += ` ORDER BY p.project_id DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    queryParams.push(limit, offset);
 
     const result = await pool.query(sql, queryParams);
-    res.json(result.rows);
+    res.json({
+      data: result.rows,
+      pagination: {
+        total: totalCount,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    });
   } catch (err) {
     console.error("âŒ Error fetching projects:", err.message);
     res.status(500).json({ message: "Server error" });

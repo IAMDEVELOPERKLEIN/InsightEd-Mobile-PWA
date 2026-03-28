@@ -496,6 +496,8 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
         const roomsPerFloor = Math.ceil(numClassrooms / numStoreys);
         let roomCount = 0;
 
+        const isBuildingCondemned = buildingFormData.status === "For Condemnation" || buildingFormData.status === "Condemned";
+
         for (let floor = 1; floor <= numStoreys; floor++) {
             for (let r = 0; r < roomsPerFloor && roomCount < numClassrooms; r++) {
                 roomCount++;
@@ -508,10 +510,10 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                     building_name: buildingFormData.building_name,
                     room_name: roomName,
                     dimensions: "7x9",
-                    grade_level: "",
+                    grade_level: isBuildingCondemned ? "Non-Instructional" : "",
                     teacher_id: "",
-                    condition: "Good Condition",
-                    seats: "",
+                    condition: isBuildingCondemned ? buildingFormData.status : "Good Condition",
+                    seats: isBuildingCondemned ? "0" : "",
                 });
             }
         }
@@ -768,12 +770,13 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
             // Summary counts for school profile
             const build_classrooms_total = roomsData.length;
-            const build_classrooms_new = buildings.filter(b => b.status === "Newly Built").reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
-            const build_classrooms_good = buildings.filter(b => b.status === "Good Condition").reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
-            const build_classrooms_repair = [...new Set(repairAssessments.map(a => `${a.building_name}-${a.room_name}`))].length;
-            const build_classrooms_demolition = buildings
-                .filter(b => b.status === "For Condemnation" || b.status === "Condemned")
-                .reduce((acc, b) => acc + (parseInt(b.classroom) || 0), 0);
+            const build_classrooms_new = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Newly Built").length;
+            const build_classrooms_good = roomsData.filter(r => buildings.find(b => b.id === r.building_local_id)?.status === "Good Condition").length;
+            const build_classrooms_repair = roomsData.filter(r => r.condition === 'Repair').length;
+            const build_classrooms_demolition = roomsData.filter(r => {
+                const b = buildings.find(bld => bld.id === r.building_local_id);
+                return b && (b.status === "For Condemnation" || b.status === "Condemned");
+            }).length;
 
             console.log("--- FINAL PAYLOAD TO BACKEND ---");
             console.log("Inventory:", inventoryPayload);
@@ -861,7 +864,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
 
     // ── Summary Dashboard Component ─────────────────────────────────────────
     const SummaryDashboard = () => {
-        const totalClassrooms = buildings.reduce((sum, b) => sum + (parseInt(b.classroom) || 0), 0);
+        const totalClassrooms = roomsData.length;
         const [showAllRooms, setShowAllRooms] = useState(false);
 
         return (
@@ -987,7 +990,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                         </div>
                                         <div className="bg-slate-50 p-3 rounded-2xl">
                                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Capacity</p>
-                                            <p className="text-[13px] font-black text-slate-700">{b.classroom} Classrooms</p>
+                                            <p className="text-[13px] font-black text-slate-700">{roomsData.filter(r => r.building_local_id === b.id).length} Classrooms</p>
                                         </div>
                                     </div>
                                     {b.remarks && (
@@ -1361,7 +1364,7 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         {b.status}
                                                     </span>
                                                 </div>
-                                                <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {b.classroom} Rooms</p>
+                                                <p className="text-sm font-bold text-gray-500 mt-1">{b.category} &bull; {b.storey} Storey &bull; {roomsData.filter(r => r.building_local_id === b.id).length} Rooms</p>
                                             </div>
                                             <div className="flex flex-col gap-2">
                                                 <button onClick={() => handleEditBuilding(b)} className="p-3 bg-indigo-50 text-indigo-500 rounded-xl hover:bg-indigo-100 transition-colors">
@@ -1631,9 +1634,10 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                 return roomsData.slice((roomsPage - 1) * roomsPerPage, roomsPage * roomsPerPage).map((room) => {
                                     const building = allBuildings.find(b => b.id === room.building_local_id);
                                     const isDuplicate = duplicateNames.has((room.room_name || "").trim().toLowerCase());
+                                    const isBuildingCondemned = building?.status === "For Condemnation" || building?.status === "Condemned";
 
                                     return (
-                                        <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : 'border-gray-100'}`}>
+                                        <div key={room.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 ${isDuplicate ? 'border-rose-200 shadow-rose-50' : isBuildingCondemned ? 'border-amber-200 bg-amber-50/20 shadow-amber-50' : 'border-gray-100'}`}>
                                             <div className="flex justify-between items-start mb-4">
                                                 <div className="flex-1 mr-4">
                                                     <input
@@ -1648,6 +1652,11 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                         </p>
                                                     )}
                                                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">{building?.building_name || building?.building_no || 'N/A'}</p>
+                                                    {isBuildingCondemned && (
+                                                        <p className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-widest inline-flex items-center gap-1 mt-2 border border-rose-100">
+                                                            <FiAlertTriangle className="w-3 h-3" /> Building Condemned
+                                                        </p>
+                                                    )}
                                                 </div>
                                             <div className="flex items-center gap-2">
                                                 <span className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${room.condition === 'Repair' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
@@ -1673,18 +1682,20 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                 </select>
                                             </div>
 
-                                            <div>
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
-                                                <select
-                                                    value={room.condition}
-                                                    onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
-                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                >
-                                                    <option value="Newly Built">Newly Built</option>
-                                                    <option value="Good Condition">Good Condition</option>
-                                                    <option value="Repair">Repair</option>
-                                                </select>
-                                            </div>
+                                            {!isBuildingCondemned && (
+                                                <div>
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Condition</label>
+                                                    <select
+                                                        value={room.condition}
+                                                        onChange={(e) => setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, condition: e.target.value } : r))}
+                                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                    >
+                                                        <option value="Newly Built">Newly Built</option>
+                                                        <option value="Good Condition">Good Condition</option>
+                                                        <option value="Repair">Repair</option>
+                                                    </select>
+                                                </div>
+                                            )}
 
                                             <div className="md:col-span-2">
                                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Grade Level(s)</label>
@@ -1765,20 +1776,22 @@ export default function Unit8PhysicalFacilities({ targetSchoolId, isReadOnly: pr
                                                 </div>
                                             </div>
 
-                                            <div>
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats Capacity</label>
-                                                <input
-                                                    type="text"
-                                                    inputMode="numeric"
-                                                    value={room.seats || ""}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value.replace(/[^0-9]/g, '');
-                                                        setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats: val } : r));
-                                                    }}
-                                                    placeholder="0"
-                                                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
-                                                />
-                                            </div>
+                                            {!isBuildingCondemned && (
+                                                <div>
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Total Seats Capacity</label>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        value={room.seats || ""}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.replace(/[^0-9]/g, '');
+                                                            setRoomsData(roomsData.map(r => r.id === room.id ? { ...r, seats: val } : r));
+                                                        }}
+                                                        placeholder="0"
+                                                        className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl px-4 py-2 font-bold text-gray-700 outline-none focus:border-indigo-500"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     );

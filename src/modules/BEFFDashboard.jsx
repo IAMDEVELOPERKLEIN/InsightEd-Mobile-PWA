@@ -50,7 +50,9 @@ const BEFFDashboard = () => {
         "Library Hub",
         "SpEd Inclusive Learning Resource Centers (ILRC)",
         "Alternative Learning System - Community Based Learning Centers (ALS-CLC)",
-        "Midrise School Building"
+        "Midrise School Building",
+        "QRF",
+        "Electrification"
     ];
 
     const COLORS = ['#8B5CF6', '#EC4899', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#6366F1', '#84CC16', '#06B6D4'];

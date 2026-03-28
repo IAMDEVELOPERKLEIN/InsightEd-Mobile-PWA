@@ -293,10 +293,14 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
             if (hasMovement === true) setMovementIdx(1); // Go back to Repeater screen
         }
         else if (currentChapter === 3) {
-            if (hasMovement === true && movementIdx === 1) {
-                setMovementIdx(0); // Go back to Dropout screen
+            if (hasMovement === true) {
+                if (movementIdx === 1) {
+                    setMovementIdx(0); // Repeaters (1) -> Dropouts (0)
+                } else {
+                    setHasMovement(null); // Dropouts (0) -> YES/NO Screen
+                }
             } else {
-                // Going back from Ch 3 Gatekeeper or Dropout screen -> Ch 2 or Ch 1
+                // Going back from Ch 3 Gatekeeper (null or false) -> Ch 2 or Ch 1
                 if (selectedGroups.length === 0) {
                     setCurrentChapter(1);
                 } else {

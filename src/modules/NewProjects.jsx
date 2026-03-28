@@ -98,7 +98,9 @@ const NewProjects = () => {
         "Library Hub",
         "SpEd Inclusive Learning Resource Centers (ILRC)",
         "Alternative Learning System - Community Based Learning Centers (ALS-CLC)",
-        "Midrise School Building"
+        "Midrise School Building",
+        "QRF",
+        "Electrification"
     ];
 
     // --- NEW: IMPORT PROJECT DATA STATES ---

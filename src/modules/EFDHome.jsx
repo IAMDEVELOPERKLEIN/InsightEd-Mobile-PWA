@@ -99,6 +99,8 @@ const EFDHome = () => {
     const [externalFiles, setExternalFiles] = useState([]);
     const [externalPreviews, setExternalPreviews] = useState([]);
     const [activeCategory, setActiveCategory] = useState(null);
+    const [summaryData, setSummaryData] = useState(null);
+    const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 15, totalPages: 1 });
     const fileInputRef = useRef(null);
     const cameraInputRef = useRef(null);
     
@@ -195,7 +197,9 @@ const EFDHome = () => {
         "Library Hub",
         "SpEd Inclusive Learning Resource Centers (ILRC)",
         "Alternative Learning System - Community Based Learning Centers (ALS-CLC)",
-        "Midrise School Building"
+        "Midrise School Building",
+        "QRF",
+        "Electrification"
     ];
 
     const categoryColors = {
@@ -208,6 +212,8 @@ const EFDHome = () => {
         "SpEd Inclusive Learning Resource Centers (ILRC)": "#6366f1",
         "Alternative Learning System - Community Based Learning Centers (ALS-CLC)": "#f43f5e",
         "Midrise School Building": "#fbbf24",
+        "QRF": "#ef4444",
+        "Electrification": "#eab308",
         "Uncategorized": "#94a3b8"
     };
 
@@ -216,45 +222,91 @@ const EFDHome = () => {
         '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57', '#a4de6c', '#8dd1e1'
     ];
 
+    const fetchSummary = useCallback(async () => {
+        if (!user) return;
+        try {
+            const params = new URLSearchParams({
+                engineer_id: user.uid,
+                is_donated: selectedDonated,
+                region: selectedRegions[0] || '', // Summary currently supports one region for simplicity, or we can expand it
+                division: selectedDivision,
+                search: searchQuery,
+                category: selectedCategories[0] || '',
+                year: selectedYears[0] || ''
+            });
+            const res = await fetch(`/api/dashboard/efd-summary?${params.toString()}`);
+            if (res.ok) {
+                const data = await res.json();
+                setSummaryData(data);
+            }
+        } catch (error) {
+            console.error("Error fetching summary:", error);
+        }
+    }, [user, selectedDonated, selectedRegions, selectedDivision, searchQuery, selectedCategories, selectedYears]);
+
+    const fetchProjectsPaged = useCallback(async (p = 1) => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const params = new URLSearchParams({
+                engineer_id: user.uid,
+                is_donated: selectedDonated,
+                region: selectedRegions[0] || '',
+                division: selectedDivision,
+                search: searchQuery,
+                page: p,
+                limit: 15
+            });
+            const res = await fetch(`/api/projects?${params.toString()}`);
+            if (res.ok) {
+                const result = await res.json();
+                setProjects(result.data || []);
+                setPagination(result.pagination);
+            }
+        } catch (error) {
+            console.error("Error fetching projects:", error);
+        } finally {
+            setLoading(false);
+        }
+    }, [user, selectedDonated, selectedRegions, selectedDivision, searchQuery]);
+
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
+        const fetchInitialData = async () => {
             try {
-                if (!user) {
-                    setLoading(false);
-                    return;
-                }
+                if (!user) return;
                 setUserData(user);
 
-                // Concurrent fetch for project and reference data
-                const [pRes, fyRes, locRes, engRes] = await Promise.all([
-                    fetch('/api/projects'),
+                const [fyRes, locRes, engRes] = await Promise.all([
                     fetch('/api/reference/funding-years'),
                     fetch('/api/reference/efd-locations'),
                     fetch('/api/engineers')
                 ]);
 
-                const [pData, fyData, locData, engData] = await Promise.all([
-                    pRes.ok ? pRes.json() : [],
+                const [fyData, locData, engData] = await Promise.all([
                     fyRes.ok ? fyRes.json() : [],
                     locRes.ok ? locRes.json() : [],
                     engRes.ok ? engRes.json() : []
                 ]);
 
-                setProjects(pData);
                 setFundingYears(fyData);
                 setEfdLocations(locData);
                 setEngineers(engData);
 
             } catch (error) {
-                console.error("Error fetching EFD data:", error);
-            } finally {
-                setLoading(false);
+                console.error("Error fetching reference data:", error);
             }
         };
 
-        fetchData();
-    }, []);
+        fetchInitialData();
+    }, [user]);
+
+    useEffect(() => {
+        fetchSummary();
+    }, [fetchSummary]);
+
+    useEffect(() => {
+        fetchProjectsPaged(currentPage);
+    }, [fetchProjectsPaged, currentPage]);
 
     useEffect(() => {
         const loadBreakdown = async () => {
@@ -304,52 +356,18 @@ const EFDHome = () => {
     const normalize = (val) => val?.toString().trim().toUpperCase() || 'UNASSIGNED';
 
     const regionalData = useMemo(() => {
+        if (!summaryData?.regionalData) return [];
         const stats = {};
-        const baseProjects = projects.filter(p => {
-            const matchesRegions = selectedRegions.length === 0 || 
-                selectedRegions.some(reg => normalize(reg) === normalize(p.region));
-            const matchesCategory = selectedCategories.length === 0 || 
-                selectedCategories.some(cat => normalize(cat) === normalize(p.projectCategory));
-            const matchesFundingYear = selectedYears.length === 0 || 
-                selectedYears.some(year => year.toString() === p.fundingYear?.toString());
-            const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
-                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
-            const matchesDocStatus = selectedDocStatus === 'All' ||
-                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
-                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
-            const matchesSearch = !searchQuery ||
-                p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
-                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-
-            const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
-            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
-            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
-            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
-
-            return matchesRegions && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource &&
-                   matchesDivision && matchesProvince && matchesMunicipality && matchesDistrict;
-        });
-
-        baseProjects.forEach(p => {
-            const reg = normalize(p.region);
-            const cat = allCategories.find(c => normalize(c) === normalize(p.projectCategory)) || 'Uncategorized';
+        summaryData.regionalData.forEach(item => {
+            const reg = normalize(item.name);
+            const cat = item.category || 'Uncategorized';
             if (!stats[reg]) stats[reg] = { name: reg, totalValue: 0 };
-            
-            const field = chartMetric === 'count' ? cat : `${cat}_abc`;
-            const val = chartMetric === 'count' ? 1 : (parseFloat(p.projectAllocation) || 0);
-            
+            const val = chartMetric === 'count' ? parseInt(item.count || 0) : parseFloat(item.total_abc || 0);
             stats[reg][cat] = (stats[reg][cat] || 0) + val;
             stats[reg].totalValue += val;
         });
-
         return Object.values(stats).sort((a, b) => b.totalValue - a.totalValue);
-    }, [projects, selectedRegions, selectedCategories, selectedYears, searchQuery, selectedDonated, selectedDocStatus, chartMetric, selectedSource]);
+    }, [summaryData, chartMetric]);
 
     const allRegions = useMemo(() => {
         const regions = new Set();
@@ -406,185 +424,45 @@ const EFDHome = () => {
     }, [fundingYears]);
 
     const divisionData = useMemo(() => {
+        if (!summaryData?.divisionData) return [];
         const stats = {};
-        const baseProjects = projects.filter(p => {
-            const matchesRegions = selectedRegions.length === 0 || 
-                selectedRegions.some(reg => normalize(reg) === normalize(p.region));
-            const matchesCategory = selectedCategories.length === 0 || 
-                selectedCategories.some(cat => normalize(cat) === normalize(p.projectCategory));
-            const matchesFundingYear = selectedYears.length === 0 || 
-                selectedYears.some(year => year.toString() === p.fundingYear?.toString());
-            const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
-                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
-            const matchesDocStatus = selectedDocStatus === 'All' ||
-                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
-                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
-            const matchesSearch = !searchQuery ||
-                p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
-                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-            return matchesRegions && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource;
-        });
-
-        baseProjects.forEach(p => {
-            const div = normalize(p.division);
-            const cat = allCategories.find(c => normalize(c) === normalize(p.projectCategory)) || 'Uncategorized';
+        summaryData.divisionData.forEach(item => {
+            const div = normalize(item.name);
+            const cat = item.category || 'Uncategorized';
             if (!stats[div]) stats[div] = { name: div, totalValue: 0 };
-            
-            const field = chartMetric === 'count' ? cat : `${cat}_abc`;
-            const val = chartMetric === 'count' ? 1 : (parseFloat(p.projectAllocation) || 0);
-
+            const val = chartMetric === 'count' ? parseInt(item.count || 0) : parseFloat(item.total_abc || 0);
             stats[div][cat] = (stats[div][cat] || 0) + val;
             stats[div].totalValue += val;
         });
-
         return Object.values(stats).sort((a, b) => b.totalValue - a.totalValue);
-    }, [projects, selectedRegions, selectedCategories, selectedYears, searchQuery, selectedDonated, selectedDocStatus, chartMetric, selectedSource]);
+    }, [summaryData, chartMetric]);
 
     const pieChartData = useMemo(() => {
-        const counts = {};
-        // Initialize with 0 for all categories to ensure they show up in the pie chart
-        allCategories.forEach(cat => counts[cat] = 0);
-        
-        const baseProjects = projects.filter(p => {
-            const matchesRegions = selectedRegions.length === 0 || 
-                selectedRegions.some(reg => normalize(reg) === normalize(p.region));
-            const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
-            const matchesFundingYear = selectedYears.length === 0 || 
-                selectedYears.some(year => year.toString() === p.fundingYear?.toString());
-            const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
-                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
-            const matchesDocStatus = selectedDocStatus === 'All' ||
-                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
-                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
-            const matchesSearch = !searchQuery ||
-                p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
-                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-
-            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
-            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
-            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
-
-            return matchesRegions && matchesDivision && matchesFundingYear && matchesDonated && matchesDocStatus && matchesSearch && matchesSource &&
-                   matchesProvince && matchesMunicipality && matchesDistrict;
-        });
-
-        baseProjects.forEach(p => {
-            const cat = allCategories.find(c => normalize(c) === normalize(p.projectCategory)) || 'Uncategorized';
-            counts[cat] = (counts[cat] || 0) + 1;
-        });
-        return Object.entries(counts).map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value);
-    }, [projects, selectedRegions, selectedDivision, selectedYears, searchQuery, selectedDonated, selectedDocStatus, selectedSource]);
+        if (!summaryData?.categoryData) return [];
+        return summaryData.categoryData.map(item => ({
+            name: item.name || 'Uncategorized',
+            value: parseInt(item.value || 0)
+        })).sort((a, b) => b.value - a.value);
+    }, [summaryData]);
 
     const yearData = useMemo(() => {
-        const counts = {};
-        const baseProjects = projects.filter(p => {
-            const matchesRegions = selectedRegions.length === 0 || 
-                selectedRegions.some(reg => normalize(reg) === normalize(p.region));
-            const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
-            const matchesCategory = selectedCategories.length === 0 || 
-                selectedCategories.some(cat => normalize(cat) === normalize(p.projectCategory));
-            const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
-                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
-            const matchesDocStatus = selectedDocStatus === 'All' ||
-                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
-                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
-            const matchesSearch = !searchQuery ||
-                p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
-                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-
-            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
-            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
-            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
-
-            return matchesRegions && matchesDivision && matchesCategory && matchesDonated && matchesDocStatus && matchesSearch && matchesSource &&
-                   matchesProvince && matchesMunicipality && matchesDistrict;
-        });
-
-        baseProjects.forEach(p => {
-            const year = p.fundingYear?.toString() || 'N/A';
-            counts[year] = (counts[year] || 0) + 1;
-        });
-        return Object.entries(counts).map(([name, value]) => ({ name: `FY ${name}`, value }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-    }, [projects, selectedRegions, selectedDivision, selectedCategories, searchQuery, selectedDonated, selectedDocStatus, selectedSource]);
+        if (!summaryData?.yearData) return [];
+        return summaryData.yearData.map(item => ({
+            name: `FY ${item.name || 'N/A'}`,
+            value: parseInt(item.count || 0)
+        })).sort((a, b) => a.name.localeCompare(b.name));
+    }, [summaryData]);
 
 
 
-    const newlyCreatedCount = useMemo(() => {
-        return projects.length;
-    }, [projects]);
+    const newlyCreatedCount = summaryData?.totalStats?.totalProjects || 0;
+    const totalABCValue = summaryData?.totalStats?.totalABC || 0;
+    const donatedCount = summaryData?.totalStats?.donatedCount || 0;
+    const beffCount = summaryData?.totalStats?.beffCount || 0;
+    const completeDocsCount = summaryData?.totalStats?.completeDocs || 0;
 
-    const filteredProjects = useMemo(() => {
-        return projects.filter(p => {
-            const matchesRegions = selectedRegions.length === 0 || 
-                selectedRegions.some(reg => normalize(reg) === normalize(p.region));
-            const matchesDivision = !selectedDivision || normalize(p.division) === normalize(selectedDivision);
-            const matchesCategory = selectedCategories.length === 0 || 
-                selectedCategories.some(cat => normalize(cat) === normalize(p.projectCategory));
-            const matchesFundingYear = selectedYears.length === 0 || 
-                selectedYears.some(year => year.toString() === p.fundingYear?.toString());
-            const matchesDonated = selectedDonated === 'All' ||
-                (selectedDonated === 'Donated' && p.program_type === 'Donated') ||
-                (selectedDonated === 'Non-Donated' && p.program_type === 'BEFF');
-            const matchesDocStatus = selectedDocStatus === 'All' ||
-                (selectedDocStatus === 'Complete' && p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing RTA' && p.hasMoa && !p.hasRta) ||
-                (selectedDocStatus === 'Missing MOA' && !p.hasMoa && p.hasRta) ||
-                (selectedDocStatus === 'Missing Both' && !p.hasMoa && !p.hasRta);
-            const matchesBeff = !isBeffMode || (!!p.implementingAgency || !!p.implementing_agency);
-            const matchesSearch = !searchQuery ||
-                p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.schoolId?.toString().includes(searchQuery);
-            const matchesSource = selectedSource === 'All' || 
-                                (selectedSource === 'Donated' && p.program_type === 'Donated') ||
-                                (selectedSource === 'BEFF' && p.program_type === 'BEFF');
-
-            const matchesProvince = !selectedProvince || normalize(p.province) === normalize(selectedProvince);
-            const matchesMunicipality = !selectedMunicipality || normalize(p.municipality) === normalize(selectedMunicipality);
-            const matchesDistrict = !selectedDistrict || normalize(p.legislative_district) === normalize(selectedDistrict);
-
-            return matchesRegions && matchesDivision && matchesCategory && matchesFundingYear && matchesDonated && matchesDocStatus && matchesBeff && matchesSearch && matchesSource &&
-                   matchesProvince && matchesMunicipality && matchesDistrict;
-        });
-    }, [projects, selectedRegions, selectedDivision, selectedCategories, selectedYears, searchQuery, selectedDonated, selectedDocStatus, isBeffMode, selectedSource]);
-
-    // Pagination State
-    const itemsPerPage = 15;
-    
-    useEffect(() => {
-        setCurrentPage(1); // Reset to first page on search or filter change
-    }, [searchQuery, selectedRegions, selectedDivision, selectedCategories, selectedYears, selectedDonated, selectedDocStatus, selectedSource]);
-
-    const paginatedProjects = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredProjects.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredProjects, currentPage]);
-
-    const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
-
-    const totalABC = useMemo(() => {
-        return filteredProjects.reduce((sum, p) => sum + (parseFloat(p.projectAllocation) || 0), 0);
-    }, [filteredProjects]);
+    const paginatedProjects = projects; 
+    const totalPages = pagination.totalPages;
 
     const handleDeleteProject = async (e, id) => {
         e.stopPropagation();
@@ -1297,7 +1175,7 @@ const EFDHome = () => {
                                     {/* Pagination Controls */}
                                     <div className="bg-slate-50/50 px-6 py-4 flex items-center justify-between border-t border-slate-100">
                                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredProjects.length)} of {filteredProjects.length} Records
+                                            Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} Records
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             <button 
@@ -1490,10 +1368,10 @@ const EFDHome = () => {
                                 </div>
                             )}
                             {/* Pagination Controls for Card View */}
-                            {filteredProjects.length > 0 && (
+                            {pagination.total > 0 && (
                                 <div className="bg-slate-50/50 px-6 py-4 flex items-center justify-between border-t border-slate-100 mt-6 rounded-[2.5rem]">
                                     <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                        Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredProjects.length)} of {filteredProjects.length} Records
+                                        Showing {((currentPage - 1) * pagination.limit) + 1} to {Math.min(currentPage * pagination.limit, pagination.total)} of {pagination.total} Records
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <button 
