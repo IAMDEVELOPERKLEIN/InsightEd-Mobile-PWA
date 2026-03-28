@@ -351,17 +351,81 @@ const runMigrations = async (client, dbLabel) => {
         `);
         await client.query(`
             ALTER TABLE engineer_form 
-            ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE,
+            ADD COLUMN IF NOT EXISTS ipc TEXT,
+            ADD COLUMN IF NOT EXISTS status_of_construction_phase TEXT;
+        `);
+
+        // Synchronize status -> status_of_construction_phase if necessary
+        await client.query(`
+            DO $$ 
+            BEGIN 
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='status') AND 
+                   NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='engineer_form' AND column_name='status_of_construction_phase') THEN
+                    ALTER TABLE engineer_form RENAME COLUMN status TO status_of_construction_phase;
+                END IF;
+            END $$;
+        `);
+
+        await client.query(`
+            ALTER TABLE engineer_form
+            -- 1. Identity & Location Extensions
+            ADD COLUMN IF NOT EXISTS engineer_name TEXT,
             ADD COLUMN IF NOT EXISTS latitude TEXT,
             ADD COLUMN IF NOT EXISTS longitude TEXT,
-            ADD COLUMN IF NOT EXISTS engineer_name TEXT,
+            ADD COLUMN IF NOT EXISTS province TEXT,
+            ADD COLUMN IF NOT EXISTS city TEXT,
+            ADD COLUMN IF NOT EXISTS municipality TEXT,
+
+            -- 2. Project Details Extensions
+            ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS project_category TEXT,
+            ADD COLUMN IF NOT EXISTS scope_of_work TEXT,
+            ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER,
+            ADD COLUMN IF NOT EXISTS number_of_sites INTEGER,
+            ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER,
+            ADD COLUMN IF NOT EXISTS no_of_units INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC(20, 2),
+            ADD COLUMN IF NOT EXISTS savings NUMERIC(20, 2),
+            ADD COLUMN IF NOT EXISTS actions TEXT,
+
+            -- 3. Procurement & Engineering details
+            ADD COLUMN IF NOT EXISTS procurement_status TEXT,
+            ADD COLUMN IF NOT EXISTS status_design_phase TEXT,
+            ADD COLUMN IF NOT EXISTS contract_id TEXT,
+            ADD COLUMN IF NOT EXISTS date_notice_of_award TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS issuance_of_invitation_to_bid TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS pre_bid_conference TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS opening_of_technical_proposal TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS opening_of_financial_proposal TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS request_for_quotation TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS negotiation TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS opening_of_quotation TIMESTAMP,
+
+            -- 4. Tracking & Delays
             ADD COLUMN IF NOT EXISTS funding_year INTEGER,
             ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
-            ADD COLUMN IF NOT EXISTS uploader_type TEXT, -- EFD, Division Engineer, Non-DepEd Engineer
+            ADD COLUMN IF NOT EXISTS delay_reason TEXT,
+            ADD COLUMN IF NOT EXISTS revised_target_completion_date TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS time_lapsed_days INTEGER,
+            ADD COLUMN IF NOT EXISTS time_lapsed_percentage TEXT,
+
+            -- 5. Ownership & Assignment
             ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE,
-            ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
-            ADD COLUMN IF NOT EXISTS procurement_status TEXT;
+            ADD COLUMN IF NOT EXISTS program_type TEXT,
+            ADD COLUMN IF NOT EXISTS uploader_type TEXT,
+            ADD COLUMN IF NOT EXISTS mode_of_project TEXT,
+            ADD COLUMN IF NOT EXISTS assigned_engineer_id TEXT,
+            ADD COLUMN IF NOT EXISTS assigned_engineer_name TEXT,
+            ADD COLUMN IF NOT EXISTS implementing_agency TEXT,
+            ADD COLUMN IF NOT EXISTS implementing_agency_specific TEXT,
+            ADD COLUMN IF NOT EXISTS uploader_id_moa_rta TEXT,
+
+            -- 6. Document Blobs (The ones that caused the error)
+            ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
+            ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
+            ADD COLUMN IF NOT EXISTS contract_pdf TEXT;
         `);
+        console.log(`✅ [${dbLabel}] Multi-Column alignment for engineer_form completed`);
 
         // --- 8b. ENGINEER IMAGE EXTENSIONS ---
         try {
@@ -382,6 +446,35 @@ const runMigrations = async (client, dbLabel) => {
         } catch (imgErr) {
             console.error(`❌ [${dbLabel}] Failed to migrate engineer_image:`, imgErr.message);
         }
+        // --- 8d. ENGINEER DOCUMENTS TABLE ---
+        try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS engineer_documents (
+                    doc_id SERIAL PRIMARY KEY,
+                    project_id INTEGER REFERENCES engineer_form(project_id),
+                    ipc TEXT,
+                    pow_pdf TEXT,
+                    dupa_pdf TEXT,
+                    contract_pdf TEXT,
+                    moa_pdf TEXT,
+                    rta_pdf TEXT,
+                    uploader_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+            // Ensure ipc column exists for older installs
+            await client.query(`
+                ALTER TABLE engineer_documents
+                ADD COLUMN IF NOT EXISTS ipc TEXT,
+                ADD COLUMN IF NOT EXISTS moa_pdf TEXT,
+                ADD COLUMN IF NOT EXISTS rta_pdf TEXT,
+                ADD COLUMN IF NOT EXISTS uploader_id TEXT;
+            `);
+            console.log(\`✅ [\${dbLabel}] Engineer Documents Table Ready\`);
+        } catch (docsErr) {
+            console.error(\`❌ [\${dbLabel}] Failed to migrate engineer_documents:\`, docsErr.message);
+        }
+
         // --- 8c. ENGINEER FORM REFACTOR ---
         try {
             // Rename project_allocation if it exists

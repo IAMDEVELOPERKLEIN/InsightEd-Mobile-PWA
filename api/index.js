@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
 import express from 'express';
+console.log("📌 >>> RUNNING: [ROOT]/api/index.js <<< 📌");
+
 import { google } from 'googleapis';
 // Force restart to pick up .env changes - Robust Login Fix v1
 import pg from 'pg';
@@ -8415,8 +8417,8 @@ app.post('/api/save-project', async (req, res) => {
       );
       console.log("… Activity logged successfully for:", newIpc);
     } catch (logErr) {
-      console.error(" ï¸ Activity Log Error (Non-blocking):", logErr.message);
-      console.error(" ï¸ Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
+      console.error(" ï¸  Activity Log Error (Non-blocking):", logErr.message);
+      console.error(" ï¸  Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
     }
 
     res.status(200).json({ message: "Project and images saved!", project: newProject, ipc: newIpc });
@@ -8424,7 +8426,7 @@ app.post('/api/save-project', async (req, res) => {
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(e => console.error("Dual-Write Rollback Err:", e.message)); // Rollback secondary too
-    console.error("âŒ SQL ERROR:", err.message);
+    console.error("â Œ SQL ERROR:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   } finally {
     if (client) client.release();
@@ -8440,6 +8442,8 @@ app.put('/api/update-project/:id', upload.fields([
 ]), async (req, res) => {
   const { id } = req.params;
   const data = req.body;
+  console.log("🔥 HIT: PUT /api/update-project/" + id);
+
 
   let client;
   let clientNew = null;
@@ -8466,6 +8470,7 @@ app.put('/api/update-project/:id', upload.fields([
       return res.status(404).json({ message: "Project not found" });
     }
     const oldData = oldRes.rows[0];
+
 
     // Fetch existing documents for carry-over
     const oldDocsRes = await client.query('SELECT * FROM engineer_documents WHERE project_id = $1', [id]);
@@ -8506,7 +8511,7 @@ app.put('/api/update-project/:id', upload.fields([
     const newStatus = statusMapping[rawStatus?.toLowerCase()] || rawStatus || 'Ongoing';
 
     const rawProc = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status || oldData.status_design_phase;
-    const newProcurementStatus = statusMapping[rawProc?.toLowerCase()] || rawProc || 'Ongoing';
+    const newProcurementStatus = statusMapping[rawProc?.toLowerCase()] || rawProc || null;
 
     const newStatusDesignPhase = newProcurementStatus;
     const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
@@ -8517,7 +8522,11 @@ app.put('/api/update-project/:id', upload.fields([
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
 
     const insertValues = [
-      oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
+      valueOrNull(data.project_name || data.projectName) || oldData.project_name || 'N/A',
+      valueOrNull(data.school_name || data.schoolName) || oldData.school_name || 'N/A',
+      valueOrNull(data.school_id || data.schoolId) || oldData.school_id || 'N/A',
+      valueOrNull(data.region) || oldData.region || 'N/A',
+      valueOrNull(data.division) || oldData.division || 'N/A',
       newStatus, newAccomplishment, newStatusAsOf,
       valueOrNull(data.targetCompletionDate) || oldData.target_completion_date,
       newActualDate,
@@ -8576,6 +8585,7 @@ app.put('/api/update-project/:id', upload.fields([
 
     const insertQuery = `
       INSERT INTO "engineer_form" (
+
         project_name, school_name, school_id, region, division,
         status_of_construction_phase, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
@@ -8594,24 +8604,27 @@ app.put('/api/update-project/:id', upload.fields([
         province, city, municipality,
         pow_pdf, dupa_pdf, contract_pdf,
         procurement_status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63)
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63)
+
+
       RETURNING *;
     `;
 
+    console.log("🚀 INSERTING MAPPED VALUES:", insertValues.slice(0, 5));
+    fs.appendFileSync('debug.log', `[${new Date().toISOString()}] INSERTING PROJECT_NAME: ${insertValues[0]}\n`);
     const result = await client.query(insertQuery, insertValues);
+
+
     const newData = result.rows[0];
 
-    // --- 2.2a Handle Documents Update (engineer_documents) ---
+    // --- 2.2a Handle Documents Insert for new snapshot (engineer_documents) ---
+    // NOTE: Each update creates a NEW engineer_form row (append-only snapshot), so project_id
+    // is always brand new here. Plain INSERT is correct — no conflict is possible.
     await client.query(`
       INSERT INTO engineer_documents (project_id, ipc, pow_pdf, dupa_pdf, contract_pdf, rta_pdf, moa_pdf, uploader_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (project_id) DO UPDATE SET
-        pow_pdf = EXCLUDED.pow_pdf,
-        dupa_pdf = EXCLUDED.dupa_pdf,
-        contract_pdf = EXCLUDED.contract_pdf,
-        rta_pdf = EXCLUDED.rta_pdf,
-        moa_pdf = EXCLUDED.moa_pdf,
-        uploader_id = EXCLUDED.uploader_id
     `, [
       newData.project_id, newData.ipc,
       pow_pdf_base64,
@@ -8799,7 +8812,11 @@ app.put('/api/update-project/:id', upload.fields([
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
     console.error("âŒ Error updating project:", err.message);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message, 
+      detail: err.detail || "No additional detail" 
+    });
   } finally {
     if (client) client.release();
     if (clientNew) clientNew.release();
@@ -17382,6 +17399,9 @@ const startServer = async () => {
     ]);
 
     const PORT = process.env.PORT || 3000;
+
+
+
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n================================================`);
       console.log(`🚀 SERVER RUNNING - PID: ${process.pid}`);
