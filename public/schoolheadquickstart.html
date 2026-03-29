@@ -76,6 +76,74 @@
             }
         }
 
+        /* Essential Mobile Overrides (Samsung S8+ / Small Screens) */
+        @media (max-width: 480px) {
+            body { 
+                font-size: 70%; 
+            }
+            .unit-card {
+                padding: 1.25rem;
+                margin-bottom: 2rem;
+                border-radius: 1.25rem;
+            }
+            .step-pill {
+                width: 2.25rem;
+                height: 2.25rem;
+                font-size: 0.9rem;
+                margin-right: 0.75rem;
+                border-radius: 1rem;
+            }
+            h1 { font-size: 3rem !important; line-height: 1.1 !important; }
+            h2 { font-size: 1.75rem !important; line-height: 1.2 !important; }
+            .summary-card { padding: 1rem; border-radius: 1rem; }
+            .alert-box { padding: 0.75rem 1rem; }
+            .p-12, .p-10 { padding: 1.5rem !important; }
+            .rounded-\[4rem\], .rounded-\[3\.5rem\], .rounded-\[2\.5rem\] { border-radius: 1.5rem !important; }
+            .mb-16, .mb-32, .mt-24 { margin-top: 1.5rem !important; margin-bottom: 2rem !important; }
+            .gap-16, .gap-20, .gap-12 { gap: 1rem !important; }
+        }
+
+        /* Timeline - Connector Lines */
+        section {
+            position: relative;
+        }
+        section:not(:last-of-type)::after {
+            content: '';
+            position: absolute;
+            left: 2.5rem; /* Center of step-pill (Desktop) */
+            top: 5rem;
+            bottom: -2rem;
+            width: 2px;
+            background: linear-gradient(to bottom, #3b82f6 50%, transparent);
+            z-index: 0;
+            opacity: 0.3;
+        }
+        @media (max-width: 768px) {
+            section:not(:last-of-type)::after {
+                left: 2rem;
+                top: 4.5rem;
+                bottom: -2rem;
+            }
+        }
+        @media (max-width: 480px) {
+            section:not(:last-of-type)::after {
+                left: 1.125rem;
+                top: 3.5rem;
+                bottom: -1rem;
+            }
+        }
+
+        /* Scroll Reveal */
+        .reveal-section {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .reveal-section.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
         .unit-card::before {
             content: '';
             position: absolute;
@@ -211,6 +279,24 @@
         .alert-required { background-color: #fef2f2; border: 1px solid #fee2e2; color: #991b1b; }
         .alert-tip { background-color: #f0fdf4; border: 1px solid #dcfce7; color: #166534; }
         .alert-warning { background-color: #fffbeb; border: 1px solid #fef3c7; color: #92400e; }
+
+        /* Additional Mobile Adjustments */
+        @media (max-width: 480px) {
+            body { font-size: 70%; }
+            .unit-card {
+                padding: 1rem;
+                margin-bottom: 2rem;
+                border-radius: 1rem;
+            }
+            .step-pill {
+                width: 2rem;
+                height: 2rem;
+                font-size: 0.875rem;
+            }
+            h1 { font-size: 2.75rem !important; line-height: 1 !important; }
+            h2 { font-size: 1.75rem !important; }
+            .summary-card { padding: 1rem; }
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 scroll-smooth">
@@ -390,38 +476,30 @@
         <main class="flex-1 min-w-0">
             
             <!-- Global Content Header (Clean White Mode) -->
-            <header class="mb-16 md:mb-32 relative group">
-                <div class="flex flex-col items-center justify-center py-12 md:py-24 px-6 md:px-10 rounded-[2.5rem] md:rounded-[3.5rem] border border-slate-100 bg-white shadow-[0_40px_80px_-20px_rgba(0,0,0,0.03)] overflow-hidden relative">
+            <header class="mb-8 md:mb-32 relative group">
+                <div class="flex flex-col items-center justify-center py-8 md:py-24 px-4 md:px-10 rounded-[1.5rem] md:rounded-[3.5rem] border border-slate-100 bg-white shadow-[0_40px_80px_-20px_rgba(0,0,0,0.03)] overflow-hidden relative">
                      <!-- Minimalist Accents -->
                      <div class="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-blue-500/10 to-transparent"></div>
 
-                     <div class="flex items-center justify-center gap-4 sm:gap-8 md:gap-12 mb-20 relative z-10 w-full overflow-hidden">
-                         <div class="p-4 sm:p-6 bg-white rounded-3xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] border border-slate-50 hover:-translate-y-2 transition-transform duration-500 cursor-pointer flex-shrink-0">
-                             <img src="./logo1.png" alt="Logo 1" class="h-16 sm:h-20 md:h-24 w-auto flex-shrink-0">
+                     <div class="flex items-center justify-center gap-2 sm:gap-8 md:gap-12 mb-8 relative z-10 w-full">
+                         <div class="p-2 sm:p-6 bg-white rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] border border-slate-50 flex-shrink-0">
+                             <img src="./logo1.png" alt="Logo 1" class="h-10 sm:h-20 md:h-24 w-auto">
                          </div>
-                         <div class="p-6 sm:p-8 bg-white rounded-[2.5rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.08)] hover:scale-105 transition-transform duration-500 cursor-pointer border border-slate-50 flex-shrink-0">
-                             <img src="./logo2.png" alt="Logo 2" class="h-20 sm:h-24 md:h-28 w-auto flex-shrink-0">
+                         <div class="p-3 sm:p-8 bg-white rounded-[1.5rem] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.08)] border border-slate-50 flex-shrink-0">
+                             <img src="./logo2.png" alt="Logo 2" class="h-12 sm:h-24 md:h-28 w-auto">
                          </div>
-                         <div class="p-4 sm:p-6 bg-white rounded-3xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] border border-slate-50 hover:-translate-y-2 transition-transform duration-500 cursor-pointer flex-shrink-0">
-                             <img src="./logo3.png" alt="Logo 3" class="h-16 sm:h-20 md:h-24 w-auto flex-shrink-0">
+                         <div class="p-2 sm:p-6 bg-white rounded-2xl shadow-[0_20px_40px_-10px_rgba(0,0,0,0.05)] border border-slate-50 flex-shrink-0">
+                             <img src="./logo3.png" alt="Logo 1" class="h-10 sm:h-20 md:h-24 w-auto">
                          </div>
                      </div>
                      
                      <div class="text-center relative z-10 max-w-5xl">
-                          <div class="inline-flex items-center gap-4 px-8 py-3 bg-slate-950 text-white text-[11px] font-black rounded-full uppercase tracking-[0.5em] mb-12 italic border border-white/10">
-                               <span class="flex h-2 w-2 relative">
-                                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                  <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                               </span>
-                               Official School Guide
-                          </div>
-                          
-                          <h1 class="text-4xl md:text-8xl font-black text-slate-950 mb-6 md:mb-10 tracking-[-0.03em] leading-tight md:leading-[0.85] uppercase overflow-visible">
+                          <h1 class="text-3xl md:text-8xl font-black text-slate-950 mb-2 md:mb-10 tracking-[-0.03em] leading-tight md:leading-[0.85] uppercase">
                              InsightEd <br>
-                             <span class="text-transparent bg-clip-text bg-gradient-to-br from-blue-600 to-slate-950 italic inline-block pr-6">Operational Guide</span>
+                             <span class="text-transparent bg-clip-text bg-gradient-to-br from-blue-600 to-slate-950 italic">Operational Guide</span>
                           </h1>
                           
-                          <p class="text-2xl md:text-3xl text-slate-400 leading-tight font-medium italic tracking-tight mx-auto max-w-3xl px-4 mb-4">
+                          <p class="text-lg md:text-3xl text-slate-400 font-medium italic tracking-tight mx-auto max-w-3xl">
                               "Accurate Data. Clear Insights."
                           </p>
                      </div>
@@ -434,7 +512,7 @@
                         <span class="step-pill">01</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Getting Ready</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Quick Start</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Quick Start</h2>
                         </div>
                     </div>
                     <div class="h-px flex-1 bg-slate-200 hidden md:block mx-8 mb-4"></div>
@@ -444,24 +522,19 @@
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Install InsightEd as an app on your phone.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Works just like a regular app from the Play Store/App Store.</li>
-                        </ul>
-                    </div>
-                    <div class="mb-12 border-l-4 border-blue-600 pl-8">
-                        <p class="text-2xl font-medium text-slate-800 leading-relaxed italic">"InsightEd is a **Phone-First** app for school reporting."</p>
-                    </div>
-                    
                     <div class="grid md:grid-cols-2 gap-16 items-center">
-                        <div class="space-y-6 text-lg">
-                            <p>1. Open Chrome/Safari.</p>
-                            <p>2. Go to: <code class="bg-blue-50 px-2 py-1 rounded text-blue-600 font-black italic">tinyurl.com/InsightEdV2</code>.</p>
-                            <p>3. Tap **Menu** &rarr; **Add to Home Screen**.</p>
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">To install InsightEd, open your browser and navigate to tinyurl.com/InsightEdV2. Use your browser's menu to 'Add to Home Screen' to install it as a phone-first app, allowing for seamless school reporting directly from your mobile device.</p>
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-2" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Welcome to InsightEd
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -471,7 +544,7 @@
                         <span class="step-pill">02</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Accessing the App</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Welcome to InsightEd</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Welcome to InsightEd</h2>
                         </div>
                     </div>
                     <div class="h-px flex-1 bg-slate-200 hidden md:block mx-8 mb-4"></div>
@@ -481,30 +554,19 @@
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Open the app and select "School Head Portal".</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Click "Create Account" if you are a first-time user.</li>
-                        </ul>
-                    </div>
-                    <div class="mb-12">
-                        <p class="text-lg font-medium text-slate-500 italic">"Select the **School Head Portal** to log in."</p>
-                    </div>
                     <div class="grid md:grid-cols-2 gap-16 items-center">
-                        <div class="space-y-4">
-                            <div class="p-6 bg-white border border-slate-100 rounded-2xl">
-                                <p class="text-lg font-bold italic">1. Select **InsightED (For HROD)**</p>
-                            </div>
-                            <div class="p-6 bg-white border border-slate-100 rounded-2xl">
-                                <p class="text-lg font-bold italic">2. Select **School Head Portal**</p>
-                            </div>
-                            <div class="alert-tip">
-                                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                <span>Tip: Click "Create Account" if you are a first-time user.</span>
-                            </div>
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Access the app by selecting the 'School Head Portal' from the main entry screen. If you are a first-time user, click 'Create Account' to begin your registration and gain access to your school’s specialized data management tools.</p>
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-3" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: School Registration
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -514,34 +576,26 @@
                         <span class="step-pill">03</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Getting Started</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">School Registration</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">School Registration</h2>
                         </div>
                     </div>
                     <div class="h-px flex-1 bg-slate-200 hidden md:block mx-8 mb-4"></div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Enter Personal Details (Name, Email, Mobile).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Map your school's 5-step hierarchy.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Geotag your school's exact location.</li>
-                        </ul>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-16">
-                        <div class="space-y-10">
-                            <div class="p-10 bg-navy-950 text-white rounded-3xl">
-                                <h3 class="text-sm font-black text-blue-400 uppercase tracking-widest mb-4 italic text-blue-500">Important: Your School ID (IERN)</h3>
-                                <p class="text-lg font-medium italic">Save your unique IERN. You will need it to log in later.</p>
-                            </div>
-                            <div class="space-y-6 text-lg italic text-slate-600 pl-6 border-l-2 border-blue-500">
-                                <p>1. Enter First/Last Name and Mobile.</p>
-                                <p>2. Select Region, Division, and School.</p>
-                                <p>3. Drop the map pin on your school.</p>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Register your school by entering personal details, mapping your location hierarchy, and geotagging your school's exact coordinates. Remember to save your unique School ID (IERN), as it is required for all future logins.</p>
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-4" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Your Dashboard
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -551,33 +605,25 @@
                         <span class="step-pill">04</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Manage Your School</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Your Dashboard</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Your Dashboard</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Use the **CLOUD** button for school monitoring (Units 1-9).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Use **ESF7** to upload teacher personnel files.</li>
-                        </ul>
-                    </div>
                     <div class="grid md:grid-cols-2 gap-16 items-center">
-                        <div class="space-y-6">
-                            <div class="p-8 bg-white border border-slate-100 rounded-3xl hover:border-blue-500 transition-all">
-                                <h4 class="font-black italic text-2xl uppercase mb-2">CLOUD</h4>
-                                <p class="text-base text-slate-500 italic">Audit Units 1-9 & Monitoring.</p>
-                            </div>
-                            <div class="p-8 bg-white border border-slate-100 rounded-3xl hover:border-blue-500 transition-all">
-                                <h4 class="font-black italic text-2xl uppercase mb-2">ESF7</h4>
-                                <p class="text-base text-slate-500 italic">Personnel Management.</p>
-                            </div>
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Your dashboard is the central hub for school management. Use the 'CLOUD' button for comprehensive school monitoring and audits (Units 1-9), and access 'ESF7' to efficiently manage and upload your teacher personnel files.</p>
                         </div>
                     </div>
-                    
-
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-5" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 1 - School Profile
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
             <section id="unit-5" class="mb-16 md:mb-32 scroll-mt-24 px-4 md:px-12">
@@ -586,45 +632,28 @@
                         <span class="step-pill">05</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Your School Identity</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 1: School Profile</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 1: School Profile</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Set School Name, ID, and Curricular Offering.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Upload Ownership Documents (DepEd/LGU/Private).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Establish establishment date and Mother/Annex links.</li>
-                        </ul>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Confirm your school's identity, official name, and establishment dates. Upload required ownership documentation and link any mother or annex schools to ensure a complete profile.</p>
+                        </div>
+                        <div class="phone-mockup">
+                            <img src="./Unit_1_Complete_Guide.gif" alt="Unit 1 Complete Guide" class="w-full h-auto">
+                        </div>
                     </div>
-                    <div class="grid md:grid-cols-2 gap-16 items-start">
-                         <div class="space-y-8">
-                             <div class="alert-required">
-                                 <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                 <span>To change the School ID, click <strong>"Unlock"</strong> and type <strong>"CONFIRM"</strong>.</span>
-                             </div>
-                             <div class="space-y-6">
-                                 <div>
-                                     <h3 class="font-black text-slate-900 text-base uppercase tracking-widest mb-2 italic">Essential Data</h3>
-                                     <ul class="text-base text-slate-600 space-y-2 italic">
-                                         <li>• Enter the official School Name (no abbreviations).</li>
-                                         <li>• Select your authorized Curricular Offering (e.g., K-6, K-12).</li>
-                                         <li>• Enter the official Month and Year of establishment.</li>
-                                     </ul>
-                                 </div>
-                                 <div class="p-6 bg-slate-950 text-white rounded-2xl shadow-xl italic">
-                                     <h4 class="text-xs font-black text-blue-400 uppercase tracking-widest mb-3 italic">Ownership & Links</h4>
-                                     <p class="text-sm opacity-90 italic">Select ownership type and upload the deed/document. If applicable, provide Mother or Annex School IDs.</p>
-                                 </div>
-                             </div>
-                         </div>
-                         <div class="phone-mockup">
-                             <img src="./Unit_1_Complete_Guide.gif" alt="Unit 1 Complete Guide" class="w-full h-auto">
-                         </div>
-                    </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-6" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 2 - Enrollment
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
             <section id="unit-6" class="mb-16 md:mb-32 scroll-mt-24 px-4 md:px-12">
@@ -633,39 +662,28 @@
                         <span class="step-pill">06</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Learner Count</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 2: Learners</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 2: Learners</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Enter total enrollment per grade level.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Mandatory: Split counts by Male and Female.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Disable grades not present in your school.</li>
-                        </ul>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-16 items-start">
-                        <div class="space-y-8">
-                            <div class="p-6 bg-blue-50 border border-blue-100 rounded-2xl italic">
-                                <h3 class="text-lg font-black text-blue-900 uppercase mb-2">Enrollment Modes</h3>
-                                <ul class="text-sm text-blue-800 space-y-3">
-                                    <li><strong>A. Monograde:</strong> Enter totals for each grade.</li>
-                                    <li><strong>B. Multigrade:</strong> Use <strong>"ADD COMBO"</strong> for grade pairings and enter specific counts.</li>
-                                    <li><strong>C. Mixed:</strong> Combine multigrade combos with regular grades.</li>
-                                </ul>
-                            </div>
-                            <div class="alert-warning">
-                                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                <span>The system blocks sync if <strong>Male + Female</strong> does not equal the <strong>Total Enrollment</strong>.</span>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Log enrollment by grade level and gender. The system validates that male and female counts match the total. Use the combination tool to accurately group multigrade classes.</p>
                         </div>
                         <div class="phone-mockup">
                             <img src="./unit2 final.gif" alt="Unit 2 Learners Enrollment" class="w-full h-auto">
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-7" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 3 - Sections
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -675,39 +693,28 @@
                         <span class="step-pill">07</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Classroom Density</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 3: Sectioning</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 3: Sectioning</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Create sections and assign shifts (Morning/Afternoon/Whole Day).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Categorize sections by enrollment density (LT, WS, AS).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Ensure section totals match your Unit 2 Enrollment.</li>
-                        </ul>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-16 items-start">
-                        <div class="space-y-8">
-                            <div class="p-6 bg-slate-900 text-white rounded-2xl italic">
-                                <h3 class="text-sm font-black text-blue-400 uppercase tracking-widest mb-4">Density Categories</h3>
-                                <div class="grid grid-cols-1 gap-4 text-xs italic">
-                                    <p><strong>LT (Less Than):</strong> Below standard ratio.</p>
-                                    <p class="text-blue-400 font-bold"><strong>WS (Within Standard):</strong> Optimal learner-teacher ratio.</p>
-                                    <p><strong>AS (Above Standard):</strong> Overcrowded sections.</p>
-                                </div>
-                            </div>
-                            <div class="alert-tip">
-                                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                <span>The sum of LT + WS + AS MUST equal the total sections declared for that grade level.</span>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Organize class sections and assign instructional shifts. Categorize each section by density—Less Than, Within, or Above Standard—to monitor and maintain optimal learner-teacher ratios across your campus.</p>
                         </div>
                         <div class="phone-mockup">
                             <img src="./unit 3 final.gif" alt="Unit 3 Teachers Sectioning" class="w-full h-auto">
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-8" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 4 - Profiles
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -717,38 +724,28 @@
                         <span class="step-pill">08</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Special Education & Health</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 4: Profiles</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 4: Profiles</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Select specific learner communities (IP, Muslim, ALS).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Record health metrics (Wasted, Severely Wasted).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Track performance data (Dropouts, Repeaters).</li>
-                        </ul>
-                    </div>
                     <div class="grid md:grid-cols-2 gap-16 items-center">
                         <div class="phone-mockup">
                             <img src="./unit4.gif" alt="Unit 4 Specialized Analytics" class="w-full h-auto">
                         </div>
-                        <div class="space-y-8">
-                            <div class="p-6 bg-blue-600 text-white rounded-2xl italic">
-                                <h4 class="text-xs font-black text-blue-200 uppercase tracking-widest mb-3 italic">Community Filters</h4>
-                                <p class="text-sm italic mb-4">Select all that apply: ALS, Muslim Affairs, IP Learners, Displaced, Overage.</p>
-                                <p class="text-[10px] opacity-70 italic border-t border-white/20 pt-3 italic">"Only selected categories will appear for data entry."</p>
-                            </div>
-                            <div class="grid grid-cols-1 gap-6">
-                                <div class="p-6 bg-white border border-slate-100 rounded-2xl italic">
-                                    <h5 class="text-xs font-black text-navy-950 uppercase mb-2">Health & Performance</h5>
-                                    <p class="text-sm text-slate-500 italic">Input counts for nutritional status (Wasted) and learner attrition (Dropouts).</p>
-                                </div>
-                            </div>
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Record specialized data for learner communities like IP and ALS. Monitor critical health metrics and performance indicators, such as dropouts and repeaters, to provide targeted support for at-risk students.</p>
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-9" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 5 - Modalities
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
             <section id="unit-9" class="mb-16 md:mb-32 scroll-mt-24 px-4 md:px-12">
@@ -757,135 +754,28 @@
                         <span class="step-pill">09</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Class Setup</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic font-display">Unit 5: Learning Modalities</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic font-display">Unit 5: Learning Modalities</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Select learning modes (In-person, Blended, etc.).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Set class schedules (5 days, 6 days, etc.).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Note specific reasons for modular or remote learning.</li>
-                        </ul>
-                    </div>
-                    <div class="grid lg:grid-cols-2 gap-20 items-center mb-16">
-                        <div class="space-y-10">
-                            <div class="p-10 border-l-4 border-slate-950 bg-slate-50 rounded-r-[3rem] relative overflow-hidden group">
-                                <h3 class="text-2xl font-black text-slate-900 uppercase tracking-tighter italic mb-4 leading-none">Operational Modalities & Emergency Protocols</h3>
-                                <p class="text-lg text-slate-600 leading-relaxed italic opacity-80">"Analyzing structural shifting models and adaptive delivery protocols for institutional resilience."</p>
-                            </div>
-                            <!-- Decision Node -->
-                            <div class="p-10 bg-white border-2 border-blue-600 rounded-[3.5rem] shadow-2xl italic relative group">
-                                 <div class="absolute -top-4 left-10 bg-blue-600 text-white text-[10px] font-black px-5 py-1.5 rounded-full uppercase italic tracking-widest shadow-xl">Audit Launch Pad</div>
-                                 <h4 class="text-base font-black text-navy-950 uppercase mb-8 tracking-tighter italic leading-relaxed">"Does your entire school follow a standard Single Shift with 100% In-Person classes?"</h4>
-                                 
-                                 <div class="grid grid-cols-2 gap-6">
-                                     <div class="p-8 bg-blue-50 border border-blue-100 rounded-[2rem] text-center hover:bg-blue-600 hover:text-white transition-all cursor-pointer group/opt">
-                                         <span class="block font-black text-[10px] uppercase mb-2 tracking-widest italic text-blue-400 group-hover/opt:text-white/60">Node A</span>
-                                         <span class="text-sm font-black uppercase italic">Yes: Standard</span>
-                                     </div>
-                                     <div class="p-8 bg-slate-50 border border-slate-100 rounded-[2rem] text-center opacity-60">
-                                         <span class="block font-black text-[10px] uppercase mb-2 tracking-widest italic text-slate-400">Node B</span>
-                                         <span class="text-sm font-black uppercase italic">No: Mixed Schedule</span>
-                                     </div>
-                                 </div>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Configure your school's learning setup by selecting between in-person, blended, or distance delivery modes. Define your shifting models and report any emergency ADM protocols to ensure accurate operational mapping for reporting.</p>
                         </div>
-
                         <div class="phone-mockup">
                             <img src="./unit 5 final.gif" alt="Unit 5 Modality Configuration" class="w-full h-auto">
                         </div>
                     </div>
-
-                    <!-- Mixed Schedule Logic -->
-                    <div class="space-y-10">
-                         <div class="p-12 bg-slate-950 text-white rounded-[4rem] shadow-2xl italic relative overflow-hidden group border border-slate-800">
-                             <div class="absolute top-0 right-0 w-48 h-48 bg-blue-600/10 rounded-full blur-[80px] -mr-24 -mt-24 group-hover:bg-blue-600/20 transition-all"></div>
-                             <h4 class="text-[11px] font-black text-blue-400 uppercase tracking-[0.3em] mb-10 italic flex items-center gap-4">
-                                 <span class="w-8 h-px bg-blue-400"></span>
-                                 Mixed Modality Matrix
-                             </h4>
-                             <div class="grid md:grid-cols-2 gap-16">
-                                 <div class="space-y-10">
-                                     <div>
-                                         <h5 class="font-black text-white text-xs uppercase mb-4 italic tracking-widest flex items-center gap-2">
-                                             <span class="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                                             01 / Shifting Model
-                                         </h5>
-                                         <div class="grid grid-cols-3 gap-2 text-[10px] font-black uppercase">
-                                             <div class="bg-white/5 py-2 rounded-lg border border-white/10 text-center italic">Single</div>
-                                             <div class="bg-blue-600 py-2 rounded-lg text-center italic">Double</div>
-                                             <div class="bg-white/5 py-2 rounded-lg border border-white/10 text-center italic">Triple</div>
-                                         </div>
-                                     </div>
-                                     <p class="text-xs italic text-slate-400 leading-relaxed">
-                                         <span class="text-blue-600">NOTE:</span> If you select "Standard Set-up", the system bypasses complexity and jumps directly to the Emergency ADM Node.
-                                     </p>
-                                 </div>
-                                 <div>
-                                     <h5 class="font-black text-white text-xs uppercase mb-4 italic tracking-widest flex items-center gap-2">
-                                         <span class="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                                         02 / Delivery Modality
-                                     </h5>
-                                     <ul class="text-[11px] space-y-4 opacity-80 leading-relaxed italic">
-                                         <li class="flex items-start gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                             <span class="text-blue-500 font-black">100%</span>
-                                             <span>**In-Person:** 100% Face-to-Face operations.</span>
-                                         </li>
-                                         <li class="flex items-start gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                             <span class="text-blue-500 font-black">3:2</span>
-                                             <span>**Blended (3F2F-2OC):** 3 Days F2F / 2 Outside Campus.</span>
-                                         </li>
-                                         <li class="flex items-start gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                             <span class="text-blue-500 font-black">4:1</span>
-                                             <span>**Blended (4F2F-1OC):** 4 Days F2F / 1 Outside Campus.</span>
-                                         </li>
-                                         <li class="flex items-start gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                             <span class="text-blue-500 font-black">0%</span>
-                                             <span>**Full Distance:** Zero on-campus instructional hours.</span>
-                                         </li>
-                                     </ul>
-                                 </div>
-                             </div>
-                         </div>
-                    </div>
-
-                    <!-- Emergency Phase -->
-                    <div class="mt-24 p-12 bg-white border-2 border-slate-100 rounded-[4rem] shadow-xl italic relative overflow-hidden group">
-                         <div class="absolute inset-0 bg-blue-600/[0.02] opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                         <h4 class="font-black text-navy-950 uppercase text-lg mb-12 tracking-[0.3em] flex items-center gap-6 italic leading-none">
-                              <span class="w-16 h-1 bg-red-600 rounded-full"></span>
-                              Emergency ADM Protocol
-                         </h4>
-                         <div class="grid lg:grid-cols-2 gap-20 items-center">
-                             <div class="space-y-8">
-                                 <p class="text-xl text-slate-900 italic font-black leading-tight">"Are you utilizing Emergency Modalities due to congestion or disasters?"</p>
-                                 <p class="text-base text-slate-500 italic leading-relaxed">If **YES**, select all active nodes. This data establishes the school's emergency operational baseline for regional SDO reporting.</p>
-                             </div>
-                             <div class="grid grid-cols-2 gap-6">
-                                 <div class="p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] text-center hover:border-blue-600 hover:shadow-lg transition-all">
-                                      <span class="block font-black text-navy-950 text-sm mb-2">MDL</span>
-                                      <span class="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">Modular</span>
-                                 </div>
-                                 <div class="p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] text-center hover:border-blue-600 hover:shadow-lg transition-all">
-                                      <span class="block font-black text-navy-950 text-sm mb-2">ODL</span>
-                                      <span class="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">Online</span>
-                                 </div>
-                                 <div class="p-8 bg-slate-50 border border-slate-100 rounded-[2.5rem] text-center hover:border-blue-600 hover:shadow-lg transition-all">
-                                      <span class="block font-black text-navy-950 text-sm mb-2">TVI</span>
-                                      <span class="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">TV / Radio</span>
-                                 </div>
-                                 <div class="p-8 bg-blue-600 text-white border-4 border-blue-400 rounded-[2.5rem] text-center shadow-2xl relative overflow-hidden">
-                                      <div class="absolute inset-0 bg-white/10 animate-pulse"></div>
-                                      <span class="block font-black text-sm mb-2 relative z-10">Blended</span>
-                                      <span class="text-[10px] text-blue-200 uppercase font-black tracking-widest italic relative z-10">Hybrid ADM</span>
-                                 </div>
-                             </div>
-                         </div>
-                    </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-10" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 6 - Resources
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -895,34 +785,16 @@
                         <span class="step-pill">09</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Classroom Logic</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 5: Learning Modalities</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 5: Learning Modalities</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Select delivery modes (Face-to-Face, Blended, Distance).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Set Shifting Models (Single, Double, or Triple shifts).</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Report any Emergency ADM (Modular, Online, TV/Radio).</li>
-                        </ul>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-16 items-start">
-                        <div class="space-y-8">
-                            <div class="p-6 bg-slate-900 text-white rounded-2xl italic">
-                                <h3 class="text-sm font-black text-blue-400 uppercase tracking-widest mb-4">Delivery Ratios</h3>
-                                <ul class="text-xs space-y-3 italic">
-                                    <li><strong>100% In-Person:</strong> Full Face-to-Face.</li>
-                                    <li><strong>Blended (3:2 or 4:1):</strong> Mixed on-campus and remote.</li>
-                                    <li><strong>Full Distance:</strong> 0% on-campus.</li>
-                                </ul>
-                            </div>
-                            <div class="alert-tip">
-                                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                <span>Selecting "Standard Set-up" auto-fills default F2F values.</span>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Configure your school's learning setup by selecting between in-person, blended, or distance delivery modes. Define your shifting models and report any emergency ADM protocols to ensure accurate operational mapping for reporting.</p>
                         </div>
                     </div>
                 </div>
@@ -934,35 +806,28 @@
                         <span class="step-pill">10</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">School Property</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic font-display">Unit 6: School Resources</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic font-display">Unit 6: School Resources</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Inventory desks, chairs, and learning materials.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Report health clinic and WASH facility details.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Record internet and power source connectivity.</li>
-                        </ul>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-16 items-start">
-                        <div class="space-y-6">
-                            <div class="p-6 bg-white border border-slate-100 rounded-2xl italic">
-                                <h3 class="text-xs font-black text-blue-600 uppercase mb-3 italic">1. Furniture & ICT</h3>
-                                <p class="text-sm text-slate-600 italic">Audit seat counts (Armchairs, Tables) and ICT assets (Laptops, TVs, eCarts).</p>
-                            </div>
-                            <div class="p-6 bg-white border border-slate-100 rounded-2xl italic">
-                                <h3 class="text-xs font-black text-blue-600 uppercase mb-3 italic">2. Utilities & WASH</h3>
-                                <p class="text-sm text-slate-600 italic">Log Power source, Internet type (Fiber/Starlink), and Toilet seat counts.</p>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Inventory furniture and ICT assets like laptops and eCarts. Log the status of power, internet, and WASH facilities to provide a clear view of your school's operational resources.</p>
                         </div>
                         <div class="phone-mockup">
                             <img src="./unit6 resources.gif" alt="Unit 6 Resources" class="w-full h-auto">
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-11" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 7 - Buildings
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -972,35 +837,28 @@
                         <span class="step-pill">11</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">Building Audit</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 7: Physical Facilities</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 7: Physical Facilities</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Audit every building and room in the school.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Assess repair needs and classroom conditions.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Map "Buildable Spaces" for future expansion.</li>
-                        </ul>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-16 items-start">
-                        <div class="space-y-6">
-                            <div class="p-6 bg-slate-50 border border-slate-100 rounded-2xl italic">
-                                <h3 class="text-xs font-black text-blue-600 uppercase mb-3 italic">1. Campus Map</h3>
-                                <p class="text-sm text-slate-600 italic">Place pins on "Buildable Areas" and input dimensions (m) for total area calculation.</p>
-                            </div>
-                            <div class="p-6 bg-slate-950 text-white rounded-2xl italic">
-                                <h3 class="text-xs font-black text-blue-400 uppercase mb-3 italic">2. Building & Room Audit</h3>
-                                <p class="text-sm opacity-90 italic">Register buildings, set floors, and assign room types. Use the <strong>Damage Slider</strong> for repair assessments.</p>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Audit all school buildings and rooms to assess conditions. Map buildable spaces for future development and use the damage slider to report specific repair needs for prioritized maintenance.</p>
                         </div>
                         <div class="phone-mockup">
                             <img src="./uni7 buildable.gif" alt="Unit 7 Facilities" class="w-full h-auto">
                         </div>
                     </div>
+                </div>
+                <!-- Next Unit Link -->
+                <div class="mt-8 text-right px-4">
+                    <a href="#unit-12" class="text-[10px] font-black text-blue-500 uppercase tracking-widest italic flex items-center justify-end gap-2 group">
+                        Next: Unit 8 - Risks
+                        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
                 </div>
             </section>
 
@@ -1010,30 +868,16 @@
                         <span class="step-pill">12</span>
                         <div>
                             <span class="text-sm font-black text-blue-600 uppercase tracking-[0.4em] block mb-1">School Environment</span>
-                            <h2 class="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 8: Terrain & Risk Profile</h2>
+                            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Unit 8: Terrain & Risk Profile</h2>
                         </div>
                     </div>
                 </header>
 
                 <div class="unit-card">
-                    <div class="summary-card">
-                        <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
-                        <ul class="text-sm space-y-2 text-slate-600 italic">
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Identify flood, earthquake, and landslide risks.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> Note if the school is used as an evacuation center.</li>
-                            <li class="flex items-center gap-2"><span class="w-1 h-1 bg-blue-500 rounded-full"></span> List proximity to SDO and Health facilities.</li>
-                        </ul>
-                    </div>
-                    <div class="grid md:grid-cols-2 gap-16 items-start">
-                        <div class="space-y-6">
-                            <div class="p-6 bg-white border border-slate-100 rounded-2xl italic">
-                                <h3 class="text-xs font-black text-blue-600 uppercase mb-3 italic">1. Location Hazards</h3>
-                                <p class="text-sm text-slate-600 italic">Describe terrain (Level, Hilly) and physical threats (Near Cliff, River Crossings).</p>
-                            </div>
-                            <div class="p-6 bg-red-600 text-white rounded-2xl italic">
-                                <h3 class="text-xs font-black text-white uppercase mb-3 italic">2. Risk Exposure</h3>
-                                <p class="text-sm italic">Report recent natural calamities (Floods, Typhoons) and man-made threats.</p>
-                            </div>
+                    <div class="grid md:grid-cols-2 gap-16 items-center">
+                        <div class="summary-card">
+                            <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-2 italic">At a Glance</h4>
+                            <p class="text-sm text-slate-600 italic">Profile environmental hazards and terrain risks. Document your school's proximity to support facilities and its capacity to serve as an evacuation center during emergencies or natural calamities.</p>
                         </div>
                         <div class="phone-mockup">
                             <img src="./uni9.gif" alt="Unit 8 Risks" class="w-full h-auto">
@@ -1074,6 +918,25 @@
     </div>
 
     <script>
+        // Premium UI: Scroll Reveal Animation
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('section').forEach(section => {
+            section.classList.add('reveal-section');
+            observer.observe(section);
+        });
+
         // Premium UI: Auto-Toggle Mobile Navigation on Load
         window.addEventListener('load', () => {
             const navToggle = document.getElementById('mobile-nav-toggle');

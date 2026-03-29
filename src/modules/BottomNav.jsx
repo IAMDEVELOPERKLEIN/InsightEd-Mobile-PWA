@@ -63,7 +63,7 @@ const BottomNav = ({ userRole: propRole }) => {
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: FiHome },
             { label: 'Units', path: '/modular-dashboard', icon: LuCompass },
-            { label: 'Quick Start', path: '/guide/school-head', icon: TbSchool, highlight: true },
+            { label: 'Guide', path: '/guide/school-head', icon: TbSchool, highlight: true },
             { label: 'Profile', path: '/profile', icon: FiUser },
         ],
 
