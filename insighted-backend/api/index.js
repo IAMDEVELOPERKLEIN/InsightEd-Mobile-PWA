@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
 import express from 'express';
+console.log("📌 >>> RUNNING: [INSIGHTED-BACKEND]/api/index.js <<< 📌");
+
 import pg from 'pg';
 import cors from 'cors';
 // import cron from 'node-cron'; // REMOVED for Vercel
@@ -511,14 +513,51 @@ const initOtpTable = async () => {
         console.error('❌ Failed to migrate ARAL/Exp columns:', migErr.message);
       }
 
-      // --- MIGRATION: UPDATE PROJECT HISTORY SCHEMA ---
+      // --- MIGRATION: COMPREHENSIVE ALIGNMENT FOR ENGINEER FORM SNAPSHOTS ---
       try {
-        // 1. Add engineer_name column
         await client.query(`
-          ALTER TABLE engineer_form 
-          ADD COLUMN IF NOT EXISTS engineer_name TEXT;
+          ALTER TABLE engineer_form
+          -- 1. Identity & Location
+          ADD COLUMN IF NOT EXISTS engineer_name TEXT,
+          ADD COLUMN IF NOT EXISTS province TEXT,
+          ADD COLUMN IF NOT EXISTS city TEXT,
+          ADD COLUMN IF NOT EXISTS municipality TEXT,
+          
+          -- 2. Project Classification
+          ADD COLUMN IF NOT EXISTS project_category TEXT,
+          ADD COLUMN IF NOT EXISTS funding_year TEXT,
+          ADD COLUMN IF NOT EXISTS scope_of_work TEXT,
+          ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER,
+          ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER,
+          ADD COLUMN IF NOT EXISTS number_of_sites INTEGER,
+          ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC(20, 2),
+          ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
+          ADD COLUMN IF NOT EXISTS latitude TEXT,
+          ADD COLUMN IF NOT EXISTS longitude TEXT,
+          ADD COLUMN IF NOT EXISTS contract_amount NUMERIC(20, 2),
+          ADD COLUMN IF NOT EXISTS update_type TEXT,
+
+          -- 3. Document Status Flags
+          ADD COLUMN IF NOT EXISTS has_pow BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS has_dupa BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS has_contract BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS has_moa BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS has_rta BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS has_variation_order BOOLEAN DEFAULT FALSE,
+
+          -- 4. Realignment & Savings
+          ADD COLUMN IF NOT EXISTS is_realigned BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS savings NUMERIC(20, 2),
+          ADD COLUMN IF NOT EXISTS is_donated BOOLEAN DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS program_type TEXT,
+          ADD COLUMN IF NOT EXISTS funding_year_justification TEXT,
+
+          -- 5. Legal & External Refs
+          ADD COLUMN IF NOT EXISTS sangguniang_resolution_id TEXT,
+          ADD COLUMN IF NOT EXISTS mother_moa_id TEXT,
+          ADD COLUMN IF NOT EXISTS supplamental_moa_id TEXT;
         `);
-        console.log('✅ Checked/Added engineer_name and created_at columns');
+        console.log('✅ Checked/Added ALL missing columns to engineer_form for snapshots');
 
         // 2. Drop UNIQUE constraint on IPC (if it exists) to allow multiple rows per project
         await client.query(`
@@ -618,12 +657,10 @@ const initOtpTable = async () => {
       try {
         await client.query(`
           ALTER TABLE engineer_form
-          DROP COLUMN IF EXISTS funds_utilized,
           DROP COLUMN IF EXISTS variation_order_pdf,
           DROP COLUMN IF EXISTS vo_number,
           DROP COLUMN IF EXISTS vo_requested_date,
           DROP COLUMN IF EXISTS vo_requested_by,
-          DROP COLUMN IF EXISTS has_variation_order,
           DROP COLUMN IF EXISTS variation_order_amount,
           DROP COLUMN IF EXISTS variation_order_remarks,
           DROP COLUMN IF EXISTS variation_order_no,
@@ -1984,6 +2021,8 @@ app.post('/api/save-project', async (req, res) => {
 // --- 9. PUT: Update Project ---
 // --- 9. PUT: Update Project (With History Logging) ---
 app.put('/api/update-project/:id', async (req, res) => {
+  console.log("🔥 HIT (SECONDARY): PUT /api/update-project/" + req.params.id);
+
   const { id } = req.params;
   const data = req.body;
 
@@ -1999,6 +2038,10 @@ app.put('/api/update-project/:id', async (req, res) => {
       return res.status(404).json({ message: "Project not found" });
     }
     const oldData = oldRes.rows[0];
+    console.log("DEBUG: project_id from URL:", id);
+    console.log("DEBUG: oldData keys:", Object.keys(oldData));
+    console.log("DEBUG: oldData sample (project_name):", oldData.project_name);
+
 
     // 2. Prepare Data for New Row (Append History)
     // Fetch user name to ensure it's up-to-date
@@ -2061,7 +2104,7 @@ app.put('/api/update-project/:id', async (req, res) => {
       newCategory, newYear, newScope, newClassrooms, newStoreys, newSites,
       newFundsUtilized, newConstStart, newLat, newLong, newContractAmount, newUpdateType,
       oldData.has_pow, oldData.has_dupa, oldData.has_contract, oldData.has_moa, oldData.has_rta,
-      oldData.has_variation_order, oldData.variation_order_pdf,
+      oldData.has_variation_order,
       oldData.is_realigned, oldData.savings, oldData.is_donated, oldData.program_type, oldData.funding_year_justification,
       oldData.sangguniang_resolution_id, oldData.mother_moa_id, oldData.supplamental_moa_id
     ];
@@ -2078,7 +2121,7 @@ app.put('/api/update-project/:id', async (req, res) => {
         number_of_storeys, number_of_sites, funds_utilized, construction_start_date,
         latitude, longitude, contract_amount, update_type,
         has_pow, has_dupa, has_contract, has_moa, has_rta,
-        has_variation_order, variation_order_pdf,
+        has_variation_order,
         is_realigned, savings, is_donated, program_type, funding_year_justification,
         sangguniang_resolution_id, mother_moa_id, supplamental_moa_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48)
@@ -2146,8 +2189,13 @@ app.put('/api/update-project/:id', async (req, res) => {
     res.json({ message: "Update successful", project: newData });
   } catch (err) {
     if (client) await client.query('ROLLBACK');
-    console.error("❌ Error updating project:", err.message);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ Update Project Error:", err.message);
+    if (err.detail) console.error("❌ DB Detail:", err.detail);
+    res.status(500).json({ 
+      error: "Internal Server Error", 
+      message: err.message, 
+      detail: err.detail || "No additional detail" 
+    });
   } finally {
     if (client) client.release();
   }
@@ -2535,14 +2583,30 @@ app.post('/api/save-project-documents', async (req, res) => {
 
 // --- 20. POST: Upload Project Image (Base64) ---
 app.post('/api/upload-image', async (req, res) => {
-  const { projectId, imageData, uploadedBy } = req.body;
+  const { projectId, imageData, uploadedBy, category, ipc: providedIpc } = req.body;
   if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
 
   try {
-    const query = `INSERT INTO engineer_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
-    const result = await pool.query(query, [projectId, imageData, uploadedBy]);
+    let finalIpc = providedIpc;
 
-    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image`);
+    // If IPC is not provided, look it up from engineer_form
+    if (!finalIpc) {
+      const ipcResult = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+      if (ipcResult.rows.length > 0) {
+        finalIpc = ipcResult.rows[0].ipc;
+      }
+    }
+
+    const query = `
+      INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc) 
+      VALUES ($1, $2, $3, $4, $5) 
+      RETURNING id;
+    `;
+    const result = await pool.query(query, [projectId, imageData, uploadedBy, category || 'Internal', finalIpc]);
+
+    console.log(`📸 Image Saved: ID ${result.rows[0].id} for Project ${projectId} (IPC: ${finalIpc || 'N/A'}, Category: ${category || 'Internal'})`);
+
+    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image (${category || 'Internal'})`);
     res.status(201).json({ success: true, imageId: result.rows[0].id });
   } catch (err) {
     console.error("❌ Image Upload Error:", err.message);
@@ -2550,12 +2614,38 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
-// --- 21. GET: Fetch All Images for a Project ---
+// --- 21. GET: Fetch All Images for a Project (IPC-aware) ---
 app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {
-    const query = `SELECT id, image_data, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
-    const result = await pool.query(query, [projectId]);
+    // 1. Get the IPC for this specific project snapshot
+    const ipcResult = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+    const ipc = ipcResult.rows.length > 0 ? ipcResult.rows[0].ipc : null;
+
+    let query;
+    let params;
+
+    if (ipc) {
+      // 2. Fetch all images linked to this IPC (full project history)
+      query = `
+        SELECT id, image_data, uploaded_by, created_at, category, ipc 
+        FROM engineer_image 
+        WHERE ipc = $1 OR project_id = $2
+        ORDER BY created_at DESC;
+      `;
+      params = [ipc, projectId];
+    } else {
+      // Fallback to just project_id if IPC is missing
+      query = `
+        SELECT id, image_data, uploaded_by, created_at, category, ipc 
+        FROM engineer_image 
+        WHERE project_id = $1 
+        ORDER BY created_at DESC;
+      `;
+      params = [projectId];
+    }
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error("❌ Error fetching project images:", err.message);

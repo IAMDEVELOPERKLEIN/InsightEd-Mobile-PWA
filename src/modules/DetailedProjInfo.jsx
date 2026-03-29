@@ -1327,7 +1327,7 @@ const DetailedProjInfo = () => {
             project={project}
             isOpen={editModalOpen}
             onClose={() => setEditModalOpen(false)}
-            onSaveDetails={async (payload) => {
+            onSaveDetails={async (payload, siteImages = []) => {
                 try {
                     const isFormData = payload instanceof FormData;
                     const projectId = isFormData ? payload.get('id') : payload.id;
@@ -1337,10 +1337,39 @@ const DetailedProjInfo = () => {
                         body: isFormData ? payload : JSON.stringify(payload),
                     });
                     if (!res.ok) throw new Error('Update failed');
-                    alert('✅ Details updated successfully!');
+                    const resData = await res.json();
+
+                    // Orchestrate Site Image Uploads if any
+                    if (siteImages.length > 0) {
+                        // Small delay to ensure snapshot is ready for linking
+                        await new Promise(resolve => setTimeout(resolve, 800));
+
+                        for (const item of siteImages) {
+                            try {
+                                const base64Image = await compressImage(item.file);
+                                await fetch(`/api/upload-image`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        projectId: resData.project.project_id, // Link to the NEW snapshot ID
+                                        imageData: base64Image,
+                                        uploadedBy: user?.uid,
+                                        category: item.category
+                                    }),
+                                });
+                            } catch (err) {
+                                console.error("Image upload failed:", err);
+                            }
+                        }
+                    }
+
+                    alert('✅ SUCCESS\n\nProject details and site photos have been saved.');
                     setEditModalOpen(false);
                     window.location.reload();
-                } catch (err) { alert('Error: ' + err.message); }
+                } catch (err) { 
+                    console.error("Save Error:", err);
+                    alert('Error: ' + err.message); 
+                }
             }}
             onSaveVO={async (payload) => {
                 try {
