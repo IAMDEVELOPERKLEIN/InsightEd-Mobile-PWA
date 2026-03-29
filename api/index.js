@@ -6552,6 +6552,7 @@ app.post('/api/register-school', async (req, res) => {
     return res.status(400).json({ error: "Validation Failed", details: result.error.format() });
   }
   const { email, password, schoolData, contactNumber, role, passcode } = result.data;
+  const normalizedEmail = (email || '').toLowerCase();
 
   // Fallback to School Head if role not provided for backward compatibility
   const userRole = role || 'School Head';
@@ -6930,6 +6931,7 @@ app.post('/api/register-user', async (req, res) => {
     return res.status(400).json({ error: "Validation Failed", details: result.error.format() });
   }
   const { email, password, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail, accountCategory, passcode } = result.data;
+  const normalizedEmail = (email || '').toLowerCase();
 
   console.log(`🚀 Registration request received for: ${email} (Role: ${role})`);
 
