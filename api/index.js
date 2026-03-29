@@ -8528,8 +8528,8 @@ app.put('/api/update-project/:id', upload.fields([
       'not yet started': 'Not Yet Started'
     };
 
-    const rawStatus = data.statusOfConstructionPhase || data.status || oldData.status_of_construction_phase;
-    const newStatus = statusMapping[rawStatus?.toLowerCase()] || rawStatus || 'Ongoing';
+    const rawStatus = (data.statusOfConstructionPhase !== undefined) ? data.statusOfConstructionPhase : (data.status !== undefined ? data.status : oldData.status_of_construction_phase);
+    const newStatus = statusMapping[rawStatus?.toLowerCase()] || rawStatus || null;
 
     const rawProc = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status || oldData.status_design_phase;
     const newProcurementStatus = statusMapping[rawProc?.toLowerCase()] || rawProc || null;
@@ -8542,19 +8542,24 @@ app.put('/api/update-project/:id', upload.fields([
     const newLat = valueOrNull(data.latitude) || oldData.latitude;
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
 
+    const currentBudget = Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || 0);
+    const currentAmount = Number(valueOrNull(data.contract_amount) || oldData.contract_amount || 0);
+    const calculatedSavings = isNaN(currentBudget - currentAmount) ? 0 : (currentBudget - currentAmount);
+
     const insertValues = [
       valueOrNull(data.project_name || data.projectName) || oldData.project_name || 'N/A',
       valueOrNull(data.school_name || data.schoolName) || oldData.school_name || 'N/A',
       valueOrNull(data.school_id || data.schoolId) || oldData.school_id || 'N/A',
       valueOrNull(data.region) || oldData.region || 'N/A',
       valueOrNull(data.division) || oldData.division || 'N/A',
-      newStatus, newAccomplishment, newStatusAsOf,
+      newStatus, // Mapping only to 'status_of_construction_phase'
+      newAccomplishment, newStatusAsOf,
       valueOrNull(data.targetCompletionDate) || oldData.target_completion_date,
       newActualDate,
       valueOrNull(data.noticeToProceed) || oldData.notice_to_proceed,
       valueOrNull(data.contractorName) || oldData.contractor_name,
-      valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation,
-      valueOrNull(data.contract_amount) || oldData.contract_amount,
+      currentBudget,
+      currentAmount,
       valueOrNull(data.batchOfFunds) || oldData.batch_of_funds,
       newRemarks,
       oldData.engineer_id,
@@ -8570,7 +8575,7 @@ app.put('/api/update-project/:id', upload.fields([
       valueOrNull(data.numberOfStoreys) || oldData.number_of_storeys,
       valueOrNull(data.fundsUtilized) || oldData.funds_utilized,
       valueOrNull(data.update_type) || 'Status Update',
-      Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation) - Number(valueOrNull(data.contract_amount) || oldData.contract_amount),
+      calculatedSavings,
       newStatusDesignPhase,
       valueOrNull(data.contractId) || oldData.contract_id,
       valueOrNull(data.dateNoticeOfAward) || oldData.date_notice_of_award,
@@ -8601,7 +8606,12 @@ app.put('/api/update-project/:id', upload.fields([
       valueOrNull(data.city) || oldData.city,
       valueOrNull(data.municipality) || oldData.municipality,
       pow_pdf_base64, dupa_pdf_base64, contract_pdf_base64,
-      newProcurementStatus
+      newProcurementStatus,
+      valueOrNull(data.mother_moa_id) || oldData.mother_moa_id,
+      valueOrNull(data.supplemental_moa_id) || oldData.supplemental_moa_id,
+      valueOrNull(data.supplamental_moa_id) || oldData.supplamental_moa_id,
+      valueOrNull(data.sangguniang_resolution_id) || oldData.sangguniang_resolution_id,
+      valueOrNull(data.project_category_id) || oldData.project_category_id
     ];
 
     const insertQuery = `
@@ -8624,10 +8634,11 @@ app.put('/api/update-project/:id', upload.fields([
         implementing_agency, implementing_agency_specific, uploader_id_moa_rta, no_of_units, program_type,
         province, city, municipality,
         pow_pdf, dupa_pdf, contract_pdf,
-        procurement_status
+        procurement_status,
+        mother_moa_id, supplemental_moa_id, supplamental_moa_id, sangguniang_resolution_id, project_category_id
       ) VALUES (
         $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63)
+        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68)
 
 
       RETURNING *;
@@ -9308,20 +9319,20 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
       const userResult = await pool.query('SELECT role, region, division FROM users WHERE uid = $1', [engineer_id]);
       const userProfile = userResult.rows[0];
       if (userProfile) {
-        const role = userProfile.role?.toLowerCase();
+        const role = userProfile.role?.trim().toLowerCase();
         const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
-        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office'].includes(role);
+        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
 
         if (isAdmin) {
           // admin/HRODI sees all summary stats; skip engineer_id/region/division filters
         } else if (isDivEng) {
           if (userProfile.region) {
             queryParams.push(userProfile.region.trim());
-            whereClauses.push(`e.region ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(e.region) ILIKE TRIM($${queryParams.length})`);
           }
           if (userProfile.division) {
             queryParams.push(userProfile.division.trim());
-            whereClauses.push(`e.division ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(e.division) ILIKE TRIM($${queryParams.length})`);
           }
         } else {
           queryParams.push(engineer_id);
@@ -9436,7 +9447,7 @@ app.get('/api/projects', async (req, res) => {
             e.construction_start_date, e.project_category, e.scope_of_work,
             e.province, e.city, e.municipality,
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
-            e.is_donated, e.program_type, e.status_design_phase, e.actions, e.savings, e.funding_year, e.funding_year_justification,
+            e.is_donated, e.program_type, e.status_design_phase, e.procurement_status, e.actions, e.savings, e.funding_year, e.funding_year_justification,
             e.sangguniang_resolution_id, e.mother_moa_id, e.supplamental_moa_id,
             (NULLIF(d.moa_pdf, '') IS NOT NULL) AS has_moa,
             (NULLIF(d.rta_pdf, '') IS NOT NULL) AS has_rta,
@@ -9479,6 +9490,7 @@ app.get('/api/projects', async (req, res) => {
         p.number_of_classrooms AS "numberOfClassrooms", p.number_of_storeys AS "numberOfStoreys",
         p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
         p.status_design_phase AS "statusDesignPhase",
+        p.procurement_status AS "procurement_status",
         p.actions AS "updateType",
         (p.actions LIKE 'Realignment%') AS "isRealigned",
         p.savings,
@@ -9511,9 +9523,9 @@ app.get('/api/projects', async (req, res) => {
       const userProfile = userResult.rows[0];
 
       if (userProfile) {
-        const role = userProfile.role?.toLowerCase();
+        const role = userProfile.role?.trim().toLowerCase();
         const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
-        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office'].includes(role);
+        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
 
         if (isAdmin) {
           // admin/HRODI can see all projects; don't add engineer_id or region/division filters
@@ -9521,11 +9533,11 @@ app.get('/api/projects', async (req, res) => {
         } else if (isDivEng) {
           if (userProfile.region) {
             queryParams.push(userProfile.region.trim());
-            whereClauses.push(`p.region ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(p.region) ILIKE TRIM($${queryParams.length})`);
           }
           if (userProfile.division) {
             queryParams.push(userProfile.division.trim());
-            whereClauses.push(`p.division ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(p.division) ILIKE TRIM($${queryParams.length})`);
           }
         } else {
           queryParams.push(engineer_id);
