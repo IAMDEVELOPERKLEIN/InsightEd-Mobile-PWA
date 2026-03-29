@@ -24,16 +24,22 @@ const LazyImage = ({ imageId, meta, onClick }) => {
                     console.error("Failed to parse image JSON", e);
                 }
             }
-            
+
+            // File-path based storage (new)
+            if (typeof base64 === 'string' && base64.startsWith('/uploads/')) {
+                setSrc(base64);
+                setLoading(false);
+                return;
+            }
+
             // Ensure data URI prefix
             if (typeof base64 === 'string' && !base64.startsWith("http") && !base64.startsWith("data:")) {
                 base64 = `data:image/jpeg;base64,${base64}`;
             }
-            
+
             setSrc(base64);
             setLoading(false);
         } else {
-            // Fallback or error if no data
             setError(true);
             setLoading(false);
         }

@@ -123,6 +123,7 @@ const EFDHome = () => {
     const [selectedDocStatus, setSelectedDocStatus] = useState('All'); 
     const [fundingYears, setFundingYears] = useState([]);
     const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
+    const [localSearchQuery, setLocalSearchQuery] = useState(() => localStorage.getItem('efd_searchQuery') || '');
     const [efdLocations, setEfdLocations] = useState([]);
     const [isBeffMode, setIsBeffMode] = useState(() => window.location.pathname.toLowerCase().includes('beff'));
     const [chartMetric, setChartMetric] = useState('count'); // 'count' or 'abc'
@@ -143,6 +144,21 @@ const EFDHome = () => {
         localStorage.setItem('efd_selectedCategories', JSON.stringify(selectedCategories));
         localStorage.setItem('efd_searchQuery', searchQuery);
     }, [selectedRegions, selectedDivision, selectedProvince, selectedMunicipality, selectedDistrict, selectedCategories, searchQuery]);
+
+    // Debounce: update shared searchQuery 400ms after user stops typing
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (localSearchQuery !== searchQuery) {
+                setSearchQuery(localSearchQuery);
+            }
+        }, 400);
+        return () => clearTimeout(timer);
+    }, [localSearchQuery]);
+
+    // Sync local input when searchQuery is reset externally (e.g. Clear Filters)
+    useEffect(() => {
+        setLocalSearchQuery(searchQuery);
+    }, [searchQuery]);
 
     // Building Standards State
     const [dataMode, setDataMode] = useState('masterlist');
@@ -627,7 +643,6 @@ const EFDHome = () => {
             setEditModalOpen(false);
             
             // Upload Images if any
-            const { compressImage } = await import('../utils/imageCompression');
             const allFiles = [
                 ...internalFiles.map(f => ({ file: f, category: 'Internal' })),
                 ...externalFiles.map(f => ({ file: f, category: 'External' }))
@@ -636,19 +651,14 @@ const EFDHome = () => {
             if (allFiles.length > 0) {
                 for (const item of allFiles) {
                     try {
-                        const base64Image = await compressImage(item.file);
-                        await fetch('/api/upload-image', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                projectId: updatedProject.id,
-                                imageData: base64Image,
-                                uploadedBy: uid,
-                                category: item.category
-                            }),
-                        });
+                        const formData = new FormData();
+                        formData.append('image', item.file);
+                        formData.append('projectId', updatedProject.id);
+                        formData.append('uploadedBy', uid);
+                        formData.append('category', item.category);
+                        await fetch('/api/upload-image', { method: 'POST', body: formData });
                     } catch (err) {
-                        console.error("Compression/Upload failed for file:", item.file.name, err);
+                        console.error("Upload failed for file:", item.file.name, err);
                     }
                 }
             }
@@ -756,8 +766,8 @@ const EFDHome = () => {
                                 <input 
                                     type="text"
                                     placeholder="Search by project name, school ID, or location..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    value={localSearchQuery}
+                                    onChange={(e) => setLocalSearchQuery(e.target.value)}
                                     className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-3xl shadow-sm text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all placeholder:text-slate-300"
                                 />
                             </div>
@@ -783,6 +793,34 @@ const EFDHome = () => {
                             }`}
                         >
                             <FiFilter size={12} /> Reset All Active Filters
+                        </button>
+                    </div>
+                </div>
+
+                {/* Tab Bar */}
+                <div className="px-5 mb-6">
+                    <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-sm">
+                        <button
+                            onClick={() => setActiveTab('summary')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${
+                                activeTab === 'summary'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                        >
+                            <FiTrendingUp size={13} />
+                            Summary
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('list')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${
+                                activeTab === 'list'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-slate-400 hover:text-slate-600'
+                            }`}
+                        >
+                            <LuClipboardList size={13} />
+                            Projects
                         </button>
                     </div>
                 </div>
@@ -1095,15 +1133,6 @@ const EFDHome = () => {
 
 
 
-                                {/* Browse Detailed Button */}
-                                <div className="mt-6">
-                                    <button
-                                        onClick={() => setActiveTab('list')}
-                                        className="w-full bg-white shadow-sm border border-slate-100 hover:bg-slate-100 hover:border-slate-200 text-slate-600 py-5 rounded-[2rem] text-xs font-black transition-all flex items-center justify-center gap-2 uppercase tracking-[0.2em] active:scale-[0.98]"
-                                    >
-                                        Browse Detailed Project Records <FiChevronRight />
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     ) : (

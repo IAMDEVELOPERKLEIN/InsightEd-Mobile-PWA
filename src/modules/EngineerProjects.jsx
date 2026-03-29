@@ -945,7 +945,13 @@ const EngineerProjects = () => {
       const finalProject = {
         ...updatedProject,
         id: resData.project.project_id,
-        otherRemarks: resData.project.other_remarks
+        otherRemarks: resData.project.other_remarks,
+        mother_moa_id: resData.project.mother_moa_id,
+        supplamental_moa_id: resData.project.supplamental_moa_id,
+        sangguniang_resolution_id: resData.project.sangguniang_resolution_id,
+        project_category_id: resData.project.project_category_id,
+        projectCategory: resData.project.project_category || updatedProject.projectCategory,
+        savings: resData.project.savings,
       };
 
       // Online Upload Images
@@ -960,22 +966,14 @@ const EngineerProjects = () => {
         
         for (const item of allFiles) {
           try {
-            const base64Image = await compressImage(item.file);
-            const uploadRes = await fetch(`${API_BASE}/api/upload-image`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ 
-                projectId: resData.project.project_id, // Link to the NEW snapshot ID
-                imageData: base64Image, 
-                uploadedBy: uid, 
-                category: item.category 
-              }),
-            });
-            if (!uploadRes.ok) {
-              console.error("Upload failed for file:", item.file.name, await uploadRes.text());
-            }
+            const formData = new FormData();
+            formData.append('image', item.file);
+            formData.append('projectId', resData.project.project_id);
+            formData.append('uploadedBy', uid);
+            formData.append('category', item.category);
+            await fetch(`${API_BASE}/api/upload-image`, { method: "POST", body: formData });
           } catch (err) {
-            console.error("Compression/Upload failed for file:", item.file.name, err);
+            console.error("Upload failed for file:", item.file.name, err);
           }
         }
       }

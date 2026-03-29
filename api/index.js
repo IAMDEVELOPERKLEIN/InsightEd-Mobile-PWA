@@ -103,16 +103,16 @@ const RegisterBetaSchema = z.object({
   password: z.string().min(6),
   schoolData: z.object({
     school_id: z.string().min(1),
-    school_name: z.string().optional(),
-    region: z.string().optional(),
-    division: z.string().optional(),
-    province: z.string().optional(),
-    municipality: z.string().optional(),
-    district: z.string().optional(),
-    legislative_district: z.string().optional(),
-    barangay: z.string().optional(),
-    latitude: z.union([z.number(), z.string()]).optional(),
-    longitude: z.union([z.number(), z.string()]).optional()
+    school_name: z.string().optional().nullable(),
+    region: z.string().optional().nullable(),
+    division: z.string().optional().nullable(),
+    province: z.string().optional().nullable(),
+    municipality: z.string().optional().nullable(),
+    district: z.string().optional().nullable(),
+    legislative_district: z.string().optional().nullable(),
+    barangay: z.string().optional().nullable(),
+    latitude: z.union([z.number(), z.string()]).optional().nullable(),
+    longitude: z.union([z.number(), z.string()]).optional().nullable()
   }),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
@@ -226,6 +226,23 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 const upload = multer({ dest: 'uploads/' });
 
+// --- Multer: Project Photos (file-path storage) ---
+const projectPhotosStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '..', 'uploads/project_photos/');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`);
+    }
+});
+const projectPhotosUpload = multer({
+    storage: projectPhotosStorage,
+    limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit
+});
+
 // --- UPLOAD ROUTE: SCHOOL OWNERSHIP DOCUMENTS ---
 app.post('/api/schools/:iern/ownership-docs', schoolDocsUpload.single('file'), async (req, res) => {
   const { iern } = req.params;
@@ -328,22 +345,25 @@ app.delete('/api/schools/:iern/ownership-docs/:id', async (req, res) => {
 
 const processPdfFile = async (file) => {
     if (!file) return null;
-    
+
     // Multer saves files WITHOUT extensions - PyMuPDF needs .pdf to detect format
     const renamedInput = file.path + '.pdf';
     fs.renameSync(file.path, renamedInput);
-    
-    // Use absolute paths so Python can always find the files
+
+    // Permanent output path in uploads/project_docs/
+    const docsDir = path.resolve(__dirname, '..', 'uploads/project_docs');
+    if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir, { recursive: true });
+    const outputFilename = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.pdf`;
+    const outputPath = path.join(docsDir, outputFilename);
+
     const inputPath = path.resolve(renamedInput);
-    const outputPath = path.resolve(`${file.path}_compressed.pdf`);
     const scriptPath = path.resolve(__dirname, '..', 'compress_pdf.py');
-    
+
     console.log(`📄 Processing PDF: ${inputPath}`);
-    
+
     try {
-        // Build the command with absolute paths
         const cmd = (pythonCmd) => `${pythonCmd} "${scriptPath}" "${inputPath}" "${outputPath}"`;
-        
+
         let stdout = '';
         try {
             const res = await execAsync(cmd('python'));
@@ -361,18 +381,17 @@ const processPdfFile = async (file) => {
                 }
             }
         }
-        
+
         console.log("✅ PDF Compression Output:", stdout);
-        const compressedBuffer = fs.readFileSync(outputPath);
-        return `data:application/pdf;base64,${compressedBuffer.toString('base64')}`;
+        return `/uploads/project_docs/${outputFilename}`;
     } catch (err) {
         console.error("PDF Compression Error - Message:", err.message);
         console.error("PDF Compression Error - Stderr:", err.stderr);
         console.error("PDF Compression Error - Stdout:", err.stdout);
         throw new Error("PDF compression failed: " + (err.stderr || err.message));
     } finally {
+        // Always clean up the temp input; output is now the permanent stored file
         if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     }
 };
 
@@ -4215,7 +4234,8 @@ const normalizeOffering = (val) => {
 
 const parseNumberOrNull = (value) => {
   if (value === '' || value === null || value === undefined) return null;
-  const parsed = parseFloat(value);
+  const cleaned = String(value).replace(/[^0-9.\-]/g, '');
+  const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? null : parsed;
 };
 
@@ -8542,24 +8562,38 @@ app.put('/api/update-project/:id', upload.fields([
     const newLat = valueOrNull(data.latitude) || oldData.latitude;
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
 
-    const currentBudget = Number(valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || 0);
-    const currentAmount = Number(valueOrNull(data.contract_amount) || oldData.contract_amount || 0);
-    const calculatedSavings = isNaN(currentBudget - currentAmount) ? 0 : (currentBudget - currentAmount);
+    const categoryMapping = {
+      "New Construction": "01",
+      "Repair and Rehab": "02",
+      "Last Mile Schools": "03",
+      "Health facilities": "04",
+      "Gabaldon Restoration": "05",
+      "Library Hub": "06",
+      "SpEd Inclusive Learning Resource Centers (ILRC)": "07",
+      "Alternative Learning System - Community Based Learning Centers (ALS-CLC)": "08",
+      "Midrise School Building": "09"
+    };
+    const newProjectCategory = valueOrNull(data.projectCategory) || oldData.project_category;
+    const newCatId = categoryMapping[newProjectCategory] || oldData.project_category_id || "10";
+
+    const rawAbc = valueOrNull(data.approved_budget_for_contract || data.projectAllocation) || oldData.approved_budget_for_contract || oldData.project_allocation;
+    const rawContract = valueOrNull(data.contract_amount) || oldData.contract_amount;
+    const cleanedAbc = parseNumberOrNull(rawAbc) || 0;
+    const cleanedContract = parseNumberOrNull(rawContract) || 0;
 
     const insertValues = [
-      valueOrNull(data.project_name || data.projectName) || oldData.project_name || 'N/A',
-      valueOrNull(data.school_name || data.schoolName) || oldData.school_name || 'N/A',
-      valueOrNull(data.school_id || data.schoolId) || oldData.school_id || 'N/A',
-      valueOrNull(data.region) || oldData.region || 'N/A',
-      valueOrNull(data.division) || oldData.division || 'N/A',
-      newStatus, // Mapping only to 'status_of_construction_phase'
-      newAccomplishment, newStatusAsOf,
+      data.project_name || oldData.project_name,
+      data.school_name || oldData.school_name,
+      data.school_id || oldData.school_id,
+      data.region || oldData.region,
+      data.division || oldData.division,
+      newStatus, newAccomplishment, newStatusAsOf,
       valueOrNull(data.targetCompletionDate) || oldData.target_completion_date,
       newActualDate,
       valueOrNull(data.noticeToProceed) || oldData.notice_to_proceed,
       valueOrNull(data.contractorName) || oldData.contractor_name,
-      currentBudget,
-      currentAmount,
+      rawAbc,
+      rawContract,
       valueOrNull(data.batchOfFunds) || oldData.batch_of_funds,
       newRemarks,
       oldData.engineer_id,
@@ -8568,14 +8602,14 @@ app.put('/api/update-project/:id', upload.fields([
       newLat,
       newLong,
       valueOrNull(data.constructionStartDate) || oldData.construction_start_date,
-      valueOrNull(data.projectCategory) || oldData.project_category,
+      newProjectCategory,
       valueOrNull(data.scopeOfWork) || oldData.scope_of_work,
       valueOrNull(data.numberOfClassrooms) || oldData.number_of_classrooms,
       valueOrNull(data.numberOfSites) || oldData.number_of_sites,
       valueOrNull(data.numberOfStoreys) || oldData.number_of_storeys,
       valueOrNull(data.fundsUtilized) || oldData.funds_utilized,
       valueOrNull(data.update_type) || 'Status Update',
-      calculatedSavings,
+      cleanedAbc - cleanedContract,
       newStatusDesignPhase,
       valueOrNull(data.contractId) || oldData.contract_id,
       valueOrNull(data.dateNoticeOfAward) || oldData.date_notice_of_award,
@@ -8607,11 +8641,10 @@ app.put('/api/update-project/:id', upload.fields([
       valueOrNull(data.municipality) || oldData.municipality,
       pow_pdf_base64, dupa_pdf_base64, contract_pdf_base64,
       newProcurementStatus,
-      valueOrNull(data.mother_moa_id) || oldData.mother_moa_id,
-      valueOrNull(data.supplemental_moa_id) || oldData.supplemental_moa_id,
-      valueOrNull(data.supplamental_moa_id) || oldData.supplamental_moa_id,
-      valueOrNull(data.sangguniang_resolution_id) || oldData.sangguniang_resolution_id,
-      valueOrNull(data.project_category_id) || oldData.project_category_id
+      oldData.mother_moa_id,
+      oldData.supplamental_moa_id,
+      oldData.sangguniang_resolution_id,
+      newCatId
     ];
 
     const insertQuery = `
@@ -8635,12 +8668,8 @@ app.put('/api/update-project/:id', upload.fields([
         province, city, municipality,
         pow_pdf, dupa_pdf, contract_pdf,
         procurement_status,
-        mother_moa_id, supplemental_moa_id, supplamental_moa_id, sangguniang_resolution_id, project_category_id
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68)
-
-
+        mother_moa_id, supplamental_moa_id, sangguniang_resolution_id, project_category_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67)
       RETURNING *;
     `;
 
@@ -10077,9 +10106,28 @@ app.get('/api/project-history/:ipc', async (req, res) => {
 });
 
 // --- 20. POST: Upload Project Image (Base64) ---
-app.post('/api/upload-image', async (req, res) => {
-  const { projectId, imageData, uploadedBy, category } = req.body;
-  if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
+app.post('/api/upload-image', (req, res, next) => {
+    // Accept multipart/form-data (file upload) OR application/json (legacy Base64 / offline outbox)
+    const ct = req.headers['content-type'] || '';
+    if (ct.includes('multipart/form-data')) {
+        projectPhotosUpload.single('image')(req, res, next);
+    } else {
+        next();
+    }
+}, async (req, res) => {
+  // Determine the image value to store: file path (new) or Base64 (legacy)
+  let imageValue;
+  if (req.file) {
+      imageValue = `/uploads/project_photos/${req.file.filename}`;
+  } else {
+      imageValue = req.body.imageData;
+  }
+
+  const projectId = req.body.projectId;
+  const uploadedBy = req.body.uploadedBy;
+  const category = req.body.category;
+
+  if (!projectId || !imageValue) return res.status(400).json({ error: "Missing required data" });
 
   try {
     // 1. Fetch IPC first
@@ -10100,28 +10148,41 @@ app.post('/api/upload-image', async (req, res) => {
 
     // 3. Insert with Latest Project ID
     const query = `INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc) VALUES ($1, $2, $3, $4, $5) RETURNING id;`;
-    const result = await pool.query(query, [finalProjectId, imageData, uploadedBy, category || 'Internal', ipc]);
+    const result = await pool.query(query, [finalProjectId, imageValue, uploadedBy, category || 'Internal', ipc]);
 
     await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image (${category || 'Internal'})`);
     res.status(201).json({ success: true, imageId: result.rows[0].id });
 
+    // --- Background: optimize image file if saved to disk ---
+    if (req.file) {
+        const filePath = path.join(__dirname, '..', 'uploads/project_photos', req.file.filename);
+        const tmpOut = filePath + '.tmp.jpg';
+        const scriptPath = path.resolve(__dirname, '..', 'compress_image.py');
+        const cmd = (py) => `${py} "${scriptPath}" "${filePath}" "${tmpOut}"`;
+        const tryCompress = async () => {
+            for (const py of ['python', 'py', 'python3']) {
+                try {
+                    await execAsync(cmd(py));
+                    fs.renameSync(tmpOut, filePath);
+                    console.log(`✅ [BG] Image optimized: ${req.file.filename}`);
+                    return;
+                } catch (_) {}
+            }
+            console.warn(`⚠️ [BG] Image compression skipped (Python/Pillow unavailable)`);
+            if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut);
+        };
+        tryCompress().catch(() => {});
+    }
+
     // --- DUAL WRITE: UPLOAD IMAGE ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Project Image...");
         if (ipc) {
-          // Insert into Secondary using IPC for linking (Project ID might differ but IPC is constant)
-          // We'll try to find the project_id on the secondary DB that has this IPC (latest one?)
-          // Or just insert blindly if secondary table has IPC column?
-          // Assuming secondary has same schema update applied via some mechanism (or we do it here if possible, but migrations run on start).
-
-          // Ideally, we find the project_id on secondary that matches this IPC.
           const dwQuery = `
-                INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc) 
+                INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc)
                 VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $1);
             `;
-          await poolNew.query(dwQuery, [ipc, imageData, uploadedBy, category || 'Internal']);
-          console.log("✅ Dual-Write: Project Image Synced via IPC!");
+          await poolNew.query(dwQuery, [ipc, imageValue, uploadedBy, category || 'Internal']);
         }
       } catch (dwErr) {
         console.error("❌ Dual-Write Error (Upload Image):", dwErr.message);

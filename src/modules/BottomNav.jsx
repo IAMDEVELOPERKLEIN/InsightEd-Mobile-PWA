@@ -63,7 +63,7 @@ const BottomNav = ({ userRole: propRole }) => {
         'School Head': [
             { label: 'Home', path: '/my-activity', icon: FiHome },
             { label: 'Units', path: '/modular-dashboard', icon: LuCompass },
-            { label: 'Guide', path: '/guide/school-head', icon: FiBookOpen },
+            { label: 'Guide', path: '/guide/school-head', icon: TbSchool, highlight: true },
             { label: 'Profile', path: '/profile', icon: FiUser },
         ],
 
@@ -184,7 +184,7 @@ const BottomNav = ({ userRole: propRole }) => {
                             <React.Fragment key={item.label}>
                                 {isSchoolHead && idx === 2 && <div className="w-16" />} {/* Gap for FAB */}
                                 <button
-                                    className="flex-1 flex flex-col items-center justify-center h-full bg-transparent border-none cursor-pointer group transition-all"
+                                    className={`flex-1 flex flex-col items-center justify-center h-full bg-transparent border-none cursor-pointer group transition-all ${item.highlight && !isActive ? 'bg-blue-50/50 rounded-2xl' : ''}`}
                                     onClick={() => {
                                         if (item.logout) {
                                             confirmLogout();
@@ -205,9 +205,9 @@ const BottomNav = ({ userRole: propRole }) => {
                                 >
                                     <Icon
                                         size={22}
-                                        className={`mb-1 transition-all duration-300 ${isActive ? 'text-[#10346B] scale-110 drop-shadow-sm' : 'text-slate-300 group-hover:text-slate-500'}`}
+                                        className={`mb-1 transition-all duration-300 ${isActive ? 'text-[#10346B] scale-110 drop-shadow-sm' : (item.highlight ? 'text-blue-600 animate-pulse' : 'text-slate-300 group-hover:text-slate-500')}`}
                                     />
-                                    <span className={`text-[10px] font-bold transition-colors ${isActive ? 'text-[#10346B]' : 'text-slate-300 group-hover:text-slate-500'}`}>
+                                    <span className={`text-[10px] font-bold transition-colors ${isActive ? 'text-[#10346B]' : (item.highlight ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-500')}`}>
                                         {item.label}
                                     </span>
                                 </button>

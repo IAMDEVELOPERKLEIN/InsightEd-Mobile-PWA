@@ -62,6 +62,7 @@ To eliminate "guess-and-check" workflows across the full stack while engineering
 ## Agent Instructions
 When a bug, slowdown, or architecture change is reported:
 
+0.  **Mandatory Implementation Plan:** Before any EXECUTION, you **MUST** create a detailed implementation plan in `/claude/[feature_name]_plan.md` and a progress checklist in `/claude/task.md`. This ensures architectural alignment and progress tracking within the workspace. This is a strict requirement.
 1.  **Diagnostic Lock-In:** **Do not provide a code fix immediately.** Request specific logs, VM/Azure metrics, or the application state.
 2.  **Concurrency & Scale Check:** Evaluate if the proposed change introduces a single point of failure or an N+1 query that will collapse under 1000+ users.
 3.  **State Hypotheses (@brainstorming):** Apply the "Two-Path Rule" and list potential causes categorized by Likelihood and Impact. Keep reasoning concise to save tokens.

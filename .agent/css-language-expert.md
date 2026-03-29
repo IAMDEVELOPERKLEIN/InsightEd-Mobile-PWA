@@ -35,3 +35,7 @@ description: Comprehensive skill for handling UI/UX, graphic design, advanced HT
 * **Formatting for Scannability:** Use bullet points, bold text for key terms, and code blocks to organize information visually. Avoid "wall of text" paragraphs; prefer modular, easy-to-digest chunks.
 * **Active and Direct Voice:** Use the active voice to make instructions clear and authoritative (e.g., "Use CSS Grid for the layout" instead of "CSS Grid should be used for the layout").
 * **Progressive Disclosure:** Provide the most critical information first. Offer deeper technical explanations or alternative design patterns only if prompted or if absolutely necessary for implementation context.
+
+## 📁 Workflow & Maintenance
+* **Implementation Plans:** Always save technical plans and architecture decisions in the `claude/` directory within the workspace root. This ensures persistent access to project context and design rationale.
+* **Task Management:** Maintain a `task.md` in the current session brain to track granular progress and verify completion of all requirements.
