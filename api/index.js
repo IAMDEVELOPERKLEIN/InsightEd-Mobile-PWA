@@ -8548,8 +8548,8 @@ app.put('/api/update-project/:id', upload.fields([
       'not yet started': 'Not Yet Started'
     };
 
-    const rawStatus = data.statusOfConstructionPhase || data.status || oldData.status_of_construction_phase;
-    const newStatus = statusMapping[rawStatus?.toLowerCase()] || rawStatus || 'Ongoing';
+    const rawStatus = (data.statusOfConstructionPhase !== undefined) ? data.statusOfConstructionPhase : (data.status !== undefined ? data.status : oldData.status_of_construction_phase);
+    const newStatus = statusMapping[rawStatus?.toLowerCase()] || rawStatus || null;
 
     const rawProc = valueOrNull(data.procurement_status || data.statusDesignPhase) || oldData.procurement_status || oldData.status_design_phase;
     const newProcurementStatus = statusMapping[rawProc?.toLowerCase()] || rawProc || null;
@@ -9348,20 +9348,20 @@ app.get('/api/dashboard/efd-summary', async (req, res) => {
       const userResult = await pool.query('SELECT role, region, division FROM users WHERE uid = $1', [engineer_id]);
       const userProfile = userResult.rows[0];
       if (userProfile) {
-        const role = userProfile.role?.toLowerCase();
+        const role = userProfile.role?.trim().toLowerCase();
         const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
-        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office'].includes(role);
+        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
 
         if (isAdmin) {
           // admin/HRODI sees all summary stats; skip engineer_id/region/division filters
         } else if (isDivEng) {
           if (userProfile.region) {
             queryParams.push(userProfile.region.trim());
-            whereClauses.push(`e.region ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(e.region) ILIKE TRIM($${queryParams.length})`);
           }
           if (userProfile.division) {
             queryParams.push(userProfile.division.trim());
-            whereClauses.push(`e.division ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(e.division) ILIKE TRIM($${queryParams.length})`);
           }
         } else {
           queryParams.push(engineer_id);
@@ -9476,7 +9476,7 @@ app.get('/api/projects', async (req, res) => {
             e.construction_start_date, e.project_category, e.scope_of_work,
             e.province, e.city, e.municipality,
             e.number_of_classrooms, e.number_of_storeys, e.number_of_sites, e.funds_utilized,
-            e.is_donated, e.program_type, e.status_design_phase, e.actions, e.savings, e.funding_year, e.funding_year_justification,
+            e.is_donated, e.program_type, e.status_design_phase, e.procurement_status, e.actions, e.savings, e.funding_year, e.funding_year_justification,
             e.sangguniang_resolution_id, e.mother_moa_id, e.supplamental_moa_id,
             (NULLIF(d.moa_pdf, '') IS NOT NULL) AS has_moa,
             (NULLIF(d.rta_pdf, '') IS NOT NULL) AS has_rta,
@@ -9519,6 +9519,7 @@ app.get('/api/projects', async (req, res) => {
         p.number_of_classrooms AS "numberOfClassrooms", p.number_of_storeys AS "numberOfStoreys",
         p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
         p.status_design_phase AS "statusDesignPhase",
+        p.procurement_status AS "procurement_status",
         p.actions AS "updateType",
         (p.actions LIKE 'Realignment%') AS "isRealigned",
         p.savings,
@@ -9551,9 +9552,9 @@ app.get('/api/projects', async (req, res) => {
       const userProfile = userResult.rows[0];
 
       if (userProfile) {
-        const role = userProfile.role?.toLowerCase();
+        const role = userProfile.role?.trim().toLowerCase();
         const isAdmin = ['central office', 'hrodi', 'super user', 'super admin', 'admin', 'efd', 'efd engineer', 'hrodi engineer', 'central office finance'].includes(role);
-        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office'].includes(role);
+        const isDivEng = ['division engineer', 'sdo', 'ro', 'regional office', 'school division office', 'deped engineer', 'engineer'].includes(role);
 
         if (isAdmin) {
           // admin/HRODI can see all projects; don't add engineer_id or region/division filters
@@ -9561,11 +9562,11 @@ app.get('/api/projects', async (req, res) => {
         } else if (isDivEng) {
           if (userProfile.region) {
             queryParams.push(userProfile.region.trim());
-            whereClauses.push(`p.region ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(p.region) ILIKE TRIM($${queryParams.length})`);
           }
           if (userProfile.division) {
             queryParams.push(userProfile.division.trim());
-            whereClauses.push(`p.division ILIKE $${queryParams.length}`);
+            whereClauses.push(`TRIM(p.division) ILIKE TRIM($${queryParams.length})`);
           }
         } else {
           queryParams.push(engineer_id);

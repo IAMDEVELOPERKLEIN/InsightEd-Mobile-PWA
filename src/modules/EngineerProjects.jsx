@@ -640,10 +640,11 @@ const EngineerProjects = () => {
     try {
       const payload = { ...project };
       if (type === 'procurement') {
+        delete payload.status; // Avoid sending current construction status as a new change
         payload.procurement_status = newValue;
         payload.statusDesignPhase = newValue; // For consistency
         if (newValue === 'Completed') {
-          payload.status = null; // Clear construction status to show placeholder
+          // Do nothing to status; keep previous value or handle at backend
         }
       } else {
         payload.status = newValue;
@@ -682,10 +683,10 @@ const EngineerProjects = () => {
       console.log(`Status (${type}) updated to: ${newValue}`);
       
       // Update local state with the actual data from server
-      setProjects(prev => prev.map(p => (p.ipc === project.ipc || p.id === project.id) ? { 
+      setProjects(prev => prev.map(p => (p.id === project.id || (p.ipc && p.ipc === project.ipc)) ? { 
         ...p, 
         ...updatedProject, 
-        id: updatedProject.project_id, // Correctly access nested project_id
+        id: updatedProject.project_id, // Important: Use the NEW project_id for the next update
         previousPercentage: project.accomplishmentPercentage 
       } : p));
 
