@@ -476,9 +476,9 @@ const runMigrations = async (client, dbLabel) => {
                 ADD COLUMN IF NOT EXISTS rta_pdf TEXT,
                 ADD COLUMN IF NOT EXISTS uploader_id TEXT;
             `);
-            console.log(\`✅ [\${dbLabel}] Engineer Documents Table Ready\`);
+            console.log(`✅ [${dbLabel}] Engineer Documents Table Ready`);
         } catch (docsErr) {
-            console.error(\`❌ [\${dbLabel}] Failed to migrate engineer_documents:\`, docsErr.message);
+            console.error(`❌ [${dbLabel}] Failed to migrate engineer_documents:`, docsErr.message);
         }
 
         // --- 8c. ENGINEER FORM REFACTOR ---
