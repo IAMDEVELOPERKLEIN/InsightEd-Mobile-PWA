@@ -8,7 +8,6 @@ import { TbPhoto } from "react-icons/tb";
 import { useAuth } from '../context/AuthContext';
 import EditProjectModal from '../components/EditProjectModal';
 import ProjectEditModal from '../components/ProjectEditModal';
-import { compressImage } from '../utils/imageCompression';
 import { LuHistory, LuUser, LuCalendar, LuX, LuInfo, LuMapPin, LuShoppingBag, LuDollarSign, LuFileText, LuImages } from "react-icons/lu";
 import { FiSettings, FiImage, FiFileText } from 'react-icons/fi';
 
@@ -275,17 +274,17 @@ const VOHistoryList = ({ voHistory, loading }) => {
                                     <div className="h-[1px] flex-1 bg-slate-50"></div>
                                 </span>
                                 {vo.revised_pow_pdf && (
-                                    <a href={vo.revised_pow_pdf.startsWith('data:') ? vo.revised_pow_pdf : `data:application/pdf;base64,${vo.revised_pow_pdf}`} download={`Revised_POW_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={vo.revised_pow_pdf.startsWith('data:') || vo.revised_pow_pdf.startsWith('/uploads/') ? vo.revised_pow_pdf : `data:application/pdf;base64,${vo.revised_pow_pdf}`} download={`Revised_POW_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 POW
                                     </a>
                                 )}
                                 {vo.revised_dupa_pdf && (
-                                    <a href={vo.revised_dupa_pdf.startsWith('data:') ? vo.revised_dupa_pdf : `data:application/pdf;base64,${vo.revised_dupa_pdf}`} download={`Revised_DUPA_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={vo.revised_dupa_pdf.startsWith('data:') || vo.revised_dupa_pdf.startsWith('/uploads/') ? vo.revised_dupa_pdf : `data:application/pdf;base64,${vo.revised_dupa_pdf}`} download={`Revised_DUPA_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 DUPA
                                     </a>
                                 )}
                                 {vo.revised_contract_pdf && (
-                                    <a href={vo.revised_contract_pdf.startsWith('data:') ? vo.revised_contract_pdf : `data:application/pdf;base64,${vo.revised_contract_pdf}`} download={`Revised_Contract_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
+                                    <a href={vo.revised_contract_pdf.startsWith('data:') || vo.revised_contract_pdf.startsWith('/uploads/') ? vo.revised_contract_pdf : `data:application/pdf;base64,${vo.revised_contract_pdf}`} download={`Revised_Contract_${vo.ipc}_VO${vo.vo_sequence_no}.pdf`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-blue-600 rounded-lg border border-slate-100 text-[10px] font-bold hover:bg-blue-50 transition-colors">
                                         📄 CONTRACT
                                     </a>
                                 )}
@@ -483,8 +482,8 @@ const DetailedProjInfo = () => {
         // 3. Ensure we have a string for the final checks
         if (typeof data !== 'string') return null;
 
-        // 4. Handle standard data URI or URL
-        if (data.startsWith('data:') || data.startsWith('http')) {
+        // 4. Handle standard data URI, URL, or file path
+        if (data.startsWith('data:') || data.startsWith('http') || data.startsWith('/uploads/')) {
             return data;
         }
 
@@ -841,17 +840,12 @@ const DetailedProjInfo = () => {
             if (allFiles.length > 0) {
                 for (const item of allFiles) {
                     try {
-                        const base64Image = await compressImage(item.file);
-                        await fetch(`${API_BASE}/api/upload-image`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ 
-                                projectId: resData.id, // Use NEW project ID
-                                imageData: base64Image, 
-                                uploadedBy: uid, 
-                                category: item.category 
-                            }),
-                        });
+                        const formData = new FormData();
+                        formData.append('image', item.file);
+                        formData.append('projectId', resData.id);
+                        formData.append('uploadedBy', uid);
+                        formData.append('category', item.category);
+                        await fetch(`${API_BASE}/api/upload-image`, { method: "POST", body: formData });
                     } catch (err) {
                         console.error("Image upload failed", err);
                     }
@@ -1146,7 +1140,7 @@ const DetailedProjInfo = () => {
                             </div>
                         </div>
                         {project[docKey] ? (
-                            <a href={project[docKey].startsWith('data:') ? project[docKey] : `data:application/pdf;base64,${project[docKey]}`} download={`${project.schoolName}_${docKey}.pdf`} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95">Download</a>
+                            <a href={project[docKey].startsWith('data:') || project[docKey].startsWith('/uploads/') ? project[docKey] : `data:application/pdf;base64,${project[docKey]}`} download={`${project.schoolName}_${docKey}.pdf`} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95">Download</a>
                         ) : (
                             <span className="text-[10px] font-black text-slate-300 uppercase italic px-4">Missing</span>
                         )}

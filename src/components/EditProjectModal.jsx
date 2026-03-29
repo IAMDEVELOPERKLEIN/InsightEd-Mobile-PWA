@@ -1321,7 +1321,7 @@ const EditProjectModal = ({
                                             <div className="flex flex-col mt-0.5">
                                                 <p className="text-[9px] text-blue-500 font-bold mb-1">Existing File Available</p>
                                                 <a
-                                                    href={project[`${key.toLowerCase()}_pdf`]?.startsWith('data:') ? project[`${key.toLowerCase()}_pdf`] : `data:application/pdf;base64,${project[`${key.toLowerCase()}_pdf`]}`}
+                                                    href={(() => { const v = project[`${key.toLowerCase()}_pdf`]; return (v?.startsWith('data:') || v?.startsWith('/uploads/')) ? v : `data:application/pdf;base64,${v}`; })()}
                                                     download={`${formData.schoolName}_${label}.pdf`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"

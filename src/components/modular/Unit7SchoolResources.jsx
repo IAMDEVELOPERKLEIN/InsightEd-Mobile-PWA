@@ -81,9 +81,14 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [generalRoomsData, setGeneralRoomsData] = useState({
         has_general_rooms: null,
         general_rooms_count: "",
-        armchairs_func: "", armchairs_broken: "",
-        tables_func: "", tables_broken: "",
-        desks_func: "", desks_broken: "",
+        armchair_wood_func: "", armchair_wood_broken: "",
+        armchair_plastic_func: "", armchair_plastic_broken: "",
+        armchair_plastic_steel_func: "", armchair_plastic_steel_broken: "",
+        individual_table_chair_func: "", individual_table_chair_broken: "",
+        two_seater_wood_func: "", two_seater_wood_broken: "",
+        two_seater_wood_steel_func: "", two_seater_wood_steel_broken: "",
+        wooden_chair_only_func: "", wooden_chair_only_broken: "",
+        plastic_chair_only_func: "", plastic_chair_only_broken: "",
         has_teacher_desk: null,
     });
     
@@ -91,9 +96,14 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const [showGradeModal, setShowGradeModal] = useState(false);
     
     const initialGradeForm = {
-        armchairs_func: "", armchairs_broken: "",
-        tables_func: "", tables_broken: "",
-        desks_func: "", desks_broken: "",
+        armchair_wood_func: "", armchair_wood_broken: "",
+        armchair_plastic_func: "", armchair_plastic_broken: "",
+        armchair_plastic_steel_func: "", armchair_plastic_steel_broken: "",
+        individual_table_chair_func: "", individual_table_chair_broken: "",
+        two_seater_wood_func: "", two_seater_wood_broken: "",
+        two_seater_wood_steel_func: "", two_seater_wood_steel_broken: "",
+        wooden_chair_only_func: "", wooden_chair_only_broken: "",
+        plastic_chair_only_func: "", plastic_chair_only_broken: "",
     };
     const [currentGradeForm, setCurrentGradeForm] = useState(initialGradeForm);
 
@@ -535,22 +545,37 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
     const openGradeModal = (grade) => {
         setSelectedGradeId(grade.id);
         setCurrentGradeForm({
-            armchairs_func: grade.armchairs_func || "",
-            armchairs_broken: grade.armchairs_broken || "",
-            tables_func: grade.tables_func || "",
-            tables_broken: grade.tables_broken || "",
-            desks_func: grade.desks_func || "",
-            desks_broken: grade.desks_broken || "",
+            armchair_wood_func: grade.armchair_wood_func || "",
+            armchair_wood_broken: grade.armchair_wood_broken || "",
+            armchair_plastic_func: grade.armchair_plastic_func || "",
+            armchair_plastic_broken: grade.armchair_plastic_broken || "",
+            armchair_plastic_steel_func: grade.armchair_plastic_steel_func || "",
+            armchair_plastic_steel_broken: grade.armchair_plastic_steel_broken || "",
+            individual_table_chair_func: grade.individual_table_chair_func || "",
+            individual_table_chair_broken: grade.individual_table_chair_broken || "",
+            two_seater_wood_func: grade.two_seater_wood_func || "",
+            two_seater_wood_broken: grade.two_seater_wood_broken || "",
+            two_seater_wood_steel_func: grade.two_seater_wood_steel_func || "",
+            two_seater_wood_steel_broken: grade.two_seater_wood_steel_broken || "",
+            wooden_chair_only_func: grade.wooden_chair_only_func || "",
+            wooden_chair_only_broken: grade.wooden_chair_only_broken || "",
+            plastic_chair_only_func: grade.plastic_chair_only_func || "",
+            plastic_chair_only_broken: grade.plastic_chair_only_broken || "",
         });
         setGradeValidationConfirm("");
         setShowGradeModal(true);
     };
 
     const gradeStats = useMemo(() => {
-        const af = parseInt(currentGradeForm.armchairs_func) || 0;
-        const tf = parseInt(currentGradeForm.tables_func) || 0;
-        const df = parseInt(currentGradeForm.desks_func) || 0;
-        const totalCapacity = af + (tf * 2) + (df * 2);
+        const aw  = parseInt(currentGradeForm.armchair_wood_func) || 0;
+        const ap  = parseInt(currentGradeForm.armchair_plastic_func) || 0;
+        const aps = parseInt(currentGradeForm.armchair_plastic_steel_func) || 0;
+        const itc = parseInt(currentGradeForm.individual_table_chair_func) || 0;
+        const tsw = parseInt(currentGradeForm.two_seater_wood_func) || 0;
+        const tsws = parseInt(currentGradeForm.two_seater_wood_steel_func) || 0;
+        const wco = parseInt(currentGradeForm.wooden_chair_only_func) || 0;
+        const pco = parseInt(currentGradeForm.plastic_chair_only_func) || 0;
+        const totalCapacity = aw + ap + aps + itc + (tsw * 2) + (tsws * 2) + wco + pco;
         
         const activeGrade = gradesData.find(g => g.id === selectedGradeId);
         const enrolled = activeGrade ? parseInt(activeGrade.enrolled) : 0;
@@ -886,7 +911,7 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                             </div>
                             <div className="p-6 space-y-4">
                                 {gradesData.filter(g => g.isVerified).map(g => {
-                                    const total = (parseInt(g.armchairs_func)||0) + ((parseInt(g.tables_func)||0)*2) + ((parseInt(g.desks_func)||0)*2);
+                                    const total = (parseInt(g.armchair_wood_func)||0) + (parseInt(g.armchair_plastic_func)||0) + (parseInt(g.armchair_plastic_steel_func)||0) + (parseInt(g.individual_table_chair_func)||0) + ((parseInt(g.two_seater_wood_func)||0)*2) + ((parseInt(g.two_seater_wood_steel_func)||0)*2) + (parseInt(g.wooden_chair_only_func)||0) + (parseInt(g.plastic_chair_only_func)||0);
                                     const shortage = total < (parseInt(g.enrolled)||0);
                                     return (
                                         <div key={g.id} className="flex items-center justify-between group">
@@ -1168,26 +1193,61 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 </div>
 
                                                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-2">Shared Seating Capacity (Total across all {generalRoomsData.general_rooms_count || '...'} rooms)</h3>
-                                                
+
                                                 <div>
-                                                    <p className="text-sm font-bold text-gray-700 mb-2">Individual Armchairs 🪑</p>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Wood 🪑</p>
                                                     <div className="grid grid-cols-2 gap-3">
-                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchairs_func" value={generalRoomsData.armchairs_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchairs_broken" value={generalRoomsData.armchairs_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_wood_func" value={generalRoomsData.armchair_wood_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_wood_broken" value={generalRoomsData.armchair_wood_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-gray-700 mb-2">Table &amp; Chair Sets <span className="text-xs text-indigo-400 font-normal">(2-seaters)</span></p>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic 🪑</p>
                                                     <div className="grid grid-cols-2 gap-3">
-                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="tables_func" value={generalRoomsData.tables_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="tables_broken" value={generalRoomsData.tables_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_func" value={generalRoomsData.armchair_plastic_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_broken" value={generalRoomsData.armchair_plastic_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-gray-700 mb-2">Student Desks <span className="text-xs text-indigo-400 font-normal">(2-seaters)</span></p>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic / Steel 🪑</p>
                                                     <div className="grid grid-cols-2 gap-3">
-                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="desks_func" value={generalRoomsData.desks_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="desks_broken" value={generalRoomsData.desks_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_steel_func" value={generalRoomsData.armchair_plastic_steel_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_steel_broken" value={generalRoomsData.armchair_plastic_steel_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">Individual Table &amp; Chair 🪑</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="individual_table_chair_func" value={generalRoomsData.individual_table_chair_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="individual_table_chair_broken" value={generalRoomsData.individual_table_chair_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_func" value={generalRoomsData.two_seater_wood_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_broken" value={generalRoomsData.two_seater_wood_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood / Steel <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_steel_func" value={generalRoomsData.two_seater_wood_steel_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_steel_broken" value={generalRoomsData.two_seater_wood_steel_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">Wooden Chair Only 🪑</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="wooden_chair_only_func" value={generalRoomsData.wooden_chair_only_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="wooden_chair_only_broken" value={generalRoomsData.wooden_chair_only_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-700 mb-2">Plastic Chair Only 🪑</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="plastic_chair_only_func" value={generalRoomsData.plastic_chair_only_func} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                                        <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="plastic_chair_only_broken" value={generalRoomsData.plastic_chair_only_broken} onChange={handleGeneralChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                                     </div>
                                                 </div>
                                                 
@@ -1871,31 +1931,66 @@ const Unit7SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                 <div>
                                     <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-3 pb-2 border-b border-gray-100">Learner Seating (Aggregated Totals)</h4>
                                     <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Individual Armchairs 🪑</p>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Wood 🪑</p>
                                         <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchairs_func" value={currentGradeForm.armchairs_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchairs_broken" value={currentGradeForm.armchairs_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_wood_func" value={currentGradeForm.armchair_wood_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_wood_broken" value={currentGradeForm.armchair_wood_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Table &amp; Chair Sets <span className="text-xs text-indigo-400 font-normal">(2-seaters)</span></p>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic 🪑</p>
                                         <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="tables_func" value={currentGradeForm.tables_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="tables_broken" value={currentGradeForm.tables_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_func" value={currentGradeForm.armchair_plastic_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_broken" value={currentGradeForm.armchair_plastic_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-gray-700 mb-2">Student Desks <span className="text-xs text-indigo-400 font-normal">(2-seaters)</span></p>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">Armchair — Plastic / Steel 🪑</p>
                                         <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="desks_func" value={currentGradeForm.desks_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
-                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="desks_broken" value={currentGradeForm.desks_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="armchair_plastic_steel_func" value={currentGradeForm.armchair_plastic_steel_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="armchair_plastic_steel_broken" value={currentGradeForm.armchair_plastic_steel_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">Individual Table &amp; Chair 🪑</p>
+                                        <div className="grid grid-cols-2 gap-3 mb-4">
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="individual_table_chair_func" value={currentGradeForm.individual_table_chair_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="individual_table_chair_broken" value={currentGradeForm.individual_table_chair_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
+                                        <div className="grid grid-cols-2 gap-3 mb-4">
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_func" value={currentGradeForm.two_seater_wood_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_broken" value={currentGradeForm.two_seater_wood_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">2-Seater — Wood / Steel <span className="text-xs text-indigo-400 font-normal">(×2 capacity)</span></p>
+                                        <div className="grid grid-cols-2 gap-3 mb-4">
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="two_seater_wood_steel_func" value={currentGradeForm.two_seater_wood_steel_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="two_seater_wood_steel_broken" value={currentGradeForm.two_seater_wood_steel_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">Wooden Chair Only 🪑</p>
+                                        <div className="grid grid-cols-2 gap-3 mb-4">
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="wooden_chair_only_func" value={currentGradeForm.wooden_chair_only_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="wooden_chair_only_broken" value={currentGradeForm.wooden_chair_only_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-gray-700 mb-2">Plastic Chair Only 🪑</p>
+                                        <div className="grid grid-cols-2 gap-3 mb-4">
+                                            <div><p className="text-[10px] font-black text-emerald-500 uppercase text-center mb-1">Functional</p><input type="number" name="plastic_chair_only_func" value={currentGradeForm.plastic_chair_only_func} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-emerald-50 text-emerald-700 focus:!border-emerald-400 !mt-0`} /></div>
+                                            <div><p className="text-[10px] font-black text-red-500 uppercase text-center mb-1">Broken</p><input type="number" name="plastic_chair_only_broken" value={currentGradeForm.plastic_chair_only_broken} onChange={handleGradeFormChange} min="0" placeholder="0" className={`${chunkyInput} !bg-red-50 text-red-700 focus:!border-red-400 !mt-0`} /></div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Magic Math Validation Banner */}
                                 <AnimatePresence>
-                                    {(currentGradeForm.armchairs_func !== "" || currentGradeForm.tables_func !== "" || currentGradeForm.desks_func !== "") && (
+                                    {(currentGradeForm.armchair_wood_func !== "" || currentGradeForm.armchair_plastic_func !== "" || currentGradeForm.armchair_plastic_steel_func !== "" || currentGradeForm.individual_table_chair_func !== "" || currentGradeForm.two_seater_wood_func !== "" || currentGradeForm.two_seater_wood_steel_func !== "" || currentGradeForm.wooden_chair_only_func !== "" || currentGradeForm.plastic_chair_only_func !== "") && (
                                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`rounded-3xl p-5 border-2 mt-6 ${gradeStats.isOk ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
                                             <div className="flex items-center justify-between mb-3 border-b-2 border-white/40 pb-3">
                                                 <span className={`text-xs font-black uppercase tracking-widest ${gradeStats.isOk ? "text-emerald-600" : "text-red-500"}`}>Combined Capacity</span>

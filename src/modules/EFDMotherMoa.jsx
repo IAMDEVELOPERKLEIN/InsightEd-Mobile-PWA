@@ -119,6 +119,9 @@ const EFDMotherMoa = () => {
     const resolvePreviewUrl = (raw) => {
         if (!raw) return null;
 
+        // File-path based storage — serve directly via static URL
+        if (raw.startsWith('/uploads/')) return raw;
+
         // If it's already a data URI, we should still try to convert it to a Blob URL
         // because window.open() has severe character limits for data URIs in many browsers.
         let base64Data = null;
