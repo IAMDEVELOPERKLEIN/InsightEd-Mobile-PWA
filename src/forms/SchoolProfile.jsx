@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Papa from 'papaparse';
 import { useAuth } from '../context/AuthContext';
-import locationData from '../locations.json';
 // LoadingScreen import removed 
 import { addToOutbox } from '../db';
 import PageTransition from '../components/PageTransition';
@@ -54,6 +53,7 @@ const SchoolProfile = ({ embedded }) => {
     const [currentUserLocation, setCurrentUserLocation] = useState(null); // NEW: User's real-time location
 
     // Dropdowns
+    const [regionOptions, setRegionOptions] = useState([]);
     const [provinceOptions, setProvinceOptions] = useState([]);
     const [cityOptions, setCityOptions] = useState([]);
     const [barangayOptions, setBarangayOptions] = useState([]);
@@ -131,15 +131,18 @@ const SchoolProfile = ({ embedded }) => {
         };
     };
 
-    const applyDataToState = (data, regDivMap, divDistMap) => {
+    const applyDataToState = async (data, regDivMap, divDistMap) => {
         if (!data) return;
 
-        if (locationData && data.region && locationData[data.region]) {
-            setProvinceOptions(Object.keys(locationData[data.region]).sort());
-            if (data.province && locationData[data.region][data.province]) {
-                setCityOptions(Object.keys(locationData[data.region][data.province]).sort());
-                if (data.municipality && locationData[data.region][data.province][data.municipality]) {
-                    setBarangayOptions(locationData[data.region][data.province][data.municipality].sort());
+        if (data.region) {
+            const provRes = await fetch(`/api/locations/provinces?region=${encodeURIComponent(data.region)}`).catch(() => null);
+            if (provRes?.ok) setProvinceOptions(await provRes.json());
+            if (data.province) {
+                const cityRes = await fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(data.region)}&province=${encodeURIComponent(data.province)}`).catch(() => null);
+                if (cityRes?.ok) setCityOptions(await cityRes.json());
+                if (data.municipality) {
+                    const brgyRes = await fetch(`/api/locations/barangays?region=${encodeURIComponent(data.region)}&province=${encodeURIComponent(data.province)}&municipality=${encodeURIComponent(data.municipality)}`).catch(() => null);
+                    if (brgyRes?.ok) setBarangayOptions(await brgyRes.json());
                 }
             }
         }
@@ -158,6 +161,11 @@ const SchoolProfile = ({ embedded }) => {
         // Run validation on loaded name
         if (data.schoolName) checkSchoolName(data.schoolName);
     };
+
+    useEffect(() => {
+        fetch('/api/locations/regions')
+            .then(r => r.json()).then(setRegionOptions).catch(() => {});
+    }, []);
 
     // --- NETWORK LISTENER ---
     useEffect(() => {
@@ -358,14 +366,15 @@ const SchoolProfile = ({ embedded }) => {
     useEffect(() => {
         if (!formData.region) return;
 
-        // Populate Province/City (JSON)
-        if (locationData && locationData[formData.region]) {
-            setProvinceOptions(Object.keys(locationData[formData.region]).sort());
-            if (formData.province && locationData[formData.region][formData.province]) {
-                setCityOptions(Object.keys(locationData[formData.region][formData.province]).sort());
-                if (formData.municipality && locationData[formData.region][formData.province][formData.municipality]) {
-                    setBarangayOptions(locationData[formData.region][formData.province][formData.municipality].sort());
-                }
+        // Populate Province/City/Barangay (API)
+        fetch(`/api/locations/provinces?region=${encodeURIComponent(formData.region)}`)
+            .then(r => r.json()).then(setProvinceOptions).catch(() => {});
+        if (formData.province) {
+            fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}`)
+                .then(r => r.json()).then(setCityOptions).catch(() => {});
+            if (formData.municipality) {
+                fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(formData.municipality)}`)
+                    .then(r => r.json()).then(setBarangayOptions).catch(() => {});
             }
         }
 
@@ -449,7 +458,7 @@ const SchoolProfile = ({ embedded }) => {
                 const findMatch = (options, value) => options.find(opt => clean(opt) === clean(value)) || value;
 
                 const rawRegion = getVal('region');
-                const matchedRegion = findMatch(Object.keys(locationData), rawRegion);
+                const matchedRegion = findMatch(regionOptions, rawRegion);
 
                 const newDivisions = regionDivMap[matchedRegion] || [];
                 setDivisionOptions(newDivisions);
@@ -458,26 +467,30 @@ const SchoolProfile = ({ embedded }) => {
                 const newDistricts = divDistMap[matchedDiv] || [];
                 setDistrictOptions(newDistricts);
 
-                let provOpts = [], matchedProv = getVal('province');
-                if (locationData[matchedRegion]) {
-                    provOpts = Object.keys(locationData[matchedRegion]).sort();
-                    matchedProv = findMatch(provOpts, matchedProv);
-                }
+                let matchedProv = getVal('province');
+                let matchedMun = getVal('municipality');
+                let matchedBrgy = getVal('barangay');
+
+                const provRes = await fetch(`/api/locations/provinces?region=${encodeURIComponent(matchedRegion)}`).catch(() => null);
+                const provOpts = provRes?.ok ? await provRes.json() : [];
+                matchedProv = findMatch(provOpts, matchedProv);
                 setProvinceOptions(provOpts);
 
-                let cityOpts = [], matchedMun = getVal('municipality');
-                if (locationData[matchedRegion]?.[matchedProv]) {
-                    cityOpts = Object.keys(locationData[matchedRegion][matchedProv]).sort();
+                let cityOpts = [];
+                if (matchedProv) {
+                    const cityRes = await fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(matchedRegion)}&province=${encodeURIComponent(matchedProv)}`).catch(() => null);
+                    cityOpts = cityRes?.ok ? await cityRes.json() : [];
                     matchedMun = findMatch(cityOpts, matchedMun);
+                    setCityOptions(cityOpts);
                 }
-                setCityOptions(cityOpts);
 
-                let brgyOpts = [], matchedBrgy = getVal('barangay');
-                if (locationData[matchedRegion]?.[matchedProv]?.[matchedMun]) {
-                    brgyOpts = locationData[matchedRegion][matchedProv][matchedMun].sort();
+                let brgyOpts = [];
+                if (matchedMun) {
+                    const brgyRes = await fetch(`/api/locations/barangays?region=${encodeURIComponent(matchedRegion)}&province=${encodeURIComponent(matchedProv)}&municipality=${encodeURIComponent(matchedMun)}`).catch(() => null);
+                    brgyOpts = brgyRes?.ok ? await brgyRes.json() : [];
                     matchedBrgy = findMatch(brgyOpts, matchedBrgy);
+                    setBarangayOptions(brgyOpts);
                 }
-                setBarangayOptions(brgyOpts);
 
                 setFormData(prev => ({
                     ...prev,
@@ -537,21 +550,36 @@ const SchoolProfile = ({ embedded }) => {
         const val = e.target.value;
         setDivisionOptions(regionDivMap[val] || []);
         setFormData(prev => ({ ...prev, region: val, province: '', municipality: '', barangay: '', division: '', district: '' }));
-        setProvinceOptions(val && locationData[val] ? Object.keys(locationData[val]).sort() : []);
         setCityOptions([]); setBarangayOptions([]); setDistrictOptions([]);
+        if (val) {
+            fetch(`/api/locations/provinces?region=${encodeURIComponent(val)}`)
+                .then(r => r.json()).then(setProvinceOptions).catch(() => setProvinceOptions([]));
+        } else {
+            setProvinceOptions([]);
+        }
     };
 
     const handleProvinceChange = (e) => {
         const val = e.target.value;
         setFormData(prev => ({ ...prev, province: val, municipality: '', barangay: '' }));
-        setCityOptions(val && formData.region ? Object.keys(locationData[formData.region][val]).sort() : []);
         setBarangayOptions([]);
+        if (val && formData.region) {
+            fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(val)}`)
+                .then(r => r.json()).then(setCityOptions).catch(() => setCityOptions([]));
+        } else {
+            setCityOptions([]);
+        }
     };
 
     const handleCityChange = (e) => {
         const val = e.target.value;
         setFormData(prev => ({ ...prev, municipality: val, barangay: '' }));
-        setBarangayOptions(val && formData.province ? locationData[formData.region][formData.province][val].sort() : []);
+        if (val && formData.province && formData.region) {
+            fetch(`/api/locations/barangays?region=${encodeURIComponent(formData.region)}&province=${encodeURIComponent(formData.province)}&municipality=${encodeURIComponent(val)}`)
+                .then(r => r.json()).then(setBarangayOptions).catch(() => setBarangayOptions([]));
+        } else {
+            setBarangayOptions([]);
+        }
     };
 
     const handleDivisionChange = (e) => {
@@ -784,7 +812,7 @@ const SchoolProfile = ({ embedded }) => {
                                 <div className={sectionClass}>
                                     <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📍</span> Location</h2>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div><label className={labelClass}>Region</label>{isOffline ? <input type="text" value={formData.region} className={inputClass} disabled /> : <select name="region" value={formData.region} onChange={handleRegionChange} className={inputClass} required disabled={isDummy}><option value="">Select Region</option>{Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}</select>}</div>
+                                        <div><label className={labelClass}>Region</label>{isOffline ? <input type="text" value={formData.region} className={inputClass} disabled /> : <select name="region" value={formData.region} onChange={handleRegionChange} className={inputClass} required disabled={isDummy}><option value="">Select Region</option>{regionOptions.map(r => <option key={r} value={r}>{r}</option>)}</select>}</div>
                                         <div><label className={labelClass}>Province</label>{isOffline ? <input type="text" value={formData.province} className={inputClass} disabled /> : <select name="province" value={formData.province} onChange={handleProvinceChange} className={inputClass} disabled={!formData.region || isDummy} required><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select>}</div>
                                         <div><label className={labelClass}>Municipality</label>{isOffline ? <input type="text" value={formData.municipality} className={inputClass} disabled /> : <select name="municipality" value={formData.municipality} onChange={handleCityChange} className={inputClass} disabled={!formData.province || isDummy} required><option value="">Select City/Mun</option>{cityOptions.map(c => <option key={c} value={c}>{c}</option>)}</select>}</div>
                                         <div><label className={labelClass}>Barangay</label>{isOffline ? <input type="text" value={formData.barangay} className={inputClass} disabled /> : <select name="barangay" value={formData.barangay} onChange={handleChange} className={inputClass} disabled={!formData.municipality || isDummy} required><option value="">Select Barangay</option>{barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}</select>}</div>

@@ -6917,10 +6917,9 @@ app.post('/api/forgot-password', async (req, res) => {
 app.get('/api/locations/regions', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT MAX("Region") as region 
-      FROM "schools_IERN" 
-      WHERE "Region" IS NOT NULL AND "Region" != '' 
-      GROUP BY UPPER(TRIM("Region"))
+      SELECT DISTINCT region
+      FROM all_locations
+      WHERE region IS NOT NULL AND region != ''
       ORDER BY region ASC
     `);
     res.json(result.rows.map(r => r.region));
@@ -6980,37 +6979,40 @@ app.get('/api/locations/municipalities', async (req, res) => {
   const { region, division, district } = req.query;
   try {
     const result = await pool.query(`
-      SELECT MAX("Municipality") as municipality 
-      FROM "schools_IERN" 
-      WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) 
-      AND UPPER(TRIM("Division")) = UPPER(TRIM($2)) 
-      AND UPPER(TRIM("District")) = UPPER(TRIM($3)) 
-      AND "Municipality" IS NOT NULL AND "Municipality" != '' 
-      GROUP BY UPPER(TRIM("Municipality"))
+      SELECT DISTINCT municipality FROM all_locations
+      WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
+      AND UPPER(TRIM(division)) = UPPER(TRIM($2))
+      AND UPPER(TRIM(district)) = UPPER(TRIM($3))
+      AND municipality IS NOT NULL AND municipality != ''
       ORDER BY municipality ASC
     `, [region, division, district]);
     res.json(result.rows.map(r => r.municipality));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- Province lookup (for LGU Super User Selector) ---
+// --- Province lookup ---
 app.get('/api/locations/provinces', async (req, res) => {
   const { region } = req.query;
   try {
     const result = await pool.query(
-      'SELECT DISTINCT "Province" as province FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND "Province" IS NOT NULL AND "Province" != \'\' ORDER BY "Province" ASC',
+      `SELECT DISTINCT province FROM all_locations
+       WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) AND province IS NOT NULL AND province != ''
+       ORDER BY province ASC`,
       [region]
     );
     res.json(result.rows.map(r => r.province));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- Municipality by Province lookup (for LGU Super User Selector) ---
+// --- Municipality by Province lookup ---
 app.get('/api/locations/municipalities-by-province', async (req, res) => {
   const { region, province } = req.query;
   try {
     const result = await pool.query(
-      'SELECT DISTINCT "Municipality" as municipality FROM "schools_IERN" WHERE UPPER(TRIM("Region")) = UPPER(TRIM($1)) AND UPPER(TRIM("Province")) = UPPER(TRIM($2)) AND "Municipality" IS NOT NULL AND "Municipality" != \'\' ORDER BY "Municipality" ASC',
+      `SELECT DISTINCT municipality FROM all_locations
+       WHERE UPPER(TRIM(region)) = UPPER(TRIM($1)) AND UPPER(TRIM(province)) = UPPER(TRIM($2))
+       AND municipality IS NOT NULL AND municipality != ''
+       ORDER BY municipality ASC`,
       [region, province]
     );
     res.json(result.rows.map(r => r.municipality));
@@ -7025,6 +7027,21 @@ app.get('/api/locations/schools', async (req, res) => {
       [region, division, district, municipality]
     );
     res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/locations/barangays', async (req, res) => {
+  const { region, province, municipality } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT DISTINCT barangay FROM ph_barangays
+       WHERE UPPER(TRIM(region)) = UPPER(TRIM($1))
+       AND UPPER(TRIM(province)) = UPPER(TRIM($2))
+       AND UPPER(TRIM(municipality)) = UPPER(TRIM($3))
+       ORDER BY barangay ASC`,
+      [region, province, municipality]
+    );
+    res.json(result.rows.map(r => r.barangay));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
