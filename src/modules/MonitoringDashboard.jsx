@@ -26,6 +26,30 @@ const normalizeLocationName = (name) => {
 
 import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import Context
 
+const StatCard = ({ title, value, total, color, icon: Icon }) => {
+    const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+    return (
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <div className="flex justify-between items-start mb-4">
+                <div className={`p-3 rounded-xl ${color} bg-opacity-10 dark:bg-opacity-20`}>
+                    <Icon className={color.replace('bg-', 'text-')} size={24} />
+                </div>
+                <div className="text-right">
+                    <span className="text-2xl font-black text-slate-800 dark:text-slate-100">{percentage}%</span>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{value} / {total}</p>
+                </div>
+            </div>
+            <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300">{title}</h3>
+            <div className="mt-3 w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                <div
+                    className={`h-full ${color} transition-all duration-1000`}
+                    style={{ width: `${percentage}%` }}
+                ></div>
+            </div>
+        </div>
+    );
+};
+
 const MonitoringDashboard = () => {
     const navigate = useNavigate();
     const location = useLocation();

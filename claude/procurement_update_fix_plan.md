@@ -1,27 +1,33 @@
-# Implementation Plan: Fix Procurement Update & Input Focus Loss
+# [PLAN] Fix: Procurement Status UI Reversion
 
-This plan addresses a backend failure in project updates and a frontend UI bug causing focus loss on mobile.
+## Problem
+When a user updates "Procurement Status" to "Under procurement", the update is successful in the database (verified by audit), but the UI in the Engineer Dashboard reverts to "Not yet procured" or shows a stale state.
 
-## User Review Required
-> [!IMPORTANT]
-> The focus loss fix involves moving component definitions (like `Field` and `StatCard`) OUTSIDE of their parent functions. This is a standard React performance and bug-fix pattern but changes the file structure slightly.
+## Root Cause
+- **Casing Mismatch:** The backend `statusMapping` in `api/index.js` converts the string to Title Case: `"Under Procurement"`. 
+- **Frontend Expectation:** The `<select>` dropdown in `EngineerProjects.jsx` uses the value `"Under procurement"` (lowercase 'p').
+- **Display Failure:** Because the value from the database (`"Under Procurement"`) does not exactly match any `<option>` value in the frontend, the dropdown fails to select the item and reverts to the default/placeholder.
 
 ## Proposed Changes
 
-### [Component] Backend API ([api/index.js](file:///e:/InsightEd-Mobile-PWA/api/index.js))
-- **Robust Numeric Parsing**: Update `parseIntOrNull` and `parseNumberOrNull` to strip non-numeric characters (currency symbols, commas) from string inputs.
-- **Data Integrity**: Include all missing columns (`mother_moa_id`, `sangguniang_resolution_id`, etc.) in the history insertion query for `/api/update-project/:id`.
-- **Safety**: Ensure `savings` calculation handles cleaned numeric values.
+### 1. Backend: Standardize Status Strings
+- **File:** `api/index.js`
+- **Change:** Update `statusMapping` to match the frontend constant values. Specifically:
+    - `'under procurement': 'Under procurement'` (lowercase 'p')
+    - `'not yet started': 'Not yet started'` (lowercase 'y', 's'? Wait, let's check construction status too.)
 
-### [Component] Frontend Modules
-- **DetailedProjInfo.jsx**: Move `Field` and `SectionHeader` definitions outside the main component to fix the focus loss bug.
-- **UpdateProjectWizard.jsx**: Move `PhotoCard` outside the main component.
-- **MonitoringDashboard.jsx**: Move `StatCard` outside the main component.
+### 2. Database Cleanup (Optional but Recommended)
+- Standardize existing records with a one-time SQL update:
+  `UPDATE engineer_form SET procurement_status = 'Under procurement' WHERE procurement_status = 'Under Procurement';`
 
 ## Verification Plan
-### Automated Tests
-- Run `tmp/repro_procurement_fix.js` to simulate a project update with formatted currency strings.
-### Manual Verification
-- Verify focus retention in `DetailedProjInfo` edit mode on mobile.
-- Verify procurement status update preserves existing project data.
 
+### Automated Verification
+- Run a Node.js script to check the casing of "Under procurement" in the database after an update.
+
+### Manual Verification
+1. Open the Engineer Dashboard.
+2. Select a project and update Procurement Status to "Under procurement".
+3. Verify the success message appears.
+4. Verify the dropdown REMAINS on "Under procurement" instead of reverting.
+5. Refresh the page and verify the state persists correctly.

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext, createContext } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
@@ -402,6 +402,59 @@ const RealignmentComparison = ({ current, previous, remarks }) => {
                     </div>
                 ))}
             </div>
+        </div>
+    );
+};
+
+// --- FIELD FORM CONTEXT (prevents focus loss caused by inline component re-creation on every render) ---
+const FieldFormContext = createContext(null);
+
+const SectionHeader = ({ title }) => (
+    <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2 mt-6 first:mt-0">
+        {title}
+    </h2>
+);
+
+const Field = ({ label, name, value, type = 'text', options = [] }) => {
+    const { isEditMode, formData, handleChange } = useContext(FieldFormContext) || {};
+    if (!isEditMode) {
+        const isMoney = type === 'money';
+        const displayValue = isMoney ? `₱${Number(value || 0).toLocaleString()}` : (value || '---');
+        return (
+            <div className="mb-4 group">
+                <p className="text-[9px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter opacity-70">{label}</p>
+                <p className="text-[13px] font-bold text-slate-800 leading-tight">
+                    {displayValue}
+                </p>
+            </div>
+        );
+    }
+
+    const inputClass = "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all";
+
+    if (type === 'select') {
+        return (
+            <div className="mb-4">
+                <label className="text-[10px] uppercase font-black text-slate-400 mb-1 block">{label}</label>
+                <select name={name} value={formData[name] || ''} onChange={handleChange} className={inputClass}>
+                    <option value="">Select {label}</option>
+                    {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mb-4">
+            <label className="text-[10px] uppercase font-black text-slate-400 mb-1 block">{label}</label>
+            <input
+                type={type === 'date' ? 'date' : 'text'}
+                name={name}
+                value={formData[name] || ''}
+                onChange={handleChange}
+                className={inputClass}
+                placeholder={`Enter ${label}`}
+            />
         </div>
     );
 };
@@ -875,56 +928,6 @@ const DetailedProjInfo = () => {
     if (isLoading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading details...</div>;
     if (!project) return null;
 
-    // --- RENDER HELPERS ---
-    const SectionHeader = ({ title }) => (
-        <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 border-b border-slate-100 pb-2 mt-6 first:mt-0">
-            {title}
-        </h2>
-    );
-
-    const Field = ({ label, name, value, type = 'text', options = [] }) => {
-        if (!isEditMode) {
-            const isMoney = type === 'money';
-            const displayValue = isMoney ? `₱${Number(value || 0).toLocaleString()}` : (value || '---');
-            return (
-                <div className="mb-4 group">
-                    <p className="text-[9px] uppercase font-black text-slate-400 mb-0.5 tracking-tighter opacity-70">{label}</p>
-                    <p className="text-[13px] font-bold text-slate-800 leading-tight">
-                        {displayValue}
-                    </p>
-                </div>
-            );
-        }
-
-        const inputClass = "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all";
-        
-        if (type === 'select') {
-            return (
-                <div className="mb-4">
-                    <label className="text-[10px] uppercase font-black text-slate-400 mb-1 block">{label}</label>
-                    <select name={name} value={formData[name] || ''} onChange={handleChange} className={inputClass}>
-                        <option value="">Select {label}</option>
-                        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                </div>
-            );
-        }
-
-        return (
-            <div className="mb-4">
-                <label className="text-[10px] uppercase font-black text-slate-400 mb-1 block">{label}</label>
-                <input
-                    type={type === 'date' ? 'date' : 'text'}
-                    name={name}
-                    value={formData[name] || ''}
-                    onChange={handleChange}
-                    className={inputClass}
-                    placeholder={`Enter ${label}`}
-                />
-            </div>
-        );
-    };
-
     const renderOverview = () => (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-1 mt-2">
@@ -1204,6 +1207,7 @@ const DetailedProjInfo = () => {
 
                 {/* --- CONTENT AREA --- */}
                 <div className="px-5 -mt-10 relative z-20">
+                    <FieldFormContext.Provider value={{ isEditMode, formData, handleChange }}>
                     <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-200/50 min-h-[400px]">
                         {activeTab === 0 && renderOverview()}
                         {activeTab === 1 && renderLocation()}
@@ -1212,6 +1216,7 @@ const DetailedProjInfo = () => {
                         {activeTab === 4 && renderMedia()}
                         {activeTab === 5 && renderDocuments()}
                     </div>
+                    </FieldFormContext.Provider>
                 </div>
 
                 {/* --- STICKY FOOTER NAVIGATION / SAVE --- */}

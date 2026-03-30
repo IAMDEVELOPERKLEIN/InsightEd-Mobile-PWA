@@ -18,7 +18,7 @@ import ProjectLogModal from "../components/ProjectLogModal";
 
 // --- CONSTANTS ---
 const ProjectStatus = {
-  UnderProcurement: "Under Procurement",
+  UnderProcurement: "Under procurement",
   NotYetStarted: "Not Yet Started",
   Ongoing: "Ongoing",
   ForFinalInspection: "For Final Inspection",
@@ -51,7 +51,7 @@ const getStatusColor = (status) => {
     case "Completed":
       return "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20";
     case "Ongoing":
-    case "Under Procurement":
+    case "Under procurement":
     case "For Final Inspection":
       return "bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20";
     case "Not Yet Started":
