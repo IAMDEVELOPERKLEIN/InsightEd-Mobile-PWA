@@ -54,16 +54,7 @@ const SchoolHeadQuickStart = () => {
                                             <p className="text-sm font-bold">Select <strong>"Add to Home Screen"</strong> or <strong>"Install App"</strong> from your browser menu.</p>
                                         </div>
                                     </div>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-blue-500/20">
-                                        <div className="absolute inset-0 bg-blue-500/5 transition-opacity opacity-0 group-hover/gif:opacity-100"></div>
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-blue-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400 mb-2">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90">pwa_installation_flow.gif</h4>
-                                        </div>
-                                    </div>
+                                        <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/pwa_installation_flow.gif" alt="PWA Installation Flow" className="w-full h-auto rounded-xl shadow-2xl" />
                                 </div>
                             </div>
                         </section>
@@ -95,16 +86,7 @@ const SchoolHeadQuickStart = () => {
                                     </div>
                                 </div>
 
-                                <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-emerald-500/20">
-                                    <div className="absolute inset-0 bg-emerald-500/5 transition-opacity opacity-0 group-hover/gif:opacity-100"></div>
-                                    <div className="relative z-10 text-center">
-                                        <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                            <FiInfo className="text-emerald-400 rotate-12" size={24} />
-                                        </div>
-                                        <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-400 mb-2">Visual Guide Missing</p>
-                                        <h4 className="text-sm font-bold font-mono text-white/90">registration_school_mapping.gif</h4>
-                                    </div>
-                                </div>
+                                <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/registration_school_mapping.gif" alt="Registration School Mapping" className="w-full h-auto rounded-xl shadow-2xl" />
 
                                 <div className="p-6 bg-[#0A192F] text-white rounded-[2rem] border-l-[12px] border-emerald-500/50 shadow-xl shadow-blue-900/20 relative overflow-hidden">
                                     <div className="relative z-10">
@@ -133,16 +115,7 @@ const SchoolHeadQuickStart = () => {
                                         <FiInfo className="text-amber-600 shrink-0" size={24} />
                                         <p className="text-sm font-bold text-amber-900 leading-relaxed uppercase tracking-tight italic">Grant all mandatory device permissions (Camera, Location, Storage) upon prompt to ensure zero-failure data capture.</p>
                                     </div>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-amber-500/20">
-                                        <div className="absolute inset-0 bg-amber-500/5 transition-opacity opacity-0 group-hover/gif:opacity-100"></div>
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-amber-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400 mb-2">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90">login_permissions_flow.gif</h4>
-                                        </div>
-                                    </div>
+                                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/log_in_passcode_password_switch.gif" alt="Sign-In Permissions Flow" className="w-full h-auto rounded-xl shadow-2xl" />
                                 </div>
 
                                 <div className="pt-12 border-t border-slate-100">
@@ -153,16 +126,7 @@ const SchoolHeadQuickStart = () => {
                                     <p className="text-slate-600 text-base mb-8 font-medium leading-relaxed">
                                         Upon successful sign-in, you will land on the <strong className="text-blue-600 italic">Nexus Dashboard</strong>. This is your primary strategic hub for cross-module oversight and departmental management.
                                     </p>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-blue-500/20">
-                                        <div className="absolute inset-0 bg-blue-500/5 transition-opacity opacity-0 group-hover/gif:opacity-100"></div>
-                                        <div className="relative z-10 text-center">
-                                            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                                                <FiInfo className="text-blue-400 rotate-12" size={24} />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400 mb-2">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90">nexus_dashboard_navigation.gif</h4>
-                                        </div>
-                                    </div>
+                                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/nexus.gif" alt="Nexus Dashboard Navigation" className="w-full h-auto rounded-xl shadow-2xl" />
                                 </div>
                             </div>
                         </section>
@@ -184,12 +148,7 @@ const SchoolHeadQuickStart = () => {
                                         <span className="px-3 py-1 bg-blue-50 text-blue-600 text-[9px] font-black rounded-full uppercase tracking-widest border border-blue-100">Critical Priority</span>
                                     </div>
                                     <p className="text-slate-600 font-medium">Verify your School ID records and manually drag the map pin to the <strong className="text-blue-600 underline">exact coordinate of the primary school entrance</strong>.</p>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-blue-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400 mb-2">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90">geotagging_validation.gif</h4>
-                                        </div>
-                                    </div>
+                                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/Unit_1_Complete_Guide.gif" alt="Geo-Tagging Validation" className="w-full h-auto rounded-xl shadow-2xl" />
                                 </div>
 
                                 <div className="space-y-6">
@@ -198,12 +157,7 @@ const SchoolHeadQuickStart = () => {
                                         <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black rounded-full uppercase tracking-widest border border-emerald-100">High Impact</span>
                                     </div>
                                     <p className="text-slate-600 font-medium">Transmit accurate learner counts per grade level. You must include specific <strong className="text-emerald-600 italic">ARAL program enrollment</strong> data for verified compliance.</p>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-emerald-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-400 mb-2">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90">enrollment_entry_grid.gif</h4>
-                                        </div>
-                                    </div>
+                                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/unit2%20final.gif" alt="Enrollment Entry Grid" className="w-full h-auto rounded-xl shadow-2xl" />
                                 </div>
 
                                 <div className="space-y-6">
@@ -213,12 +167,7 @@ const SchoolHeadQuickStart = () => {
                                     </div>
                                     <p className="text-slate-600 font-medium whitespace-pre-wrap leading-relaxed italic">Map all buildings using the <strong className="text-amber-600 not-italic uppercase font-black tracking-widest border-b-2 border-amber-200">Room Assessment Tool</strong>. 
 Categories: Newcon, Functional, or Condemned for Demolition.</p>
-                                    <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-amber-500/20">
-                                        <div className="relative z-10 text-center">
-                                            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-amber-400 mb-2">Visual Guide Missing</p>
-                                            <h4 className="text-sm font-bold font-mono text-white/90">building_inventory_add.gif</h4>
-                                        </div>
-                                    </div>
+                                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/uni7register%20building.gif" alt="Building Inventory Registry" className="w-full h-auto rounded-xl shadow-2xl" />
                                     <div className="flex items-center gap-4 p-5 bg-red-50 border border-red-100 rounded-3xl shadow-[0_10px_30px_rgba(239,68,68,0.1)]">
                                         <FiShield className="text-red-600 shrink-0" size={24} />
                                         <p className="text-sm font-black text-red-950 uppercase tracking-tight italic">Strict Rule: Photographic timestamped evidence is required for all facility assessments.</p>
@@ -277,12 +226,7 @@ Categories: Newcon, Functional, or Condemned for Demolition.</p>
                             </div>
                             <div className="space-y-8 text-slate-700 leading-relaxed bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100">
                                 <p className="text-lg font-medium">The InsightED engine saves inputs locally. Navigate to the <strong className="text-blue-600 italic">Sync Dashboard</strong> once a stable connection established.</p>
-                                <div className="bg-[#0A192F] aspect-video rounded-3xl flex flex-col items-center justify-center gap-4 text-white p-8 shadow-2xl relative overflow-hidden group/gif transition-all hover:bg-navy-900 border-4 border-blue-500/20">
-                                    <div className="relative z-10 text-center">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-400 mb-2">Visual Guide Missing</p>
-                                        <h4 className="text-sm font-bold font-mono text-white/90">manual_data_sync_success.gif</h4>
-                                    </div>
-                                </div>
+                                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/nexus_portal_selection.gif" alt="Manual Data Sync Success" className="w-full h-auto rounded-xl shadow-2xl" />
                                 <div className="p-8 bg-[#0A192F] text-white rounded-[2rem] border-4 border-red-500/20 relative overflow-hidden">
                                     <div className="absolute top-0 right-0 p-4 opacity-10">
                                         <FiTool size={80} />

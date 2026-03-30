@@ -169,7 +169,7 @@ const MyActivityDashboard = () => {
 
         return [
             { id: 'first', name: 'First Steps', desc: 'Complete your first unit', earned: completed >= 1, icon: '🎯' },
-            { id: 'half', name: 'STRIDE Miller', desc: `Complete ${halfway} units`, earned: completed >= halfway, icon: '⚡' },
+            { id: 'half', name: 'STRIDE Miler', desc: `Complete ${halfway} units`, earned: completed >= halfway, icon: '⚡' },
             { id: 'sprint', name: 'STRIDE Sprinter', desc: 'Log a fastest sprint', earned: !!data?.gamification?.fastest_sprint, icon: '🏃' },
             { id: 'master', name: 'STRIDE Hero', desc: `Complete all ${totalUnits} units`, earned: completed >= totalUnits, icon: '👑' },
         ];

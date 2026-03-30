@@ -8131,7 +8131,7 @@ app.put('/api/update-project/:id', upload.fields([
       newRemarks,
       oldData.engineer_id,
       oldData.ipc,
-      oldData.engineer_name,
+      finalUserName,
       newLat,
       newLong,
       valueOrNull(data.constructionStartDate) || oldData.construction_start_date,
@@ -8414,6 +8414,35 @@ app.put('/api/update-project/:id', upload.fields([
   } finally {
     if (client) client.release();
     if (clientNew) clientNew.release();
+  }
+});
+
+// --- 9.4 POST: Upload Project Document (POW / DUPA / CONTRACT) ---
+app.post('/api/upload-project-document', upload.single('document_pdf'), async (req, res) => {
+  const { project_id, type, uid, ipc } = req.body;
+  const validTypes = ['POW', 'DUPA', 'CONTRACT'];
+
+  if (!project_id || !validTypes.includes(type?.toUpperCase())) {
+    return res.status(400).json({ error: 'project_id and a valid type (POW, DUPA, CONTRACT) are required.' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: 'No PDF file provided.' });
+  }
+
+  try {
+    // Verify project exists
+    const check = await pool.query('SELECT project_id FROM engineer_form WHERE project_id = $1', [project_id]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    res.json({ success: true, message: `${type} upload received. Compressing in background…` });
+
+    // Background compression + save (reuses existing processPdfInBackground helper)
+    processPdfInBackground(req.file, project_id, type.toUpperCase(), ipc || null, uid || null);
+  } catch (err) {
+    console.error('❌ upload-project-document error:', err.message);
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
   }
 });
 
