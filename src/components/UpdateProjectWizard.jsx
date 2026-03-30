@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { FiCamera, FiImage, FiX, FiCheck, FiChevronRight } from 'react-icons/fi';
+import { getChecklist, calcTriangulatedPercentage } from '../constants/progressChecklists';
 
 const ProcurementStatus = {
     NotYetProcured: "Not yet procured",
@@ -54,7 +55,8 @@ const colorMap = {
 const STEPS_CONSTRUCTION = [
     { id: 1, label: "Media", icon: "📸" },
     { id: 2, label: "Status", icon: "📊" },
-    { id: 3, label: "Confirm", icon: "✅" },
+    { id: 3, label: "Validate", icon: "📋" },
+    { id: 4, label: "Confirm", icon: "✅" },
 ];
 
 const STEPS_PROCUREMENT = [
@@ -167,8 +169,17 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
     const [constructionStatus, setConstructionStatus] = useState((project?.status === ConstructionStatus.NotYetStarted || !project?.status) ? "" : project.status); // Force placeholder if not yet started
     const [percentage, setPercentage] = useState(Number(project?.accomplishmentPercentage || 0));
     const [remarks, setRemarks] = useState('');
-    const [statusAsOfDate, setStatusAsOfDate] = useState(new Date().toISOString().split('T')[0]);
+    const [statusAsOfDate, setStatusAsOfDate] = useState(new Date().toISOString());
     const [actualCompletionDate, setActualCompletionDate] = useState(project?.actualCompletionDate || '');
+
+    // Triangulation checklist state
+    const checklist = useMemo(() => getChecklist(project?.numberOfStoreys), [project?.numberOfStoreys]);
+    const [checkedState, setCheckedState] = useState(() => {
+        const saved = project?.checklist;
+        if (saved && typeof saved === 'object' && !Array.isArray(saved)) return saved;
+        return {};
+    });
+    const triangulatedPercentage = useMemo(() => calcTriangulatedPercentage(checklist, checkedState), [checkedState, checklist]);
 
     // Detailed Project Fields (Construction Mode)
     const [details, setDetails] = useState({
@@ -219,8 +230,10 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
             setConstructionStatus((project.status === ConstructionStatus.NotYetStarted || !project.status) ? "" : project.status); // Force placeholder if not yet started
             setPercentage(Number(project.accomplishmentPercentage || 0));
             setRemarks('');
-            setStatusAsOfDate(new Date().toISOString().split('T')[0]);
+            setStatusAsOfDate(new Date().toISOString());
             setActualCompletionDate(project.actualCompletionDate || '');
+            const saved = project.checklist;
+            setCheckedState((saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : {});
             setInternalFiles([]);
             setInternalPreviews([]);
             setExternalFiles([]);
@@ -342,13 +355,15 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
             {
                 ...project,
                 procurement_status: procurementStatus,
-                statusDesignPhase: procurementStatus, // ensuring the backend fallback also updates
+                statusDesignPhase: procurementStatus,
                 status: constructionStatus,
                 accomplishmentPercentage: percentage,
                 previousPercentage: project.accomplishmentPercentage,
                 otherRemarks: remarks || project.otherRemarks,
-                statusAsOfDate: isProcurementMode ? new Date().toISOString().split('T')[0] : statusAsOfDate,
+                statusAsOfDate: isProcurementMode ? new Date().toISOString() : statusAsOfDate,
                 actualCompletionDate: constructionStatus === ConstructionStatus.Completed ? actualCompletionDate : project.actualCompletionDate,
+                checklist: checkedState,
+                triangulated_percentage: triangulatedPercentage,
                 ...biddingDates,
                 ...contractAward,
                 ...details,
@@ -519,8 +534,16 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                                         )}
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Status As Of Date</label>
-                                            <input type="date" value={statusAsOfDate} onChange={e => setStatusAsOfDate(e.target.value)}
-                                                className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none" />
+                                            <input
+                                                type="date"
+                                                value={statusAsOfDate.split('T')[0]}
+                                                onChange={e => {
+                                                    const datePart = e.target.value;
+                                                    const timePart = new Date().toISOString().split('T')[1];
+                                                    setStatusAsOfDate(`${datePart}T${timePart}`);
+                                                }}
+                                                className="w-full p-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700 outline-none"
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Remarks (Optional)</label>
@@ -611,8 +634,59 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                         </>
                     )}
 
-                    {/* STEP 3: CONFIRM (Unified) */}
-                    {step === 3 && (
+                    {/* STEP 3: VALIDATION (Construction only) */}
+                    {!isProcurementMode && step === 3 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                                <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                                        Checklist Calculation
+                                    </p>
+                                    <span className="text-xl font-black text-blue-700">{triangulatedPercentage}%</span>
+                                </div>
+                                <p className="text-[9px] text-blue-400 font-bold mb-3">
+                                    {project?.numberOfStoreys || 1}-Storey building · {checklist.length} tasks
+                                </p>
+                                <div className="w-full bg-blue-100 rounded-full h-2 mb-3">
+                                    <div
+                                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${triangulatedPercentage}%` }}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between text-[9px] font-bold">
+                                    <span className="text-slate-500">Manual Progress: <span className="text-slate-700">{percentage}%</span></span>
+                                    {Math.abs(triangulatedPercentage - percentage) > 10 && (
+                                        <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                            ⚠ {Math.abs(triangulatedPercentage - percentage)}% variance
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {checklist.map(task => (
+                                    <button
+                                        key={task.id}
+                                        onClick={() => setCheckedState(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
+                                        className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition-all ${checkedState[task.id] ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}
+                                    >
+                                        <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${checkedState[task.id] ? 'bg-emerald-500 border-emerald-500' : 'border-slate-200'}`}>
+                                            {checkedState[task.id] && <FiCheck size={11} className="text-white" />}
+                                        </div>
+                                        <span className={`text-[11px] font-bold flex-1 leading-tight ${checkedState[task.id] ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                            {task.task}
+                                        </span>
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${checkedState[task.id] ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                                            {task.weight}%
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 4: CONFIRM (Unified) */}
+                    {step === STEPS.length && (
                         <div className="space-y-4">
                             <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4">
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Project</p>
@@ -648,8 +722,13 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                                 {constructionStatus && (
                                     <div className="p-3 rounded-2xl border bg-slate-50 border-slate-100">
                                         <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Accomplishment</p>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[11px] font-black text-slate-700">{percentage}%</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-[11px] font-black text-slate-700">{percentage}% manual</span>
+                                            {!isProcurementMode && (
+                                                <span className={`text-[11px] font-black ${Math.abs(triangulatedPercentage - percentage) > 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                    · {triangulatedPercentage}% checklist
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -683,9 +762,9 @@ const UpdateProjectWizard = ({ project, isOpen, onClose, onSave, isUploading }) 
                         {step === 1 ? "Cancel" : "← Back"}
                     </button>
 
-                    <button onClick={step < 3 ? handleNextStep : handleSubmit} disabled={isUploading}
+                    <button onClick={step < STEPS.length ? handleNextStep : handleSubmit} disabled={isUploading}
                         className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider ${isUploading ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/25 hover:-translate-y-0.5 active:scale-95'}`}>
-                        {isUploading ? "Saving..." : step < 3 ? "Next" : "Submit Update"}
+                        {isUploading ? "Saving..." : step < STEPS.length ? "Next" : "Submit Update"}
                     </button>
                 </div>
             </div>

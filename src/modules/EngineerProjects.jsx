@@ -71,14 +71,19 @@ const formatAllocation = (value) => {
   return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-const formatDateShort = (dateString) => {
+const formatDateTime = (dateString) => {
   if (!dateString) return "TBD";
   const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
+  const datePart = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "2-digit",
   });
+  const timePart = date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${datePart} ${timePart}`;
 };
 
 // --- SUB-COMPONENTS ---
@@ -169,7 +174,7 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
                     </div>
                     {p.statusAsOf && (
                       <span className="text-[7px] font-black uppercase tracking-tighter opacity-60 mt-0.5">
-                        As of {new Date(p.statusAsOf).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        As of {new Date(p.statusAsOf).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(p.statusAsOf).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     )}
                   </div>
@@ -549,7 +554,9 @@ const EngineerProjects = () => {
             fundingYearJustification: item.fundingYearJustification,
             sangguniang_resolution_id: item.sangguniang_resolution_id,
             mother_moa_id: item.mother_moa_id,
-            supplamental_moa_id: item.supplamental_moa_id
+            supplamental_moa_id: item.supplamental_moa_id,
+            checklist: item.checklist,
+            triangulated_percentage: item.triangulated_percentage,
           }));
 
           // Update Cache on success
@@ -684,6 +691,7 @@ const EngineerProjects = () => {
           previousPercentage: project.accomplishmentPercentage,
           uid: user?.uid,
           modifiedBy: userName,
+          statusAsOfDate: new Date().toISOString().split('T')[0],
           update_type: 'Status Quick Update'
         }),
       });
@@ -1387,7 +1395,7 @@ const EngineerProjects = () => {
                             <span className="text-[8px] font-black px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg text-slate-500 uppercase">{vo.variation_type}</span>
                           </div>
                           <div className="flex justify-between items-end">
-                            <span className="text-[10px] font-bold text-slate-400">{formatDateShort(vo.created_at)}</span>
+                            <span className="text-[10px] font-bold text-slate-400">{formatDateTime(vo.created_at)}</span>
                             <span className="text-[11px] font-black text-[#004A99] dark:text-blue-400">{formatAllocation(vo.modified_amount)}</span>
                           </div>
                         </div>

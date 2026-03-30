@@ -44,7 +44,8 @@
             --industrial-dark: #0a0a0a;
             --glass-bg: rgba(23, 23, 23, 0.8);
             --glass-border: rgba(249, 215, 28, 0.2);
-            --blueprint-line: rgba(249, 215, 28, 0.05);
+            --blueprint-line: rgba(249, 215, 28, 0.1);
+            --structural-steel: #2d2d2d;
         }
 
         /* Simulated concrete look with CSS if image fails */
@@ -58,35 +59,45 @@
 
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: #333;
+            background-color: #1a1a1a;
             color: #f8fafc;
             overflow-x: hidden;
             scroll-behavior: smooth;
         }
 
-        /* Override Blueprint Background to be subtle on top of cement */
+        /* Enhanced Blueprint Background */
         .blueprint-overlay {
             position: fixed;
             inset: 0;
             background-image:
                 linear-gradient(var(--blueprint-line) 1px, transparent 1px),
                 linear-gradient(90deg, var(--blueprint-line) 1px, transparent 1px);
-            background-size: 80px 80px;
+            background-size: 40px 40px;
             pointer-events: none;
             z-index: -1;
-            opacity: 0.3;
+            opacity: 0.2;
+        }
+
+        .blueprint-overlay::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--blueprint-line) 2px, transparent 2px),
+                linear-gradient(90deg, var(--blueprint-line) 2px, transparent 2px);
+            background-size: 200px 200px;
         }
 
         .glass-card {
-            background: rgba(23, 23, 23, 0.9);
+            background: rgba(23, 23, 23, 0.95);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(249, 215, 28, 0.3);
-            border-radius: 1.25rem;
+            border: 1px solid rgba(249, 215, 28, 0.2);
+            border-radius: 0.75rem;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
-            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
         }
 
         .glass-card::before {
@@ -95,28 +106,45 @@
             top: 0;
             left: 0;
             width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--safety-yellow), transparent);
-            opacity: 0;
-            transition: opacity 0.3s ease;
+            height: 4px;
+            background: var(--safety-yellow);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.4s ease;
         }
 
         .glass-card:hover {
-            transform: translateY(-8px);
+            transform: translateY(-5px);
             border-color: var(--safety-yellow);
-            box-shadow: 0 25px 50px -12px rgba(249, 215, 28, 0.15);
+            box-shadow: 0 20px 40px -15px rgba(249, 215, 28, 0.1);
         }
 
         .glass-card:hover::before {
-            opacity: 1;
+            transform: scaleX(1);
         }
 
         .hazard-stripe {
             background: repeating-linear-gradient(-45deg,
                     var(--safety-yellow),
-                    var(--safety-yellow) 10px,
-                    #000 10px,
-                    #000 20px);
+                    var(--safety-yellow) 15px,
+                    #000 15px,
+                    #000 30px);
+        }
+
+        .structural-divider {
+            height: 12px;
+            background: var(--structural-steel);
+            border-top: 2px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 2px solid #000;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .structural-divider::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(0, 0, 0, 0.3) 40px, rgba(0, 0, 0, 0.3) 42px);
         }
 
         .gradient-text {
@@ -128,12 +156,12 @@
 
         .video-container {
             position: relative;
-            border-radius: 1rem;
+            border-radius: 0.5rem;
             overflow: hidden;
             background: #000;
             aspect-ratio: 16/9;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-            border: 2px solid var(--glass-border);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border: 4px solid var(--structural-steel);
         }
 
         .scroll-reveal {
@@ -154,31 +182,31 @@
             transform: translateX(-50%);
             width: 80%;
             height: 40%;
-            background: radial-gradient(circle, rgba(249, 215, 28, 0.1) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(249, 215, 28, 0.05) 0%, transparent 70%);
             filter: blur(80px);
             pointer-events: none;
             z-index: -1;
         }
 
         .badge {
-            background: rgba(249, 215, 28, 0.1);
-            border: 1px solid rgba(249, 215, 28, 0.2);
+            background: #000;
+            border: 1px solid var(--safety-yellow);
             color: var(--safety-yellow);
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.5rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 0.25rem;
             font-size: 0.7rem;
-            font-weight: 800;
+            font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 0.1em;
+            letter-spacing: 0.2em;
         }
 
         code {
             font-family: 'JetBrains Mono', monospace;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 0.2rem 0.4rem;
-            border-radius: 0.375rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #93c5fd;
+            background: #000;
+            padding: 0.2rem 0.6rem;
+            border-radius: 0.25rem;
+            border: 1px solid var(--safety-yellow);
+            color: var(--safety-yellow);
         }
 
         .toc-link {
@@ -200,7 +228,7 @@
             width: 64px;
             height: 64px;
             background: var(--safety-yellow);
-            border-radius: 20px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -214,13 +242,33 @@
             transform: scale(1.1) rotate(5deg);
         }
 
+        /* Technical Drawing Callouts */
+        .callout-tag {
+            position: absolute;
+            background: var(--safety-yellow);
+            color: #000;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 900;
+            padding: 2px 6px;
+            border-radius: 2px;
+            z-index: 10;
+        }
+
+        .callout-line {
+            position: absolute;
+            background: var(--safety-yellow);
+            height: 1px;
+            z-index: 5;
+        }
+
         /* Phone Mockup */
         .phone-mockup {
-            max-width: 260px;
+            max-width: 280px;
             margin: 0 auto;
-            border: 8px solid #1e293b;
-            border-radius: 2.5rem;
-            box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.5);
+            border: 12px solid var(--structural-steel);
+            border-radius: 2rem;
+            box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.8);
             background: #000;
             overflow: hidden;
             position: relative;
@@ -231,6 +279,12 @@
             height: auto;
             display: block;
         }
+
+        .section-icon {
+            width: 48px;
+            height: 48px;
+            fill: var(--safety-yellow);
+        }
     </style>
 </head>
 
@@ -239,8 +293,9 @@
     <div class="blueprint-overlay"></div>
     <div class="hero-glow"></div>
 
-    <!-- Hazard Stripe Divider -->
-    <div class="fixed top-0 w-full h-1 z-[60] hazard-stripe opacity-50"></div>
+    <!-- Hazard Stripe Top Border -->
+    <div class="fixed top-0 w-full h-2 z-[60] hazard-stripe shadow-lg"></div>
+
 
     <!-- Navigation -->
     <nav class="fixed top-0 w-full z-50 border-b border-white/5 bg-industrial-950/80 backdrop-blur-xl">
@@ -342,16 +397,13 @@
         <!-- 1. Introduction & Setup -->
         <section id="introduction" class="mb-32 md:mb-40 scroll-reveal">
             <div class="flex items-start gap-4 md:gap-6 mb-12">
-                <div
-                    class="w-10 h-10 md:w-12 md:h-12 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">
-                    01</div>
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 md:w-14 md:h-14 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">01</div>
+                    <svg class="section-icon opacity-50" viewBox="0 0 24 24"><path d="M12 3L4 8v8l8 5 8-5V8l-8-5zm0 2.2l6 3.8v7l-6 3.8-6-3.8v-7l6-3.8zM12 7a2 2 0 100 4 2 2 0 000-4z"/></svg>
+                </div>
                 <div>
-                    <h2
-                        class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">
-                        Installation of PWA</h2>
-                    <p class="text-slate-400 font-medium text-sm md:text-base">InsightEd is a <span
-                            class="text-white font-bold text-shadow-sm">Progressive Web App</span>. No app store
-                        needed—just direct access.</p>
+                    <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">Installation of PWA</h2>
+                    <p class="text-slate-400 font-medium text-sm md:text-base">InsightEd is a <span class="text-white font-bold text-shadow-sm">Progressive Web App</span>. No app store needed—just direct access.</p>
                 </div>
             </div>
 
@@ -425,21 +477,25 @@
             </div>
 
             <div class="phone-mockup">
-                <img src="./Installationgif.gif" alt="PWA Installation" class="w-full h-auto">
-                <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Mobile View
-                </div>
+                <div class="callout-tag top-10 -right-4 shadow-lg">SYST: INSTALL</div>
+                <div class="callout-line w-12 top-[48px] -right-10 rotate-[20deg]"></div>
+                <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/pwa_installation_flow.gif" alt="PWA Installation" class="w-full h-auto">
+                <div class="absolute bottom-4 left-4 badge italic font-bold">Mobile View</div>
             </div>
         </section>
+
+        <div class="structural-divider my-20"></div>
 
         <!-- 2. Portals & Access -->
         <section id="portals" class="mb-32 md:mb-40 scroll-reveal">
             <div class="flex items-start gap-4 md:gap-6 mb-12">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 md:w-14 md:h-14 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">02</div>
+                    <svg class="section-icon opacity-50" viewBox="0 0 24 24"><path d="M13 5h8v2h-8V5zm0 4h5v2h-5V9zM3 19V5h2v6h5V5h2v14h-2v-6H5v6H3z"/></svg>
+                </div>
                 <div>
-                    <h2
-                        class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">
-                        Navigating the Nexus Dashboard</h2>
-                    <p class="text-slate-400 font-medium text-sm md:text-base">The Launchpad to your jurisdiction's
-                        engineering metrics.</p>
+                    <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">Navigating the Nexus Dashboard</h2>
+                    <p class="text-slate-400 font-medium text-sm md:text-base">The Launchpad to your jurisdiction's engineering metrics.</p>
                 </div>
             </div>
 
@@ -464,30 +520,26 @@
                 </div>
 
                 <div class="phone-mockup">
-                    <img src="./nexusgif.gif" alt="Nexus Navigation" class="w-full h-auto">
-                    <div class="absolute top-4 right-4 badge bg-black/40 backdrop-blur-md italic font-bold">Portal
-                        Access</div>
+                    <div class="callout-tag bottom-20 -left-6 shadow-lg">PATH: NEXUS</div>
+                    <div class="callout-line w-8 bottom-[88px] -left-8"></div>
+                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/nexus_portal_selection.gif" alt="Nexus Navigation" class="w-full h-auto">
+                    <div class="absolute top-4 right-4 badge italic font-bold">Portal Access</div>
                 </div>
             </div>
         </section>
 
+        <div class="structural-divider my-20"></div>
+
         <!-- 3. Registration & Login -->
         <section id="registration" class="mb-32 md:mb-40 scroll-reveal">
             <div class="flex items-start gap-4 md:gap-6 mb-12">
-                <div
-                    class="w-10 h-10 md:w-12 md:h-12 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">
-                    <!-- Wrench Icon -->
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V7a2 2 0 10-4 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1V11a2 2 0 11-4 0V7a2 2 0 012-2V4z" />
-                    </svg>
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 md:w-14 md:h-14 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">03</div>
+                    <svg class="section-icon opacity-50" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 15l-3-3 1.41-1.41L11 13.17l4.59-4.59L17 10l-6 6z"/></svg>
                 </div>
                 <div>
-                    <h2
-                        class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">
-                        Identity & Access</h2>
-                    <p class="text-slate-400 font-medium text-sm md:text-base">Registering your account for the pilot
-                        phase.</p>
+                    <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">Identity & Access</h2>
+                    <p class="text-slate-400 font-medium text-sm md:text-base">Registering your account for the pilot phase.</p>
                 </div>
             </div>
 
@@ -560,23 +612,26 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div class="phone-mockup">
-                    <img src="./registrationp1.gif" alt="Registration Phase 1" class="w-full h-auto">
-                    <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Step Alpha
-                    </div>
+                    <div class="callout-tag top-1/4 -right-2 shadow-lg">AUTH: P1</div>
+                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/registration_p1.gif" alt="Registration Phase 1" class="w-full h-auto">
+                    <div class="absolute bottom-4 left-4 badge italic font-bold">Step Alpha</div>
                 </div>
                 <div class="phone-mockup">
-                    <img src="./registrationp2.gif" alt="Registration Phase 2" class="w-full h-auto">
-                    <div class="absolute bottom-4 left-4 badge bg-black/60 backdrop-blur-md italic font-bold">Step Beta
-                    </div>
+                    <div class="callout-tag bottom-1/4 -left-2 shadow-lg">AUTH: P2</div>
+                    <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/registration_p2.gif" alt="Registration Phase 2" class="w-full h-auto">
+                    <div class="absolute bottom-4 left-4 badge italic font-bold">Step Beta</div>
                 </div>
             </div>
         </section>
 
+        <div class="structural-divider my-20"></div>
+
         <!-- 4. Dashboard Breakdown -->
         <section id="tabs" class="mb-32 md:mb-40 scroll-reveal">
             <div class="flex items-start gap-4 md:gap-6 mb-16">
-                <div class="w-10 h-10 md:w-12 md:h-12 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M9 21V5a2 2 0 012-2h2a2 2 0 012 2v16M7 21h10M12 3v2M12 7v2M12 11v2M12 15v2" /></svg>
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 md:w-14 md:h-14 glass-card flex items-center justify-center text-safety-yellow font-black text-lg md:text-xl shadow-lg border-safety-yellow/20 shrink-0">04</div>
+                    <svg class="section-icon opacity-50" viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-1 16H6a1 1 0 01-1-1V6a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1zM7 7h10v2H7V7zm0 4h10v2H7v-2zm0 4h7v2H7v-2z"/></svg>
                 </div>
                 <div>
                     <h2 class="text-3xl md:text-4xl font-black mb-4 tracking-tight uppercase italic text-white leading-tight">The Nexus Dashboard Hub</h2>
@@ -613,34 +668,47 @@
                         </div>
                     </div>
                     <div class="phone-mockup">
-                        <img src="./homegif.gif" alt="Home Analytics" class="w-full h-auto">
+                        <div class="callout-tag top-12 -left-4 shadow-lg">DATA: VISUAL</div>
+                        <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/home_tab.gif" alt="Home Analytics" class="w-full h-auto">
                     </div>
                 </div>
             </div>
 
+            <div class="structural-divider my-20"></div>
+
             <!-- Tab 2: Projects -->
-            <div class="mb-24">
+            <div class="mb-24 scroll-reveal">
                 <div class="flex items-center gap-4 mb-10">
                     <h3 class="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-safety-orange flex items-center gap-4 leading-none">
                         <div class="w-8 h-8 md:w-10 md:h-10 bg-safety-orange/10 rounded-xl flex items-center justify-center shrink-0">
-                            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4.5l5.5 5.5l-2.5 2.5l-5.5-5.5l2.5-2.5zM14 7.5L7 14.5L5.5 13l7-7l1.5 1.5zM7 14.5L3 21l3-1l4-5.5l-3-3z"/></svg>
+                            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11 4.5l5.5 5.5l-2.5 2.5l-5.5-5.5l2.5-2.5zM14 7.5L7 14.5L5.5 13l7-7l1.5 1.5zM7 14.5L3 21l3-1l4-5.5l-3-3z" />
+                            </svg>
                         </div>
                         2. Projects: Site Operations Hub
                     </h3>
                     <div class="h-px bg-industrial-800 flex-grow hidden sm:block"></div>
                 </div>
-                <div class="glass-card p-8 md:p-12 border-l-8 border-l-safety-yellow">
-                    <div class="max-w-3xl space-y-6 text-slate-300 font-medium leading-[1.8] text-lg">
-                        <p>In the <strong class="text-white">projects tab</strong>, you will see a list of projects displayed through <strong class="text-safety-yellow">cards</strong>. Each card contains key project information at a glance.</p>
-                        <div class="bg-white/5 p-5 rounded-xl border border-white/10 italic text-slate-400">
-                            "To see the detailed project information, the user must <strong class="text-white">click the card</strong>."
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+                    <div class="glass-card p-8 md:p-10 border-l-8 border-l-safety-yellow h-full flex flex-col justify-center">
+                        <div class="space-y-6 text-slate-300 font-medium leading-[1.7] text-base md:text-lg">
+                            <p>In the <strong class="text-white">projects tab</strong>, you will see a list of projects displayed through <strong class="text-safety-yellow">cards</strong>. Each card contains key project information at a glance.</p>
+                            <div class="bg-white/5 p-5 rounded-xl border border-white/10 italic text-slate-400 text-sm">
+                                "To see the detailed project information, the user must <strong class="text-white">click the card</strong>."
+                            </div>
+                            <p>Within the card, you will also see the <strong class="text-safety-orange underline font-bold">procurement status</strong>. You must change it depending on the stage of the project.</p>
+                            <div class="p-6 bg-safety-orange/5 border border-safety-orange/20 rounded-2xl">
+                                <p><strong class="text-safety-orange italic">STATUS TRANSITION:</strong> Once procurement is <strong class="text-white">completed</strong>, you can update <strong class="text-white underline font-bold">construction status</strong>.</p>
+                            </div>
+                            <p>Construction updates must be performed <strong class="text-white">regularly</strong>. Site photos are <strong class="text-safety-yellow font-bold uppercase">mandatory</strong> for COA compliance. After uploading photos, update the <strong class="text-white italic">percentage status</strong>.</p>
                         </div>
-                        <p>Within the card, you will also see the <strong class="text-safety-orange underline">procurement status</strong>. You must change it depending on the stage of the project. You also have to update the procurement details by clicking the <strong class="text-white bg-slate-700 px-3 py-1 rounded-lg font-black text-xs uppercase">update</strong> button.</p>
-                        <div class="p-6 bg-safety-orange/5 border border-safety-orange/20 rounded-2xl">
-                            <p><strong class="text-safety-orange italic">STATUS TRANSITION:</strong> Once the procurement status is <strong class="text-white">completed</strong>, you can now change the <strong class="text-white underline">construction status</strong>.</p>
-                        </div>
-                        <p>Construction updates must be performed <strong class="text-white">regularly</strong>. Site photos are <strong class="text-safety-yellow">mandatory</strong> for COA compliance. After uploading photos, you can update the <strong class="text-white italic">percentage status</strong>.</p>
-                        <p>Finally, by clicking the <strong class="text-safety-yellow bg-safety-yellow/10 px-4 py-1 rounded-full font-black text-sm">LOGS</strong> button, you can view the complete <strong class="text-white">history of updates</strong>.</p>
+                    </div>
+                    <div class="phone-mockup relative">
+                        <div class="callout-tag top-12 -left-4 shadow-lg">OPS: HUB</div>
+                        <div class="callout-line w-8 top-16 -left-6 rotate-[-20deg]"></div>
+                        <img id="project-demo-img" src="./projectstabdemop1.gif" alt="Project Operations" class="w-full h-auto">
+                        <div class="absolute bottom-6 left-4 badge italic font-bold border-safety-yellow/40" id="project-demo-label">Sequence: P1</div>
                     </div>
                 </div>
             </div>
@@ -676,7 +744,8 @@
                         </div>
                     </div>
                     <div class="phone-mockup">
-                        <img src="./settingsgif.gif" alt="Settings" class="w-full h-auto">
+                        <div class="callout-tag bottom-32 -right-4 shadow-lg">CONF: NODE</div>
+                        <img src="https://raw.githubusercontent.com/sebtcheng/InsightEd-Mobile-PWA/2a4874ba604994c6710b1ce38135db8fe2951f7b/public/settings_tab.gif" alt="Settings" class="w-full h-auto">
                     </div>
                 </div>
             </div>
@@ -691,7 +760,7 @@
             <div class="pt-24 text-center px-4">
                 <div
                     class="w-20 h-20 md:w-24 md:h-24 glass-card mx-auto flex items-center justify-center mb-10 overflow-hidden group">
-                    <img src="public/mascot-thumbsup.png" alt="Mascot"
+                    <img src="./mascot-thumbsup.png" alt="Mascot"
                         class="w-14 md:w-16 animate-pulse group-hover:scale-110 transition-transform">
                 </div>
                 <h2 class="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-white mb-6">
@@ -711,8 +780,8 @@
                 </div>
 
                 <div class="flex justify-center gap-8 md:gap-12 grayscale opacity-40 mb-16">
-                    <img src="public/deped_logo.png" alt="DepEd" class="h-8 md:h-10">
-                    <img src="public/pwa-512x512.png" alt="InsightEd" class="h-8 md:h-10">
+                    <img src="./deped_logo.png" alt="DepEd" class="h-8 md:h-10">
+                    <img src="./pwa-512x512.png" alt="InsightEd" class="h-8 md:h-10">
                 </div>
 
                 <p
@@ -738,7 +807,7 @@
 
     <!-- Floating AI -->
     <a href="#tabs" class="floating-assistant">
-        <img src="public/assistant-mascot.png" alt="Synergy" class="w-10">
+        <img src="./assistant-mascot.png" alt="Synergy" class="w-10">
     </a>
 
     <script>
@@ -752,6 +821,40 @@
         }, observerOptions);
 
         document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+
+        // Project Demo GIF Rotation Logic (Variable Timing)
+        const demoImg = document.getElementById('project-demo-img');
+        const demoLabel = document.getElementById('project-demo-label');
+        
+        // Define durations for each GIF cycle in milliseconds
+        const demoSequence = [
+            { src: './projectstabdemop1.gif', duration: 22000, label: 'P1: Selection' },
+            { src: './projectstabdemop2.gif', duration: 18000, label: 'P2: Details' },
+            { src: './projectstabdemop3.gif', duration: 28000, label: 'P3: Procurement' },
+            { src: './projectstabdemop4.gif', duration: 26000, label: 'P4: Monitoring' }
+        ];
+        
+        let currentIdx = 0;
+
+        function rotateDemo() {
+            if (!demoImg) return;
+            
+            // Move to next GIF
+            currentIdx = (currentIdx + 1) % demoSequence.length;
+            const currentItem = demoSequence[currentIdx];
+            
+            // Update Image & Label
+            demoImg.src = currentItem.src;
+            demoLabel.textContent = `Sequence: P${currentIdx + 1}`;
+            
+            // Schedule next rotation based on current GIF duration
+            setTimeout(rotateDemo, currentItem.duration);
+        }
+
+        // Initialize first timer based on the first GIF's duration
+        if (demoImg) {
+            setTimeout(rotateDemo, demoSequence[0].duration);
+        }
     </script>
 </body>
 

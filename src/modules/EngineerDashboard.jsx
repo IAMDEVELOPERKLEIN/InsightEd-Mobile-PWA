@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Autoplay } from "swiper/modules";
@@ -200,6 +200,10 @@ const EngineerDashboard = () => {
 
   const [isLoading, setIsLoading] = useState(true);
 
+  // Force a fresh network fetch on the very first mount after login.
+  // Prevents stale cache from a previous session appearing on login.
+  const hasForceFetched = useRef(false);
+
   // Service Worker Update Context
   const { isUpdateAvailable, updateApp } = useServiceWorker();
 
@@ -238,6 +242,7 @@ const EngineerDashboard = () => {
           }
 
           // ENGINEER: Stale-While-Revalidate Strategy
+          // Priority 1: Show cache immediately if present
           try {
             const cachedData = await getCachedProjects();
             if (cachedData && cachedData.length > 0) {
@@ -249,32 +254,66 @@ const EngineerDashboard = () => {
             console.warn("Cache read failed", err);
           }
 
+          // Priority 2: Fetch fresh data from network
           try {
             const response = await fetch(url);
             if (!response.ok) throw new Error("Failed to fetch projects");
             const data = await response.json();
+            const dataArr = Array.isArray(data) ? data : (data.data || []);
 
-            currentProjects = data.map((item) => ({
+            currentProjects = dataArr.map((item) => ({
               id: item.id,
               projectName: item.projectName,
               schoolName: item.schoolName,
               schoolId: item.schoolId,
               status: item.status,
+              engineerName: item.engineerName,
               accomplishmentPercentage: item.accomplishmentPercentage,
               projectAllocation: item.projectAllocation,
-              contractAmount: item.contractAmount,
               targetCompletionDate: item.targetCompletionDate,
-              projects_count: 1,
-              region: item.region,
-              division: item.division,
-              statusAsOfDate: item.statusAsOfDate,
+              statusAsOf: item.statusAsOf,
               otherRemarks: item.otherRemarks,
               contractorName: item.contractorName,
+              ipc: item.ipc,
+              latitude: item.latitude,
+              longitude: item.longitude,
+              projectCategory: item.projectCategory,
+              scopeOfWork: item.scopeOfWork,
+              numberOfClassrooms: item.numberOfClassrooms,
+              numberOfStoreys: item.numberOfStoreys,
+              numberOfSites: item.numberOfSites,
+              fundsUtilized: item.fundsUtilized,
+              constructionStartDate: item.constructionStartDate,
+              noticeToProceed: item.noticeToProceed,
+              batchOfFunds: item.batchOfFunds,
               hasPow: item.hasPow,
               hasDupa: item.hasDupa,
               hasContract: item.hasContract,
               hasMoa: item.hasMoa,
-              hasRta: item.hasRta
+              hasRta: item.hasRta,
+              hasVariationOrder: item.hasVariationOrder,
+              variationOrderPdf: item.variationOrderPdf,
+              contractAmount: item.contractAmount,
+              statusDesignPhase: item.procurement_status,
+              procurement_status: item.procurement_status,
+              fundingYear: item.fundingYear,
+              province: item.province,
+              region: item.region,
+              division: item.division,
+              municipality: item.municipality,
+              city: item.city,
+              previousPercentage: item.previousPercentage,
+              isRealigned: item.isRealigned,
+              updateType: item.updateType,
+              savings: item.savings,
+              isDonated: item.isDonated,
+              programType: item.programType,
+              fundingYearJustification: item.fundingYearJustification,
+              sangguniang_resolution_id: item.sangguniang_resolution_id,
+              mother_moa_id: item.mother_moa_id,
+              supplamental_moa_id: item.supplamental_moa_id,
+              checklist: item.checklist,
+              triangulated_percentage: item.triangulated_percentage,
             }));
 
             if (userRole !== 'Super User') {
@@ -282,6 +321,7 @@ const EngineerDashboard = () => {
             }
 
             setProjects(currentProjects);
+            hasForceFetched.current = true; // First network fetch done; cache is now fresh
 
           } catch (networkError) {
             console.warn("Dashboard network request failed:", networkError);
