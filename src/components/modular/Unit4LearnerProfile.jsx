@@ -1219,8 +1219,9 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                     <div className="w-full max-w-xl flex gap-4">
                         
                         {currentChapter === 1 ? (
-                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                            <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 flex items-center justify-center gap-2 text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                                 <FiSave className="w-6 h-6" />
+                                <span className="text-sm font-bold text-gray-500">Save Draft</span>
                             </button>
                         ) : (
                             <div className="flex gap-2">
@@ -1229,9 +1230,10 @@ const Unit4LearnerProfile = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                     <FiArrowLeft className="w-6 h-6" />
                                 </button>
                                 <button onClick={() => setShowDraftModal(true)}
-                                    className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
+                                    className="flex-none h-16 px-6 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center gap-2 text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
                                 >
                                     <FiSave className="w-6 h-6" />
+                                    <span className="text-sm font-bold text-blue-500">Save Draft</span>
                                 </button>
                             </div>
                         )}

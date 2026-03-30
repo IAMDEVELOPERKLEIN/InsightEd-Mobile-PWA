@@ -1814,8 +1814,9 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                         {/* School-wide Status Confirmation removed as requested */}
                     </div>
                     <div className="w-full max-w-md flex items-center gap-3">
-                        <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                        <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 flex items-center justify-center gap-2 text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                             <FiSave className="w-6 h-6" />
+                            <span className="text-sm font-bold text-gray-500">Save Draft</span>
                         </button>
                         {currentPhase === 1 ? (
                             <button disabled={!isPhase1Valid} onClick={handleMainProceed} className="flex-1 py-4 rounded-2xl text-white font-black text-lg text-center bg-emerald-500 border-b-[5px] border-emerald-700 active:border-b-0 active:translate-y-[5px] transition-all disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
@@ -1862,7 +1863,7 @@ const Unit6SchoolResources = ({ targetSchoolId, isReadOnly: propReadOnly }) => {
                                                 <p className="text-xs font-bold text-gray-500 mb-1 ml-1">Year Received</p>
                                                 <select name="year_received" value={ecartForm.year_received} onChange={handleEcartFormChange} className={`${chunkySelect} !mt-0 text-base py-4.5`}>
                                                     <option value="" disabled>Select Year...</option>
-                                                    {Array.from({ length: 2026 - 2000 + 1 }, (_, i) => 2026 - i).map(year => (
+                                                    {Array.from({ length: new Date().getFullYear() - 2000 + 1 }, (_, i) => new Date().getFullYear() - i).map(year => (
                                                         <option key={year} value={year}>{year}</option>
                                                     ))}
                                                 </select>

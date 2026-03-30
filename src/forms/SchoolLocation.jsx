@@ -959,8 +959,9 @@ const SchoolLocation = React.forwardRef(({ schoolId, iern, onSaveSuccess, onSave
                     {!isReadOnly && (
                         <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-gray-100 dark:border-slate-800 z-50">
                             <div className="max-w-2xl mx-auto flex gap-4">
-                                <button type="button" onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center text-gray-400 dark:text-slate-500 hover:text-gray-900 dark:hover:text-slate-200 active:scale-95 transition-all outline-none">
+                                <button type="button" onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center gap-2 text-gray-400 dark:text-slate-500 hover:text-gray-900 dark:hover:text-slate-200 active:scale-95 transition-all outline-none">
                                      <FiSave className="w-6 h-6" />
+                                     <span className="text-sm font-bold text-gray-500 dark:text-slate-400">Save Draft</span>
                                 </button>
                                 {currentStep > 1 && (
                                     <button 

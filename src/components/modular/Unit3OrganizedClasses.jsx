@@ -103,6 +103,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     // 0: Multigrade (skipped if hasElementary === false)
     // 1 to N: Grades in availableGrades
     const [currentStep, setCurrentStep] = useState(0);
+    const [mgSubStep, setMgSubStep] = useState('overview'); // 'overview' | 'distribution' — for multigrade grade steps
 
     // Form State
     const [sectionData, setSectionData] = useState({});
@@ -409,12 +410,20 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
     }, [currentStep, isEditingGrade, currentGrade, sectionData]);
 
     const handleBack = () => {
+        if (currentGrade?.id.startsWith('mg_') && mgSubStep === 'distribution') {
+            setMgSubStep('overview');
+            return;
+        }
         if (canGoBack) setCurrentStep(prev => prev - 1);
     };
 
     const handleNext = () => {
+        if (currentGrade?.id.startsWith('mg_') && mgSubStep === 'overview') {
+            setMgSubStep('distribution');
+            return;
+        }
         if (isCurrentStepValid) {
-            // If we are on the last grade, move to Step N+1 (Confirmation)
+            setMgSubStep('overview'); // reset for next potential MG step
             setCurrentStep(prev => prev + 1);
         }
     };
@@ -779,12 +788,53 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                 {/* ── Page 1 to N: Single Grade ── */}
                 {isEditingGrade && currentGrade && (
                      <motion.div
-                        key={`step-${currentStep}`}
+                        key={`step-${currentStep}-${mgSubStep}`}
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
                         transition={{ duration: 0.3 }}
                     >
+                        {/* MG Overview sub-screen */}
+                        {currentGrade.id.startsWith('mg_') && mgSubStep === 'overview' ? (
+                            <div className="space-y-8">
+                                <div className="text-center mb-10">
+                                    <span className="inline-block px-4 py-1.5 rounded-full bg-rose-100 text-rose-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                        Multigrade Combination • {currentStep}/{totalSteps}
+                                    </span>
+                                    <h1 className="text-4xl font-black text-slate-800 mb-2 leading-tight">
+                                        {currentGrade.label}
+                                    </h1>
+                                    <p className="text-slate-500 font-medium text-lg">
+                                        Review this multigrade combination before entering section data.
+                                    </p>
+                                </div>
+                                <div className="bg-indigo-50/40 rounded-[2.5rem] p-8 border-2 border-indigo-100 shadow-sm">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-10 h-10 rounded-2xl bg-indigo-100 flex items-center justify-center text-xl">🤝</div>
+                                        <div>
+                                            <h3 className="font-black text-slate-800">Combination Overview</h3>
+                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Defined in Unit 2</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white rounded-[2rem] p-6 border border-indigo-100">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Grade Levels in This Combination</p>
+                                        <p className="text-2xl font-black text-indigo-700 leading-tight">{currentGrade.label}</p>
+                                    </div>
+                                    {currentGrade.u2_total > 0 && (
+                                        <div className="mt-4 bg-white rounded-[2rem] p-6 border border-indigo-100 flex justify-between items-center">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Unit 2 Enrollment</p>
+                                            <span className="text-3xl font-black text-indigo-700">{currentGrade.u2_total}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="p-5 bg-amber-50 border-2 border-amber-100 rounded-[2rem] flex items-start gap-3">
+                                    <FiAlertTriangle className="text-amber-500 w-5 h-5 mt-0.5 shrink-0" />
+                                    <p className="text-sm font-medium text-amber-800 leading-snug">
+                                        The grade grouping above was configured in <strong>Unit 2</strong>. To change the combination, you must return to Unit 2 and edit it there.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
                              <div className="text-center mb-10">
                                             <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-100 text-indigo-600 text-xs font-black uppercase tracking-[0.2em] mb-4 shadow-sm">
                                                 Section Setup • {currentStep}/{totalSteps}
@@ -906,6 +956,7 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                             </div>
                             );
                         })()}
+                        )}
                     </motion.div>
                 )}
 
@@ -1000,8 +1051,9 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                 <FiArrowLeft className="w-6 h-6" />
                             </button>
                         ) : currentStep === 0 ? (
-                            <button onClick={() => setShowDraftModal(true)} className="w-16 h-16 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
+                            <button onClick={() => setShowDraftModal(true)} className="flex-none h-16 px-6 rounded-3xl bg-gray-100 flex items-center justify-center gap-2 text-gray-400 hover:text-gray-900 active:scale-95 transition-all outline-none">
                                 <FiSave className="w-6 h-6" />
+                                <span className="text-sm font-bold text-gray-500">Save Draft</span>
                             </button>
                         ) : (
                             <div className="flex gap-2">
@@ -1011,9 +1063,10 @@ const Unit3OrganizedClasses = ({ targetSchoolId, isReadOnly: propReadOnly }) => 
                                     <FiArrowLeft className="w-6 h-6" />
                                 </button>
                                 <button onClick={() => setShowDraftModal(true)}
-                                    className="w-16 h-16 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
+                                    className="flex-none h-16 px-6 rounded-3xl bg-blue-50 border-2 border-blue-100 flex items-center justify-center gap-2 text-blue-500 hover:text-blue-700 active:scale-95 transition-all outline-none"
                                 >
                                     <FiSave className="w-6 h-6" />
+                                    <span className="text-sm font-bold text-blue-500">Save Draft</span>
                                 </button>
                             </div>
                         )}
