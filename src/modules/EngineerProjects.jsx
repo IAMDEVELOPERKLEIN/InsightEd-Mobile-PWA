@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { FiSearch, FiPlus, FiFilter, FiCamera, FiImage, FiSettings, FiChevronRight, FiEdit, FiEye, FiX } from "react-icons/fi";
-import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-icons/lu";
+import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity, LuFileText, LuX } from "react-icons/lu";
 
 import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
@@ -83,7 +83,7 @@ const formatDateShort = (dateString) => {
 
 // --- SUB-COMPONENTS ---
 
-const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariation, isLoading, searchQuery, readOnly, handleStatusChange }) => {
+const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariation, onUploadDocs, isLoading, searchQuery, readOnly, handleStatusChange }) => {
 
   if (isLoading) {
     return (
@@ -151,7 +151,7 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
                 {p.engineerName && (
                   <div className="flex items-center gap-1.5 mt-1 bg-white/50 dark:bg-slate-900/40 px-2 py-1 rounded-lg border border-slate-100 dark:border-slate-700/50 shadow-sm transition-all hover:shadow-md">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Updated By</span>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">Last updated by</span>
                     <span className="text-[9px] font-black text-[#004A99] dark:text-blue-400 leading-none">{p.engineerName}</span>
                   </div>
                 )}
@@ -295,6 +295,12 @@ const ProjectCards = ({ projects, onEdit, onDelete, onView, onViewLog, onVariati
               >
                 <LuDollarSign size={14} /> VO
               </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onUploadDocs(p); }}
+                className="flex-1 py-2.5 bg-blue-50 dark:bg-blue-900/30 text-[#004A99] dark:text-blue-300 text-[10px] font-black rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all active:scale-95 flex items-center justify-center gap-2 border border-blue-100 dark:border-blue-800"
+              >
+                <LuFileText size={14} /> DOCS
+              </button>
             </div>
             <button
                onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}
@@ -325,6 +331,13 @@ const EngineerProjects = () => {
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // --- DOCUMENT UPLOAD STATE ---
+  const [isDocUploadModalOpen, setIsDocUploadModalOpen] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState('POW');
+  const [docUploadFile, setDocUploadFile] = useState(null);
+  const [isDocUploading, setIsDocUploading] = useState(false);
+  const [uploadTargetProject, setUploadTargetProject] = useState(null);
 
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -873,6 +886,37 @@ const EngineerProjects = () => {
     }
   };
 
+  const handleDocumentUpload = async () => {
+    if (!docUploadFile || !uploadTargetProject?.id) return;
+    setIsDocUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('document_pdf', docUploadFile);
+      formData.append('project_id', uploadTargetProject.id);
+      formData.append('type', selectedDocType);
+      formData.append('ipc', uploadTargetProject.ipc || '');
+      formData.append('uid', user?.uid || '');
+
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/upload-project-document', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Upload failed');
+      alert(`✅ ${selectedDocType} uploaded successfully!`);
+      setIsDocUploadModalOpen(false);
+      setDocUploadFile(null);
+      setUploadTargetProject(null);
+    } catch (err) {
+      console.error('Document upload error:', err);
+      alert('❌ Upload failed: ' + err.message);
+    } finally {
+      setIsDocUploading(false);
+    }
+  };
+
   const handleSaveProject = async (updatedProject, overrideInternalFiles = null, overrideExternalFiles = null) => {
     const uid = user?.uid;
     if (!uid) return;
@@ -1084,6 +1128,10 @@ const EngineerProjects = () => {
             onView={handleViewProject}
             onViewLog={handleViewLog}
             onVariation={handleOpenVariationModal}
+            onUploadDocs={(p) => {
+              setUploadTargetProject(p);
+              setIsDocUploadModalOpen(true);
+            }}
             isLoading={isLoading}
             searchQuery={searchQuery}
             readOnly={userRole === 'Super User'}
@@ -1368,6 +1416,61 @@ const EngineerProjects = () => {
         )}
 
         <BottomNav userRole={userRole} />
+
+        {/* --- UPLOAD DOCUMENTS MODAL --- */}
+        {isDocUploadModalOpen && createPortal(
+            <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setIsDocUploadModalOpen(false); setDocUploadFile(null); }}>
+                <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-sm p-8 space-y-6 border border-slate-100 dark:border-slate-700 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-[11px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-[0.2em]">Upload Document</h3>
+                            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase truncate max-w-[200px]">{uploadTargetProject?.schoolName}</p>
+                        </div>
+                        <button onClick={() => { setIsDocUploadModalOpen(false); setDocUploadFile(null); }} className="p-2 rounded-2xl bg-slate-50 dark:bg-slate-700 text-slate-400 hover:bg-slate-100 transition-all">
+                            <LuX size={18} />
+                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">Document Type</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {['POW', 'DUPA', 'CONTRACT'].map(t => (
+                                <button
+                                    key={t}
+                                    onClick={() => setSelectedDocType(t)}
+                                    className={`py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest border transition-all ${selectedDocType === t ? 'bg-[#004A99] text-white border-[#004A99] shadow-lg shadow-blue-500/20' : 'bg-slate-50 dark:bg-slate-900 text-slate-500 border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">PDF File</label>
+                        <label className="flex flex-col items-center justify-center gap-3 w-full py-10 border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-3xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/10 transition-all group">
+                            <LuFileText size={28} className={`transition-colors ${docUploadFile ? 'text-blue-500' : 'text-slate-200 dark:text-slate-600 group-hover:text-blue-300'}`} />
+                            <span className={`text-[10px] font-bold uppercase tracking-wider text-center px-4 ${docUploadFile ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400'}`}>
+                                {docUploadFile ? docUploadFile.name : 'Tap to select PDF'}
+                            </span>
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setDocUploadFile(e.target.files[0] || null)} />
+                        </label>
+                    </div>
+
+                    <button
+                        onClick={handleDocumentUpload}
+                        disabled={!docUploadFile || isDocUploading}
+                        className="w-full py-4 bg-[#004A99] text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-blue-500/20 hover:bg-blue-800 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                        {isDocUploading ? (
+                            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                        ) : null}
+                        {isDocUploading ? 'Uploading…' : `Upload ${selectedDocType}`}
+                    </button>
+                </div>
+            </div>,
+            document.body
+        )}
       </div>
     </PageTransition >
   );
